@@ -1,157 +1,146 @@
 # agents_b2g/onboarding/ecosystem_onboarding_orchestrator.py
 """
 Agent 19.1 — EcosystemOnboardingOrchestrator
-
-Root-Agent der Welle 19. Steuert das Multi-Stakeholder-Onboarding,
-verwaltet Subagenten und erstellt den Ecosystem-Health-Report.
-
-5 Zielgruppen: Handwerker → Bauherren → Software-Partner → IoT → Banken
+Root: Multi-Stakeholder Onboarding, alle 8 Subagenten integriert.
 """
-
-import hashlib
-import json
-import logging
+import hashlib, json, logging, uuid
 from datetime import datetime, timezone
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List
+from enum import Enum
 
-from agents_b2g.onboarding.subagents.craftsman_onboarding_agent import (
-    CraftsmanOnboardingAgent,
-)
+from agents_b2g.onboarding.subagents.craftsman_onboarding_agent import CraftsmanOnboardingAgent
+from agents_b2g.onboarding.subagents.developer_onboarding_agent import DeveloperOnboardingAgent
+from agents_b2g.onboarding.subagents.builder_onboarding_agent import BuilderOnboardingAgent
+from agents_b2g.onboarding.subagents.iot_partner_onboarding_agent import IoTPartnerOnboardingAgent
+from agents_b2g.onboarding.subagents.banking_partner_onboarding_agent import BankingPartnerOnboardingAgent
+from agents_b2g.onboarding.subagents.compliance_enrollment_agent import ComplianceEnrollmentAgent
+from agents_b2g.onboarding.subagents.ecosystem_health_monitor import EcosystemHealthMonitor
+from agents_b2g.onboarding.subagents.partner_success_manager import PartnerSuccessManager
 
-logger = logging.getLogger("EcosystemOnboardingOrchestrator")
+logger = logging.getLogger(__name__)
 
+class StakeholderRole(Enum):
+    CRAFTSMAN = "CRAFTSMAN"; DEVELOPER = "DEVELOPER"; BUILDER = "BUILDER"
+    IOT_PARTNER = "IOT_PARTNER"; BANKING_PARTNER = "BANKING_PARTNER"
 
 class EcosystemOnboardingOrchestrator:
-    """
-    Agent 19.1: Multi-Stakeholder Onboarding & Ecosystem Health.
-    """
+    """Agent 19.1: 8 Subagenten, 5 Stakeholder-Rollen."""
 
     def __init__(self):
+        self.compliance = ComplianceEnrollmentAgent()
         self.craftsman = CraftsmanOnboardingAgent()
-        # Weitere Subagenten folgen in späteren Sprints
+        self.developer = DeveloperOnboardingAgent()
+        self.builder = BuilderOnboardingAgent()
+        self.iot = IoTPartnerOnboardingAgent()
+        self.banking = BankingPartnerOnboardingAgent()
+        self.health = EcosystemHealthMonitor()
+        self.success = PartnerSuccessManager()
+        self._ecosystem: Dict[str, int] = {"craftsmen": 0, "builders": 0, "developers": 0,
+                                             "iot_partners": 0, "banking_partners": 0}
+        self._history: List[Dict[str, Any]] = []
 
-        # Ecosystem-Tracking
-        self._ecosystem: Dict[str, int] = {
-            "craftsmen": 0, "builders": 0, "developers": 0,
-            "iot_partners": 0, "banking_partners": 0,
+    def register(self, role: StakeholderRole, company_name: str, tax_id: str,
+                 business_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """Hauptmethode: Vollständiges Stakeholder-Onboarding."""
+        job_id = hashlib.sha256(f"{company_name}{role.value}{uuid.uuid4()}".encode()).hexdigest()[:12]
+        logger.info(f"Onboarding {job_id}: {company_name} as {role.value}")
+
+        # Step 1: Compliance (Agent 7)
+        comp = self.compliance.verify(tax_id, business_id)
+        if comp["status"] != "APPROVED":
+            return {"status": "REJECTED", "job_id": job_id, "company": company_name,
+                    "compliance": comp, "artifacts": [], "error": comp.get("reason"),
+                    "logs": [{"level": "WARN", "message": f"Compliance: {comp.get('reason')}"}]}
+
+        # Step 2: Rollenspezifisches Provisioning
+        role_map = {
+            StakeholderRole.CRAFTSMAN: lambda: self.craftsman.onboard(
+                company_name, payload.get("trade_license", ""), payload.get("iban", ""),
+                tax_id, payload.get("email", ""), payload.get("bund_id", "")),
+            StakeholderRole.DEVELOPER: lambda: self.developer.onboard(
+                company_name, payload.get("use_case", "ERP")),
+            StakeholderRole.BUILDER: lambda: self.builder.onboard(company_name, payload),
+            StakeholderRole.IOT_PARTNER: lambda: self.iot.onboard(
+                company_name, payload.get("device_dids", [])),
+            StakeholderRole.BANKING_PARTNER: lambda: self.banking.onboard(company_name, payload),
         }
-        self._onboarding_history: List[Dict[str, Any]] = []
+        provision = role_map.get(role, lambda: {"status": "UNKNOWN_ROLE"})()
+        if provision.get("status") == "UNKNOWN_ROLE":
+            return {"status": "FAILED", "job_id": job_id, "error": "Unknown role"}
 
-    def onboard_craftsman(
-        self,
-        company_name: str,
-        trade_license: str,
-        iban: str,
-        tax_id: str,
-        email: str,
-        bund_id_token: str = "",
-    ) -> Dict[str, Any]:
-        """Handwerker-Onboarding via CraftsmanOnboardingAgent."""
-        result = self.craftsman.onboard(
-            company_name, trade_license, iban, tax_id, email, bund_id_token
-        )
-        if result["status"] == "ONBOARDED":
-            self._ecosystem["craftsmen"] += 1
-            self._onboarding_history.append({
-                "timestamp": datetime.now(timezone.utc).isoformat() + "Z",
-                "type": "craftsman",
-                "company": company_name,
-                "wallet": result["wallet_address"],
-            })
-        return result
+        # Step 3: Health Monitor (Agent 8)
+        record = {"company_name": company_name, "assigned_role": role.value,
+                  "onboarding_timestamp": datetime.now(timezone.utc).isoformat() + "Z",
+                  "status": "ONBOARDING_SUCCESSFUL"}
+        self.health.record_onboarding(record)
+
+        # Step 4: Success Manager (Agent 9)
+        welcome = self.success.welcome(company_name, role.value)
+
+        # Step 5: Ecosystem-Tracking
+        role_key = {"CRAFTSMAN": "craftsmen", "DEVELOPER": "developers", "BUILDER": "builders",
+                     "IOT_PARTNER": "iot_partners", "BANKING_PARTNER": "banking_partners"}
+        self._ecosystem[role_key.get(role.value, "craftsmen")] += 1
+        self._history.append({"timestamp": record["onboarding_timestamp"], "role": role.value,
+                              "company": company_name, "job_id": job_id})
+
+        return {"status": "ONBOARDED", "job_id": job_id, "company_name": company_name,
+                "role": role.value, "compliance": comp, "provisioning": provision,
+                "welcome": welcome, "ecosystem": self.ecosystem_health(),
+                "artifacts": [{"type": "onboarding_receipt", "format": "json"}],
+                "error": None,
+                "logs": [{"level": "INFO", "message": f"{company_name} onboarded as {role.value}"}]}
+
+    def batch_onboard(self, stakeholders: List[Dict[str, Any]]) -> Dict[str, Any]:
+        results = []; success = 0
+        for s in stakeholders:
+            role = StakeholderRole[s["role"]]
+            r = self.register(role, s["name"], s.get("tax_id", "DE000000000"),
+                            s.get("business_id", "HRB00000"), s.get("payload", {}))
+            results.append({"name": s["name"], "role": s["role"], "status": r["status"]})
+            if r["status"] == "ONBOARDED": success += 1
+        return {"status": "BATCH_COMPLETE", "total": len(stakeholders),
+                "onboarded": success, "failed": len(stakeholders) - success,
+                "conversion_pct": round(success / max(len(stakeholders), 1) * 100, 1),
+                "details": results,
+                "logs": [{"level": "INFO", "message": f"Batch: {success}/{len(stakeholders)}"}]}
 
     def ecosystem_health(self) -> Dict[str, Any]:
-        """
-        Ecosystem Health Dashboard.
-        Aggregiert alle Stakeholder-Metriken.
-        """
-        total = sum(self._ecosystem.values())
-        return {
-            "status": "GROWING" if total > 10 else ("LAUNCHING" if total > 0 else "PRE_LAUNCH"),
-            "total_onboarded": self._ecosystem,
-            "total_stakeholders": total,
-            "growth_strategy": {
-                "current_focus": "Handwerker (höchster Time-to-Value)",
-                "next_focus": "Bauherren & Projektentwickler",
-                "flywheel": "Handwerker → Bauherren → Software-Partner → IoT → Banken",
-            },
-            "onboarding_history": self._onboarding_history[-10:],
-            "timestamp": datetime.now(timezone.utc).isoformat() + "Z",
-        }
+        h = self.health.get_health_report()
+        return {"status": h["status"], "total_onboarded": self._ecosystem,
+                "total_stakeholders": sum(self._ecosystem.values()),
+                "success_rate_24h_pct": h["success_rate_24h_pct"],
+                "role_distribution": h["role_distribution"],
+                "recent": self._history[-5:]}
 
-    def batch_onboard_craftsmen(
-        self, companies: List[Dict[str, str]]
-    ) -> Dict[str, Any]:
-        """Batch-Onboarding für Pilotprogramm (z.B. 50 Handwerker)."""
-        results = []
-        success = 0
-        for c in companies:
-            r = self.onboard_craftsman(
-                company_name=c.get("name", "Unbekannt"),
-                trade_license=c.get("license", ""),
-                iban=c.get("iban", ""),
-                tax_id=c.get("tax_id", ""),
-                email=c.get("email", ""),
-                bund_id_token=c.get("bund_id", ""),
-            )
-            results.append({"name": c.get("name"), "status": r["status"]})
-            if r["status"] == "ONBOARDED":
-                success += 1
-
-        return {
-            "status": "BATCH_COMPLETE",
-            "total": len(companies),
-            "onboarded": success,
-            "failed": len(companies) - success,
-            "conversion_rate_pct": round(success / max(len(companies), 1) * 100, 1),
-            "details": results,
-            "artifacts": [],
-            "error": None,
-            "logs": [{"level": "INFO",
-                      "message": f"Batch: {success}/{len(companies)} onboarded"}],
-        }
-
-
-# ============================================================================
-# SMOKE TEST
 # ============================================================================
 if __name__ == "__main__":
     print("=" * 60)
-    print("EcosystemOnboardingOrchestrator — Smoke Test")
+    print("EcosystemOnboardingOrchestrator — Full Test")
     print("=" * 60)
-
     orch = EcosystemOnboardingOrchestrator()
 
-    # Einzel-Onboarding
-    r1 = orch.onboard_craftsman(
-        company_name="Betonwerk Nord GmbH",
-        trade_license="HWK-2024-0815",
-        iban="DE89370400440532013000",
-        tax_id="DE123456789",
-        email="info@betonwerk-nord.de",
-        bund_id_token="valid_token_1234567890",
-    )
-    print(f"\nEinzel-Onboarding: {r1['status']} — {r1['wallet_address']}")
-
-    # Batch-Onboarding (Pilot mit 5 Handwerkern)
-    batch = [
-        {"name": "Maurer Schmidt GmbH", "iban": "DE12345678901234567890", "tax_id": "DE111111111", "email": "ms@bau.de"},
-        {"name": "Elektro Müller KG", "iban": "DE09876543210987654321", "tax_id": "DE222222222", "email": "em@bau.de"},
-        {"name": "Dachdecker Schulz", "iban": "DE55555555555555555555", "tax_id": "DE333333333", "email": "ds@bau.de"},
-        {"name": "Fliesen König GmbH", "iban": "DE44444444444444444444", "tax_id": "DE444444444", "email": "fk@bau.de"},
-        {"name": "Tiefbau Nord AG", "iban": "INVALID_IBAN", "tax_id": "DE555555555", "email": "tn@bau.de"},
+    # All 5 roles
+    tests = [
+        ("CRAFTSMAN", "Betonwerk Nord GmbH", "DE123456789", "HRB 12345",
+         {"iban": "DE89370400440532013000", "trade_license": "HWK-0815",
+          "email": "info@betonwerk.de", "bund_id": "valid_token_1234567890"}),
+        ("DEVELOPER", "ERP-Systeme Schmidt AG", "DE987654321", "HRB 67890",
+         {"use_case": "SAP Integration"}),
+        ("BUILDER", "Wohnungsbau Nord eG", "DE456789123", "HRB 11111",
+         {"project_name": "Kläranlage Nord", "budget_eur": 4_200_000,
+          "milestones": [{"id": "M1"}, {"id": "M2"}, {"id": "M3"}], "gaeb_xml": "<GAEB>..."}),
+        ("IOT_PARTNER", "SensorTech GmbH", "DE111222333", "HRB 22222",
+         {"device_dids": ["did:peaq:waage_01", "did:peaq:bagger_03"]}),
+        ("BANKING_PARTNER", "DekaBank", "DE999888777", "HRB 33333",
+         {"partner_type": "BANK"}),
     ]
-    batch_result = orch.batch_onboard_craftsmen(batch)
-    print(f"\nBatch: {batch_result['onboarded']}/{batch_result['total']} onboarded "
-          f"({batch_result['conversion_rate_pct']}%)")
-    for d in batch_result["details"]:
-        print(f"  {'✅' if d['status'] == 'ONBOARDED' else '❌'} {d['name']}")
+    for role, name, tax, biz, payload in tests:
+        r = orch.register(StakeholderRole[role], name, tax, biz, payload)
+        icon = "✅" if r["status"] == "ONBOARDED" else "❌"
+        print(f"{icon} {role}: {name} — {r['status']}")
 
-    # Ecosystem Health
     health = orch.ecosystem_health()
-    print(f"\nEcosystem: {health['status']}")
-    print(f"Stakeholder: {health['total_onboarded']}")
-    print(f"Total: {health['total_stakeholders']} onboarded")
-    print(f"Strategie: {health['growth_strategy']['current_focus']}")
-
-    print(f"\n✅ Smoke Test abgeschlossen.")
+    print(f"\nEcosystem: {health['status']} | {health['total_stakeholders']} stakeholders")
+    print(f"Distribution: {health['total_onboarded']}")
+    print("✅ Smoke Test complete.")
