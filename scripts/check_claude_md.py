@@ -49,6 +49,11 @@ TEST_SCRIPTS: list[tuple[str, str, str]] = [
         r"(\d+)\s*/\s*(\d+)\s+tests passed",
         r"Wave 16.*?SEPA Bridge.*?(\d+)\s*/\s*(\d+)\s+tests? passed",
     ),
+    (
+        "scripts/test_wave17_macro.py",
+        r"WAVE 17 E2E-TEST:\s*(\d+)/(\d+)\s+BESTANDEN",
+        r"Wave 17.*?MacroEconomy.*?(\d+)\s*/\s*(\d+)\s+(?:E2E\s+)?passed",
+    ),
 ]
 
 # Skripte ohne x/y-Testbilanz — Generatoren, Fetcher, Reports.

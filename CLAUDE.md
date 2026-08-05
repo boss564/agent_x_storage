@@ -8,7 +8,7 @@ Two integrated systems sharing core infrastructure (SymbolicsAgent, Consensus En
 
 1. **Agent X Core** — DeFi risk management: 6 classes (A–F), 60+ agents, consensus-driven state evaluation with CHI (Composite Health Index), backtesting against 8 historical crisis scenarios.
 
-2. **Agent X B2G** — Public-sector procurement: 108 agents in 12 waves covering the complete lifecycle from GAEB tender receipt through VOB/B multi-installment payment, defect/dispute arbitration, BHO-compliant treasury reconciliation, GoBD archiving, multi-chain notarization, operations, user/project management with BundID SSO, and a complete query & reporting layer for authority audits.
+2. **Agent X B2G** — Public-sector procurement: 117 agents in 13 waves covering the complete lifecycle from GAEB tender receipt through VOB/B multi-installment payment, defect/dispute arbitration, BHO-compliant treasury reconciliation, GoBD archiving, multi-chain notarization, operations, user/project management with BundID SSO, a complete query & reporting layer, and a **real-time macroeconomic engine** (Wave 17) with velocity tracking, inflation measurement, programmable fiscal stimulus, tax splitting, capital efficiency, cartel detection, and central bank ledger twin.
 
 ## Agent X Core — Projektstruktur
 
@@ -22,7 +22,7 @@ agent_x_storage/
 ├── agent_x/                      # Analyse-Module
 │   └── metrics/
 │       └── compound_analyzer.py  # EWMA-Kalibrierungs-Analyzer
-├── agents_b2g/                   # 108 B2G-Agenten in 12 Wellen (s.u.)
+├── agents_b2g/                   # 117 B2G-Agenten in 13 Wellen (s.u.)
 ├── scripts/                      # Runner & Tests
 │   ├── calibrate_agent_x.py      # Compound-Risk-Kalibrierung
 │   ├── paper_trading_agent_x.py  # Paper-Trading mit Deep-Logging
@@ -30,6 +30,7 @@ agent_x_storage/
 │   ├── end_to_end_90_agents.py   # 90-Agenten-10-Wellen-E2E-Test (11/11 passed)
 │   ├── end_to_end_b2g_test.py    # 25-Schritte-E2E-Test
 │   ├── test_gaeb_reference.py    # GAEB DA XML 3.3 Test Suite
+│   ├── test_wave17_macro.py      # Wave 17 E2E: 8-Stufen-Makro-Pipeline (8/8 passed)
 │   ├── fetch_xrechnung_schematron.py # XRechnung 3.0 Schematron Fetcher
 │   └── export_backtest_signals.py # Backtest-Daten-Exporter
 ├── config/
@@ -63,7 +64,7 @@ agent_x_storage/
 
 ## Agent X B2G — Public Sector Procurement
 
-### Architecture: 12 Waves × 9 Agents = 108 Agents
+### Architecture: 13 Waves × 9 Agents = 117 Agents
 
 ```
 Wave 1 (Tendering):        Monitor → Parser → Eligibility → CHI-Risk → PoPW-Index →
@@ -111,11 +112,15 @@ Wave 16 (SEPA Bridge):      SEPABridgeOrchestrator → EUReMinterSubagent →
                             SEPAAuditTrailSubagent → MoneriumAPIClientSubagent →
                             GasPaymasterSubagent → BridgeBalanceMonitorSubagent →
                             SEPAConfirmationSubagent
+Wave 17 (MacroEconomy):     VelocityOfMoneyTracker → RealTimeInflationOracle →
+                            SupplyChainMultiplierCalc → ProgrammableStimulusEngine →
+                            RealTimeTaxSplitter → CapitalEfficiencyAnalyzer →
+                            SystemicRiskAndCartelMonitor → CentralBankLedgerTwin
 ```
 
 ### Wellen-Übersicht
 
-Welle 3.5 (VOB/B Disput) ist eine Unterwelle von Welle 3 (Execution) und wird nicht als eigenständige Hauptwelle gezählt. Die Gesamtzahl der Hauptwellen beträgt 12 (Wellen 1–10, 15, 16).
+Welle 3.5 (VOB/B Disput) ist eine Unterwelle von Welle 3 (Execution) und wird nicht als eigenständige Hauptwelle gezählt. Die Gesamtzahl der Hauptwellen beträgt 13 (Wellen 1–10, 15, 16, 17). Die Wellen-Nummern 11–14 existieren nicht — die Nummerierung springt von 10 direkt auf 15 (Public Portal), 16 (SEPA Bridge) und 17 (MacroEconomy).
 
 | Welle | Name | Agenten | Modul | Fokus |
 |-------|------|---------|-------|-------|
@@ -132,6 +137,7 @@ Welle 3.5 (VOB/B Disput) ist eine Unterwelle von Welle 3 (Execution) und wird ni
 | 10 | Query & Reports | 9 | `query/agents.py` | RPA-Prüfberichte, Vergabekammer, Baufortschritt, Treasury, Ops, OpenData |
 | 15 | Public Portal & Transparency | 9 | `public_portal/agents.py` | QR-Codes, Blockchain-Verifikation, Kommunalkarte, DSGVO-Shield, Open Data |
 | 16 | Monerium SEPA-Bridge | 9 | `bridge/agents.py` | EURe Mint/Burn, IBAN/BZSt-Validierung, ERC-4337 Paymaster, Δ=0,00€ Bridge-Reconciliation |
+| 17 | MacroEconomy Engine | 9 | `macro/macro_economy_orchestrator.py` | Velocity, Inflation, Multiplikator, Stimulus, Steuer, Kapitaleffizienz, Kartell, Zentralbank |
 
 ### B2G Module Structure
 
@@ -195,6 +201,18 @@ agents_b2g/
 ├── bridge/                       # Wave 16: Monerium SEPA-Bridge
 │   ├── __init__.py               # Wave 16 exports
 │   └── agents.py                 # Wave 16: 9 agents + SEPABridgeSupervisor
+├── macro/                        # Wave 17: MacroEconomy Engine
+│   ├── __init__.py               # Wave 17 exports
+│   ├── macro_economy_orchestrator.py  # Root: 8-Stufen-Pipeline, MEHI
+│   └── subagents/
+│       ├── velocity_of_money_tracker.py        # Agent 2: Umlaufgeschwindigkeit (768 L)
+│       ├── programmable_stimulus_engine.py     # Agent 3: Taylor-Regel + EURe Mint/Burn (872 L)
+│       ├── real_time_tax_splitter.py           # Agent 4: §13b UStG + Bauabzug + BZSt (558 L)
+│       ├── capital_efficiency_analyzer.py      # Agent 5: ROIC, CCC, WCR, PROIC (540 L)
+│       ├── supply_chain_multiplier_calc.py     # Agent 6: Keynes + Leontief + Tiers (640 L)
+│       ├── systemic_risk_and_cartel_monitor.py # Agent 7: Betweenness, PageRank, Gini (200 L)
+│       ├── real_time_inflation_oracle.py       # Agent 8: Laspeyres/Paasche/Fisher (858 L)
+│       └── central_bank_ledger_twin.py         # Agent 9: Bilanz + Taylor-Zins (260 L)
 ├── event_bus.py                  # Pub/Sub + JSONL Audit-Log
 ├── gov_procurement_agent.py      # Root Orchestrator, BHO thresholds
 └── tender_reader_agent.py        # GAEB-XML Reader
@@ -319,6 +337,7 @@ GoBD → Ledger (BHO Δ=0,00€) → Chain-Hash → XRechnung → PoPW-Coverage 
 - **GoBD Integrity:** PASSED (hash chains verified), BHO Zero-Sum Δ=0.00€
 - **Wave 15 Public Portal:** 68/68 tests passed (QR generation SVG/PNG, batch, municipality, tenant isolation, fast-track, DSGVO shield, blockchain verification, open data export)
 - **Wave 16 SEPA Bridge:** 43/43 tests passed (Mint/Burn, IBAN/BZSt/MOD97/Blacklist, GoBD audit, OAuth2/CircuitBreaker/HALF_OPEN, ERC-4337 Paymaster + sponsor_tx, Δ=0.00€ reconciliation, SEPA polling/timeout, MiCAR compliance)
+- **Wave 17 MacroEconomy:** 8/8 E2E passed (`scripts/test_wave17_macro.py`), MEHI 0.74 Grade B, all 8 pipeline stages green, cartel patterns detected, balance sheet Δ=0.00€
 
 ### Smart Contracts (Schwesterprojekt)
 
@@ -349,10 +368,10 @@ python3 scripts/paper_trading_agent_x.py
 # B2G — Bootstrap (3-agent demo)
 python3 scripts/bootstrap_b2g.py
 
-# B2G — Full Pipeline (108 agents, 12 waves)
+# B2G — Full Pipeline (117 agents, 13 waves)
 python3 orchestrator_b2g_full.py
 
-# B2G — E2E Test (108 agents, 12 waves)
+# B2G — E2E Test (117 agents, 13 waves)
 python3 scripts/end_to_end_90_agents.py
 
 # B2G — GAEB Reference Test
@@ -379,6 +398,23 @@ print(sup.generate_qr_for_municipality('Niedersachsen'))
 print(sup.citizen_query('TED-2026-0815'))
 "
 
+# B2G — MacroEconomy Engine (Wave 17)
+python3 scripts/test_wave17_macro.py               # Run 8-stage E2E pipeline
+python3 -c "
+from agents_b2g.macro import MacroEconomyOrchestrator
+orch = MacroEconomyOrchestrator(user_id='test')
+report = orch.analyze_economy()
+print(f'MEHI: {report[\"macro_economy_health_index\"][\"score\"]:.2f} ({report[\"macro_economy_health_index\"][\"grade\"]})')
+print(f'Steps: {report[\"steps_completed\"]}')
+"
+# Individual agent smoke tests
+python3 agents_b2g/macro/subagents/velocity_of_money_tracker.py
+python3 agents_b2g/macro/subagents/real_time_inflation_oracle.py
+python3 agents_b2g/macro/subagents/supply_chain_multiplier_calc.py
+python3 agents_b2g/macro/subagents/programmable_stimulus_engine.py
+python3 agents_b2g/macro/subagents/real_time_tax_splitter.py
+python3 agents_b2g/macro/subagents/capital_efficiency_analyzer.py
+
 # B2G — SEPA Bridge (Wave 16)
 python3 scripts/test_wave16_bridge.py              # Run all 43 tests
 python3 -c "
@@ -395,7 +431,7 @@ print(sup.reconcile())
 # python3 scripts/deploy.py --dry-run
 # python3 scripts/deploy.py  # requires PRIVATE_KEY
 
-# Docker — Full Stack (108 agents + Redis/Neo4j/NATS/Prometheus/Grafana)
+# Docker — Full Stack (117 agents + Redis/Neo4j/NATS/Prometheus/Grafana)
 docker-compose up -d
 docker-compose logs -f pilot_dashboard
 ```
@@ -427,7 +463,7 @@ docker-compose logs -f pilot_dashboard
 | redis | redis:7.4-alpine | State store, session cache, pub/sub |
 | neo4j | neo4j:5.26-community | Graph database for audit trails, agent relationships |
 | nats | nats:2.10-alpine | JetStream message broker (replaces in-process EventBus) |
-| prometheus | prom/prometheus:v2.55.0 | Metrics collection from all 108 agents |
+| prometheus | prom/prometheus:v2.55.0 | Metrics collection from all 117 agents |
 | grafana | grafana/grafana:11.3.0 | Dashboards for ops and project management |
 
 ### Wave 10 Detail: Query & Reports (9 Agents)
@@ -439,7 +475,7 @@ docker-compose logs -f pilot_dashboard
 | ConstructionProgressQueryAgent | SollIstVergleich, GanttChartGenerator, DelayAnalyzer | GAEB-Plan vs. PoPW-Telemetrie, Baufortschritt |
 | TreasuryQueryAgent | BalanceSheetCalculator, RetentionTracker, SEPATransactionExporter | Escrow-Saldo, 5%-Einbehalt, SEPA-Tracking |
 | ComplianceQueryAgent | PIIAnonymizer, AuditTrailValidator, RetentionPolicyChecker | DSGVO/GoBD-Prüfung, JSONL-Vollständigkeit |
-| ControllingQueryAgent | CostTrendAnalyzer, AgentUtilizationStat, OnTimeDashboard | Kosten, Auslastung (108 Agenten), Termintreue |
+| ControllingQueryAgent | CostTrendAnalyzer, AgentUtilizationStat, OnTimeDashboard | Kosten, Auslastung (117 Agenten), Termintreue |
 | OpsQueryAgent | CircuitBreakerStatus, ErrorLogAggregator, PerformanceHeatmap | Systemgesundheit, Fehlerraten, Latenzen |
 | PublicDataQueryAgent | AnonymizationEngine, StatisticalCalculator, OpenDataExport | Vergabestatistik für Transparenzportale |
 | LocalEconomyQueryAgent | GeoIPResolver, RegionalShareCalculator, SubsidyImpactReport | Regionaler Unternehmensanteil, Fördermittel-Impact |
@@ -493,10 +529,54 @@ MiCAR-compliant fiat-to-crypto bridge. Handwerker and Behorden never touch nativ
 - JSONLogger replaces all print() calls
 - try/except wrapping on every agent method
 
+### Wave 17 Detail: MacroEconomy Engine — Real-Time Economic Digital Twin (9 Agents)
+
+Closed-loop macroeconomic control system. Measures velocity of money, inflation from GAEB unit prices, Keynesian multiplier, tax decomposition, capital efficiency, cartel risk, and mirrors the central bank balance sheet. Programmable fiscal stimulus via Taylor Rule with EURe Mint/Burn integration.
+
+**8-Stufen-Pipeline (E2E: 8/8 passed):**
+```
+Transactions → Velocity → Inflation → SupplyChain → Stimulus → TaxSplitter → CapitalEff → CartelMon → CBLedger
+    500 TX       V=2.12      0.33%        k=1.86       +250K€       4.76M€       ROIC 39%     Risk 0.50    Δ=0.00€
+```
+
+| Agent | Subagenten | Funktion |
+|-------|-----------|----------|
+| MacroEconomyOrchestrator | — | Root: 8-Stufen-Pipeline, MEHI (MacroEconomyHealthIndex), GoBD-Export |
+| VelocityOfMoneyTracker | — | Umlaufgeschwindigkeit V=PT/M, Sektor-Velocity, Trend, Prognose, 7 Alert-Typen |
+| RealTimeInflationOracle | — | Laspeyres/Paasche/Fisher-Preisindex, BKI-Benchmark (14 Gewerke), Fisher-Gleichung P=M×V/Y |
+| SupplyChainMultiplierCalc | — | Keynesianischer Multiplikator k=1/(1−MPC(1−t)+m), 5 Lieferketten-Tiers, Beschäftigungs-Multiplikator, ifo/DIW/IWF-Benchmarks |
+| ProgrammableStimulusEngine | — | Taylor-Regel ΔG=α(V*−V)+β(π*−π)+γ(k*−k), 6 Stimulus-Typen, EURe Mint/Burn-Integration, Sektor-Allokation |
+| RealTimeTaxSplitter | — | §13b UStG Reverse-Charge, §48 EStG Bauabzug, GewSt-Zerlegung, BZSt-Steuer-ID-Validierung, Steuerverteilung nach GG Art. 106 |
+| CapitalEfficiencyAnalyzer | — | ROIC, Cash Conversion Cycle, Working Capital Ratio, Public ROIC, Kapitalbindungsdauer |
+| SystemicRiskAndCartelMonitor | — | Betweenness/PageRank/Eigenvector-Zentralität, Gini-Koeffizient, Zykluserkennung, Kartellmuster (gegenseitige Zahlungen) |
+| CentralBankLedgerTwin | — | ISO 20022 CAMT.053, Zentralbank-Bilanz (Δ=0.00€), Taylor-Zinsempfehlung, Seigniorage-Tracking, Dashboard |
+
+**MEHI (MacroEconomyHealthIndex) Components:**
+| Component | Weight | Source |
+|-----------|--------|--------|
+| Velocity | 20% | VelocityOfMoneyTracker |
+| Price Stability | 15% | RealTimeInflationOracle |
+| Supply Chain | 15% | SupplyChainMultiplierCalc |
+| Fiscal Policy | 15% | ProgrammableStimulusEngine |
+| Systemic Risk | 15% | SystemicRiskAndCartelMonitor |
+| Tax Compliance | 10% | RealTimeTaxSplitter (default) |
+| Capital Efficiency | 10% | CapitalEfficiencyAnalyzer (default) |
+
+**Key characteristics:**
+- All 9 agents return standardized JSON: `{"status": "started|completed|failed", "job_id": "uuid", "artifacts": [...], "error": null, "logs": []}`
+- Closed-loop: Sensors (Velocity, Inflation, Multiplier) → Decision (StimulusEngine) → Actors (EURe Mint/Burn, TaxSplitter)
+- Taylor Rule: ΔG = 0.5(V*−V) + 0.8(π*−π) + 0.3(k*−k)
+- Fisher Equation: P = M × V / Y
+- BHO Zero-Sum: Central bank assets = liabilities (Δ ≤ 0.01 €)
+- Multi-tenancy: All reports under `{data_root}/{user_id}/macro/reports/`
+- JSONLogger replaces all print() calls
+- try/except wrapping on every agent method
+- E2E Test: `python3 scripts/test_wave17_macro.py` — 8/8 passed
+
 ## Language
 
 German for communication and documentation. Code comments in English.
 
 ## Version
 
-Agent X Core: 0.4.0 (stable, 90/100 backtest). Agent X B2G: 0.7.0 (108 agents, 12 waves, E2E: 11/11, Compliance: 23 subagents + 2 orchestrators, RPA + VK PDFs, GAEB DA XML 3.3, XRechnung 3.0, VHB-221/222, BVBS Sync, Public Portal Wave 15: 68/68 tests, SEPA Bridge Wave 16: 43/43 tests, hybrid Blockchain-Verifikation Mock/Live-RPC).
+Agent X Core: 0.4.0 (stable, 90/100 backtest). Agent X B2G: 0.8.0 (117 agents, 13 waves + Wave 3.5 VOB/B + 25 compliance agents, E2E: Waves 1-17, RPA + VK PDFs, GAEB DA XML 3.3, XRechnung 3.0, VHB-221/222, BVBS Sync, Public Portal Wave 15: 68/68 tests, SEPA Bridge Wave 16: 43/43 tests, MacroEconomy Wave 17: 8/8 E2E passed, MEHI 0.74 Grade B).
