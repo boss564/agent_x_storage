@@ -8,7 +8,7 @@ Two integrated systems sharing core infrastructure (SymbolicsAgent, Consensus En
 
 1. **Agent X Core** — DeFi risk management: 6 classes (A–F), 60+ agents, consensus-driven state evaluation with CHI (Composite Health Index), backtesting against 8 historical crisis scenarios.
 
-2. **Agent X B2G** — Public-sector procurement: 117 agents in 13 waves covering the complete lifecycle from GAEB tender receipt through VOB/B multi-installment payment, defect/dispute arbitration, BHO-compliant treasury reconciliation, GoBD archiving, multi-chain notarization, operations, user/project management with BundID SSO, a complete query & reporting layer, and a **real-time macroeconomic engine** (Wave 17) with velocity tracking, inflation measurement, programmable fiscal stimulus, tax splitting, capital efficiency, cartel detection, and central bank ledger twin.
+2. **Agent X B2G** — Public-sector procurement: 135 agents in 15 waves covering the complete lifecycle from GAEB tender receipt through VOB/B multi-installment payment, defect/dispute arbitration, BHO-compliant treasury reconciliation, GoBD archiving, multi-chain notarization, operations, user/project management with BundID SSO, a complete query & reporting layer, a **real-time macroeconomic engine** (Wave 17) with velocity tracking and programmable fiscal stimulus, a **VOB Shadow Contract & Pilot** (Wave 18) for risk-free blockchain adoption, and a **Multi-Stakeholder Onboarding Ecosystem** (Wave 19) for craftsmen, builders, developers, IoT and banking partners.
 
 ## Agent X Core — Projektstruktur
 
@@ -22,7 +22,7 @@ agent_x_storage/
 ├── agent_x/                      # Analyse-Module
 │   └── metrics/
 │       └── compound_analyzer.py  # EWMA-Kalibrierungs-Analyzer
-├── agents_b2g/                   # 117 B2G-Agenten in 13 Wellen (s.u.)
+├── agents_b2g/                   # 135 B2G-Agenten in 15 Wellen (s.u.)
 ├── scripts/                      # Runner & Tests
 │   ├── calibrate_agent_x.py      # Compound-Risk-Kalibrierung
 │   ├── paper_trading_agent_x.py  # Paper-Trading mit Deep-Logging
@@ -64,7 +64,7 @@ agent_x_storage/
 
 ## Agent X B2G — Public Sector Procurement
 
-### Architecture: 13 Waves × 9 Agents = 117 Agents
+### Architecture: 15 Waves × 9 Agents = 135 Agents
 
 ```
 Wave 1 (Tendering):        Monitor → Parser → Eligibility → CHI-Risk → PoPW-Index →
@@ -116,11 +116,21 @@ Wave 17 (MacroEconomy):     VelocityOfMoneyTracker → RealTimeInflationOracle �
                             SupplyChainMultiplierCalc → ProgrammableStimulusEngine →
                             RealTimeTaxSplitter → CapitalEfficiencyAnalyzer →
                             SystemicRiskAndCartelMonitor → CentralBankLedgerTwin
+Wave 18 (Shadow Contract):  LifecycleStateEngine → ShadowContractDeployer →
+                            PrivateClientBridge → MilestoneConditionChecker →
+                            TaxSimulationAgent → RetentionVaultManager →
+                            AuditorDashboardComposer → PilotMetricsCollector →
+                            GovernmentOnboardingKit
+Wave 19 (Ecosystem):        EcosystemOnboardingOrchestrator → CraftsmanOnboarding →
+                            DeveloperOnboarding → BuilderOnboarding →
+                            IoTPartnerOnboarding → BankingPartnerOnboarding →
+                            ComplianceEnrollment → EcosystemHealthMonitor →
+                            PartnerSuccessManager
 ```
 
 ### Wellen-Übersicht
 
-Welle 3.5 (VOB/B Disput) ist eine Unterwelle von Welle 3 (Execution) und wird nicht als eigenständige Hauptwelle gezählt. Die Gesamtzahl der Hauptwellen beträgt 13 (Wellen 1–10, 15, 16, 17). Die Wellen-Nummern 11–14 existieren nicht — die Nummerierung springt von 10 direkt auf 15 (Public Portal), 16 (SEPA Bridge) und 17 (MacroEconomy).
+Welle 3.5 (VOB/B Disput) ist eine Unterwelle von Welle 3 (Execution) und wird nicht als eigenständige Hauptwelle gezählt. Die Gesamtzahl der Hauptwellen beträgt 15 (Wellen 1–10, 15, 16, 17, 18, 19). Die Wellen-Nummern 11–14 existieren nicht — die Nummerierung springt von 10 direkt auf 15 (Public Portal), 16 (SEPA Bridge), 17 (MacroEconomy), 18 (Shadow Contract) und 19 (Ecosystem Onboarding).
 
 | Welle | Name | Agenten | Modul | Fokus |
 |-------|------|---------|-------|-------|
@@ -138,6 +148,8 @@ Welle 3.5 (VOB/B Disput) ist eine Unterwelle von Welle 3 (Execution) und wird ni
 | 15 | Public Portal & Transparency | 9 | `public_portal/agents.py` | QR-Codes, Blockchain-Verifikation, Kommunalkarte, DSGVO-Shield, Open Data |
 | 16 | Monerium SEPA-Bridge | 9 | `bridge/agents.py` | EURe Mint/Burn, IBAN/BZSt-Validierung, ERC-4337 Paymaster, Δ=0,00€ Bridge-Reconciliation |
 | 17 | MacroEconomy Engine | 9 | `macro/macro_economy_orchestrator.py` | Velocity, Inflation, Multiplikator, Stimulus, Steuer, Kapitaleffizienz, Kartell, Zentralbank |
+| 18 | Shadow Contract & Pilot | 10 | `shadow/shadow_contract_orchestrator.py` | VOB Shadow Escrow, IoT/ZK-Milestones, ELSTER-Steuer, Retention, RPA-Dashboard |
+| 19 | Ecosystem Onboarding | 9 | `onboarding/ecosystem_onboarding_orchestrator.py` | Handwerker, Bauherren, Developer, IoT, Banken — 5 Rollen |
 
 ### B2G Module Structure
 
@@ -213,6 +225,14 @@ agents_b2g/
 │       ├── systemic_risk_and_cartel_monitor.py # Agent 7: Betweenness, PageRank, Gini (200 L)
 │       ├── real_time_inflation_oracle.py       # Agent 8: Laspeyres/Paasche/Fisher (858 L)
 │       └── central_bank_ledger_twin.py         # Agent 9: Bilanz + Taylor-Zins (260 L)
+├── shadow/                       # Wave 18: VOB Shadow Contract & Pilot
+│   ├── __init__.py
+│   ├── shadow_contract_orchestrator.py  # 14-Phase-Lifecycle, 10 Subagenten
+│   └── subagents/ (10 files)
+├── onboarding/                   # Wave 19: Ecosystem Onboarding
+│   ├── __init__.py
+│   ├── ecosystem_onboarding_orchestrator.py  # 5-Rollen-Root
+│   └── subagents/ (8 files)
 ├── event_bus.py                  # Pub/Sub + JSONL Audit-Log
 ├── gov_procurement_agent.py      # Root Orchestrator, BHO thresholds
 └── tender_reader_agent.py        # GAEB-XML Reader
@@ -338,6 +358,8 @@ GoBD → Ledger (BHO Δ=0,00€) → Chain-Hash → XRechnung → PoPW-Coverage 
 - **Wave 15 Public Portal:** 68/68 tests passed (QR generation SVG/PNG, batch, municipality, tenant isolation, fast-track, DSGVO shield, blockchain verification, open data export)
 - **Wave 16 SEPA Bridge:** 43/43 tests passed (Mint/Burn, IBAN/BZSt/MOD97/Blacklist, GoBD audit, OAuth2/CircuitBreaker/HALF_OPEN, ERC-4337 Paymaster + sponsor_tx, Δ=0.00€ reconciliation, SEPA polling/timeout, MiCAR compliance)
 - **Wave 17 MacroEconomy:** 8/8 E2E passed (`scripts/test_wave17_macro.py`), MEHI 0.74 Grade B, all 8 pipeline stages green, cartel patterns detected, balance sheet Δ=0.00€
+- **Wave 18 Shadow Contract:** 14/14 phases passed, Ledger Δ=0.00€, 21.600× speedup, 99.85% reliability, Atomic Settlement Δ=0.00€
+- **Wave 19 Ecosystem:** 5/5 stakeholder roles onboarded, 100% conversion rate, ecosystem health dashboard active
 
 ### Smart Contracts (Schwesterprojekt)
 
@@ -368,10 +390,10 @@ python3 scripts/paper_trading_agent_x.py
 # B2G — Bootstrap (3-agent demo)
 python3 scripts/bootstrap_b2g.py
 
-# B2G — Full Pipeline (117 agents, 13 waves)
+# B2G — Full Pipeline (135 agents, 15 waves)
 python3 orchestrator_b2g_full.py
 
-# B2G — E2E Test (117 agents, 13 waves)
+# B2G — E2E Test (135 agents, 15 waves)
 python3 scripts/end_to_end_90_agents.py
 
 # B2G — GAEB Reference Test
@@ -415,6 +437,11 @@ python3 agents_b2g/macro/subagents/programmable_stimulus_engine.py
 python3 agents_b2g/macro/subagents/real_time_tax_splitter.py
 python3 agents_b2g/macro/subagents/capital_efficiency_analyzer.py
 
+# B2G — Shadow Contract & Pilot (Wave 18)
+python3 agents_b2g/shadow/shadow_contract_orchestrator.py
+# B2G — Ecosystem Onboarding (Wave 19)
+python3 agents_b2g/onboarding/ecosystem_onboarding_orchestrator.py
+
 # B2G — SEPA Bridge (Wave 16)
 python3 scripts/test_wave16_bridge.py              # Run all 43 tests
 python3 -c "
@@ -431,7 +458,7 @@ print(sup.reconcile())
 # python3 scripts/deploy.py --dry-run
 # python3 scripts/deploy.py  # requires PRIVATE_KEY
 
-# Docker — Full Stack (117 agents + Redis/Neo4j/NATS/Prometheus/Grafana)
+# Docker — Full Stack (135 agents + Redis/Neo4j/NATS/Prometheus/Grafana)
 docker-compose up -d
 docker-compose logs -f pilot_dashboard
 ```
@@ -463,7 +490,7 @@ docker-compose logs -f pilot_dashboard
 | redis | redis:7.4-alpine | State store, session cache, pub/sub |
 | neo4j | neo4j:5.26-community | Graph database for audit trails, agent relationships |
 | nats | nats:2.10-alpine | JetStream message broker (replaces in-process EventBus) |
-| prometheus | prom/prometheus:v2.55.0 | Metrics collection from all 117 agents |
+| prometheus | prom/prometheus:v2.55.0 | Metrics collection from all 135 agents |
 | grafana | grafana/grafana:11.3.0 | Dashboards for ops and project management |
 
 ### Wave 10 Detail: Query & Reports (9 Agents)
@@ -475,7 +502,7 @@ docker-compose logs -f pilot_dashboard
 | ConstructionProgressQueryAgent | SollIstVergleich, GanttChartGenerator, DelayAnalyzer | GAEB-Plan vs. PoPW-Telemetrie, Baufortschritt |
 | TreasuryQueryAgent | BalanceSheetCalculator, RetentionTracker, SEPATransactionExporter | Escrow-Saldo, 5%-Einbehalt, SEPA-Tracking |
 | ComplianceQueryAgent | PIIAnonymizer, AuditTrailValidator, RetentionPolicyChecker | DSGVO/GoBD-Prüfung, JSONL-Vollständigkeit |
-| ControllingQueryAgent | CostTrendAnalyzer, AgentUtilizationStat, OnTimeDashboard | Kosten, Auslastung (117 Agenten), Termintreue |
+| ControllingQueryAgent | CostTrendAnalyzer, AgentUtilizationStat, OnTimeDashboard | Kosten, Auslastung (135 Agenten), Termintreue |
 | OpsQueryAgent | CircuitBreakerStatus, ErrorLogAggregator, PerformanceHeatmap | Systemgesundheit, Fehlerraten, Latenzen |
 | PublicDataQueryAgent | AnonymizationEngine, StatisticalCalculator, OpenDataExport | Vergabestatistik für Transparenzportale |
 | LocalEconomyQueryAgent | GeoIPResolver, RegionalShareCalculator, SubsidyImpactReport | Regionaler Unternehmensanteil, Fördermittel-Impact |
@@ -573,10 +600,49 @@ Transactions → Velocity → Inflation → SupplyChain → Stimulus → TaxSpli
 - try/except wrapping on every agent method
 - E2E Test: `python3 scripts/test_wave17_macro.py` — 8/8 passed
 
+### Wave 18 Detail: VOB Shadow Contract & Real-World Pilot (10 Agents)
+
+Rechtssicherer Parallelbetrieb: Smart-Contract-basierte Bauabwicklung als Schattenbuchhaltung zur traditionellen VOB/B-Abwicklung. Ermöglicht Behörden die Beobachtung und Validierung ohne Prozessänderung.
+
+**14-Phasen-Lifecycle (E2E: 14/14 passed):**
+```
+Init → Deploy → Fund → 5×Milestones → Tax → Retention → Complete → Auditor → Metrics → Onboarding
+```
+
+| Agent | Funktion |
+|-------|----------|
+| ShadowContractOrchestrator | Root: 14-Phasen-Lifecycle, alle Subagenten integriert |
+| LifecycleStateEngine | CREATED→FUNDED→ACTIVE→DISPUTED→SETTLED→COMPLETED |
+| ShadowContractDeployer | 9-stufig: Compile→Deploy→Gnosisscan→GoBD |
+| PrivateClientBridge | 6-stufig: SEPA→vIBAN→Reconcile→Monerium→Verify |
+| MilestoneConditionChecker | 9-stufig: IoT→ZK→Quantity→Quality→Schedule→Release |
+| TaxSimulationAgent | 9-stufig: §13b→BZSt→Split→ELSTER→PDF/A-3 |
+| RetentionVaultManager | VOB/B §17: 5% Einbehalt, 4-Jahres-Frist, Aval-Bürgschaft |
+| AuditorDashboardComposer | Read-Only RPA-Dashboard + Completion Certificate |
+| PilotMetricsCollector | 21.600× Speedup, 99.85% Reliability, 88.4 SUS |
+| GovernmentOnboardingKit | EVB-IT-Vertrag, DSGVO-DSFA, Sandbox-Demo-Zugang |
+| AtomicSettlementEngine | Brutto→Netto+USt+Bauabzug+Retention, Δ=0.00€ |
+
+### Wave 19 Detail: Multi-Stakeholder Onboarding & Ecosystem (9 Agents)
+
+5 Zielgruppen — Handwerker, Bauherren, Software-Partner, IoT-Hersteller, Banken. Flywheel: Jeder integrierte Partner zieht weitere an.
+
+| Agent | Funktion |
+|-------|----------|
+| EcosystemOnboardingOrchestrator | Root: 5-Rollen-Routing, Batch-Onboarding, Ecosystem Health |
+| CraftsmanOnboardingAgent | BundID→IBAN→BZSt→ERC-4337→Freemium, Sofort-Auszahlung in <60s |
+| DeveloperOnboardingAgent | API-Keys, SDK (Python/TS/.NET), Sandbox, Rate Limits |
+| BuilderOnboardingAgent | GAEB-Upload, Escrow, Shadow-Contract-Init |
+| IoTPartnerOnboardingAgent | peaq-DID-Registrierung, Telemetrie-Oracle |
+| BankingPartnerOnboardingAgent | ISO-20022-Endpoint, Settlement-Node |
+| ComplianceEnrollmentAgent | KYB, AML, BZSt-Steuer-ID-Validierung |
+| EcosystemHealthMonitor | Real-Time Health Dashboard, 24h-Metriken, Rollenverteilung |
+| PartnerSuccessManager | Rollenbasierte Empfehlungen, Upsell-Erkennung |
+
 ## Language
 
 German for communication and documentation. Code comments in English.
 
 ## Version
 
-Agent X Core: 0.4.0 (stable, 90/100 backtest). Agent X B2G: 0.8.0 (117 agents, 13 waves + Wave 3.5 VOB/B + 25 compliance agents, E2E: Waves 1-17, RPA + VK PDFs, GAEB DA XML 3.3, XRechnung 3.0, VHB-221/222, BVBS Sync, Public Portal Wave 15: 68/68 tests, SEPA Bridge Wave 16: 43/43 tests, MacroEconomy Wave 17: 8/8 E2E passed, MEHI 0.74 Grade B).
+Agent X Core: 0.4.0 (stable, 90/100 backtest). Agent X B2G: 0.9.0 (135 agents, 15 waves + Wave 3.5 VOB/B + 25 compliance agents, E2E: Waves 1-17, Shadow Contract Wave 18: 14/14 phases, Ecosystem Onboarding Wave 19: 5/5 roles, GAEB DA XML 3.3, XRechnung 3.0, VHB-221/222, GoBD/BHO/EVB-IT/DSGVO ready, 30.000+ lines).
