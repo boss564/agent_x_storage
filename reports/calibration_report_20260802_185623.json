@@ -1,0 +1,819 @@
+{
+  "total_blocks_analyzed": 80,
+  "overheated_blocks_count": 13,
+  "overheat_rate_percent": 16.25,
+  "config": {
+    "alpha": 0.15,
+    "static_caution_threshold": 2.0,
+    "volatility_penalty": 0.5
+  },
+  "evaluations": [
+    {
+      "block_id": "BLK-0000",
+      "raw_signal": 1.1337,
+      "rolling_mean": 1.1337,
+      "rolling_std": 0.0001,
+      "z_score": 0.0,
+      "raw_zone": "NORMAL",
+      "calibrated_zone": "NORMAL",
+      "is_overheated": false
+    },
+    {
+      "block_id": "BLK-0001",
+      "raw_signal": 0.6004,
+      "rolling_mean": 1.0537,
+      "rolling_std": 0.2065,
+      "z_score": -2.1947,
+      "raw_zone": "NORMAL",
+      "calibrated_zone": "NORMAL",
+      "is_overheated": false
+    },
+    {
+      "block_id": "BLK-0002",
+      "raw_signal": -0.2504,
+      "rolling_mean": 0.8581,
+      "rolling_std": 0.5398,
+      "z_score": -2.0536,
+      "raw_zone": "NORMAL",
+      "calibrated_zone": "NORMAL",
+      "is_overheated": false
+    },
+    {
+      "block_id": "BLK-0003",
+      "raw_signal": -1.0125,
+      "rolling_mean": 0.5775,
+      "rolling_std": 0.8789,
+      "z_score": -1.809,
+      "raw_zone": "NORMAL",
+      "calibrated_zone": "NORMAL",
+      "is_overheated": false
+    },
+    {
+      "block_id": "BLK-0004",
+      "raw_signal": 1.0521,
+      "rolling_mean": 0.6487,
+      "rolling_std": 0.8309,
+      "z_score": 0.4855,
+      "raw_zone": "NORMAL",
+      "calibrated_zone": "NORMAL",
+      "is_overheated": false
+    },
+    {
+      "block_id": "BLK-0005",
+      "raw_signal": 0.6046,
+      "rolling_mean": 0.6421,
+      "rolling_std": 0.7663,
+      "z_score": -0.0489,
+      "raw_zone": "NORMAL",
+      "calibrated_zone": "NORMAL",
+      "is_overheated": false
+    },
+    {
+      "block_id": "BLK-0006",
+      "raw_signal": 0.8662,
+      "rolling_mean": 0.6757,
+      "rolling_std": 0.7118,
+      "z_score": 0.2676,
+      "raw_zone": "NORMAL",
+      "calibrated_zone": "NORMAL",
+      "is_overheated": false
+    },
+    {
+      "block_id": "BLK-0007",
+      "raw_signal": 1.5997,
+      "rolling_mean": 0.8143,
+      "rolling_std": 0.7475,
+      "z_score": 1.0508,
+      "raw_zone": "NORMAL",
+      "calibrated_zone": "NORMAL",
+      "is_overheated": false
+    },
+    {
+      "block_id": "BLK-0008",
+      "raw_signal": -0.7335,
+      "rolling_mean": 0.5821,
+      "rolling_std": 0.9134,
+      "z_score": -1.4404,
+      "raw_zone": "NORMAL",
+      "calibrated_zone": "NORMAL",
+      "is_overheated": false
+    },
+    {
+      "block_id": "BLK-0009",
+      "raw_signal": -0.2748,
+      "rolling_mean": 0.4536,
+      "rolling_std": 0.9051,
+      "z_score": -0.8047,
+      "raw_zone": "NORMAL",
+      "calibrated_zone": "NORMAL",
+      "is_overheated": false
+    },
+    {
+      "block_id": "BLK-0010",
+      "raw_signal": 1.5621,
+      "rolling_mean": 0.6199,
+      "rolling_std": 0.9384,
+      "z_score": 1.004,
+      "raw_zone": "NORMAL",
+      "calibrated_zone": "NORMAL",
+      "is_overheated": false
+    },
+    {
+      "block_id": "BLK-0011",
+      "raw_signal": -0.1912,
+      "rolling_mean": 0.4982,
+      "rolling_std": 0.9205,
+      "z_score": -0.749,
+      "raw_zone": "NORMAL",
+      "calibrated_zone": "NORMAL",
+      "is_overheated": false
+    },
+    {
+      "block_id": "BLK-0012",
+      "raw_signal": 3.2716,
+      "rolling_mean": 0.9142,
+      "rolling_std": 1.3689,
+      "z_score": 1.7221,
+      "raw_zone": "CAUTION",
+      "calibrated_zone": "NORMAL",
+      "is_overheated": true
+    },
+    {
+      "block_id": "BLK-0013",
+      "raw_signal": 0.802,
+      "rolling_mean": 0.8974,
+      "rolling_std": 1.2628,
+      "z_score": -0.0755,
+      "raw_zone": "NORMAL",
+      "calibrated_zone": "NORMAL",
+      "is_overheated": false
+    },
+    {
+      "block_id": "BLK-0014",
+      "raw_signal": -0.1636,
+      "rolling_mean": 0.7382,
+      "rolling_std": 1.2347,
+      "z_score": -0.7304,
+      "raw_zone": "NORMAL",
+      "calibrated_zone": "NORMAL",
+      "is_overheated": false
+    },
+    {
+      "block_id": "BLK-0015",
+      "raw_signal": -0.3804,
+      "rolling_mean": 0.5704,
+      "rolling_std": 1.218,
+      "z_score": -0.7807,
+      "raw_zone": "NORMAL",
+      "calibrated_zone": "NORMAL",
+      "is_overheated": false
+    },
+    {
+      "block_id": "BLK-0016",
+      "raw_signal": 1.2692,
+      "rolling_mean": 0.6753,
+      "rolling_std": 1.1551,
+      "z_score": 0.5142,
+      "raw_zone": "NORMAL",
+      "calibrated_zone": "NORMAL",
+      "is_overheated": false
+    },
+    {
+      "block_id": "BLK-0017",
+      "raw_signal": 0.3688,
+      "rolling_mean": 0.6293,
+      "rolling_std": 1.0715,
+      "z_score": -0.2431,
+      "raw_zone": "NORMAL",
+      "calibrated_zone": "NORMAL",
+      "is_overheated": false
+    },
+    {
+      "block_id": "BLK-0018",
+      "raw_signal": -0.194,
+      "rolling_mean": 0.5058,
+      "rolling_std": 1.0381,
+      "z_score": -0.6741,
+      "raw_zone": "NORMAL",
+      "calibrated_zone": "NORMAL",
+      "is_overheated": false
+    },
+    {
+      "block_id": "BLK-0019",
+      "raw_signal": -0.5785,
+      "rolling_mean": 0.3431,
+      "rolling_std": 1.0451,
+      "z_score": -0.8819,
+      "raw_zone": "NORMAL",
+      "calibrated_zone": "NORMAL",
+      "is_overheated": false
+    },
+    {
+      "block_id": "BLK-0020",
+      "raw_signal": 1.0517,
+      "rolling_mean": 0.4494,
+      "rolling_std": 1.0019,
+      "z_score": 0.6011,
+      "raw_zone": "NORMAL",
+      "calibrated_zone": "NORMAL",
+      "is_overheated": false
+    },
+    {
+      "block_id": "BLK-0021",
+      "raw_signal": 0.6634,
+      "rolling_mean": 0.4815,
+      "rolling_std": 0.9274,
+      "z_score": 0.1961,
+      "raw_zone": "NORMAL",
+      "calibrated_zone": "NORMAL",
+      "is_overheated": false
+    },
+    {
+      "block_id": "BLK-0022",
+      "raw_signal": 0.5398,
+      "rolling_mean": 0.4903,
+      "rolling_std": 0.8553,
+      "z_score": 0.0579,
+      "raw_zone": "NORMAL",
+      "calibrated_zone": "NORMAL",
+      "is_overheated": false
+    },
+    {
+      "block_id": "BLK-0023",
+      "raw_signal": 0.867,
+      "rolling_mean": 0.5468,
+      "rolling_std": 0.8019,
+      "z_score": 0.3993,
+      "raw_zone": "NORMAL",
+      "calibrated_zone": "NORMAL",
+      "is_overheated": false
+    },
+    {
+      "block_id": "BLK-0024",
+      "raw_signal": -0.0081,
+      "rolling_mean": 0.4635,
+      "rolling_std": 0.77,
+      "z_score": -0.6126,
+      "raw_zone": "NORMAL",
+      "calibrated_zone": "NORMAL",
+      "is_overheated": false
+    },
+    {
+      "block_id": "BLK-0025",
+      "raw_signal": 1.0776,
+      "rolling_mean": 0.5557,
+      "rolling_std": 0.7486,
+      "z_score": 0.6972,
+      "raw_zone": "NORMAL",
+      "calibrated_zone": "NORMAL",
+      "is_overheated": false
+    },
+    {
+      "block_id": "BLK-0026",
+      "raw_signal": 1.5657,
+      "rolling_mean": 0.7072,
+      "rolling_std": 0.7934,
+      "z_score": 1.0822,
+      "raw_zone": "NORMAL",
+      "calibrated_zone": "NORMAL",
+      "is_overheated": false
+    },
+    {
+      "block_id": "BLK-0027",
+      "raw_signal": 0.0519,
+      "rolling_mean": 0.6089,
+      "rolling_std": 0.7742,
+      "z_score": -0.7194,
+      "raw_zone": "NORMAL",
+      "calibrated_zone": "NORMAL",
+      "is_overheated": false
+    },
+    {
+      "block_id": "BLK-0028",
+      "raw_signal": 0.4375,
+      "rolling_mean": 0.5832,
+      "rolling_std": 0.7169,
+      "z_score": -0.2032,
+      "raw_zone": "NORMAL",
+      "calibrated_zone": "NORMAL",
+      "is_overheated": false
+    },
+    {
+      "block_id": "BLK-0029",
+      "raw_signal": 0.0262,
+      "rolling_mean": 0.4996,
+      "rolling_std": 0.6952,
+      "z_score": -0.681,
+      "raw_zone": "NORMAL",
+      "calibrated_zone": "NORMAL",
+      "is_overheated": false
+    },
+    {
+      "block_id": "BLK-0030",
+      "raw_signal": 2.6867,
+      "rolling_mean": 0.8277,
+      "rolling_std": 1.0622,
+      "z_score": 1.7501,
+      "raw_zone": "CAUTION",
+      "calibrated_zone": "NORMAL",
+      "is_overheated": true
+    },
+    {
+      "block_id": "BLK-0031",
+      "raw_signal": -0.2865,
+      "rolling_mean": 0.6606,
+      "rolling_std": 1.0702,
+      "z_score": -0.8849,
+      "raw_zone": "NORMAL",
+      "calibrated_zone": "NORMAL",
+      "is_overheated": false
+    },
+    {
+      "block_id": "BLK-0032",
+      "raw_signal": 2.176,
+      "rolling_mean": 0.8879,
+      "rolling_std": 1.148,
+      "z_score": 1.122,
+      "raw_zone": "CAUTION",
+      "calibrated_zone": "NORMAL",
+      "is_overheated": true
+    },
+    {
+      "block_id": "BLK-0033",
+      "raw_signal": -0.0693,
+      "rolling_mean": 0.7443,
+      "rolling_std": 1.1215,
+      "z_score": -0.7255,
+      "raw_zone": "NORMAL",
+      "calibrated_zone": "NORMAL",
+      "is_overheated": false
+    },
+    {
+      "block_id": "BLK-0034",
+      "raw_signal": 0.4387,
+      "rolling_mean": 0.6985,
+      "rolling_std": 1.0407,
+      "z_score": -0.2496,
+      "raw_zone": "NORMAL",
+      "calibrated_zone": "NORMAL",
+      "is_overheated": false
+    },
+    {
+      "block_id": "BLK-0035",
+      "raw_signal": 4.1842,
+      "rolling_mean": 1.2213,
+      "rolling_std": 1.6563,
+      "z_score": 1.7889,
+      "raw_zone": "CAUTION",
+      "calibrated_zone": "NORMAL",
+      "is_overheated": true
+    },
+    {
+      "block_id": "BLK-0036",
+      "raw_signal": 1.1344,
+      "rolling_mean": 1.2083,
+      "rolling_std": 1.5274,
+      "z_score": -0.0484,
+      "raw_zone": "NORMAL",
+      "calibrated_zone": "NORMAL",
+      "is_overheated": false
+    },
+    {
+      "block_id": "BLK-0037",
+      "raw_signal": 1.5727,
+      "rolling_mean": 1.2629,
+      "rolling_std": 1.4152,
+      "z_score": 0.2189,
+      "raw_zone": "NORMAL",
+      "calibrated_zone": "NORMAL",
+      "is_overheated": false
+    },
+    {
+      "block_id": "BLK-0038",
+      "raw_signal": 2.7416,
+      "rolling_mean": 1.4847,
+      "rolling_std": 1.4249,
+      "z_score": 0.8821,
+      "raw_zone": "CAUTION",
+      "calibrated_zone": "NORMAL",
+      "is_overheated": true
+    },
+    {
+      "block_id": "BLK-0039",
+      "raw_signal": 0.6605,
+      "rolling_mean": 1.3611,
+      "rolling_std": 1.3519,
+      "z_score": -0.5182,
+      "raw_zone": "NORMAL",
+      "calibrated_zone": "NORMAL",
+      "is_overheated": false
+    },
+    {
+      "block_id": "BLK-0040",
+      "raw_signal": 0.4152,
+      "rolling_mean": 1.2192,
+      "rolling_std": 1.2991,
+      "z_score": -0.6189,
+      "raw_zone": "NORMAL",
+      "calibrated_zone": "NORMAL",
+      "is_overheated": false
+    },
+    {
+      "block_id": "BLK-0041",
+      "raw_signal": 3.9819,
+      "rolling_mean": 1.6336,
+      "rolling_std": 1.6061,
+      "z_score": 1.4621,
+      "raw_zone": "CAUTION",
+      "calibrated_zone": "NORMAL",
+      "is_overheated": true
+    },
+    {
+      "block_id": "BLK-0042",
+      "raw_signal": 1.0312,
+      "rolling_mean": 1.5433,
+      "rolling_std": 1.499,
+      "z_score": -0.3416,
+      "raw_zone": "NORMAL",
+      "calibrated_zone": "NORMAL",
+      "is_overheated": false
+    },
+    {
+      "block_id": "BLK-0043",
+      "raw_signal": 3.2215,
+      "rolling_mean": 1.795,
+      "rolling_std": 1.5272,
+      "z_score": 0.9341,
+      "raw_zone": "CAUTION",
+      "calibrated_zone": "NORMAL",
+      "is_overheated": true
+    },
+    {
+      "block_id": "BLK-0044",
+      "raw_signal": 0.8688,
+      "rolling_mean": 1.6561,
+      "rolling_std": 1.453,
+      "z_score": -0.5418,
+      "raw_zone": "NORMAL",
+      "calibrated_zone": "NORMAL",
+      "is_overheated": false
+    },
+    {
+      "block_id": "BLK-0045",
+      "raw_signal": 0.6125,
+      "rolling_mean": 1.4995,
+      "rolling_std": 1.3992,
+      "z_score": -0.6339,
+      "raw_zone": "NORMAL",
+      "calibrated_zone": "NORMAL",
+      "is_overheated": false
+    },
+    {
+      "block_id": "BLK-0046",
+      "raw_signal": 0.2441,
+      "rolling_mean": 1.3112,
+      "rolling_std": 1.3786,
+      "z_score": -0.774,
+      "raw_zone": "NORMAL",
+      "calibrated_zone": "NORMAL",
+      "is_overheated": false
+    },
+    {
+      "block_id": "BLK-0047",
+      "raw_signal": 0.6362,
+      "rolling_mean": 1.21,
+      "rolling_std": 1.2976,
+      "z_score": -0.4422,
+      "raw_zone": "NORMAL",
+      "calibrated_zone": "NORMAL",
+      "is_overheated": false
+    },
+    {
+      "block_id": "BLK-0048",
+      "raw_signal": 0.8824,
+      "rolling_mean": 1.1608,
+      "rolling_std": 1.2031,
+      "z_score": -0.2314,
+      "raw_zone": "NORMAL",
+      "calibrated_zone": "NORMAL",
+      "is_overheated": false
+    },
+    {
+      "block_id": "BLK-0049",
+      "raw_signal": 1.2736,
+      "rolling_mean": 1.1777,
+      "rolling_std": 1.11,
+      "z_score": 0.0864,
+      "raw_zone": "NORMAL",
+      "calibrated_zone": "NORMAL",
+      "is_overheated": false
+    },
+    {
+      "block_id": "BLK-0050",
+      "raw_signal": 0.2786,
+      "rolling_mean": 1.0429,
+      "rolling_std": 1.081,
+      "z_score": -0.707,
+      "raw_zone": "NORMAL",
+      "calibrated_zone": "NORMAL",
+      "is_overheated": false
+    },
+    {
+      "block_id": "BLK-0051",
+      "raw_signal": -0.6901,
+      "rolling_mean": 0.7829,
+      "rolling_std": 1.2016,
+      "z_score": -1.2259,
+      "raw_zone": "NORMAL",
+      "calibrated_zone": "NORMAL",
+      "is_overheated": false
+    },
+    {
+      "block_id": "BLK-0052",
+      "raw_signal": 0.2538,
+      "rolling_mean": 0.7036,
+      "rolling_std": 1.1266,
+      "z_score": -0.3992,
+      "raw_zone": "NORMAL",
+      "calibrated_zone": "NORMAL",
+      "is_overheated": false
+    },
+    {
+      "block_id": "BLK-0053",
+      "raw_signal": 0.1987,
+      "rolling_mean": 0.6278,
+      "rolling_std": 1.0569,
+      "z_score": -0.406,
+      "raw_zone": "NORMAL",
+      "calibrated_zone": "NORMAL",
+      "is_overheated": false
+    },
+    {
+      "block_id": "BLK-0054",
+      "raw_signal": 2.0658,
+      "rolling_mean": 0.8435,
+      "rolling_std": 1.1224,
+      "z_score": 1.089,
+      "raw_zone": "CAUTION",
+      "calibrated_zone": "NORMAL",
+      "is_overheated": true
+    },
+    {
+      "block_id": "BLK-0055",
+      "raw_signal": 0.0324,
+      "rolling_mean": 0.7219,
+      "rolling_std": 1.0814,
+      "z_score": -0.6376,
+      "raw_zone": "NORMAL",
+      "calibrated_zone": "NORMAL",
+      "is_overheated": false
+    },
+    {
+      "block_id": "BLK-0056",
+      "raw_signal": 1.2656,
+      "rolling_mean": 0.8034,
+      "rolling_std": 1.019,
+      "z_score": 0.4536,
+      "raw_zone": "NORMAL",
+      "calibrated_zone": "NORMAL",
+      "is_overheated": false
+    },
+    {
+      "block_id": "BLK-0057",
+      "raw_signal": 4.9847,
+      "rolling_mean": 1.4306,
+      "rolling_std": 1.8722,
+      "z_score": 1.8984,
+      "raw_zone": "CAUTION",
+      "calibrated_zone": "NORMAL",
+      "is_overheated": true
+    },
+    {
+      "block_id": "BLK-0058",
+      "raw_signal": -0.2044,
+      "rolling_mean": 1.1854,
+      "rolling_std": 1.8386,
+      "z_score": -0.7559,
+      "raw_zone": "NORMAL",
+      "calibrated_zone": "NORMAL",
+      "is_overheated": false
+    },
+    {
+      "block_id": "BLK-0059",
+      "raw_signal": -0.3401,
+      "rolling_mean": 0.9565,
+      "rolling_std": 1.7951,
+      "z_score": -0.7223,
+      "raw_zone": "NORMAL",
+      "calibrated_zone": "NORMAL",
+      "is_overheated": false
+    },
+    {
+      "block_id": "BLK-0060",
+      "raw_signal": -0.847,
+      "rolling_mean": 0.686,
+      "rolling_std": 1.7964,
+      "z_score": -0.8534,
+      "raw_zone": "NORMAL",
+      "calibrated_zone": "NORMAL",
+      "is_overheated": false
+    },
+    {
+      "block_id": "BLK-0061",
+      "raw_signal": 0.1598,
+      "rolling_mean": 0.6071,
+      "rolling_std": 1.6686,
+      "z_score": -0.268,
+      "raw_zone": "NORMAL",
+      "calibrated_zone": "NORMAL",
+      "is_overheated": false
+    },
+    {
+      "block_id": "BLK-0062",
+      "raw_signal": 0.4287,
+      "rolling_mean": 0.5803,
+      "rolling_std": 1.54,
+      "z_score": -0.0985,
+      "raw_zone": "NORMAL",
+      "calibrated_zone": "NORMAL",
+      "is_overheated": false
+    },
+    {
+      "block_id": "BLK-0063",
+      "raw_signal": 3.6772,
+      "rolling_mean": 1.0449,
+      "rolling_std": 1.8586,
+      "z_score": 1.4163,
+      "raw_zone": "CAUTION",
+      "calibrated_zone": "NORMAL",
+      "is_overheated": true
+    },
+    {
+      "block_id": "BLK-0064",
+      "raw_signal": 2.6313,
+      "rolling_mean": 1.2828,
+      "rolling_std": 1.8204,
+      "z_score": 0.7408,
+      "raw_zone": "CAUTION",
+      "calibrated_zone": "NORMAL",
+      "is_overheated": true
+    },
+    {
+      "block_id": "BLK-0065",
+      "raw_signal": -0.0975,
+      "rolling_mean": 1.0758,
+      "rolling_std": 1.7614,
+      "z_score": -0.6661,
+      "raw_zone": "NORMAL",
+      "calibrated_zone": "NORMAL",
+      "is_overheated": false
+    },
+    {
+      "block_id": "BLK-0066",
+      "raw_signal": 2.5998,
+      "rolling_mean": 1.3044,
+      "rolling_std": 1.7279,
+      "z_score": 0.7497,
+      "raw_zone": "CAUTION",
+      "calibrated_zone": "NORMAL",
+      "is_overheated": true
+    },
+    {
+      "block_id": "BLK-0067",
+      "raw_signal": 0.3892,
+      "rolling_mean": 1.1671,
+      "rolling_std": 1.632,
+      "z_score": -0.4767,
+      "raw_zone": "NORMAL",
+      "calibrated_zone": "NORMAL",
+      "is_overheated": false
+    },
+    {
+      "block_id": "BLK-0068",
+      "raw_signal": 0.5907,
+      "rolling_mean": 1.0806,
+      "rolling_std": 1.5211,
+      "z_score": -0.3221,
+      "raw_zone": "NORMAL",
+      "calibrated_zone": "NORMAL",
+      "is_overheated": false
+    },
+    {
+      "block_id": "BLK-0069",
+      "raw_signal": -0.8601,
+      "rolling_mean": 0.7895,
+      "rolling_std": 1.5911,
+      "z_score": -1.0368,
+      "raw_zone": "NORMAL",
+      "calibrated_zone": "NORMAL",
+      "is_overheated": false
+    },
+    {
+      "block_id": "BLK-0070",
+      "raw_signal": -0.0974,
+      "rolling_mean": 0.6565,
+      "rolling_std": 1.5066,
+      "z_score": -0.5004,
+      "raw_zone": "NORMAL",
+      "calibrated_zone": "NORMAL",
+      "is_overheated": false
+    },
+    {
+      "block_id": "BLK-0071",
+      "raw_signal": 1.6376,
+      "rolling_mean": 0.8037,
+      "rolling_std": 1.44,
+      "z_score": 0.5791,
+      "raw_zone": "NORMAL",
+      "calibrated_zone": "NORMAL",
+      "is_overheated": false
+    },
+    {
+      "block_id": "BLK-0072",
+      "raw_signal": 0.7368,
+      "rolling_mean": 0.7936,
+      "rolling_std": 1.3279,
+      "z_score": -0.0428,
+      "raw_zone": "NORMAL",
+      "calibrated_zone": "NORMAL",
+      "is_overheated": false
+    },
+    {
+      "block_id": "BLK-0073",
+      "raw_signal": 1.4674,
+      "rolling_mean": 0.8947,
+      "rolling_std": 1.2518,
+      "z_score": 0.4575,
+      "raw_zone": "NORMAL",
+      "calibrated_zone": "NORMAL",
+      "is_overheated": false
+    },
+    {
+      "block_id": "BLK-0074",
+      "raw_signal": -0.4875,
+      "rolling_mean": 0.6874,
+      "rolling_std": 1.2722,
+      "z_score": -0.9235,
+      "raw_zone": "NORMAL",
+      "calibrated_zone": "NORMAL",
+      "is_overheated": false
+    },
+    {
+      "block_id": "BLK-0075",
+      "raw_signal": 2.9177,
+      "rolling_mean": 1.0219,
+      "rolling_std": 1.4567,
+      "z_score": 1.3015,
+      "raw_zone": "CAUTION",
+      "calibrated_zone": "NORMAL",
+      "is_overheated": true
+    },
+    {
+      "block_id": "BLK-0076",
+      "raw_signal": 0.0962,
+      "rolling_mean": 0.8831,
+      "rolling_std": 1.39,
+      "z_score": -0.5661,
+      "raw_zone": "NORMAL",
+      "calibrated_zone": "NORMAL",
+      "is_overheated": false
+    },
+    {
+      "block_id": "BLK-0077",
+      "raw_signal": 0.4552,
+      "rolling_mean": 0.8189,
+      "rolling_std": 1.2922,
+      "z_score": -0.2814,
+      "raw_zone": "NORMAL",
+      "calibrated_zone": "NORMAL",
+      "is_overheated": false
+    },
+    {
+      "block_id": "BLK-0078",
+      "raw_signal": 0.0082,
+      "rolling_mean": 0.6973,
+      "rolling_std": 1.232,
+      "z_score": -0.5593,
+      "raw_zone": "NORMAL",
+      "calibrated_zone": "NORMAL",
+      "is_overheated": false
+    },
+    {
+      "block_id": "BLK-0079",
+      "raw_signal": 0.1952,
+      "rolling_mean": 0.622,
+      "rolling_std": 1.1524,
+      "z_score": -0.3703,
+      "raw_zone": "NORMAL",
+      "calibrated_zone": "NORMAL",
+      "is_overheated": false
+    }
+  ],
+  "recommendation": "Moderate over-sensitivity detected. Consider raising threshold to 2.4 or increasing \u03b1 to 0.25.",
+  "additional_metrics": {
+    "z_score_mean": -0.094,
+    "z_score_std": 0.8692,
+    "z_score_min": -2.1947,
+    "z_score_max": 1.8984
+  }
+}

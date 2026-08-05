@@ -1,0 +1,654 @@
+# ============================================================
+# Agent X B2G — Docker Compose (81 Agents, 9 Waves)
+# ============================================================
+# Usage:
+#   docker-compose up -d                  # Start all 72 agents
+#   docker-compose up -d --scale ops_health=3  # HA for critical agents
+#   docker-compose logs -f pilot_dashboard     # Stream dashboard logs
+# ============================================================
+
+version: "3.9"
+
+x-agent-defaults: &agent_defaults
+  restart: unless-stopped
+  networks:
+    - agent_x_b2g
+  environment:
+    - AGENT_X_ENV=${AGENT_X_ENV:-pilot}
+    - REDIS_URL=redis://redis:6379
+    - NEO4J_URI=bolt://neo4j:7687
+    - NEO4J_USER=${NEO4J_USER:-neo4j}
+    - NEO4J_PASSWORD=${NEO4J_PASSWORD}
+    - GNOSIS_RPC=${GNOSIS_RPC:-https://rpc.gnosischain.com}
+    - PEAQ_RPC=${PEAQ_RPC:-wss://wsspc.peaq.network}
+    - BUNDID_JWKS_URL=${BUNDID_JWKS_URL}
+    - SMTP_HOST=${SMTP_HOST}
+    - TWILIO_ACCOUNT_SID=${TWILIO_ACCOUNT_SID}
+    - TWILIO_AUTH_TOKEN=${TWILIO_AUTH_TOKEN}
+    - PGP_PUBLIC_KEY_PATH=/keys/authority_pgp.asc
+    - TENANT_ENCRYPTION_MASTER_KEY=${TENANT_ENCRYPTION_MASTER_KEY}
+  logging:
+    driver: json-file
+    options:
+      max-size: "50m"
+      max-file: "5"
+
+services:
+  # ==========================================================
+  # Infrastructure
+  # ==========================================================
+  redis:
+    image: redis:7.4-alpine
+    restart: unless-stopped
+    networks:
+      - agent_x_b2g
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  neo4j:
+    image: neo4j:5.26-community
+    restart: unless-stopped
+    networks:
+      - agent_x_b2g
+    environment:
+      - NEO4J_AUTH=neo4j/${NEO4J_PASSWORD}
+      - NEO4J_apoc_export_file_enabled=true
+    volumes:
+      - neo4j_data:/data
+      - neo4j_logs:/logs
+    healthcheck:
+      test: ["CMD", "cypher-shell", "-u", "neo4j", "-p", "${NEO4J_PASSWORD}", "RETURN 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  nats:
+    image: nats:2.10-alpine
+    restart: unless-stopped
+    command: "--jetstream --store_dir /data"
+    networks:
+      - agent_x_b2g
+    volumes:
+      - nats_data:/data
+    healthcheck:
+      test: ["CMD", "nats", "server", "check", "-s", "nats://localhost:4222"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # ==========================================================
+  # Wave 1: Tendering Engine (9 Agents)
+  # ==========================================================
+  tender_monitor:
+    <<: *agent_defaults
+    container_name: tender_monitor
+    command: ["python", "-m", "agents_b2g.tendering.agents", "--role", "monitor"]
+
+  gaeb_parser:
+    <<: *agent_defaults
+    container_name: gaeb_parser
+    command: ["python", "-m", "agents_b2g.tendering.agents", "--role", "parser"]
+
+  eligibility_analyzer:
+    <<: *agent_defaults
+    container_name: eligibility_analyzer
+    command: ["python", "-m", "agents_b2g.tendering.agents", "--role", "eligibility"]
+
+  chi_risk_scorer:
+    <<: *agent_defaults
+    container_name: chi_risk_scorer
+    command: ["python", "-m", "agents_b2g.tendering.agents", "--role", "chi"]
+
+  popw_indexer:
+    <<: *agent_defaults
+    container_name: popw_indexer
+    command: ["python", "-m", "agents_b2g.tendering.agents", "--role", "popw"]
+
+  offer_calculator:
+    <<: *agent_defaults
+    container_name: offer_calculator
+    command: ["python", "-m", "agents_b2g.tendering.agents", "--role", "calculator"]
+
+  bid_composer:
+    <<: *agent_defaults
+    container_name: bid_composer
+    command: ["python", "-m", "agents_b2g.tendering.agents", "--role", "composer"]
+
+  deadline_manager:
+    <<: *agent_defaults
+    container_name: deadline_manager
+    command: ["python", "-m", "agents_b2g.tendering.agents", "--role", "deadline"]
+
+  bid_submittal:
+    <<: *agent_defaults
+    container_name: bid_submittal
+    command: ["python", "-m", "agents_b2g.tendering.agents", "--role", "submittal"]
+
+  # ==========================================================
+  # Wave 2: Composing & QES (9 Agents)
+  # ==========================================================
+  position_aggregator:
+    <<: *agent_defaults
+    container_name: position_aggregator
+    command: ["python", "-m", "agents_b2g.composing.agents", "--role", "aggregator"]
+
+  price_injector:
+    <<: *agent_defaults
+    container_name: price_injector
+    command: ["python", "-m", "agents_b2g.composing.agents", "--role", "price"]
+
+  gap_filler:
+    <<: *agent_defaults
+    container_name: gap_filler
+    command: ["python", "-m", "agents_b2g.composing.agents", "--role", "gap"]
+
+  annex_composer:
+    <<: *agent_defaults
+    container_name: annex_composer
+    command: ["python", "-m", "agents_b2g.composing.agents", "--role", "annex"]
+
+  x84_serializer:
+    <<: *agent_defaults
+    container_name: x84_serializer
+    command: ["python", "-m", "agents_b2g.composing.agents", "--role", "serialize"]
+
+  x84_validator:
+    <<: *agent_defaults
+    container_name: x84_validator
+    command: ["python", "-m", "agents_b2g.composing.agents", "--role", "validate"]
+
+  qes_signer:
+    <<: *agent_defaults
+    container_name: qes_signer
+    command: ["python", "-m", "agents_b2g.composing.agents", "--role", "sign"]
+
+  platform_submitter:
+    <<: *agent_defaults
+    container_name: platform_submitter
+    command: ["python", "-m", "agents_b2g.composing.agents", "--role", "submit"]
+
+  submission_finalizer:
+    <<: *agent_defaults
+    container_name: submission_finalizer
+    command: ["python", "-m", "agents_b2g.composing.agents", "--role", "finalize"]
+
+  # ==========================================================
+  # Wave 3: Execution & PoPW (9 Agents)
+  # ==========================================================
+  contract_activation:
+    <<: *agent_defaults
+    container_name: contract_activation
+    command: ["python", "-m", "agents_b2g.execution.agents", "--role", "contract"]
+
+  popw_collector:
+    <<: *agent_defaults
+    container_name: popw_collector
+    command: ["python", "-m", "agents_b2g.execution.agents", "--role", "popw"]
+
+  progress_verification:
+    <<: *agent_defaults
+    container_name: progress_verification
+    command: ["python", "-m", "agents_b2g.execution.agents", "--role", "progress"]
+
+  delivery_oracle:
+    <<: *agent_defaults
+    container_name: delivery_oracle
+    command: ["python", "-m", "agents_b2g.execution.agents", "--role", "oracle"]
+
+  quality_assurance:
+    <<: *agent_defaults
+    container_name: quality_assurance
+    command: ["python", "-m", "agents_b2g.execution.agents", "--role", "qa"]
+
+  invoice_aggregator:
+    <<: *agent_defaults
+    container_name: invoice_aggregator
+    command: ["python", "-m", "agents_b2g.execution.agents", "--role", "invoice"]
+
+  xrechnung_generator:
+    <<: *agent_defaults
+    container_name: xrechnung_generator
+    command: ["python", "-m", "agents_b2g.execution.agents", "--role", "xrechnung"]
+
+  payment_executor:
+    <<: *agent_defaults
+    container_name: payment_executor
+    command: ["python", "-m", "agents_b2g.execution.agents", "--role", "payment"]
+
+  settlement_finalizer:
+    <<: *agent_defaults
+    container_name: settlement_finalizer
+    command: ["python", "-m", "agents_b2g.execution.agents", "--role", "settlement"]
+
+  # ==========================================================
+  # Wave 3.5: VOB/B Dispute Resolution (9 Agents)
+  # ==========================================================
+  installment_planner:
+    <<: *agent_defaults
+    container_name: installment_planner
+    command: ["python", "-m", "agents_b2g.execution.vob_extension", "--role", "planner"]
+
+  progress_snapshot:
+    <<: *agent_defaults
+    container_name: progress_snapshot
+    command: ["python", "-m", "agents_b2g.execution.vob_extension", "--role", "snapshot"]
+
+  partial_invoice:
+    <<: *agent_defaults
+    container_name: partial_invoice
+    command: ["python", "-m", "agents_b2g.execution.vob_extension", "--role", "invoice"]
+
+  retention_manager:
+    <<: *agent_defaults
+    container_name: retention_manager
+    command: ["python", "-m", "agents_b2g.execution.vob_extension", "--role", "retention"]
+
+  defect_detection:
+    <<: *agent_defaults
+    container_name: defect_detection
+    command: ["python", "-m", "agents_b2g.execution.vob_extension", "--role", "defect"]
+
+  dispute_arbiter:
+    <<: *agent_defaults
+    container_name: dispute_arbiter
+    command: ["python", "-m", "agents_b2g.execution.vob_extension", "--role", "dispute"]
+
+  remediation_tracker:
+    <<: *agent_defaults
+    container_name: remediation_tracker
+    command: ["python", "-m", "agents_b2g.execution.vob_extension", "--role", "remediation"]
+
+  final_settlement:
+    <<: *agent_defaults
+    container_name: final_settlement
+    command: ["python", "-m", "agents_b2g.execution.vob_extension", "--role", "final"]
+
+  escrow_reconciliation:
+    <<: *agent_defaults
+    container_name: escrow_reconciliation
+    command: ["python", "-m", "agents_b2g.execution.vob_extension", "--role", "escrow"]
+
+  # ==========================================================
+  # Wave 4: Treasury & BHO (9 Agents)
+  # ==========================================================
+  sepa_gateway:
+    <<: *agent_defaults
+    container_name: sepa_gateway
+    command: ["python", "-m", "agents_b2g.treasury.agents", "--role", "sepa"]
+
+  emi_minter:
+    <<: *agent_defaults
+    container_name: emi_minter
+    command: ["python", "-m", "agents_b2g.treasury.agents", "--role", "emi"]
+
+  retention_vault:
+    <<: *agent_defaults
+    container_name: retention_vault
+    command: ["python", "-m", "agents_b2g.treasury.agents", "--role", "vault"]
+
+  installment_ledger:
+    <<: *agent_defaults
+    container_name: installment_ledger
+    command: ["python", "-m", "agents_b2g.treasury.agents", "--role", "ledger"]
+
+  bho_reconciler:
+    <<: *agent_defaults
+    container_name: bho_reconciler
+    command: ["python", "-m", "agents_b2g.treasury.agents", "--role", "bho"]
+
+  payment_release:
+    <<: *agent_defaults
+    container_name: payment_release
+    command: ["python", "-m", "agents_b2g.treasury.agents", "--role", "release"]
+
+  sepa_burn_disburser:
+    <<: *agent_defaults
+    container_name: sepa_burn_disburser
+    command: ["python", "-m", "agents_b2g.treasury.agents", "--role", "burn"]
+
+  tax_compliance:
+    <<: *agent_defaults
+    container_name: tax_compliance
+    command: ["python", "-m", "agents_b2g.treasury.agents", "--role", "tax"]
+
+  final_audit_closer:
+    <<: *agent_defaults
+    container_name: final_audit_closer
+    command: ["python", "-m", "agents_b2g.treasury.agents", "--role", "audit"]
+
+  # ==========================================================
+  # Wave 5: Telemetry & Verification (9 Agents)
+  # ==========================================================
+  gps_tracker:
+    <<: *agent_defaults
+    container_name: gps_tracker
+    command: ["python", "-m", "agents_b2g.telemetry.agents", "--role", "gps"]
+
+  iot_scale_reader:
+    <<: *agent_defaults
+    container_name: iot_scale_reader
+    command: ["python", "-m", "agents_b2g.telemetry.agents", "--role", "iot"]
+
+  photo_evidence:
+    <<: *agent_defaults
+    container_name: photo_evidence
+    command: ["python", "-m", "agents_b2g.telemetry.agents", "--role", "photo"]
+
+  geofence_validator:
+    <<: *agent_defaults
+    container_name: geofence_validator
+    command: ["python", "-m", "agents_b2g.telemetry.agents", "--role", "geofence"]
+
+  zk_merkle_prover:
+    <<: *agent_defaults
+    container_name: zk_merkle_prover
+    command: ["python", "-m", "agents_b2g.telemetry.agents", "--role", "zk"]
+
+  telemetry_aggregator:
+    <<: *agent_defaults
+    container_name: telemetry_aggregator
+    command: ["python", "-m", "agents_b2g.telemetry.agents", "--role", "aggregate"]
+
+  popw_proof_generator:
+    <<: *agent_defaults
+    container_name: popw_proof_generator
+    command: ["python", "-m", "agents_b2g.telemetry.agents", "--role", "popw"]
+
+  sensor_health_check:
+    <<: *agent_defaults
+    container_name: sensor_health_check
+    command: ["python", "-m", "agents_b2g.telemetry.agents", "--role", "sensor"]
+
+  telemetry_archiver:
+    <<: *agent_defaults
+    container_name: telemetry_archiver
+    command: ["python", "-m", "agents_b2g.telemetry.agents", "--role", "archive"]
+
+  # ==========================================================
+  # Wave 6: Invoicing & Audit (9 Agents)
+  # ==========================================================
+  xrechnung3_serializer:
+    <<: *agent_defaults
+    container_name: xrechnung3_serializer
+    command: ["python", "-m", "agents_b2g.invoicing.agents", "--role", "xrechnung3"]
+
+  zugferd_formatter:
+    <<: *agent_defaults
+    container_name: zugferd_formatter
+    command: ["python", "-m", "agents_b2g.invoicing.agents", "--role", "zugferd"]
+
+  invoice_validator:
+    <<: *agent_defaults
+    container_name: invoice_validator
+    command: ["python", "-m", "agents_b2g.invoicing.agents", "--role", "validator"]
+
+  gobd_archiver:
+    <<: *agent_defaults
+    container_name: gobd_archiver
+    command: ["python", "-m", "agents_b2g.invoicing.agents", "--role", "gobd"]
+
+  audit_trail_indexer:
+    <<: *agent_defaults
+    container_name: audit_trail_indexer
+    command: ["python", "-m", "agents_b2g.invoicing.agents", "--role", "indexer"]
+
+  tax_xml_exporter:
+    <<: *agent_defaults
+    container_name: tax_xml_exporter
+    command: ["python", "-m", "agents_b2g.invoicing.agents", "--role", "tax"]
+
+  invoice_dispatcher:
+    <<: *agent_defaults
+    container_name: invoice_dispatcher
+    command: ["python", "-m", "agents_b2g.invoicing.agents", "--role", "dispatch"]
+
+  payment_matcher:
+    <<: *agent_defaults
+    container_name: payment_matcher
+    command: ["python", "-m", "agents_b2g.invoicing.agents", "--role", "match"]
+
+  archive_finalizer:
+    <<: *agent_defaults
+    container_name: archive_finalizer
+    command: ["python", "-m", "agents_b2g.invoicing.agents", "--role", "finalize"]
+
+  # ==========================================================
+  # Wave 7: Operations & Maintenance (9 Agents)
+  # ==========================================================
+  orchestrator_agent:
+    <<: *agent_defaults
+    container_name: orchestrator_agent
+    command: ["python", "-m", "agents_b2g.ops.agents", "--role", "orchestrator"]
+    ports:
+      - "9090:9090"
+
+  health_check_agent:
+    <<: *agent_defaults
+    container_name: health_check_agent
+    command: ["python", "-m", "agents_b2g.ops.agents", "--role", "health"]
+
+  log_aggregator_agent:
+    <<: *agent_defaults
+    container_name: log_aggregator_agent
+    command: ["python", "-m", "agents_b2g.ops.agents", "--role", "logs"]
+    volumes:
+      - ops_logs:/app/logs/ops
+
+  metrics_collector_agent:
+    <<: *agent_defaults
+    container_name: metrics_collector_agent
+    command: ["python", "-m", "agents_b2g.ops.agents", "--role", "metrics"]
+    ports:
+      - "9091:9091"  # Prometheus scrape endpoint
+
+  alerting_agent:
+    <<: *agent_defaults
+    container_name: alerting_agent
+    command: ["python", "-m", "agents_b2g.ops.agents", "--role", "alerting"]
+
+  dead_letter_handler_agent:
+    <<: *agent_defaults
+    container_name: dead_letter_handler_agent
+    command: ["python", "-m", "agents_b2g.ops.agents", "--role", "dlq"]
+
+  config_manager_agent:
+    <<: *agent_defaults
+    container_name: config_manager_agent
+    command: ["python", "-m", "agents_b2g.ops.agents", "--role", "config"]
+
+  backup_agent:
+    <<: *agent_defaults
+    container_name: backup_agent
+    command: ["python", "-m", "agents_b2g.ops.agents", "--role", "backup"]
+    volumes:
+      - backup_data:/app/archive_b2g/backups
+
+  self_healing_agent:
+    <<: *agent_defaults
+    container_name: self_healing_agent
+    command: ["python", "-m", "agents_b2g.ops.agents", "--role", "healing"]
+
+  # ==========================================================
+  # Wave 8: Pilot & Production Readiness (9 Agents)
+  # ==========================================================
+  ops_health_agent:
+    <<: *agent_defaults
+    container_name: ops_health_agent
+    command: ["python", "-m", "agents_b2g.ops.pilot_agents", "--role", "ops_health"]
+    deploy:
+      replicas: 2  # HA: primary + standby
+
+  dead_letter_recovery_agent:
+    <<: *agent_defaults
+    container_name: dead_letter_recovery_agent
+    command: ["python", "-m", "agents_b2g.ops.pilot_agents", "--role", "dlq_recovery"]
+    deploy:
+      replicas: 2
+
+  audit_exporter_agent:
+    <<: *agent_defaults
+    container_name: audit_exporter_agent
+    command: ["python", "-m", "agents_b2g.ops.pilot_agents", "--role", "audit_export"]
+    volumes:
+      - audit_exports:/app/archive_b2g/exports
+
+  tender_api_gateway:
+    <<: *agent_defaults
+    container_name: tender_api_gateway
+    command: ["python", "-m", "agents_b2g.ops.pilot_agents", "--role", "api_gateway"]
+    ports:
+      - "8443:8443"  # HTTPS API for authorities
+    deploy:
+      replicas: 3
+
+  user_notification:
+    <<: *agent_defaults
+    container_name: user_notification
+    command: ["python", "-m", "agents_b2g.ops.pilot_agents", "--role", "notification"]
+
+  compliance_report:
+    <<: *agent_defaults
+    container_name: compliance_report
+    command: ["python", "-m", "agents_b2g.ops.pilot_agents", "--role", "compliance"]
+    volumes:
+      - compliance_reports:/app/archive_b2g/reports
+
+  multi_tenant_isolator:
+    <<: *agent_defaults
+    container_name: multi_tenant_isolator
+    command: ["python", "-m", "agents_b2g.ops.pilot_agents", "--role", "tenant"]
+
+  simulation_test:
+    <<: *agent_defaults
+    container_name: simulation_test
+    command: ["python", "-m", "agents_b2g.ops.pilot_agents", "--role", "sim_test"]
+
+  pilot_dashboard:
+    <<: *agent_defaults
+    container_name: pilot_dashboard
+    command: ["python", "-m", "agents_b2g.ops.pilot_agents", "--role", "dashboard"]
+    ports:
+      - "3000:3000"   # WebSocket dashboard
+      - "3001:3001"   # HTTP fallback
+    deploy:
+      replicas: 2
+
+  # ==========================================================
+  # Wave 9: User & Project Management (9 Agents)
+  # ==========================================================
+  user_authenticator:
+    <<: *agent_defaults
+    container_name: user_authenticator
+    command: ["python", "-m", "agents_b2g.user.agents", "--role", "auth"]
+    deploy:
+      replicas: 2
+
+  project_manager:
+    <<: *agent_defaults
+    container_name: project_manager
+    command: ["python", "-m", "agents_b2g.user.agents", "--role", "project"]
+
+  task_dispatcher:
+    <<: *agent_defaults
+    container_name: task_dispatcher
+    command: ["python", "-m", "agents_b2g.user.agents", "--role", "task"]
+
+  document_manager:
+    <<: *agent_defaults
+    container_name: document_manager
+    command: ["python", "-m", "agents_b2g.user.agents", "--role", "document"]
+    volumes:
+      - dms_data:/app/archive_b2g/dms
+
+  notification_center:
+    <<: *agent_defaults
+    container_name: notification_center
+    command: ["python", "-m", "agents_b2g.user.agents", "--role", "notification"]
+
+  report_generator:
+    <<: *agent_defaults
+    container_name: report_generator
+    command: ["python", "-m", "agents_b2g.user.agents", "--role", "report"]
+    volumes:
+      - reports_data:/app/archive_b2g/reports
+
+  compliance_checker:
+    <<: *agent_defaults
+    container_name: compliance_checker
+    command: ["python", "-m", "agents_b2g.user.agents", "--role", "compliance"]
+
+  data_privacy:
+    <<: *agent_defaults
+    container_name: data_privacy
+    command: ["python", "-m", "agents_b2g.user.agents", "--role", "privacy"]
+
+  feedback_collector:
+    <<: *agent_defaults
+    container_name: feedback_collector
+    command: ["python", "-m", "agents_b2g.user.agents", "--role", "feedback"]
+
+  # ==========================================================
+  # Optional: Prometheus + Grafana Stack
+  # ==========================================================
+  prometheus:
+    image: prom/prometheus:v2.55.0
+    restart: unless-stopped
+    networks:
+      - agent_x_b2g
+    volumes:
+      - ./config/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "9092:9090"
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.enable-lifecycle"
+
+  grafana:
+    image: grafana/grafana:11.3.0
+    restart: unless-stopped
+    networks:
+      - agent_x_b2g
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD}
+      - GF_INSTALL_PLUGINS=grafana-clock-panel
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./config/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./config/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+    ports:
+      - "3002:3000"
+
+# ============================================================
+# Networks
+# ============================================================
+networks:
+  agent_x_b2g:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16
+
+# ============================================================
+# Volumes
+# ============================================================
+volumes:
+  redis_data:
+  neo4j_data:
+  neo4j_logs:
+  nats_data:
+  ops_logs:
+  backup_data:
+  audit_exports:
+  compliance_reports:
+  prometheus_data:
+  dms_data:
+  reports_data:
+  grafana_data:

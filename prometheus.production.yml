@@ -1,0 +1,27 @@
+# Agent X — Production Prometheus Config
+global:
+  scrape_interval: 12s
+  evaluation_interval: 12s
+
+scrape_configs:
+  - job_name: "agent-x-api"
+    metrics_path: "/metrics"
+    static_configs:
+      - targets: ["agent-x-api:8080"]
+        labels:
+          app: "agent-x-api"
+          env: "production"
+
+  - job_name: "agent-x-metrics"
+    metrics_path: "/metrics"
+    static_configs:
+      - targets: ["agent-x-metrics:9090"]
+        labels:
+          app: "agent-x-legacy"
+          env: "production"
+
+  - job_name: "redis"
+    static_configs:
+      - targets: ["redis:6379"]
+        labels:
+          app: "redis"

@@ -1,0 +1,26 @@
+# Agent X — v3.0 API-Ready
+# Core
+aiohttp>=3.9.0
+fastapi>=0.110.0
+uvicorn[standard]>=0.27.0
+pydantic>=2.5.0
+
+# GAEB DA XML 3.3 XSD Validation
+xmlschema>=3.3.0
+
+# XRechnung 3.0 Schematron Validation (EN 16931 / CIUS-DE)
+lxml>=5.3.0
+
+# BundID/eIDAS JWT
+pyjwt>=2.8.0
+
+# Storage (optional — In-Memory-Fallback integriert)
+# redis>=5.0.0
+
+# Blockchain (optional — urllib-Fallback integriert)
+# web3>=6.0.0
+# solders>=0.18.0
+# solana-py>=0.34.0
+
+# Monitoring (optional)
+# prometheus-client>=0.19.0

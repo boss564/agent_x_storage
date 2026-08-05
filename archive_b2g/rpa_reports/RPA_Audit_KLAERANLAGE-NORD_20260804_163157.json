@@ -1,0 +1,21 @@
+{
+  "report_id": "RPA_Audit_KLAERANLAGE-NORD_20260804_163157",
+  "tender_id": "TED-2026-0815-KLAERANLAGE-NORD",
+  "beauftragter": "Rechnungsprüfungsamt",
+  "verdict": {
+    "verdict": "ENTLASTET_MIT_HINWEIS",
+    "level": "YELLOW",
+    "message": "2 Warnungen: xrechnung, popw_evidence",
+    "recommendation": "Entlastung mit Hinweisen erteilen."
+  },
+  "checks_summary": {
+    "gobd_integrity": "INTEGRITY_CHECK_COMPLETE",
+    "ledger": "LEDGER_EXPORTED",
+    "chain_anchors": "VERIFICATION_COMPLETE",
+    "xrechnung": "WARNING",
+    "popw_evidence": "PLACEHOLDER",
+    "vobb_compliance": "PASSED",
+    "tax_compliance": "PASSED"
+  },
+  "generated_at": "2026-08-04T16:31:57.755654+00:00"
+}

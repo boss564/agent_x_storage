@@ -1,0 +1,237 @@
+{
+  "tender_id": "TED-2026-0815-KLAERANLAGE-NORD",
+  "rpa_beauftragter": "Rechnungsprüfungsamt",
+  "pruefungszeitraum": null,
+  "started_at": "2026-08-04T19:37:39.560367+00:00",
+  "status": "AUDIT_COMPLETE",
+  "checks": {
+    "gobd_integrity": {
+      "status": "INTEGRITY_CHECK_COMPLETE",
+      "timestamp": "2026-08-04T19:37:39.560371+00:00",
+      "checked_files": 2,
+      "hash_chains_valid": 2,
+      "hash_chains_broken": 0,
+      "broken_chains": [],
+      "tenders": {
+        "b2g_event_bus": {
+          "files": [
+            {
+              "path": "logs/b2g_event_bus.jsonl",
+              "valid": true,
+              "entries": 4,
+              "broken_link": null
+            }
+          ],
+          "valid": 1,
+          "broken": 0,
+          "total_entries": 4
+        },
+        "bridge_audit": {
+          "files": [
+            {
+              "path": "archive_b2g/bridge_audit/bridge_audit_20260804.jsonl",
+              "valid": true,
+              "entries": 10,
+              "broken_link": null
+            }
+          ],
+          "valid": 1,
+          "broken": 0,
+          "total_entries": 10
+        }
+      },
+      "overall_status": "PASSED",
+      "message": "Alle Hash-Ketten lückenlos — Archiv unverändert und GoBD-konform.",
+      "completeness": {
+        "expected": 5,
+        "found": 4,
+        "missing": [
+          "b2g.tender.initiate",
+          "b2g.offer.submitted",
+          "b2g.contract.signed",
+          "b2g.payment.disbursed",
+          "b2g.settlement.finalized"
+        ],
+        "complete": false
+      },
+      "integrity_certificate": {
+        "certificate_id": "GOBD-CERT-2026-08-04",
+        "timestamp": "2026-08-04T19:37:39.562915+00:00",
+        "checked_tenders": [
+          "b2g_event_bus",
+          "bridge_audit"
+        ],
+        "total_files": 2,
+        "valid_chains": 2,
+        "broken_chains": 0,
+        "overall_status": "PASSED",
+        "certificate_hash": "0xa7e77a9168f941c4a9ef97d9645acb6f866d3908afdfb3faf81d23a915b3a36b",
+        "verification_method": "SHA-256 Hash Chain Validation (GoBD §147 AO)",
+        "verification_endpoint": "https://b2g.craftengine.dev/gobd/verify"
+      }
+    },
+    "ledger": {
+      "status": "LEDGER_EXPORTED",
+      "tender_id": "TED-2026-0815-KLAERANLAGE-NORD",
+      "timestamp": "2026-08-04T19:37:39.564063+00:00",
+      "ledger": {
+        "contract_sum_eur": 0.0,
+        "total_deposited_eur": 0.0,
+        "total_paid_eur": 0.0,
+        "total_retained_eur": 0.0,
+        "vault_balance_eur": 0.0,
+        "installments": [],
+        "transactions": [],
+        "delta_eur": 0.0,
+        "bho_compliant": true,
+        "reconciliation_status": "PASSED",
+        "checks": {
+          "soll_eur": 0.0,
+          "ist_eur": 0.0,
+          "delta_eur": 0.0,
+          "formula": "Deposits - (Paid + Retained + Vault_Balance) = Delta"
+        }
+      }
+    },
+    "chain_anchors": {
+      "status": "VERIFICATION_COMPLETE",
+      "tender_id": "TED-2026-0815-KLAERANLAGE-NORD",
+      "timestamp": "2026-08-04T19:37:39.565170+00:00",
+      "local_hashes_count": 2,
+      "chain_hashes_count": 0,
+      "verified_count": 0,
+      "failed_count": 0,
+      "overall_status": "UNTESTED",
+      "verification_results": [],
+      "certificate": {
+        "certificate_id": "CHAIN-CERT-KLAERANLAGE-NORD-2026-08-04",
+        "timestamp": "2026-08-04T19:37:39.565173+00:00",
+        "total_checked": 0,
+        "verified_on_chain": 0,
+        "verification_rate": 0.0,
+        "certificate_hash": "0x8008c4a15b965a1b39820cbb34f4a481a82eac64ce233fcdc1ad51f2362c8d0c",
+        "status": "VERIFIED"
+      },
+      "note": "Chain-Adapter nicht verfügbar — Mock-Mode"
+    },
+    "xrechnung": {
+      "status": "WARNING",
+      "tender_id": "TED-2026-0815-KLAERANLAGE-NORD",
+      "message": "Keine XRechnung-XMLs im Archiv gefunden.",
+      "total_invoices": 0,
+      "valid_invoices": 0,
+      "invalid_invoices": 0,
+      "timestamp": "2026-08-04T19:37:39.567010+00:00"
+    },
+    "popw_evidence": {
+      "status": "PASSED",
+      "tender_id": "TED-2026-0815-KLAERANLAGE-NORD",
+      "timestamp": "2026-08-04T19:37:39.567978+00:00",
+      "coverage": {
+        "total_payments": 1,
+        "covered_payments": 1,
+        "total_amount_eur": 1274896.8,
+        "covered_amount_eur": 1274896.8,
+        "total_coverage_pct": 100.0,
+        "gps_events": 2,
+        "iot_events": 1,
+        "photo_events": 2,
+        "popw_proofs": 1,
+        "details": [
+          {
+            "installment_no": 1,
+            "amount_eur": 1274896.8,
+            "gps": true,
+            "iot": true,
+            "photos": true,
+            "score": 3,
+            "covered": true
+          }
+        ],
+        "errors": [],
+        "warnings": []
+      },
+      "overall_coverage_percent": 100.0,
+      "recommendation": "PoPW-Deckung exzellent – alle Zahlungen durch Telemetrie belegt."
+    },
+    "vobb_compliance": {
+      "status": "PASSED",
+      "tender_id": "TED-2026-0815-KLAERANLAGE-NORD",
+      "timestamp": "2026-08-04T19:37:39.568899+00:00",
+      "overall_compliant": true,
+      "fristen": {
+        "total_invoices": 0,
+        "overdue": 0,
+        "errors": [],
+        "warnings": []
+      },
+      "retention": {
+        "contract_sum_eur": 0.0,
+        "expected_5pct_eur": 0.0,
+        "actual_retained_eur": 0.0,
+        "released": false,
+        "errors": [],
+        "warnings": []
+      },
+      "defect_handling": {
+        "total": 0,
+        "resolved": 0,
+        "unresolved": 0,
+        "errors": [],
+        "warnings": []
+      },
+      "errors": [],
+      "warnings": []
+    },
+    "tax_compliance": {
+      "status": "PASSED",
+      "tender_id": "TED-2026-0815-KLAERANLAGE-NORD",
+      "timestamp": "2026-08-04T19:37:39.568981+00:00",
+      "overall_compliant": true,
+      "reverse_charge": {
+        "valid": true,
+        "errors": [],
+        "warnings": [],
+        "is_construction": true,
+        "total_checked": 1
+      },
+      "iban_compliance": {
+        "valid": true,
+        "errors": [],
+        "warnings": [],
+        "checked": 1
+      },
+      "tax_id_validation": {
+        "valid": true,
+        "errors": [],
+        "warnings": [],
+        "checked": 1
+      },
+      "errors": [],
+      "warnings": [],
+      "freistellungsattest": {
+        "attest_id": "UStG-13b-KLAERANLAGE-NORD-2026-08-04",
+        "timestamp": "2026-08-04T19:37:39.568964+00:00",
+        "status": "FREISTELLUNG_ERTEILT",
+        "basis": {
+          "reverse_charge": true,
+          "iban": true,
+          "tax_id": true
+        },
+        "legal_basis": "§13b UStG — Reverse-Charge bei Bauleistungen",
+        "attest_hash": "482c2a0e87eabb2d"
+      }
+    }
+  },
+  "overall_status": {
+    "verdict": "ENTLASTET_MIT_HINWEIS",
+    "level": "YELLOW",
+    "message": "1 Warnungen: xrechnung",
+    "recommendation": "Entlastung mit Hinweisen erteilen."
+  },
+  "report_path": "archive_b2g/rpa_reports/RPA_Entlastung_KLAERANLAGE-NORD_20260804_1937.pdf",
+  "errors": [],
+  "completed_at": "2026-08-04T19:37:39.568987+00:00",
+  "duration_s": 0.01,
+  "pdf_hash": "085457782a36b052"
+}

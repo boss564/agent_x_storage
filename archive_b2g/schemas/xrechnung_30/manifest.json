@@ -1,0 +1,11 @@
+{
+  "source": "KoSIT / itplr-kosit: xrechnung-schematron",
+  "version": "3.0.0",
+  "downloaded_at": "2026-08-03T19:50:05.272107+00:00",
+  "schema_dir": "/Volumes/THX_OS_ULTRA/Users/olivermueller/agent_x_storage/archive_b2g/schemas/xrechnung_30",
+  "files": [
+    "schematron/common.sch",
+    "schematron/ubl/XRechnung-UBL-validation.sch",
+    "schematron/cii/XRechnung-CII-validation.sch"
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "project_id": "PRJ-E2E-KLAERANLAGE-2026",
+  "status": "COMPLETED",
+  "payment_tx": "17f206bd8838470feacad815fe04ba74",
+  "settlement_tx": "0xSETTLE-117546b1e6a9158c9a46647facb97d602c16c284",
+  "gobd_check": {
+    "all_passed": true,
+    "checks": {
+      "contract_signed": true,
+      "popw_proofs_present": true,
+      "xrechnung_generated": true,
+      "payment_executed": true,
+      "chain_anchored": true
+    }
+  },
+  "closed_at": "2026-08-05T03:54:49.739168+00:00"
+}

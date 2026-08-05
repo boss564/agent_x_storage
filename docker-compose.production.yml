@@ -1,0 +1,146 @@
+# Agent X — Production Stack (v3.0)
+# docker-compose -f docker-compose.production.yml up -d
+#
+# Services:
+#   agent-x-api      — FastAPI mit 9 Agenten (Port 8080)
+#   redis            — Rate-Limiting, Job-Status, State-Store (Port 6379)
+#   prometheus       — Metriken-Sammlung (Port 9091)
+#   grafana          — Dashboards (Port 3030)
+#   agent-x-metrics  — Legacy Prometheus Exporter (Port 9090)
+
+services:
+  # ─── Agent X API (FastAPI + 9 Agenten) ──────────────────────────────
+  agent-x-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: agent-x-api
+    ports:
+      - "8080:8080"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - NEO4J_URI=bolt://neo4j:7687
+      - NEO4J_ENABLED=false
+      - AUDIT_LOG_PATH=/var/log/agent_x/audit.jsonl
+      - BILLING_RATE_PER_REQUEST=0.001
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - audit_logs:/var/log/agent_x
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - agent-x-prod
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  # ─── Redis (State-Store, Rate-Limiting, Job-Queue) ──────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: agent-x-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    restart: unless-stopped
+    networks:
+      - agent-x-prod
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+  # ─── Neo4j (Governance-Audit, optional) ─────────────────────────────
+  neo4j:
+    image: neo4j:5-community
+    container_name: agent-x-neo4j
+    ports:
+      - "7474:7474"  # HTTP
+      - "7687:7687"  # Bolt
+    environment:
+      - NEO4J_AUTH=neo4j/agentx2024
+      - NEO4J_PLUGINS=["apoc"]
+      - NEO4J_server_memory_heap_initial__size=256m
+      - NEO4J_server_memory_heap_max__size=512m
+    volumes:
+      - neo4j_data:/data
+      - neo4j_logs:/logs
+    restart: unless-stopped
+    networks:
+      - agent-x-prod
+    healthcheck:
+      test: ["CMD", "cypher-shell", "-u", "neo4j", "-p", "agentx2024", "RETURN 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  # ─── Prometheus (Metriken-Sammlung) ─────────────────────────────────
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: agent-x-prometheus
+    ports:
+      - "9091:9090"
+    volumes:
+      - ./prometheus.production.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.retention.time=30d"
+      - "--web.enable-lifecycle"
+    restart: unless-stopped
+    networks:
+      - agent-x-prod
+
+  # ─── Grafana (Dashboards) ───────────────────────────────────────────
+  grafana:
+    image: grafana/grafana:latest
+    container_name: agent-x-grafana
+    ports:
+      - "3030:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=agentx
+      - GF_INSTALL_PLUGINS=""
+    volumes:
+      - grafana_data:/var/lib/grafana
+    restart: unless-stopped
+    networks:
+      - agent-x-prod
+
+  # ─── Legacy Prometheus Exporter (agent_x_metrics.py) ────────────────
+  agent-x-metrics:
+    image: python:3.12-slim
+    container_name: agent-x-metrics
+    working_dir: /app
+    command: |
+      sh -c "pip install --quiet -r requirements.txt && python agent_x_metrics.py --port 9090 --interval 12"
+    ports:
+      - "9090:9090"
+    volumes:
+      - .:/app
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - NEO4J_ENABLED=false
+    restart: unless-stopped
+    networks:
+      - agent-x-prod
+
+volumes:
+  redis_data:
+  neo4j_data:
+  neo4j_logs:
+  prometheus_data:
+  grafana_data:
+  audit_logs:
+
+networks:
+  agent-x-prod:
+    driver: bridge

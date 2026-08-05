@@ -1,0 +1,2 @@
+- [Klasse A — Konsensus & Determinismus](klasse_a_konsensus.md) — Vollständige Architektur-Spezifikation: 9 Agenten, 27 Subagenten, 3 Cluster (A1 Ingestion, A2 Analytics, A3 Strategie)
+- [QA-Prüfergebnisse](QA.md) — Sektions-Amplituden-Audit, Kick-S5-Befund, v2-Code-Review, offene Punkte

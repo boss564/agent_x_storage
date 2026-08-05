@@ -1,0 +1,18 @@
+# Agent X Calibration Configuration
+calibration:
+  alpha: 0.15                    # EWMA smoothing factor (0.05–0.30)
+  static_caution_threshold: 89.0 # Current Agent-X threshold (CHI: low=alarm)
+  high_is_healthy: true          # true for CHI (high=good), false for gas (high=bad)
+  volatility_penalty: 0.5        # Extra threshold scaling per unit CV
+  min_samples: 20                # Minimum samples needed for stable statistics
+
+logging:
+  level: INFO
+  format: "%(asctime)s [%(levelname)s] %(message)s"
+
+output:
+  report_dir: "./reports/"
+  report_prefix: "calibration_report_"
+
+# Alert: if more than X% of blocks show static/adaptive disagreement, trigger warning
+alert_threshold_percent: 30.0

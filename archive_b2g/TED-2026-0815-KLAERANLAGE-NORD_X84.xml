@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<GAEB_DA_XML xmlns="http://www.gaeb.de/GAEB_DA_XML/DA/3.3" Version="3.3" Phase="X84" Currency="EUR">
+  <PrjInfo>
+    <PrjNo>UNKNOWN</PrjNo>
+    <LblPrj>Bauvorhaben</LblPrj>
+  </PrjInfo>
+  <BidderInfo>
+    <BidderName>Müller Tiefbau GmbH & Co. KG</BidderName>
+    <TaxID>DE123456789</TaxID>
+  </BidderInfo>
+  <BoQ>
+    <BoQCtgy RNo="Allgemein">
+      <LblTx>Allgemein</LblTx>
+      <Item>
+        <OZ>LV-0101</OZ>
+        <TextOut><Text><p></p></Text></TextOut>
+        <Qty>450.0</Qty>
+        <QU>Stk</QU>
+        <Amount>
+          <UnitPrice>185.00</UnitPrice>
+          <Total>83250.00</Total>
+        </Amount>
+        <CompilerRmk>fabrikat: Nach Wahl des AG</CompilerRmk>
+      </Item>
+      <Item>
+        <OZ>LV-0102</OZ>
+        <TextOut><Text><p></p></Text></TextOut>
+        <Qty>380.0</Qty>
+        <QU>Stk</QU>
+        <Amount>
+          <UnitPrice>185.00</UnitPrice>
+          <Total>70300.00</Total>
+        </Amount>
+        <CompilerRmk>fabrikat: Nach Wahl des AG</CompilerRmk>
+      </Item>
+      <Item>
+        <OZ>LV-0201</OZ>
+        <TextOut><Text><p></p></Text></TextOut>
+        <Qty>220.0</Qty>
+        <QU>Stk</QU>
+        <Amount>
+          <UnitPrice>95.00</UnitPrice>
+          <Total>20900.00</Total>
+        </Amount>
+        <CompilerRmk>fabrikat: Nach Wahl des AG</CompilerRmk>
+      </Item>
+      <Item>
+        <OZ>LV-0301</OZ>
+        <TextOut><Text><p></p></Text></TextOut>
+        <Qty>1200.0</Qty>
+        <QU>Stk</QU>
+        <Amount>
+          <UnitPrice>450.00</UnitPrice>
+          <Total>540000.00</Total>
+        </Amount>
+        <CompilerRmk>fabrikat: Nach Wahl des AG</CompilerRmk>
+      </Item>
+      <Item>
+        <OZ>LV-0302</OZ>
+        <TextOut><Text><p></p></Text></TextOut>
+        <Qty>2.0</Qty>
+        <QU>Stk</QU>
+        <Amount>
+          <UnitPrice>450.00</UnitPrice>
+          <Total>900.00</Total>
+        </Amount>
+        <CompilerRmk>fabrikat: Nach Wahl des AG</CompilerRmk>
+      </Item>
+      <Item>
+        <OZ>LV-0401</OZ>
+        <TextOut><Text><p></p></Text></TextOut>
+        <Qty>12.0</Qty>
+        <QU>Stk</QU>
+        <Amount>
+          <UnitPrice>280.00</UnitPrice>
+          <Total>3360.00</Total>
+        </Amount>
+        <CompilerRmk>fabrikat: Nach Wahl des AG</CompilerRmk>
+      </Item>
+      <Item>
+        <OZ>LV-0501</OZ>
+        <TextOut><Text><p></p></Text></TextOut>
+        <Qty>850.0</Qty>
+        <QU>Stk</QU>
+        <Amount>
+          <UnitPrice>65.00</UnitPrice>
+          <Total>55250.00</Total>
+        </Amount>
+        <CompilerRmk>fabrikat: Nach Wahl des AG</CompilerRmk>
+      </Item>
+      <Item>
+        <OZ>LV-0601</OZ>
+        <TextOut><Text><p></p></Text></TextOut>
+        <Qty>1200.0</Qty>
+        <QU>Stk</QU>
+        <Amount>
+          <UnitPrice>120.00</UnitPrice>
+          <Total>144000.00</Total>
+        </Amount>
+        <CompilerRmk>fabrikat: Nach Wahl des AG</CompilerRmk>
+      </Item>
+    </BoQCtgy>
+  </BoQ>
+  <BidSummary>
+    <TotalNet>917960.00</TotalNet>
+    <TotalGross>1092372.40</TotalGross>
+    <VATNote>§13b UStG — Steuerschuldnerschaft des Leistungsempfängers</VATNote>
+  </BidSummary>
+</GAEB_DA_XML>

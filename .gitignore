@@ -1,0 +1,32 @@
+# Agent X — gitignore
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+
+# Environment
+.env
+.env.local
+
+# Generated / cache
+logs/
+exports/
+cache/
+*.jsonl
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# QR + map cache
+qrcodes/
+map_cache/

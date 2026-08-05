@@ -1,0 +1,153 @@
+{
+  "dashboard": {
+    "id": null,
+    "uid": "agent-x-4class",
+    "title": "Agent X — 4-Klassen Monitoring",
+    "description": "Echtzeit-Monitoring für Agent X: Konsensus (A), Druckventile (B), Lending (C), DeFi-Events (D)",
+    "tags": ["agent-x", "defi", "mev", "lending"],
+    "timezone": "utc",
+    "refresh": "12s",
+    "panels": [
+      {
+        "id": 1,
+        "title": "Global State Score",
+        "type": "gauge",
+        "gridPos": {"x": 0, "y": 0, "w": 8, "h": 6},
+        "targets": [{"expr": "agent_x_orchestrator_global_state_score", "legendFormat": "Score"}],
+        "fieldConfig": {
+          "defaults": {
+            "thresholds": {"steps": [{"value": 0, "color": "red"}, {"value": 40, "color": "orange"}, {"value": 60, "color": "yellow"}, {"value": 80, "color": "green"}]},
+            "min": 0, "max": 100, "unit": "none"
+          }
+        }
+      },
+      {
+        "id": 2,
+        "title": "Consensus Health Index",
+        "type": "gauge",
+        "gridPos": {"x": 8, "y": 0, "w": 4, "h": 6},
+        "targets": [{"expr": "agent_x_consensus_health_index", "legendFormat": "CHI"}],
+        "fieldConfig": {
+          "defaults": {
+            "thresholds": {"steps": [{"value": 0, "color": "red"}, {"value": 40, "color": "orange"}, {"value": 60, "color": "yellow"}, {"value": 80, "color": "green"}]},
+            "min": 0, "max": 100
+          }
+        }
+      },
+      {
+        "id": 3,
+        "title": "Pressure Indices (Gas / MEV / Block)",
+        "type": "timeseries",
+        "gridPos": {"x": 0, "y": 6, "w": 12, "h": 8},
+        "targets": [
+          {"expr": "agent_x_pressure_gas_index", "legendFormat": "Gas Pressure", "refId": "A"},
+          {"expr": "agent_x_pressure_mev_index", "legendFormat": "MEV Pressure", "refId": "B"},
+          {"expr": "agent_x_pressure_block_index", "legendFormat": "Block Pressure", "refId": "C"},
+          {"expr": "agent_x_pressure_combined", "legendFormat": "Combined", "refId": "D"}
+        ],
+        "fieldConfig": {
+          "defaults": {"min": 0, "max": 100, "unit": "none"}
+        }
+      },
+      {
+        "id": 4,
+        "title": "Priority Fee & Basefee",
+        "type": "timeseries",
+        "gridPos": {"x": 12, "y": 0, "w": 12, "h": 8},
+        "targets": [
+          {"expr": "agent_x_pressure_basefee_gwei", "legendFormat": "Basefee (gwei)", "refId": "A"},
+          {"expr": "agent_x_pressure_priority_fee_p95", "legendFormat": "Priority Fee P95 (gwei)", "refId": "B"}
+        ],
+        "fieldConfig": {"defaults": {"unit": "gwei"}}
+      },
+      {
+        "id": 5,
+        "title": "Lending — Positions at Risk",
+        "type": "stat",
+        "gridPos": {"x": 0, "y": 14, "w": 4, "h": 4},
+        "targets": [{"expr": "agent_x_lending_positions_at_risk", "legendFormat": "At Risk"}],
+        "fieldConfig": {"defaults": {"thresholds": {"steps": [{"value": 0, "color": "green"}, {"value": 1, "color": "yellow"}, {"value": 5, "color": "red"}]}}}
+      },
+      {
+        "id": 6,
+        "title": "Lending — Liquidatable",
+        "type": "stat",
+        "gridPos": {"x": 4, "y": 14, "w": 4, "h": 4},
+        "targets": [{"expr": "agent_x_lending_positions_liquidatable", "legendFormat": "Liquidatable"}],
+        "fieldConfig": {"defaults": {"thresholds": {"steps": [{"value": 0, "color": "green"}, {"value": 1, "color": "red"}]}}}
+      },
+      {
+        "id": 7,
+        "title": "Worst Health Factor",
+        "type": "gauge",
+        "gridPos": {"x": 8, "y": 14, "w": 4, "h": 4},
+        "targets": [{"expr": "agent_x_lending_worst_health_factor", "legendFormat": "Worst HF"}],
+        "fieldConfig": {
+          "defaults": {
+            "thresholds": {"steps": [{"value": 0, "color": "red"}, {"value": 1.0, "color": "orange"}, {"value": 1.05, "color": "yellow"}, {"value": 1.5, "color": "green"}]},
+            "min": 0, "max": 3
+          }
+        }
+      },
+      {
+        "id": 8,
+        "title": "DeFi — Total Potential Profit (USD)",
+        "type": "stat",
+        "gridPos": {"x": 0, "y": 18, "w": 6, "h": 4},
+        "targets": [{"expr": "agent_x_defi_total_potential_profit_usd", "legendFormat": "Profit USD"}],
+        "fieldConfig": {"defaults": {"unit": "currencyUSD", "thresholds": {"steps": [{"value": 0, "color": "blue"}, {"value": 100, "color": "orange"}, {"value": 1000, "color": "green"}]}}}
+      },
+      {
+        "id": 9,
+        "title": "MEV Bots in Mempool",
+        "type": "stat",
+        "gridPos": {"x": 6, "y": 18, "w": 6, "h": 4},
+        "targets": [{"expr": "agent_x_defi_mempool_bots", "legendFormat": "MEV Bots"}],
+        "fieldConfig": {"defaults": {"thresholds": {"steps": [{"value": 0, "color": "green"}, {"value": 2, "color": "yellow"}, {"value": 5, "color": "red"}]}}}
+      },
+      {
+        "id": 10,
+        "title": "Pressure History (Gas, 12h)",
+        "type": "heatmap",
+        "gridPos": {"x": 0, "y": 22, "w": 12, "h": 6},
+        "targets": [{"expr": "rate(agent_x_pressure_gas_history_bucket[5m])", "legendFormat": "{{le}}"}]
+      },
+      {
+        "id": 11,
+        "title": "HF Distribution (24h)",
+        "type": "histogram",
+        "gridPos": {"x": 12, "y": 22, "w": 12, "h": 6},
+        "targets": [{"expr": "rate(agent_x_lending_hf_distribution_bucket[5m])", "legendFormat": "{{le}}"}]
+      },
+      {
+        "id": 12,
+        "title": "All-Clear Signal",
+        "type": "stat",
+        "gridPos": {"x": 12, "y": 14, "w": 4, "h": 4},
+        "targets": [{"expr": "agent_x_orchestrator_all_clear", "legendFormat": "All Clear"}],
+        "fieldConfig": {"defaults": {"thresholds": {"steps": [{"value": 0, "color": "red"}, {"value": 1, "color": "green"}]}, "unit": "bool"}}
+      },
+      {
+        "id": 13,
+        "title": "Decision Counter (Total)",
+        "type": "stat",
+        "gridPos": {"x": 16, "y": 14, "w": 4, "h": 4},
+        "targets": [{"expr": "agent_x_orchestrator_decisions_total", "legendFormat": "Decisions"}]
+      },
+      {
+        "id": 14,
+        "title": "DeFi — Profit Distribution",
+        "type": "histogram",
+        "gridPos": {"x": 0, "y": 28, "w": 12, "h": 6},
+        "targets": [{"expr": "rate(agent_x_defi_profit_distribution_bucket[5m])", "legendFormat": "{{le}}"}]
+      },
+      {
+        "id": 15,
+        "title": "MEV Pressure History (12h)",
+        "type": "heatmap",
+        "gridPos": {"x": 12, "y": 28, "w": 12, "h": 6},
+        "targets": [{"expr": "rate(agent_x_pressure_mev_history_bucket[5m])", "legendFormat": "{{le}}"}]
+      }
+    ]
+  }
+}

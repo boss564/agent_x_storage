@@ -1,0 +1,65 @@
+# Agent X — Public Sector / B2G Edition
+# Behördentaugliche Konfiguration: BHO, GWB, VOB/A, eIDAS, XRechnung, GAEB
+
+mode: "public_sector"
+
+compliance:
+  bho: true                          # Bundeshaushaltsordnung
+  gwb: true                          # Gesetz gegen Wettbewerbsbeschränkungen
+  vob_a: true                        # VOB/A — Vergabeordnung Bau
+  eidas_qes: true                    # Qualifizierte elektronische Signatur
+  xrechnung_version: "2.3"           # XRechnung XML-Standard
+  gaeb_version: "GAEB_DA_XML_3.2"    # GAEB Datenaustausch
+
+fiat_rails:
+  emi_provider: "monerium"           # E-Geld-Lizenz (EURe)
+  sepa_instant: true
+  treasury_iban: "DE89XXXXXXXXXXXX"   # Behörden-Treasury (wird NIE an die Chain gegeben)
+
+web3_backend:
+  chain: "gnosis"                    # Gas-stabil & günstig für Behörden
+  fallback_chain: "peaq_agung"
+  escrow_vault: "0x...EURe_Adapter..."
+  private_key_store: "HSM_Behoerde"  # Agent-Betreiber, NICHT die Behörde
+
+event_bus:
+  backend: "redis"                   # NATS in production, Redis for MVP
+  redis_url: "redis://localhost:6379/0"
+  subjects:
+    command: "agentx.b2g.command"
+    tender_parsed: "agentx.b2g.tender.parsed"
+    offer_optimized: "agentx.b2g.offer.optimized"
+    offer_published: "agentx.b2g.offer.published"
+    contract_signed: "agentx.b2g.contract.signed"
+    delivery_confirmed: "agentx.b2g.delivery.confirmed"
+    invoice_generated: "agentx.b2g.invoice.generated"
+    chain_anchored: "agentx.b2g.chain.anchored"
+
+agents:
+  gov_procurement:
+    class: "GovProcurementAgent"
+    role: "root_orchestrator"
+  tender_reader:
+    class: "TenderReaderAgent"
+    role: "gaeb_parser"
+  offer_optimizer:
+    class: "OfferOptimizerAgent"
+    role: "graphrag_calculation"
+  offer_publisher:
+    class: "OfferPublisherAgent"
+    role: "evergabe_submission"
+  contract_signing:
+    class: "ContractSigningAgent"
+    role: "eidas_qes_bridge"
+  escrow_coordinator:
+    class: "EscrowCoordinatorAgent"
+    role: "emi_bridge"
+  delivery_oracle:
+    class: "DeliveryOracleAgent"
+    role: "popw_verification"
+  invoice_generator:
+    class: "InvoiceGeneratorAgent"
+    role: "xrechnung_creator"
+  multichain_anchor:
+    class: "MultiChainAnchorAgent"
+    role: "chain_notary"

@@ -1,0 +1,14 @@
+# Agent X — Grafana Datasource Provisioning
+# Automatisch geladen beim Container-Start
+
+apiVersion: 1
+
+datasources:
+  - name: Prometheus-AgentX
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: false
+    jsonData:
+      timeInterval: "12s"
