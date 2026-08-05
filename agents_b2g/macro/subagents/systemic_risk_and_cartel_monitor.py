@@ -65,10 +65,10 @@ class SystemicRiskAndCartelMonitorSubagent:
                     "logs": [{"level": "WARN", "message": "Keine Transaktionen."}]}
 
         try:
-            G = self._build_graph(transactions)
-
             if not NETWORKX_AVAILABLE:
                 return self._fallback_analysis(transactions, tender_id, period_label, job_id)
+
+            G = self._build_graph(transactions)
 
             centrality = self._calculate_centrality(G)
             cartel_indicators = self._detect_cartel_patterns(G, transactions)
