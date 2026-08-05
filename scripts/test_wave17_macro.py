@@ -360,8 +360,9 @@ def test_wave17():
     print(f"  WAVE 17 E2E-TEST: {passed}/8 BESTANDEN, {failed}/8 FEHLGESCHLAGEN")
     print("=" * 70)
 
-    # Report speichern
-    report_dir = Path(__file__).parent.parent / "archive_b2g" / "wave17_reports"
+    # Report speichern (temp dir — keine persistenten Artefakte im Repo)
+    import tempfile
+    report_dir = Path(tempfile.gettempdir()) / "agent_x_wave17_reports"
     report_dir.mkdir(parents=True, exist_ok=True)
     report_path = report_dir / f"wave17_e2e_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.json"
 

@@ -26,8 +26,8 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-X83_SAMPLE = (PROJECT_ROOT / "archive_b2g" / "reference" / "gaeb_test_suite"
-              / "x83_anfrage" / "TED-2026-0815-KLAERANLAGE-NORD.x83")
+X83_SAMPLE = (PROJECT_ROOT / "archive_b2g" / "reference" / "bvbs_test_suite"
+              / "BVBS_Pruefdatei_GAEB_DA_XML_3.3_Bauausfuehrung.x83")
 
 
 # ============================================================

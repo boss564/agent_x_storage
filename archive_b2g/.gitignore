@@ -1,0 +1,21 @@
+# Generated runtime output (all timestamped/regenerated files)
+reports/
+rpa_reports/
+rpa_audits/
+investigations/
+wave17_reports/
+bridge_audit/
+exports/
+backups/
+test_data/
+offers/
+treasury/
+gobd/
+
+# Top-level generated artifacts
+PRJ-*_settlement.json
+*_X84.xml
+
+# Project-specific generated files under reference/
+reference/gaeb_test_suite/x83_anfrage/
+reference/gaeb_test_suite/x84_angebot/
