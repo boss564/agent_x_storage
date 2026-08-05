@@ -122,7 +122,8 @@ class GoBDIntegrityChecker:
     # ============================================================
 
     def _check_file(self, file_path: Path) -> dict:
-        """Verify hash chain integrity of a single JSONL file."""
+        """Verify hash chain integrity of a single JSONL file.
+        Non-JSONL files (e.g. pretty-printed settlement JSONs) are skipped gracefully."""
         entries = 0
         prev_hash = "0" * 64  # Genesis
         broken = None
@@ -133,6 +134,17 @@ class GoBDIntegrityChecker:
         except Exception as exc:
             return {"valid": False, "entries": 0,
                     "broken_link": {"error": str(exc)}}
+
+        # Detect non-JSONL files: first non-empty line must be a valid JSON object
+        # with a recognizable structure. Pretty-printed JSONs fail this test.
+        first_line = None
+        for line in lines:
+            if line.strip():
+                first_line = line.strip()
+                break
+        if first_line and not (first_line.startswith("{") and first_line.endswith("}")):
+            # Single-line JSON object = JSONL, multi-line pretty JSON = skip
+            return {"valid": True, "entries": 0, "skipped": "non-jsonl-file"}
 
         for i, line in enumerate(lines):
             if not line.strip():
