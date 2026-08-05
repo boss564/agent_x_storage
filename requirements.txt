@@ -14,6 +14,9 @@ lxml>=5.3.0
 # BundID/eIDAS JWT
 pyjwt>=2.8.0
 
+# MacroEconomy — Graphenanalyse (Wave 17)
+networkx>=3.0
+
 # Storage (optional — In-Memory-Fallback integriert)
 # redis>=5.0.0
 

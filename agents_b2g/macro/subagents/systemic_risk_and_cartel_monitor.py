@@ -22,11 +22,7 @@ from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional, Tuple
 from collections import defaultdict, Counter
 
-try:
-    import networkx as nx
-    NETWORKX_AVAILABLE = True
-except ImportError:
-    NETWORKX_AVAILABLE = False
+import networkx as nx
 
 logger = logging.getLogger("SystemicRiskAndCartelMonitor")
 
@@ -65,9 +61,6 @@ class SystemicRiskAndCartelMonitorSubagent:
                     "logs": [{"level": "WARN", "message": "Keine Transaktionen."}]}
 
         try:
-            if not NETWORKX_AVAILABLE:
-                return self._fallback_analysis(transactions, tender_id, period_label, job_id)
-
             G = self._build_graph(transactions)
 
             centrality = self._calculate_centrality(G)
@@ -211,18 +204,3 @@ class SystemicRiskAndCartelMonitorSubagent:
                            "message": f"{cycle_count} zyklische Zahlungsmuster — mögliche Verschleierung."})
         return min(1.0, risk), alerts
 
-    def _fallback_analysis(self, transactions, tender_id, period_label, job_id) -> Dict:
-        senders = [tx.get("sender", tx.get("from", "UNKNOWN")) for tx in transactions]
-        receivers = [tx.get("receiver", tx.get("to", "UNKNOWN")) for tx in transactions]
-        all_parties = set(senders + receivers)
-        return {
-            "status": "ANALYSIS_COMPLETE (FALLBACK)", "job_id": job_id,
-            "tender_id": tender_id, "period_label": period_label,
-            "timestamp": datetime.now(timezone.utc).isoformat() + "Z",
-            "artifacts": [], "error": None,
-            "logs": [{"level": "WARN", "message": "networkx nicht verfügbar — vereinfachte Analyse."}],
-            "network_metrics": {"nodes": len(all_parties), "edges": len(transactions)},
-            "top_senders": Counter(senders).most_common(5),
-            "top_receivers": Counter(receivers).most_common(5),
-            "gini_coefficient": 0.5, "risk_score": 0.1, "alerts": [],
-        }
