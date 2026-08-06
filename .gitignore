@@ -30,3 +30,9 @@ Thumbs.db
 # QR + map cache
 qrcodes/
 map_cache/
+
+# Multi-tenant test data (Audit-Archive, WORM, Nutzer-Artefakte)
+data/
+
+# CertiK test logs (temporäre .jsonl aus Testläufen)
+/tmp/certik_test_*.jsonl

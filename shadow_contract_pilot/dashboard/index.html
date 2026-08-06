@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Shadow-Contract-Pilot Dashboard</title>
+    <style>
+        * { box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        body { background: #f8f9fa; margin: 0; padding: 20px; }
+        .container { max-width: 1200px; margin: 0 auto; }
+        .header { background: white; border-radius: 12px; padding: 20px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+        .header h1 { color: #1a3a5c; margin: 0; display: flex; align-items: center; gap: 12px; }
+        .badge { background: #28a745; color: white; padding: 4px 12px; border-radius: 20px; font-size: 14px; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 16px; margin: 20px 0; }
+        .card { background: white; border-radius: 12px; padding: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+        .card-title { font-size: 13px; color: #6c757d; margin-bottom: 4px; }
+        .card-value { font-size: 28px; font-weight: 600; color: #1a3a5c; }
+        .card-value.green { color: #28a745; }
+        .card-value.red { color: #dc3545; }
+        .card-value.orange { color: #fd7e14; }
+        .table-container { background: white; border-radius: 12px; padding: 20px; margin-top: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+        table { width: 100%; border-collapse: collapse; }
+        th { text-align: left; padding: 12px 8px; background: #f1f3f5; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6; }
+        td { padding: 12px 8px; border-bottom: 1px solid #e9ecef; }
+        .status-badge { display: inline-block; padding: 2px 12px; border-radius: 12px; font-size: 12px; font-weight: 500; }
+        .status-badge.completed { background: #d4edda; color: #155724; }
+        .status-badge.pending { background: #fff3cd; color: #856404; }
+        .status-badge.active { background: #cce5ff; color: #004085; }
+        .footer { text-align: center; color: #6c757d; font-size: 13px; margin-top: 30px; }
+        .proof-hash { font-family: monospace; font-size: 12px; color: #6c757d; }
+        .btn { background: #1a3a5c; color: white; padding: 8px 20px; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; }
+        .btn:hover { background: #0d2b44; }
+        .btn-success { background: #28a745; }
+        .btn-success:hover { background: #1e7e34; }
+        .btn-danger { background: #dc3545; }
+        .btn-danger:hover { background: #bd2130; }
+        .alert { padding: 12px 16px; border-radius: 8px; margin: 12px 0; }
+        .alert-info { background: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb; }
+        .alert-success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .alert-warning { background: #fff3cd; color: #856404; border: 1px solid #ffeeba; }
+        .alert-danger { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .row { display: flex; gap: 20px; flex-wrap: wrap; }
+        .col { flex: 1; min-width: 300px; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="header">
+        <h1>
+            🏗️ VOB Shadow-Contract Pilot
+            <span class="badge">Live</span>
+        </h1>
+        <p style="color: #6c757d; margin: 4px 0 0 0;">
+            Technisch scharf — rechtlich risikofrei (Parallelbuchhaltung)
+        </p>
+    </div>
+
+    <div id="alerts"></div>
+
+    <div class="grid">
+        <div class="card">
+            <div class="card-title">💰 Gesamtbudget</div>
+            <div class="card-value" id="totalBudget">0,00 €</div>
+        </div>
+        <div class="card">
+            <div class="card-title">📤 Bisher freigegeben</div>
+            <div class="card-value" id="totalReleased">0,00 €</div>
+        </div>
+        <div class="card">
+            <div class="card-title">🔒 Sicherheitseinbehalt (5%)</div>
+            <div class="card-value" id="retentionVault">0,00 €</div>
+        </div>
+        <div class="card">
+            <div class="card-title">🏛️ Steuervault (19%)</div>
+            <div class="card-value" id="taxVault">0,00 €</div>
+        </div>
+        <div class="card">
+            <div class="card-title">📊 Fortschritt</div>
+            <div class="card-value" id="progress">0%</div>
+        </div>
+        <div class="card">
+            <div class="card-title">🔗 Status</div>
+            <div class="card-value" id="projectStatus" style="font-size: 18px;">🟢 Aktiv</div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col">
+            <div class="table-container">
+                <h3>📋 Meilensteine</h3>
+                <table id="milestoneTable">
+                    <thead>
+                        <tr>
+                            <th>OZ</th>
+                            <th>Beschreibung</th>
+                            <th>Brutto</th>
+                            <th>Status</th>
+                            <th>Proof</th>
+                        </tr>
+                    </thead>
+                    <tbody id="milestoneBody">
+                        <tr><td colspan="5">Keine Meilensteine geladen.</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <div class="col">
+            <div class="table-container">
+                <h3>📜 Transaktionen</h3>
+                <table id="transactionTable">
+                    <thead>
+                        <tr>
+                            <th>Datum</th>
+                            <th>Event</th>
+                            <th>Betrag</th>
+                        </tr>
+                    </thead>
+                    <tbody id="transactionBody">
+                        <tr><td colspan="3">Keine Transaktionen.</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="footer">
+        <p>🔗 Smart Contract: <span id="contractAddress">0x... (wird beim Deployment gesetzt)</span></p>
+        <p>🔄 Letzte Aktualisierung: <span id="lastUpdate">-</span></p>
+    </div>
+</div>
+
+<script>
+    // Dashboard-Client für den Shadow-Contract-Piloten
+    const API_BASE = '/api/shadow-pilot';
+    let pollInterval = null;
+
+    async function fetchStatus() {
+        try {
+            const response = await fetch(`${API_BASE}/status`);
+            const data = await response.json();
+            updateDashboard(data);
+        } catch (error) {
+            console.error('Fehler beim Abrufen des Status:', error);
+        }
+    }
+
+    function updateDashboard(data) {
+        // Metriken
+        document.getElementById('totalBudget').textContent =
+            (data.totalBudget || 0).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
+        document.getElementById('totalReleased').textContent =
+            (data.totalReleased || 0).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
+        document.getElementById('retentionVault').textContent =
+            (data.retentionVault || 0).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
+        document.getElementById('taxVault').textContent =
+            (data.taxVault || 0).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
+
+        const progress = data.progress || 0;
+        document.getElementById('progress').textContent = progress + '%';
+
+        const statusEl = document.getElementById('projectStatus');
+        if (data.isActive) {
+            statusEl.textContent = '🟢 Aktiv';
+            statusEl.style.color = '#28a745';
+        } else {
+            statusEl.textContent = '🔴 Abgeschlossen';
+            statusEl.style.color = '#dc3545';
+        }
+
+        // Meilensteine
+        const milestoneBody = document.getElementById('milestoneBody');
+        if (data.milestones && data.milestones.length > 0) {
+            milestoneBody.innerHTML = data.milestones.map(m => `
+                <tr>
+                    <td><strong>${m.ozId}</strong></td>
+                    <td>${m.description || '-'}</td>
+                    <td>${(m.grossAmount || 0).toLocaleString('de-DE', { minimumFractionDigits: 2 })} €</td>
+                    <td><span class="status-badge ${m.isCompleted ? 'completed' : 'pending'}">${m.isCompleted ? '✅ Erledigt' : '⏳ Offen'}</span></td>
+                    <td class="proof-hash">${m.popwProofHash ? m.popwProofHash.slice(0, 16) + '...' : '-'}</td>
+                </tr>
+            `).join('');
+        } else {
+            milestoneBody.innerHTML = '<tr><td colspan="5">Keine Meilensteine geladen.</td></tr>';
+        }
+
+        // Transaktionen
+        const transactionBody = document.getElementById('transactionBody');
+        if (data.transactions && data.transactions.length > 0) {
+            transactionBody.innerHTML = data.transactions.map(t => `
+                <tr>
+                    <td>${new Date(t.timestamp).toLocaleString('de-DE')}</td>
+                    <td>${t.event}</td>
+                    <td>${(t.amount || 0).toLocaleString('de-DE', { minimumFractionDigits: 2 })} €</td>
+                </tr>
+            `).join('');
+        } else {
+            transactionBody.innerHTML = '<tr><td colspan="3">Keine Transaktionen.</td></tr>';
+        }
+
+        document.getElementById('contractAddress').textContent =
+            data.contractAddress || '0x... (wird beim Deployment gesetzt)';
+        document.getElementById('lastUpdate').textContent = new Date().toLocaleString('de-DE');
+    }
+
+    // Initiales Laden und Polling
+    fetchStatus();
+    pollInterval = setInterval(fetchStatus, 5000);
+</script>
+</body>
+</html>

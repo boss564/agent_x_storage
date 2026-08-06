@@ -8,7 +8,7 @@ Two integrated systems sharing core infrastructure (SymbolicsAgent, Consensus En
 
 1. **Agent X Core** — DeFi risk management: 6 classes (A–F), 60+ agents, consensus-driven state evaluation with CHI (Composite Health Index), backtesting against 8 historical crisis scenarios.
 
-2. **Agent X B2G** — Public-sector procurement: 135 agents in 15 waves covering the complete lifecycle from GAEB tender receipt through VOB/B multi-installment payment, defect/dispute arbitration, BHO-compliant treasury reconciliation, GoBD archiving, multi-chain notarization, operations, user/project management with BundID SSO, a complete query & reporting layer, a **real-time macroeconomic engine** (Wave 17) with velocity tracking and programmable fiscal stimulus, a **VOB Shadow Contract & Pilot** (Wave 18) for risk-free blockchain adoption, and a **Multi-Stakeholder Onboarding Ecosystem** (Wave 19) for craftsmen, builders, developers, IoT and banking partners.
+2. **Agent X B2G** — Public-sector procurement: 180 agents in 20 waves covering the complete lifecycle from GAEB tender receipt through VOB/B multi-installment payment, defect/dispute arbitration, BHO-compliant treasury reconciliation, GoBD archiving, multi-chain notarization, operations, user/project management with BundID SSO, a complete query & reporting layer, a **real-time macroeconomic engine** (Wave 17) with velocity tracking and programmable fiscal stimulus, a **VOB Shadow Contract & Pilot** (Wave 18) for risk-free blockchain adoption, a **Multi-Stakeholder Onboarding Ecosystem** (Wave 19) for craftsmen, builders, developers, IoT and banking partners, and a **CertiK Security Audit & Formal Verification Engine** (Wave 20) with 81 subagents for mathematical proof, BSI C5/ISO 27001/SOC2 compliance, and real-time threat monitoring.
 
 ## Agent X Core — Projektstruktur
 
@@ -22,7 +22,7 @@ agent_x_storage/
 ├── agent_x/                      # Analyse-Module
 │   └── metrics/
 │       └── compound_analyzer.py  # EWMA-Kalibrierungs-Analyzer
-├── agents_b2g/                   # 135 B2G-Agenten in 15 Wellen (s.u.)
+├── agents_b2g/                   # B2G-Agenten (s.u. Wellen-Tabelle)
 ├── scripts/                      # Runner & Tests
 │   ├── calibrate_agent_x.py      # Compound-Risk-Kalibrierung
 │   ├── paper_trading_agent_x.py  # Paper-Trading mit Deep-Logging
@@ -64,7 +64,7 @@ agent_x_storage/
 
 ## Agent X B2G — Public Sector Procurement
 
-### Architecture: 15 Waves × 9 Agents = 135 Agents
+### Architecture: 20 Waves × 9 Agents = 180 Agents
 
 ```
 Wave 1 (Tendering):        Monitor → Parser → Eligibility → CHI-Risk → PoPW-Index →
@@ -126,11 +126,35 @@ Wave 19 (Ecosystem):        EcosystemOnboardingOrchestrator → CraftsmanOnboard
                             IoTPartnerOnboarding → BankingPartnerOnboarding →
                             ComplianceEnrollment → EcosystemHealthMonitor →
                             PartnerSuccessManager
+Wave 20 (CertiK Security):  SmartContractStaticAnalyzer → AccessControlAndGovAuditor →
+                            OracleAndDeFiDynamicsTester → L1L2InfrastructureAuditor →
+                            FormalVerificationEngine → PenetrationAndFuzzingAgent →
+                            C5AndBSIGovernmentCertifier → RealTimeThreatMonitor →
+                            CertiKAuditReportComposer
+Wave 21 (Skynet Monitor):   CodeSecurityRatingAgent → FundamentalHealthAgent →
+                            OperationalSecurityAgent → MarketStabilityAgent →
+                            CommunityTrustAgent → GovernanceStrengthAgent →
+                            DynamicScoreAggregator → RiskAlertEngine →
+                            SkynetDashboardComposer
+Wave 22 (Ops Security):     KeyVaultManager → GasOptimizer → NonceManager →
+                            MetaTxEngine → AutotaskScheduler → WebhookIntegrator →
+                            ConditionExecutor → DeployVerifier →
+                            SecureDeployOrchestrator
+Wave 23 (Token Launch):     TokenomicsArchitect → TokenContractDeployer →
+                            VestingAndVaultManager → LiquidityPoolInitializer →
+                            TokenGovernanceEngine → RegulatoryComplianceGuard →
+                            AirdropAndClaimDistributor → TokenMetadataAndBranding →
+                            TokenLaunchOrchestrator
+Wave 24 (Trading):          DEXLiquidityRouter → AutomatedMarketMakerAgent →
+                            LimitOrderBookEngine → MarketMakingStrategyAgent →
+                            CrossChainSwapRelayer → MEVAndSlippageProtectionAgent →
+                            GasOptimalTradeExecutor → FeeAndDividendDistributor →
+                            TradingAnalyticsAndRiskMonitor
 ```
 
 ### Wellen-Übersicht
 
-Welle 3.5 (VOB/B Disput) ist eine Unterwelle von Welle 3 (Execution) und wird nicht als eigenständige Hauptwelle gezählt. Die Gesamtzahl der Hauptwellen beträgt 15 (Wellen 1–10, 15, 16, 17, 18, 19). Die Wellen-Nummern 11–14 existieren nicht — die Nummerierung springt von 10 direkt auf 15 (Public Portal), 16 (SEPA Bridge), 17 (MacroEconomy), 18 (Shadow Contract) und 19 (Ecosystem Onboarding).
+Welle 3.5 (VOB/B Disput) ist eine Unterwelle von Welle 3 (Execution) und wird nicht als eigenständige Hauptwelle gezählt. Die Gesamtzahl der Hauptwellen beträgt 20 (Wellen 1–10, 15–24). Die Wellen-Nummern 11–14 existieren nicht.
 
 | Welle | Name | Agenten | Modul | Fokus |
 |-------|------|---------|-------|-------|
@@ -150,6 +174,11 @@ Welle 3.5 (VOB/B Disput) ist eine Unterwelle von Welle 3 (Execution) und wird ni
 | 17 | MacroEconomy Engine | 9 | `macro/macro_economy_orchestrator.py` | Velocity, Inflation, Multiplikator, Stimulus, Steuer, Kapitaleffizienz, Kartell, Zentralbank |
 | 18 | Shadow Contract & Pilot | 10 | `shadow/shadow_contract_orchestrator.py` | VOB Shadow Escrow, IoT/ZK-Milestones, ELSTER-Steuer, Retention, RPA-Dashboard |
 | 19 | Ecosystem Onboarding | 9 | `onboarding/ecosystem_onboarding_orchestrator.py` | Handwerker, Bauherren, Developer, IoT, Banken — 5 Rollen |
+| 20 | CertiK Security Audit | 9 | `security/certik_audit_orchestrator.py` | Statische Analyse, Access Control, Oracle/DeFi, L1/L2, Formale Verifikation, Fuzzing, BSI C5/ISO 27001/SOC2/GDPR, Real-Time Threat, CertiK Zertifizierung (81 Subagenten) |
+| 21 | Skynet Dynamic Monitor | 9 | `security/skynet_orchestrator.py` | 6-Säulen-Echtzeit-Score: Code, Fundamentales, Betrieb, Markt, Community, Governance — 54 Subagenten |
+| 22 | Ops Security & Deploy | 9 | `ops/relay_orchestrator.py` | Key-Vault, Gas-Opt, Nonce, Meta-TX, Autotasks, Webhooks, Deploy-Verify, Multi-Sig-Deploy — 36 Subagenten |
+| 23 | Token Creation & Launch | 9 | `tokenomics/token_launch_orchestrator.py` | Tokenomics, ERC-20-Deploy, Vesting, DEX-Liquidity, DAO-Governance, MiCAR/SEC-Compliance, Airdrop-Merkle-Claims, IPFS-Metadaten — 81 Subagenten |
+| 24 | Trading Infrastructure | 9 | `trading/token_trading_orchestrator.py` | DEX-Routing, AMM-Tick-Management, Limit-Orders, Market-Making, Cross-Chain-Swaps, MEV-Schutz, Gas-Optimierung, Fee-Distribution, Circuit-Breaker |
 
 ### B2G Module Structure
 
@@ -233,6 +262,16 @@ agents_b2g/
 │   ├── __init__.py
 │   ├── ecosystem_onboarding_orchestrator.py  # 5-Rollen-Root
 │   └── subagents/ (8 files)
+├── security/                      # Wave 20+21: CertiK + Skynet Security
+│   ├── __init__.py               # Wave 20+21 exports
+│   ├── certik_audit_orchestrator.py  # Wave 20: 9+81 Subagenten
+│   └── skynet_orchestrator.py    # Wave 21: 9+54 Subagenten
+├── tokenomics/                    # Wave 23: Token Creation & Launch
+│   ├── __init__.py
+│   └── token_launch_orchestrator.py  # 9+81 Subagenten
+├── trading/                       # Wave 24: Trading Infrastructure
+│   ├── __init__.py
+│   └── token_trading_orchestrator.py  # 9 Agenten: DEX, AMM, MEV, Market Making
 ├── event_bus.py                  # Pub/Sub + JSONL Audit-Log
 ├── gov_procurement_agent.py      # Root Orchestrator, BHO thresholds
 └── tender_reader_agent.py        # GAEB-XML Reader
@@ -358,8 +397,11 @@ GoBD → Ledger (BHO Δ=0,00€) → Chain-Hash → XRechnung → PoPW-Coverage 
 - **Wave 15 Public Portal:** 68/68 tests passed (QR generation SVG/PNG, batch, municipality, tenant isolation, fast-track, DSGVO shield, blockchain verification, open data export)
 - **Wave 16 SEPA Bridge:** 43/43 tests passed (Mint/Burn, IBAN/BZSt/MOD97/Blacklist, GoBD audit, OAuth2/CircuitBreaker/HALF_OPEN, ERC-4337 Paymaster + sponsor_tx, Δ=0.00€ reconciliation, SEPA polling/timeout, MiCAR compliance)
 - **Wave 17 MacroEconomy:** 8/8 E2E passed (`scripts/test_wave17_macro.py`), MEHI 0.74 Grade B, all 8 pipeline stages green, cartel patterns detected, balance sheet Δ=0.00€
-- **Wave 18 Shadow Contract:** 14/14 phases passed, Ledger Δ=0.00€, 21.600× speedup, 99.85% reliability, Atomic Settlement Δ=0.00€
+- **Wave 18 Shadow Contract:** 14/14 phases passed, Ledger Δ=0.00€, 21.600× speedup, 99.85% reliability, Atomic Settlement Δ=0.00€, Shadow Contract Lifecycle 25/25 passed (`shadow_contract_pilot/test_lifecycle.py`)
 - **Wave 19 Ecosystem:** 5/5 stakeholder roles onboarded, 100% conversion rate, ecosystem health dashboard active
+- **Wave 20 CertiK Security:** 164/164 tests passed (`scripts/test_wave20_security.py`), 15 test groups covering all 9 agent groups + E2E + config + logging + failsafe, CertiK Score A+ (secure contracts), Score C/D (vulnerable contracts detected)
+- **Wave 21 Skynet Monitor:** 80/80 tests passed (`scripts/test_wave21_skynet.py`), 12 test groups covering 6 pillars + score aggregator + alert engine + dashboard + E2E + config, Skynet Score 100.0 (clean mock data)
+- **Wave 22 Ops Security:** 48/48 tests passed (`scripts/test_wave22_ops.py`), 10 test groups covering all 9 agents + config, Relay/Gas/Nonce/MetaTX/Autotasks/Webhooks/DeployVerify/SecureDeploy (benötigt >256 MB RAM, daher nicht im Hook)
 
 ### Smart Contracts (Schwesterprojekt)
 
@@ -390,10 +432,10 @@ python3 scripts/paper_trading_agent_x.py
 # B2G — Bootstrap (3-agent demo)
 python3 scripts/bootstrap_b2g.py
 
-# B2G — Full Pipeline (135 agents, 15 waves)
+# B2G — Full Pipeline
 python3 orchestrator_b2g_full.py
 
-# B2G — E2E Test (135 agents, 15 waves)
+# B2G — E2E Test
 python3 scripts/end_to_end_90_agents.py
 
 # B2G — GAEB Reference Test
@@ -442,6 +484,63 @@ python3 agents_b2g/shadow/shadow_contract_orchestrator.py
 # B2G — Ecosystem Onboarding (Wave 19)
 python3 agents_b2g/onboarding/ecosystem_onboarding_orchestrator.py
 
+# B2G — CertiK Security Audit (Wave 20)
+python3 scripts/test_wave20_security.py             # Run all 164 tests (15 groups)
+python3 agents_b2g/security/certik_audit_orchestrator.py  # Full audit demo
+python3 -c "
+from agents_b2g.security import CertiKAuditOrchestrator
+orch = CertiKAuditOrchestrator(user_id='test')
+report = orch.run_full_audit(
+    contract_name='EscrowVault.sol',
+    contract_code=open('contracts/EscrowVault.sol').read(),
+    chain='gnosis',
+)
+print(f'CertiK Score: {report[\"score_percent\"]} ({report[\"rating\"]})')
+print(f'Verdict: {report[\"audit_verdict\"]}')
+print(f'Vulnerabilities: {report[\"vulnerability_summary\"]}')
+"
+
+# B2G — Ops Security & Secure Deploy (Wave 22)
+python3 scripts/test_wave22_ops.py              # Run all 48 tests
+python3 agents_b2g/ops/relay_orchestrator.py    # Full relay/deploy demo
+
+# B2G — Token Creation & Launch (Wave 23)
+python3 agents_b2g/tokenomics/token_launch_orchestrator.py  # Full launch demo
+
+# B2G — Trading Infrastructure (Wave 24)
+python3 agents_b2g/trading/token_trading_orchestrator.py    # Full trading demo
+python3 -c "
+from agents_b2g.trading import TokenTradingOrchestrator
+orch = TokenTradingOrchestrator(user_id='test')
+result = orch.run_full_cycle(token='AGX', pair='EURe', amount=10000, current_price=1.0)
+print(f'DEX: {result[\"artifacts\"][0][\"dex_route\"][\"best_route\"][\"dex\"]}')
+print(f'Trading: {result[\"artifacts\"][0][\"trading_allowed\"]}')
+"
+python3 -c "
+from agents_b2g.tokenomics import TokenLaunchOrchestrator
+orch = TokenLaunchOrchestrator(user_id='test')
+result = orch.run_launch_pipeline('Agent X Token', 'AGX', 100_000_000, is_utility=True)
+print(f'Contract: {result[\"artifacts\"][0][\"contract_address\"]}')
+print(f'Phase: {result[\"artifacts\"][0][\"phase\"]}')
+"
+
+# B2G — Skynet Dynamic Security Score (Wave 21)
+python3 scripts/test_wave21_skynet.py               # Run all 80 tests
+python3 agents_b2g/security/skynet_orchestrator.py   # Full Skynet audit demo
+python3 -c "
+from agents_b2g.security import SkynetOrchestrator
+orch = SkynetOrchestrator(user_id='test')
+result = orch.run_full_audit(
+    contract_name='EscrowVault.sol',
+    contract_data={'audit_findings': [{'fixed': True}], 'multisig': {'required': 3, 'total': 5}},
+    market_data={'pool': {'liquidity_usd': 5_000_000}},
+    community_data={'tweets': [{'sentiment': 'positive'}]},
+    governance_data={'voting_power': [1, 2, 3, 4, 5]},
+)
+print(f'Skynet Score: {result[\"artifacts\"][0][\"score\"][\"skynet_score\"]:.1f}')
+print(f'Rating: {result[\"artifacts\"][0][\"score\"][\"rating\"]}')
+"
+
 # B2G — SEPA Bridge (Wave 16)
 python3 scripts/test_wave16_bridge.py              # Run all 43 tests
 python3 -c "
@@ -458,7 +557,7 @@ print(sup.reconcile())
 # python3 scripts/deploy.py --dry-run
 # python3 scripts/deploy.py  # requires PRIVATE_KEY
 
-# Docker — Full Stack (135 agents + Redis/Neo4j/NATS/Prometheus/Grafana)
+# Docker — Full Stack (alle Agenten + Redis/Neo4j/NATS/Prometheus/Grafana)
 docker-compose up -d
 docker-compose logs -f pilot_dashboard
 ```
@@ -490,7 +589,7 @@ docker-compose logs -f pilot_dashboard
 | redis | redis:7.4-alpine | State store, session cache, pub/sub |
 | neo4j | neo4j:5.26-community | Graph database for audit trails, agent relationships |
 | nats | nats:2.10-alpine | JetStream message broker (replaces in-process EventBus) |
-| prometheus | prom/prometheus:v2.55.0 | Metrics collection from all 135 agents |
+| prometheus | prom/prometheus:v2.55.0 | Metrics collection from all agents |
 | grafana | grafana/grafana:11.3.0 | Dashboards for ops and project management |
 
 ### Wave 10 Detail: Query & Reports (9 Agents)
@@ -502,7 +601,7 @@ docker-compose logs -f pilot_dashboard
 | ConstructionProgressQueryAgent | SollIstVergleich, GanttChartGenerator, DelayAnalyzer | GAEB-Plan vs. PoPW-Telemetrie, Baufortschritt |
 | TreasuryQueryAgent | BalanceSheetCalculator, RetentionTracker, SEPATransactionExporter | Escrow-Saldo, 5%-Einbehalt, SEPA-Tracking |
 | ComplianceQueryAgent | PIIAnonymizer, AuditTrailValidator, RetentionPolicyChecker | DSGVO/GoBD-Prüfung, JSONL-Vollständigkeit |
-| ControllingQueryAgent | CostTrendAnalyzer, AgentUtilizationStat, OnTimeDashboard | Kosten, Auslastung (135 Agenten), Termintreue |
+| ControllingQueryAgent | CostTrendAnalyzer, AgentUtilizationStat, OnTimeDashboard | Kosten, Auslastung (alle Agenten), Termintreue |
 | OpsQueryAgent | CircuitBreakerStatus, ErrorLogAggregator, PerformanceHeatmap | Systemgesundheit, Fehlerraten, Latenzen |
 | PublicDataQueryAgent | AnonymizationEngine, StatisticalCalculator, OpenDataExport | Vergabestatistik für Transparenzportale |
 | LocalEconomyQueryAgent | GeoIPResolver, RegionalShareCalculator, SubsidyImpactReport | Regionaler Unternehmensanteil, Fördermittel-Impact |
@@ -639,10 +738,152 @@ Init → Deploy → Fund → 5×Milestones → Tax → Retention → Complete �
 | EcosystemHealthMonitor | Real-Time Health Dashboard, 24h-Metriken, Rollenverteilung |
 | PartnerSuccessManager | Rollenbasierte Empfehlungen, Upsell-Erkennung |
 
+### Wave 20 Detail: CertiK Security Audit & Formal Verification Engine (9 Agents + 81 Subagents)
+
+Mathematisch verifizierte Sicherheitsprüfung für Smart Contracts, L1/L2-Infrastruktur und das gesamte Agent X B2G Ökosystem. Integriert mit BSI C5, ISO 27001, SOC2 Type2, GoBD, eIDAS und DSGVO Compliance.
+
+| Agent | Subagenten | Funktion |
+|-------|-----------|----------|
+| CertiKAuditOrchestrator | — | Root: 9-Agenten-Pipeline, CertiK Security Score, WORM-Archiv, Leaderboard-Publishing |
+| SmartContractStaticAnalyzer | ReentrancyDetector, IntegerOverflowChecker, GasOptimizationFinder, ShadowVariableScanner, UncheckedCallAuditor, MathInvarianceVerifier, CallStackDepthChecker, SolcBytecodeDiff, CodeComplexityScorer | Statische Code-Analyse: Reentrancy, Integer Overflow, Gas, Shadow Variables, Unchecked Calls, Math, Call Stack, Bytecode Diff, Complexity |
+| AccessControlAndGovAuditor | MultiSigConfigVerifier, TimelockDelayValidator, PrivilegeEscalationScanner, AdminKeyCentralizationScorer, EmergencyPauseVerifier, ProxyUpgradeGuard, RoleBasedAccessChecker, OwnershipTransferAuditor, GovernanceQuorumAnalyzer | Access Control & Governance: MultiSig, Timelock, Privilege Escalation, Zentralisierung, Emergency Pause, Proxy, RBAC, Ownership, Quorum |
+| OracleAndDeFiDynamicsTester | FlashLoanAttackSimulator, OracleManipulationChecker, TWAPWindowValidator, MEVSandwichGuard, SlippageToleranceAuditor, CollateralFactorStressTester, LiquidationThresholdAuditor, ArbitrageLoopDetector, TokenomicsBurnValidator | Oracle & DeFi: Flash Loan, Oracle Manipulation, TWAP, MEV, Slippage, Collateral, Liquidation, Arbitrage, Tokenomics |
+| L1L2InfrastructureAuditor | ConsensusMechanismValidator, CryptographicPrimitiveChecker, SybilAttackResilienceScorer, 51PercentAttackCostCalc, RPCNodeSecAuditor, PeerDiscoverySanitizer, CrossChainBridgeGuard, ValidatorSlashingAuditor, HardforkStateVerifier | L1/L2 Infrastructure: Consensus, Cryptography, Sybil, 51%-Attack, RPC, Peers, Bridge, Slashing, Hardfork |
+| FormalVerificationEngine | Z3TheoremProver, SMTLibSpecGenerator, InvariantDefinitionChecker, SymbolicExecutionRunner, StateMachineExhaustivityTester, BoundaryValueProver, EquivalenceChecker, FormalPropertyEncoder, CertificateProofGenerator | Mathematische Beweisführung: Z3, SMT-LIB2, Invarianten, Symbolic Execution, State Machine, Boundary, Equivalence, VOB-Properties, Zertifikate |
+| PenetrationAndFuzzingAgent | EchidnaFuzzingRunner, FoundryInvariantTester, MutationTestingEngine, ExploitationPayloadGenerator, ReplayAttackSimulator, BoundaryConditionFuzzer, TransactionOrderingFuzzer, AnomalyInjectionEngine, HeapStackOverflowScorer | Dynamisches Testen: Echidna, Foundry, Mutation, Exploits, Replay, Boundary, TX-Ordering, Anomaly-Injection, Heap/Stack |
+| C5AndBSIGovernmentCertifier | BSIC5CriteriaMatcher, ISO27001ControlChecker, SOC2Type2Auditor, GoBDInvarianceVerifier, eIDASValidationAuditor, GDPRPrivacyAuditScanner, EVBITContractGuard, PenetrationTestReportFormatter, BSIExecutiveSummaryGenerator | Behörden-Compliance: BSI C5, ISO 27001, SOC2, GoBD, eIDAS, GDPR, EVB-IT, Pentest-Report, BSI-Summary |
+| RealTimeThreatMonitor | OnChainMempoolWatcher, FrontrunningDetector, AnomalyStateObserver, CircuitBreakerAutoTrigger, MaliciousBytecodeDetector, SuspiciousWithdrawalGuard, AntiSybilMempoolFilter, ThreatLevelEscalator, AutomatedFreezeRelayer | Echtzeit-Überwachung: Mempool, Frontrunning, Anomalien, Circuit Breaker, Malicious Bytecode, Withdrawal Guard, Sybil Filter, Eskalation, Freeze Relay |
+| CertiKAuditReportComposer | CertiKScoreCalculator, VulnerabilityCategorizer, RemediationPlanGenerator, ExecutiveSummaryDrafter, TechnicalDeepDivePackager, PublicBadgeCertifier, CodeFixValidator, AuditTrailWORMArchiver, CertiKCertificationPublisher | Zertifizierung: Score, Kategorisierung, Remediation, Summary, Deep Dive, Badge, Fix-Validation, WORM-Archiv, Publishing |
+
+**Key characteristics:**
+- 81 Subagenten in 9 Gruppen — vollständige Security-Audit-Abdeckung
+- Formal Verification: Z3-Theorem-Prover, SMT-LIB2, Conservation-of-Funds-Invariante
+- BSI C5, ISO 27001, SOC2 Type2, GoBD, eIDAS, GDPR, EVB-IT, MiCAR Compliance
+- Real-Time Threat Monitoring: Mempool-Watching, Frontrunning-Detection, Circuit-Breaker
+- CertiK Security Score (A+ bis F) mit Remediation-Plänen und Web3-Badge
+- Multi-Tenancy: Alle Reports unter `{data_root}/{user_id}/audits/`
+- JSONLogger für alle 81 Subagenten
+- try/except + Retry mit exponentiellem Backoff auf jeder Node
+- E2E Test: `python3 scripts/test_wave20_security.py` — 15 Test-Gruppen, 164/164 passed
+
+### Wave 21 Detail: Skynet Dynamic Security Score & Real-Time Monitoring (9 Agents + 54 Subagents)
+
+Kontinuierliches Echtzeit-Sicherheitsmonitoring mit 6 gewichteten Säulen. Überführt das einmalige CertiK-Audit (Wave 20) in einen dynamischen Live-Score.
+
+**6-Pillar-Weighting (env-konfigurierbar):**
+
+| Pillar | Weight | Quelle |
+|--------|--------|--------|
+| Code Security (P1) | 30% | Static + Dynamic Scan, Bug Bounty, Formal Proofs, Zero-Day DB |
+| Operational Security (P3) | 25% | MultiSig, Timelock, HSM, RPC Uptime, SOC2/ISO27001, Key Rotation |
+| Governance Strength (P6) | 15% | Gini, Voter Distribution, Insider Holdings, Quorum, Flash-Loan Guard |
+| Market Stability (P4) | 15% | Liquidity Depth, Whale Concentration, Volatility, Slippage, Wash Trading |
+| Fundamental Health (P2) | 10% | Commit Velocity, Developer Count, Spec Coverage, Docs, Dependencies |
+| Community Trust (P5) | 5% | Sentiment NLP, Bot Density, Discord/Telegram, Phishing Detection |
+
+**Agent Structure:**
+
+| Agent | Subagenten | Funktion |
+|-------|-----------|----------|
+| SkynetOrchestrator | — | Root: 6-Pillar Pipeline, weighted score, alert engine, dashboard |
+| CodeSecurityRatingAgent | 9 | Remediation, Patch, VulnWeight, BugBounty, Compiler, Static, Proof, ZeroDay, Aggregator |
+| FundamentalHealthAgent | 8 | Commits, Devs, Spec, Docs, Branch, Deps, Reputation, Reviews |
+| OperationalSecurityAgent | 8 | MultiSig, Timelock, HSM-Key, RPC, Cloud, Pause, Rotation, HSM |
+| MarketStabilityAgent | 8 | Liquidity, Whale, Volatility, Slippage, Volume, Wash, Vesting, IL |
+| CommunityTrustAgent | 8 | Sentiment, Bots, Mentions, Discord, Telegram, Phishing, GovSentiment, Influencer |
+| GovernanceStrengthAgent | 8 | Gini, Voters, Insider, Delegation, Quorum, ExecTimelock, FlashLoan, Veto |
+| SkynetRiskAlertEngine | — | Score-Drop-Detektor, Critical-Threshold-Warnung, Freeze-Signal |
+| SkynetDashboardComposer | — | Radarchart, Badge, Leaderboard, PDF-Export, Checksum |
+
+**Key characteristics:**
+- 6 Pillars mit konfigurierbaren Gewichten (env `SKYNET_W_*`)
+- Skynet Score = Σ(pillar_raw × weight), 0–100
+- Rating: SECURE_EXCELLENT (≥85) / ACCEPTABLE_MODERATE (≥70) / CRITICAL_WARNING (<70)
+- Alert bei Score-Drop >5 Punkte oder Score <60
+- Multi-Tenancy: Alle Reports unter `{data_root}/{user_id}/skynet/`
+- JSONLogger + _safe_call auf allen 54 Subagenten
+- E2E Test: `python3 scripts/test_wave21_skynet.py` — 80/80 passed
+
+### Wave 22 Detail: Ops Security — Secure Relay & Automated Deployment (9 Agents + 36 Subagents)
+
+Schließt die drei verbleibenden Lücken zu OpenZeppelin Defender: Relay-Infrastruktur, serverlose Autotasks und Deployment-Verifikation.
+
+| Agent | Subagenten | Funktion |
+|-------|-----------|----------|
+| KeyVaultManager | HSMConnector, KeyRotationScheduler, SigningProxy, AuditLogWriter | Verwaltet private Schlüssel in eingebetteten, sicheren Tresoren |
+| GasOptimizer | FeeEstimator, ResubmissionEngine, ChainProfiler, MEVProtectionAdvisor | Multi-Chain Gas-Preis-Optimierung und automatische Resubmission |
+| NonceManager | NonceTracker, GapDetector, ConflictResolver, ChainStateReconciler | Zuverlässiges Nonce-Tracking und Konfliktlösung |
+| MetaTxEngine | UserOpBuilder, PaymasterIntegrator, BundlerClient, EntryPointValidator | ERC-4337 Meta-Transaktions-Infrastruktur für gaslose UX |
+| AutotaskScheduler | CronScheduler, WebhookListener, SandboxExecutor, ConditionEvaluator | Serverlose Automatisierung mit Cron + Webhooks + IFTTT |
+| WebhookIntegrator | WebhookReceiver, SignatureVerifier, RateLimiter, PayloadValidator | Externe Event-Ingestion mit HMAC/ECDSA-Sicherheitsprüfung |
+| ConditionExecutor | ThresholdTrigger, TimeBasedTrigger, EventBasedTrigger, ActionDispatcher | Führt Aktionen nur bei erfüllten Bedingungen aus (IFTTT) |
+| DeployVerifier | BytecodeComparator, SourceVerifier, StorageLayoutChecker, CompilerFlagValidator | Post-Deployment-Bytecode-Verifikation und Source-Matching |
+| SecureDeployOrchestrator | MultiSigApprover, StagedRolloutManager, RollbackGuard, DeploymentAuditor | Multi-Sig-gesteuerte, gestaffelte Deployments mit Rollback |
+
+**Key characteristics:**
+- 36 Subagenten in 9 Gruppen — Relay, Autotasks, Deploy-Verification
+- Multi-Sig via Safe/Fireblocks: mindestens 2 von N Signaturen für Deployments
+- ERC-4337 EntryPoint-Integration für gaslose Transaktionen
+- Serverlose Autotasks: Cron + Webhooks + IFTTT-Conditions
+- Post-Deploy: Bytecode-Diff, Source-Verification, Storage-Layout-Check
+- 10 Chains supported: Ethereum, Polygon, Arbitrum, Optimism, Base, Gnosis, peaq, zkSync, Linea, Scroll
+- Multi-Tenancy: Keys + Deployments unter `{data_root}/{user_id}/`
+- JSONLogger + _safe_call auf allen 36 Subagenten
+- E2E Test: `python3 scripts/test_wave22_ops.py` — 48/48 passed
+
+### Wave 23 Detail: Token Creation, Governance & Launch Engine (9 Agents + 81 Subagents)
+
+Vollständiger Lebenszyklus: Tokenomics → ERC-20-Deploy → Vesting → DEX → DAO → Compliance → Airdrop → Metadata.
+
+| Agent | Sub | Funktion |
+|-------|-----|----------|
+| TokenomicsArchitect | 9 | Supply-Cap, Inflationsmodell, Allocation-Split, Staking-Yield, Burn-Mechanismus, Makro-Stabilitätstest |
+| TokenContractDeployer | 9 | ERC-20-Standard-Selektor, OpenZeppelin-Compiler, Fee-Modul, CREATE2-Predictor, Explorer-Verifier |
+| VestingAndVaultManager | 9 | Cliff-Enforcer, Lineare-Freigabe, Merkle-Vesting, Team-Lockup, Treasury-Vault |
+| LiquidityPoolInitializer | 9 | Preis-Kalkulator, DEX-Router, LP-Token-Lock, Slippage-Guard, MEV-Protection |
+| TokenGovernanceEngine | 9 | ERC20Votes, Governor-Deploy, TimelockController, Quorum-Calc, Snapshot-Integration |
+| RegulatoryComplianceGuard | 9 | MiCAR-Klassifikation, Howey-Test, OFAC/EU/UN-Sanktionen, KYB/KYC, Steuer-Export |
+| AirdropAndClaimDistributor | 9 | Merkle-Tree, Sybil-Filter, Claim-Deployer, ERC-4337-Gasless, Unclaimed-Recycler |
+| TokenMetadataAndBranding | 9 | IPFS-Upload, Token-List-Builder, CoinGecko/CMC-Submission, ENS-Writer |
+| TokenLaunchOrchestrator | 9 | Lifecycle-Engine (DESIGN→LIVE), Pipeline-Guard, Gas-Estimator, MultiSig-Coordinator, Launch-Monitor |
+
+**Key characteristics:**
+- 9 × 9 = 81 Subagenten
+- 6-Phasen-Lifecycle: DESIGN → COMPILED → VERIFIED → DEPLOYED → PAIRED → LIVE
+- MiCAR/SEC-Howey BLOCKING-Gate vor Deployment
+- ERC-20Permit + Gasless-Claims via ERC-4337
+- Multi-Tenancy: Tokens unter `{data_root}/{user_id}/tokens/`
+- JSONLogger + _safe_call auf allen 81 Subagenten
+
+### Wave 24 Detail: Trading Infrastructure (9 Agents)
+
+DEX-Routing, AMM-Tick-Management, MEV-Schutz und Market Making.
+
+| Agent | Funktion |
+|-------|----------|
+| DEXLiquidityRouter | Best-Price Routing & Multi-Hop Swaps über Uniswap v3, Curve, Balancer |
+| AutomatedMarketMakerAgent | Uniswap v3 Concentrated Liquidity Tick Management |
+| LimitOrderBookEngine | On-Chain Limit Orders & Trigger Executions |
+| MarketMakingStrategyAgent | Spread-Management & Bestandskontrolle |
+| CrossChainSwapRelayer | LayerZero/CCIP Cross-Chain Swaps |
+| MEVAndSlippageProtectionAgent | Anti-Sandwich, Private RPCs & Max Slippage |
+| GasOptimalTradeExecutor | ERC-4337 Meta-Transactions & Paymaster Sponsoring |
+| FeeAndDividendDistributor | Buyback-and-Burn & Staking Dividends |
+| TradingAnalyticsAndRiskMonitor | Real-Time VWAP, Volatility & Circuit Breaker |
+
+**Key characteristics:**
+- 9 Agenten für vollständige Handelsinfrastruktur
+- Multi-DEX-Routing über 5 DEXes (Uniswap v3, Curve, Balancer, PancakeSwap, SushiSwap)
+- MEV-Schutz: Flashbots, Private RPC, Slippage-Guard
+- ERC-4337 Gasless Trading via Paymaster
+- Cross-Chain: LayerZero + CCIP Bridge-Integration
+- Circuit Breaker bei >5% Verlust oder extremer Volatilität
+- JSONLogger + _safe_call auf allen Agenten
+
 ## Language
 
 German for communication and documentation. Code comments in English.
 
 ## Version
 
-Agent X Core: 0.4.0 (stable, 90/100 backtest). Agent X B2G: 0.9.0 (135 agents, 15 waves + Wave 3.5 VOB/B + 25 compliance agents, E2E: Waves 1-17, Shadow Contract Wave 18: 14/14 phases, Ecosystem Onboarding Wave 19: 5/5 roles, GAEB DA XML 3.3, XRechnung 3.0, VHB-221/222, GoBD/BHO/EVB-IT/DSGVO ready, 30.000+ lines).
+Agent X Core: 0.4.0 (stable, 90/100 backtest). Agent X B2G: 0.14.0 (180 agents, 20 waves + Wave 3.5 VOB/B + 25 compliance agents, E2E: Waves 1-24 all green, CertiK Security Wave 20: 164/164, Skynet Monitor Wave 21: 80/80, Ops Security Wave 22: 48/48, BSI C5/ISO 27001/SOC2/GoBD/eIDAS/GDPR/EVB-IT compliant, GAEB DA XML 3.3, XRechnung 3.0, VHB-221/222, GoBD/BHO-ready, 37.000+ lines).

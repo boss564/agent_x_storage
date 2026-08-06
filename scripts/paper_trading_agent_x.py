@@ -78,23 +78,50 @@ def event_to_snapshot(ev: dict[str, Any]) -> tuple[BlockSnapshot, dict]:
     try:
         block = int(block_str)
     except (ValueError, TypeError):
-        # Hash-based stable integer for non-numeric block IDs
         block = abs(hash(str(block_str))) % 1000000
+
+    # Derive mempool_bots from mev_pressure if not explicitly specified.
+    # Without bot data, assume 0 bots — no baseline MEV penalty.
+    mev_p = float(ev.get("mev_pressure", 0))
+    bots_raw = ev.get("mempool_bots")
+    if bots_raw is not None:
+        bots = int(bots_raw)
+    else:
+        bots = 6 if mev_p > 80 else 3 if mev_p > 60 else 1 if mev_p > 30 else 0
 
     snap = BlockSnapshot(
         block=block,
         label=ev.get("label", ev.get("notes", "")),
         chi=chi,
+        # Klasse A — Konsensus
+        participation_rate=float(ev.get("participation_rate", 0.97)),
+        finality_status=ev.get("finality_status", "on_time"),
+        reorg_depth=int(ev.get("reorg_depth", 0)),
+        exit_queue=int(ev.get("exit_queue", 50)),
+        trusted_validators=ev.get("trusted_validators", ["validator_101"]),
+        # Klasse B — Druckventile
         gas_pressure=float(ev.get("gas_pressure", 35)),
         mev_pressure=float(ev.get("mev_pressure", 20)),
+        block_pressure=float(ev.get("block_pressure", 50)),
+        basefee_gwei=float(ev.get("basefee_gwei", 21)),
+        pf_p95_gwei=float(ev.get("pf_p95_gwei", 3.5)),
+        mev_spike=ev.get("mev_spike", False),
+        # Klasse C — Lending
         positions_at_risk=int(ev.get("positions_at_risk", 2)),
         positions_liquidatable=int(ev.get("positions_liquidatable", 0)),
         worst_hf=float(ev.get("worst_hf", 1.5)),
+        # Klasse D — DeFi
         flash_loan_profitable=int(ev.get("flash_loan_profitable", 0)),
-        mempool_bots=int(ev.get("mempool_bots", 1)),
-        active_proposals=int(ev.get("active_proposals", 0)),
+        mempool_bots=bots,
+        cross_pool_ops=int(ev.get("cross_pool_ops", 0)),
+        potential_profit_usd=float(ev.get("potential_profit_usd", 500)),
+        # Klasse E — Langzeit
         hours_until_next_timelock=float(ev.get("hours_until_next_timelock", 9999)),
         days_until_next_unlock=float(ev.get("days_until_next_unlock", 9999)),
+        active_proposals=ev.get("active_proposals", []) or [],
+        pending_timelocks=ev.get("pending_timelocks", []) or [],
+        upcoming_unlocks=ev.get("upcoming_unlocks", []) or [],
+        # Ground truth
         expected_global_state=ev.get("expected_state", ev.get("expected_global_state", "healthy")),
         expected_action=ev.get("expected_action", "MONITOR"),
         expected_all_clear=ev.get("expected_all_clear", True),
@@ -220,6 +247,53 @@ class PaperTradingMetrics:
 
 
 # ============================================================
+# Position Builders (mirror agent_x_backtest._evaluate_snapshot)
+# ============================================================
+
+
+def _build_positions(snap: BlockSnapshot) -> list[dict[str, Any]]:
+    """Build position list from snapshot lending fields."""
+    total = max(snap.positions_liquidatable, snap.positions_at_risk)
+    positions = []
+    for i in range(total):
+        if i < snap.positions_liquidatable:
+            hf = snap.worst_hf
+        elif i < snap.positions_at_risk:
+            hf = min(snap.worst_hf + 0.15, 1.50) if snap.worst_hf != float("inf") else 1.15
+        else:
+            hf = 1.5
+        positions.append({
+            "user_address": f"0xVictim{i}",
+            "health_factor": round(hf, 3),
+            "total_debt_usd": 10000 + i * 5000,
+        })
+    return positions
+
+
+def _build_flash_loans(count: int, profit_usd: float) -> list[dict[str, Any]] | None:
+    """Build flash loan opportunity list."""
+    if count <= 0:
+        return None
+    return [{
+        "tx_hash": f"0xfl{i}",
+        "protocol": "AaveV3",
+        "net_profit_usd": profit_usd / max(1, count),
+        "profitable": True,
+    } for i in range(count)]
+
+
+def _build_cross_pool(count: int, profit_usd: float) -> list[dict[str, Any]] | None:
+    """Build cross-pool opportunity list."""
+    if count <= 0:
+        return None
+    return [{
+        "id": f"cp{i}",
+        "net_profit_usd": profit_usd / max(1, count or 1),
+        "executable": True,
+    } for i in range(count)]
+
+
+# ============================================================
 # Main Runner
 # ============================================================
 
@@ -288,26 +362,64 @@ def main():
         # Convert to snapshot
         snap, _ = event_to_snapshot(ev)
 
+        # Reset hysteresis when scenario changes (prevents cross-contamination).
+        current_scenario = ev.get("scenario", ev.get("_phase", ""))
+        if "last_scenario" not in dir(main):
+            main.last_scenario = None  # type: ignore[attr-defined]
+        if current_scenario and current_scenario != main.last_scenario:  # type: ignore[attr-defined]
+            if hasattr(agent, "_prev_global_score"):
+                del agent._prev_global_score
+        main.last_scenario = current_scenario  # type: ignore[attr-defined]
+
         # Run full pipeline via SymbolicsAgent.evaluate()
         t0 = time.perf_counter()
         try:
             eval_result = agent.evaluate(
+                # Klasse A — Konsensus
                 consensus_health_index=snap.chi,
+                exit_queue_length=snap.exit_queue,
+                participation_rate=snap.participation_rate,
+                finality_status=snap.finality_status,
+                reorg_depth=snap.reorg_depth,
+                trusted_validators=snap.trusted_validators if snap.trusted_validators else None,
+                # Klasse B — Druckventile
                 gas_pressure_index=snap.gas_pressure,
                 mev_pressure_index=snap.mev_pressure,
-                health_factors=None,       # Let lending modules default
-                flash_loan_opportunities=None,
+                block_pressure_index=snap.block_pressure,
+                basefee_current_gwei=snap.basefee_gwei,
+                priority_fee_p95_gwei=snap.pf_p95_gwei,
+                mev_spike_detected=snap.mev_spike,
+                # Klasse C — Lending
+                health_factors=(
+                    _build_positions(snap) if snap.positions_at_risk or snap.positions_liquidatable
+                    else None
+                ),
+                # Klasse D — DeFi
+                flash_loan_opportunities=(
+                    _build_flash_loans(snap.flash_loan_profitable, snap.potential_profit_usd)
+                ),
                 mempool_bots_count=snap.mempool_bots,
+                cross_pool_opportunities=(
+                    _build_cross_pool(snap.cross_pool_ops, snap.potential_profit_usd)
+                ),
+                # Klasse E — Langzeit
+                pending_timelocks=snap.pending_timelocks if snap.pending_timelocks else None,
+                upcoming_unlocks=snap.upcoming_unlocks if snap.upcoming_unlocks else None,
                 active_proposals=snap.active_proposals if snap.active_proposals else None,
             )
-            # Normalize result for deep_log
+            # Normalize result for deep_log — read from unified_decision, not top-level
+            ud = eval_result.get("unified_decision", {})
             state_result = {
-                "score": eval_result.get("global_score", eval_result.get("score", 0)),
-                "state": eval_result.get("global_state", eval_result.get("state", "healthy")),
-                "time_horizon": eval_result.get("time_horizon", "unknown"),
-                "decomposed": eval_result.get("decomposed", eval_result.get("scenario_details", {})),
+                "score": ud.get("global_state_score", 0),
+                "state": ud.get("global_state", "healthy"),
+                "time_horizon": ud.get("time_horizon", "unknown"),
+                "decomposed": eval_result.get("class_signals", {}),
             }
-            action = eval_result.get("action", eval_result.get("recommended_action", "MONITOR"))
+            action_raw = ud.get("recommended_actions", [])
+            if action_raw and isinstance(action_raw[0], dict):
+                action = action_raw[0].get("action", "MONITOR")
+            else:
+                action = action_raw[0] if action_raw else "MONITOR"
             elapsed_ms = (time.perf_counter() - t0) * 1000
         except Exception as exc:
             print(f"  ❌ Event {event_index} error: {exc}")

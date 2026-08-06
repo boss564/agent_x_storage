@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import sys
+from dataclasses import asdict
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -25,12 +26,8 @@ def export_as_jsonl(scenarios: list[dict], output_path: Path) -> int:
     """
     Convert backtest scenarios to JSONL signal events.
 
-    Each BlockSnapshot becomes one JSON line with:
-      - block_id: scenario name + snapshot index
-      - signal_value: CHI score (Composite Health Index, 0-100, lower = worse)
-      - gas_pressure, mev_pressure, positions_at_risk: additional features
-      - expected_state: ground truth label (healthy/caution/stressed/critical)
-      - scenario: parent scenario name
+    Each BlockSnapshot is serialized via dataclasses.asdict() so every
+    field flows through automatically — no hand-maintained field list.
     """
     count = 0
     with open(output_path, "w") as f:
@@ -39,19 +36,10 @@ def export_as_jsonl(scenarios: list[dict], output_path: Path) -> int:
             for snap in scenario["blocks"]:
                 if not isinstance(snap, BlockSnapshot):
                     continue
-                record = {
-                    "block_id": f"{name[:30]}-block{snap.block}",
-                    "signal_value": snap.chi,  # Primary signal: lower = worse
-                    "gas_pressure": snap.gas_pressure,
-                    "mev_pressure": snap.mev_pressure,
-                    "positions_at_risk": snap.positions_at_risk,
-                    "worst_hf": snap.worst_hf,
-                    "expected_state": snap.expected_global_state,
-                    "expected_action": snap.expected_action,
-                    "expected_all_clear": snap.expected_all_clear,
-                    "scenario": name,
-                    "notes": snap.notes,
-                }
+                record: dict = asdict(snap)
+                record["block_id"] = f"{name[:30]}-block{snap.block}"
+                record["scenario"] = name
+                record["notes"] = snap.notes
                 f.write(json.dumps(record) + "\n")
                 count += 1
     return count

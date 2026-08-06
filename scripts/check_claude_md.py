@@ -54,6 +54,21 @@ TEST_SCRIPTS: list[tuple[str, str, str]] = [
         r"WAVE 17 E2E-TEST:\s*(\d+)/(\d+)\s+BESTANDEN",
         r"Wave 17.*?MacroEconomy.*?(\d+)\s*/\s*(\d+)\s+(?:E2E\s+)?passed",
     ),
+    (
+        "scripts/test_wave20_security.py",
+        r"Results:\s*(\d+)/(\d+)\s+passed",
+        r"Wave 20.*?CertiK.*?(\d+)\s*/\s*(\d+)\s+tests? passed",
+    ),
+    (
+        "shadow_contract_pilot/test_lifecycle.py",
+        r"Results:\s*(\d+)/(\d+)\s+passed",
+        r"Shadow.*?Contract.*?Lifecycle.*?(\d+)\s*/\s*(\d+)\s+passed",
+    ),
+    (
+        "scripts/test_wave21_skynet.py",
+        r"Results:\s*(\d+)/(\d+)\s+passed",
+        r"Wave 21.*?Skynet.*?(\d+)\s*/\s*(\d+)\s+tests? passed",
+    ),
 ]
 
 # Skripte ohne x/y-Testbilanz — Generatoren, Fetcher, Reports.
@@ -63,6 +78,7 @@ NO_TEST_SUMMARY: set[str] = {
     "scripts/test_bvbs_pruefdatei.py",     # braucht externe Pruefdatei
     "scripts/export_backtest_signals.py",  # Daten-Exporter, kein Test
     "scripts/fetch_xrechnung_schematron.py",  # Fetcher, kein Test
+    "scripts/test_wave22_ops.py",           # 50+ Klassen-Import → OOM in Sandbox, braucht >256 MB
 }
 
 
