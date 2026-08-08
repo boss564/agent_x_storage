@@ -2,7 +2,7 @@
 pragma solidity ^0.8.19;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
 /**
@@ -95,9 +95,8 @@ contract VOB_Shadow_Escrow is ReentrancyGuard, Ownable {
         address _contractor,
         address _auditor,
         address _taxAuthority
-    ) {
+    ) Ownable(_client) {
         require(_eureToken != address(0), "Invalid EURe token");
-        require(_client != address(0), "Invalid client");
         require(_contractor != address(0), "Invalid contractor");
         eureToken = IERC20(_eureToken);
         project = Project({
@@ -109,10 +108,10 @@ contract VOB_Shadow_Escrow is ReentrancyGuard, Ownable {
             totalReleased: 0,
             retentionVault: 0,
             taxVault: 0,
+            acceptedAt: 0,
             isActive: true
         });
-        // Ownership an den Bauherrn (Behörde) übertragen
-        transferOwnership(_client);
+        // Ownership bereits via Ownable(_client) im Constructor gesetzt (OZ v5)
     }
 
     // ================================================================

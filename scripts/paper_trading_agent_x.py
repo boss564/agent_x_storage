@@ -425,10 +425,37 @@ def main():
             print(f"  ❌ Event {event_index} error: {exc}")
             continue
 
-        # Deep log
+        # Deep log (risk assessment from SymbolicsAgent)
         record = deep_log(output_path, event_index, ev, snap, state_result, action, elapsed_ms)
         metrics.record(record)
         processed += 1
+
+        # ---- W24 Trading Pipeline (Handelssignal aus Risikobewertung) ----
+        trade_signal = None
+        try:
+            from agents_b2g.trading.token_trading_orchestrator import TokenTradingOrchestrator
+            if "trading_orch" not in dir(main):
+                main.trading_orch = TokenTradingOrchestrator(user_id="paper_trader")  # type: ignore[attr-defined]
+            # Derive trade parameters from risk assessment
+            risk_state = record["state"]
+            chi_score = record["chi_final"]
+            # Only trade in non-critical states; use chi as signal strength
+            if risk_state != "critical":
+                trade_amount = max(1000, snap.chi * 100)  # Scale trade to CHI
+                current_price = 1.0 + (chi_score - 50) / 200  # Simulated price from CHI
+                avg_price_5min = current_price * 0.995  # Simulated 5-min average
+                trade_result = main.trading_orch.run_full_cycle(  # type: ignore[attr-defined]
+                    token="AGX", pair="EURe", amount=trade_amount,
+                    chain="gnosis", current_price=current_price,
+                    trader=f"0xPaperTrader_{event_index:04d}",
+                    avg_price_5min=avg_price_5min,
+                )
+                if trade_result.get("status") == "completed":
+                    trade_signal = trade_result["artifacts"][0] if trade_result.get("artifacts") else None
+            # Append trading signal to the deep log record
+            record["trade"] = trade_signal
+        except ImportError:
+            pass  # Trading module not available — risk-only mode
 
         # Console output
         if not args.quiet:

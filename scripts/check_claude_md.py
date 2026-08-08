@@ -69,6 +69,31 @@ TEST_SCRIPTS: list[tuple[str, str, str]] = [
         r"Results:\s*(\d+)/(\d+)\s+passed",
         r"Wave 21.*?Skynet.*?(\d+)\s*/\s*(\d+)\s+tests? passed",
     ),
+    (
+        "scripts/test_wave27_clearing.py",
+        r"ERGEBNIS:\s*(\d+)\s+passed,\s*\d+\s+failed\s*\((\d+)\s+total\)",
+        r"Wave 27.*?Clearing.*?(\d+)\s*/\s*(\d+)\s+tests? passed",
+    ),
+    (
+        "scripts/test_wave28_defense.py",
+        r"ERGEBNIS:\s*(\d+)\s+passed,\s*\d+\s+failed\s*\((\d+)\s+total\)",
+        r"Wave 28.*?Defense.*?(\d+)\s*/\s*(\d+)\s+tests? passed",
+    ),
+    (
+        "scripts/test_wave29_tokenomics.py",
+        r"ERGEBNIS:\s*(\d+)\s+passed,\s*\d+\s+failed\s*\((\d+)\s+total\)",
+        r"Wave 29.*?Token.*?Runtime.*?(\d+)\s*/\s*(\d+)\s+tests? passed",
+    ),
+    (
+        "scripts/test_wave31_ux.py",
+        r"ERGEBNIS:\s*(\d+)\s+passed,\s*\d+\s+failed\s*\((\d+)\s+total\)",
+        r"Wave 31.*?UX.*?(\d+)\s*/\s*(\d+)\s+tests? passed",
+    ),
+    (
+        "scripts/test_wave32_philately.py",
+        r"ERGEBNIS:\s*(\d+)\s+passed,\s*\d+\s+failed\s*\((\d+)\s+total\)",
+        r"Wave 32.*?Philately.*?(\d+)\s*/\s*(\d+)\s+tests? passed",
+    ),
 ]
 
 # Skripte ohne x/y-Testbilanz — Generatoren, Fetcher, Reports.

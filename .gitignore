@@ -36,3 +36,10 @@ data/
 
 # CertiK test logs (temporäre .jsonl aus Testläufen)
 /tmp/certik_test_*.jsonl
+
+# Deployment state (Crash-Recovery)
+.deployment_state.json
+.deployed_contracts.json
+
+# Foundry build artifacts
+out/
