@@ -1,0 +1,28 @@
+{
+  "certificate": {
+    "certificate_id": "AGENTX-AUDIT-20260809-114331-0080",
+    "issuer": "Agent X B2G Orchestrator — Wave 34 Final Veredelung",
+    "contract_id": "OFFER-9-ELECTRONICS",
+    "sector": "BAU",
+    "gross_amount_eur": 695.04,
+    "bho_delta_eur": 0.0,
+    "bho_split_source": "TRANSACTION",
+    "bho_invariant_holds": true,
+    "z3_proof_status": "UNVERIFIED",
+    "z3_proof_verified": false,
+    "proof_hash": "0x16e39def2344033a7712e362bdb6dc4c",
+    "seal": "378ee25eba7a6c44db7fe720ae5c09f2fc05d17413b303e3e811092303a5fa4a",
+    "issued_at": "2026-08-09T11:43:31.381569",
+    "valid_until": "2027-12-31",
+    "user_id": "P1"
+  },
+  "transaction": {
+    "contract_id": "OFFER-9-ELECTRONICS",
+    "sector": "BAU",
+    "gross_amount": 695.04,
+    "timestamp": null
+  },
+  "bho_delta": 0.0,
+  "proof_status": "UNVERIFIED",
+  "archived_at": "2026-08-09T11:43:31.381584"
+}

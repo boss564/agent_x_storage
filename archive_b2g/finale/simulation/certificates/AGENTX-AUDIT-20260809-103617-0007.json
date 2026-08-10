@@ -1,0 +1,28 @@
+{
+  "certificate": {
+    "certificate_id": "AGENTX-AUDIT-20260809-103617-0007",
+    "issuer": "Agent X B2G Orchestrator — Wave 34 Final Veredelung",
+    "contract_id": "SIM-0006",
+    "sector": "HEALTH",
+    "gross_amount_eur": 36800.0,
+    "bho_delta_eur": 0.0,
+    "bho_split_source": "TRANSACTION",
+    "bho_invariant_holds": true,
+    "z3_proof_status": "UNVERIFIED",
+    "z3_proof_verified": false,
+    "proof_hash": "0x2a1c33f092daf994a8e18456460bf732",
+    "seal": "97c2f0f292e82818f8da5d99dab2c3cf669e5cf7fb99857a40089932399e7f3e",
+    "issued_at": "2026-08-09T10:36:17.877414",
+    "valid_until": "2027-12-31",
+    "user_id": "simulation"
+  },
+  "transaction": {
+    "contract_id": "SIM-0006",
+    "sector": "HEALTH",
+    "gross_amount": 36800.0,
+    "timestamp": "2026-08-09T08:36:17.877050+00:00"
+  },
+  "bho_delta": 0.0,
+  "proof_status": "UNVERIFIED",
+  "archived_at": "2026-08-09T10:36:17.877425"
+}

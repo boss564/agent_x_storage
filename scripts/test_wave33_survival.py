@@ -795,13 +795,21 @@ if __name__ == "__main__":
     result = runner.run(suite)
 
     # Summary
+    skipped = len(result.skipped)
+    failed  = len(result.failures) + len(result.errors)
+    passed  = result.testsRun - failed - skipped
     print("\n" + "=" * 70)
     print(f"📊 Ergebnisse: {result.testsRun} Tests")
-    print(f"   ✅ Erfolgreich: {result.testsRun - len(result.failures) - len(result.errors)}")
+    print(f"   ✅ Erfolgreich: {passed}")
     if result.failures:
         print(f"   ❌ Fehlschläge: {len(result.failures)}")
     if result.errors:
         print(f"   ⚠️  Errors: {len(result.errors)}")
+    msg = f"{passed} passed, {failed} failed"
+    if skipped:
+        msg += f", {skipped} skipped"
+    msg += f" ({result.testsRun} total)"
+    print(f"\n📊 ERGEBNIS: {msg}")
     print("=" * 70)
 
     # Exit-Code

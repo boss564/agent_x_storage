@@ -1,0 +1,114 @@
+{
+  "generated_at": "2026-08-09T09:30:20.595795",
+  "repository": "/Volumes/THX_OS_ULTRA/Users/olivermueller/agent_x_storage",
+  "tests": {
+    "scripts/test_public_portal.py": {
+      "passed": 68,
+      "total": 68,
+      "failed": 0,
+      "exit_code": 0
+    },
+    "scripts/end_to_end_90_agents.py": {
+      "passed": 11,
+      "total": 11,
+      "failed": 0,
+      "exit_code": 0
+    },
+    "scripts/end_to_end_b2g_test.py": {
+      "passed": 20,
+      "total": 25,
+      "failed": 5,
+      "exit_code": 1
+    },
+    "scripts/test_wave16_bridge.py": {
+      "passed": 43,
+      "total": 43,
+      "failed": 0,
+      "exit_code": 0
+    },
+    "scripts/test_wave17_macro.py": {
+      "passed": 8,
+      "total": 8,
+      "failed": 0,
+      "exit_code": 0
+    },
+    "scripts/test_wave20_security.py": {
+      "passed": 164,
+      "total": 164,
+      "failed": 0,
+      "exit_code": 0
+    },
+    "shadow_contract_pilot/test_lifecycle.py": {
+      "passed": 25,
+      "total": 25,
+      "failed": 0,
+      "exit_code": 0
+    },
+    "scripts/test_wave21_skynet.py": {
+      "passed": 80,
+      "total": 80,
+      "failed": 0,
+      "exit_code": 0
+    },
+    "scripts/test_wave27_clearing.py": {
+      "passed": 122,
+      "total": 122,
+      "failed": 0,
+      "exit_code": 0
+    },
+    "scripts/test_wave28_defense.py": {
+      "passed": 104,
+      "total": 104,
+      "failed": 0,
+      "exit_code": 0
+    },
+    "scripts/test_wave29_tokenomics.py": {
+      "passed": 101,
+      "total": 101,
+      "failed": 0,
+      "exit_code": 0
+    },
+    "scripts/test_wave31_ux.py": {
+      "passed": 92,
+      "total": 92,
+      "failed": 0,
+      "exit_code": 0
+    },
+    "scripts/test_wave32_philately.py": {
+      "passed": 51,
+      "total": 51,
+      "failed": 0,
+      "exit_code": 0
+    },
+    "scripts/test_wave33_survival.py": {
+      "passed": 63,
+      "total": 63,
+      "failed": 0,
+      "exit_code": 0
+    },
+    "scripts/test_esp32_firmware.py": {
+      "passed": 15,
+      "total": 15,
+      "failed": 0,
+      "exit_code": 0
+    },
+    "scripts/test_finale.py": {
+      "passed": 21,
+      "total": 21,
+      "failed": 0,
+      "exit_code": 0
+    },
+    "tests/test_bunker_integration.py": {
+      "passed": 18,
+      "total": 18,
+      "failed": 0,
+      "exit_code": 0
+    },
+    "tests/test_hsm_adapter.py": {
+      "passed": 6,
+      "total": 6,
+      "failed": 0,
+      "exit_code": 0
+    }
+  }
+}

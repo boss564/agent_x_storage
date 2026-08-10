@@ -39,3 +39,18 @@ def test_hsm_public_key_format(hsm):
 
 def test_hsm_health_check(hsm):
     assert hsm.is_healthy() is True
+
+if __name__ == "__main__":
+    import sys, re, subprocess, os
+    r = subprocess.run(
+        [sys.executable, "-m", "pytest", __file__, "-q", "--tb=short", "-p", "no:cacheprovider"],
+        capture_output=True, text=True, cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    )
+    out = r.stdout + r.stderr
+    m_passed = re.search(r"(\d+)\s+passed", out)
+    m_failed = re.search(r"(\d+)\s+failed", out)
+    passed = int(m_passed.group(1)) if m_passed else 0
+    failed = int(m_failed.group(1)) if m_failed else 0
+    total = passed + failed
+    print(f"\n📊 ERGEBNIS: {passed} passed, {failed} failed ({total} total)")
+    sys.exit(r.returncode)

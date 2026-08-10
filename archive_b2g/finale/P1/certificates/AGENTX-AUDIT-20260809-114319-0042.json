@@ -1,0 +1,28 @@
+{
+  "certificate": {
+    "certificate_id": "AGENTX-AUDIT-20260809-114319-0042",
+    "issuer": "Agent X B2G Orchestrator — Wave 34 Final Veredelung",
+    "contract_id": "OFFER-5-STEEL",
+    "sector": "BAU",
+    "gross_amount_eur": 344.32,
+    "bho_delta_eur": 0.0,
+    "bho_split_source": "TRANSACTION",
+    "bho_invariant_holds": true,
+    "z3_proof_status": "UNVERIFIED",
+    "z3_proof_verified": false,
+    "proof_hash": "0xadbad448092b06159585b9f006cf026d",
+    "seal": "16cf72c88426b21270475fcd80825ce7a17dd6360f7c6bb98cc136992e77fdec",
+    "issued_at": "2026-08-09T11:43:19.896573",
+    "valid_until": "2027-12-31",
+    "user_id": "P1"
+  },
+  "transaction": {
+    "contract_id": "OFFER-5-STEEL",
+    "sector": "BAU",
+    "gross_amount": 344.32,
+    "timestamp": null
+  },
+  "bho_delta": 0.0,
+  "proof_status": "UNVERIFIED",
+  "archived_at": "2026-08-09T11:43:19.896582"
+}

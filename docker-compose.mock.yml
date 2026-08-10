@@ -1,0 +1,195 @@
+# Agent X — MPC-Bunker Mock-Stack + Z3-Theorem-Prover
+# Simuliert 5 Bunker + Handwerker + Z3-Solver ohne echte Hardware
+#
+# Start:
+#   docker compose -f docker-compose.mock.yml up --build
+#
+# Logs:
+#   docker compose -f docker-compose.mock.yml logs -f bunker_01
+#
+# Stop:
+#   docker compose -f docker-compose.mock.yml down
+
+version: '3.8'
+
+services:
+  # =========================================================================
+  # 5 MPC-Bunker (jeder mit eigenem Mock-HSM)
+  # =========================================================================
+
+  bunker_01:
+    build:
+      context: .
+      dockerfile: Dockerfile.bunker
+    container_name: agentx_bunker_01_rathaus
+    environment:
+      - BUNKER_ID=BUNKER_01_RATHAUS
+      - OFFLINE_MODE=true
+      - BHO_ENFORCE_ZERO_DELTA=true
+      - HSM_TOKEN=AgentX_Vault_Rathaus
+      - HSM_PIN=1234
+      - LORA_PORT=8881
+    ports:
+      - "8881:8881/udp"
+    volumes:
+      - ./tests:/app/tests:ro
+    command: >
+      python3 -c "
+      from tests.test_bunker_integration import MinimalBunkerOrchestrator, MockHSM
+      from tests.mock_lorawan import MockLoRaTransceiver
+      import time, sys
+      hsm = MockHSM(); hsm.init_token('AgentX_Vault_Rathaus')
+      signer = hsm.get_signer(); key = signer.generate_key_pair('bunker_01_key')
+      signer.create_threshold_shares(key.key_id)
+      lora = MockLoRaTransceiver(udp_port=8881)
+      orch = MinimalBunkerOrchestrator('BUNKER_01_RATHAUS')
+      print('BUNKER_01_RATHAUS bereit — lauscht auf UDP:8881')
+      while True:
+          pkt = lora.receive(timeout=10)
+          if pkt:
+              r = orch.process_packet(pkt, signer, key.key_id)
+              print(f'BUNKER_01: Block {r[\"block_height\"]} | {r[\"amount_eur\"]:,.2f} € | BHO Δ={r[\"bho_delta\"]:.2f}')
+      "
+    networks:
+      - bunker_mesh
+
+  bunker_02:
+    build:
+      context: .
+      dockerfile: Dockerfile.bunker
+    container_name: agentx_bunker_02_stadtwerke
+    environment:
+      - BUNKER_ID=BUNKER_02_STADTWERKE
+      - OFFLINE_MODE=true
+      - LORA_PORT=8882
+    ports:
+      - "8882:8882/udp"
+    command: python3 -c "import time; print('BUNKER_02_STADTWERKE bereit'); time.sleep(3600)"
+    networks:
+      - bunker_mesh
+
+  bunker_03:
+    build:
+      context: .
+      dockerfile: Dockerfile.bunker
+    container_name: agentx_bunker_03_klinikum
+    environment:
+      - BUNKER_ID=BUNKER_03_KLINIKUM
+      - LORA_PORT=8883
+    ports:
+      - "8883:8883/udp"
+    command: python3 -c "import time; print('BUNKER_03_KLINIKUM bereit'); time.sleep(3600)"
+    networks:
+      - bunker_mesh
+
+  bunker_04:
+    build:
+      context: .
+      dockerfile: Dockerfile.bunker
+    container_name: agentx_bunker_04_feuerwehr
+    environment:
+      - BUNKER_ID=BUNKER_04_FEUERWEHR
+      - LORA_PORT=8884
+    ports:
+      - "8884:8884/udp"
+    command: python3 -c "import time; print('BUNKER_04_FEUERWEHR bereit'); time.sleep(3600)"
+    networks:
+      - bunker_mesh
+
+  bunker_05:
+    build:
+      context: .
+      dockerfile: Dockerfile.bunker
+    container_name: agentx_bunker_05_universitaet
+    environment:
+      - BUNKER_ID=BUNKER_05_UNIVERSITAET
+      - LORA_PORT=8885
+    ports:
+      - "8885:8885/udp"
+    command: python3 -c "import time; print('BUNKER_05_UNIVERSITAET bereit'); time.sleep(3600)"
+    networks:
+      - bunker_mesh
+
+  # =========================================================================
+  # Handwerker-Simulator (sendet CBOR-Pakete via UDP)
+  # =========================================================================
+
+  handyman:
+    build:
+      context: .
+      dockerfile: Dockerfile.bunker
+    container_name: agentx_handyman_simulator
+    depends_on:
+      - bunker_01
+      - bunker_02
+      - bunker_03
+      - bunker_04
+      - bunker_05
+    command: >
+      python3 -c "
+      from tests.mock_handyman import MockHandyman
+      import time, socket
+      time.sleep(3)
+      h = MockHandyman(contractor='meier-bau.firma.b2g', lora_port=9999)
+      milestones = [(45000.0, 8881), (32000.0, 8881), (78000.0, 8881)]
+      for amt, port in milestones:
+          pkt = h.send_milestone(amount_eur=amt, target_port=port)
+          time.sleep(2)
+      print('✅ Alle Meilensteine gesendet')
+      time.sleep(10)
+      "
+    networks:
+      - bunker_mesh
+
+  # =========================================================================
+  # Test-Runner (Integrationstests)
+  # =========================================================================
+
+  test_runner:
+    build:
+      context: .
+      dockerfile: Dockerfile.bunker
+    container_name: agentx_test_runner
+    depends_on:
+      - bunker_01
+    command: python3 -m unittest discover -s tests -p "test_bunker_integration.py" -v
+    networks:
+      - bunker_mesh
+
+  # =========================================================================
+  # Streamlit Kämmerer-Dashboard — Live-Visualisierung
+  # =========================================================================
+
+  dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile.dashboard
+    container_name: agentx_dashboard
+    environment:
+      - Z3_SERVICE_URL=http://z3-solver-engine:8000
+    ports:
+      - "8501:8501"
+    depends_on:
+      - z3-solver-engine
+    networks:
+      - bunker_mesh
+
+  # =========================================================================
+  # Z3 Theorem Prover — Mathematischer BHO-Invariant-Beweis
+  # =========================================================================
+
+  z3-solver-engine:
+    build:
+      context: .
+      dockerfile: services/z3_solver/Dockerfile.z3
+    container_name: z3_solver_engine
+    environment:
+      - LOG_LEVEL=INFO
+    ports:
+      - "8000:8000"
+    networks:
+      - bunker_mesh
+
+networks:
+  bunker_mesh:
+    driver: bridge

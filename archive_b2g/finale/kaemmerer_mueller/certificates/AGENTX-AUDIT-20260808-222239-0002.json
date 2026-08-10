@@ -1,0 +1,28 @@
+{
+  "certificate": {
+    "certificate_id": "AGENTX-AUDIT-20260808-222239-0002",
+    "issuer": "Agent X B2G Orchestrator — Wave 34 Final Veredelung",
+    "contract_id": "VOB-2026-BER-4491",
+    "sector": "HEALTH",
+    "gross_amount_eur": 127000.0,
+    "bho_delta_eur": 0.0,
+    "bho_invariant_holds": true,
+    "bho_split_source": "TRANSACTION",
+    "z3_proof_status": "UNVERIFIED",
+    "z3_proof_verified": false,
+    "proof_hash": "0xfbd012ec3a2eed62e9e2cb0aafc0668e",
+    "seal": "39f6af1a38b874b12e77fcaebab1843bbd13ad3bc86dd77969c98dcfe611a123",
+    "issued_at": "2026-08-08T22:22:39.523129",
+    "valid_until": "2027-12-31",
+    "user_id": "kaemmerer_mueller"
+  },
+  "transaction": {
+    "contract_id": "VOB-2026-BER-4491",
+    "sector": "HEALTH",
+    "gross_amount": 127000.0,
+    "timestamp": "2026-08-08T22:22:39.522061"
+  },
+  "bho_delta": 0.0,
+  "proof_status": "UNVERIFIED",
+  "archived_at": "2026-08-08T22:22:39.523142"
+}

@@ -17,6 +17,9 @@ pyjwt>=2.8.0
 # MacroEconomy — Graphenanalyse (Wave 17)
 networkx>=3.0
 
+# Wave 33 Survival — Post-Quantum Hybrid-Signaturen (BSI TR-02102-1)
+pycryptodome>=3.20.0
+
 # Storage (optional — In-Memory-Fallback integriert)
 # redis>=5.0.0
 
@@ -31,3 +34,7 @@ networkx>=3.0
 # Shadow Contract Pilot (Wave 18) — Dashboard Backend
 flask>=3.0.0
 flask-cors>=4.0.0
+
+# Dashboards (Waves 35–36) — Streamlit + Plotly
+streamlit>=1.32.0
+plotly>=5.18.0

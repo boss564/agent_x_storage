@@ -1,0 +1,28 @@
+{
+  "certificate": {
+    "certificate_id": "AGENTX-AUDIT-20260809-114331-0083",
+    "issuer": "Agent X B2G Orchestrator — Wave 34 Final Veredelung",
+    "contract_id": "PROC-10-WATER",
+    "sector": "BAU",
+    "gross_amount_eur": 41.39,
+    "bho_delta_eur": 0.0,
+    "bho_split_source": "TRANSACTION",
+    "bho_invariant_holds": true,
+    "z3_proof_status": "UNVERIFIED",
+    "z3_proof_verified": false,
+    "proof_hash": "0xf9d66350f9ef7d15ea2b935c0b9adb26",
+    "seal": "50103ce33aa30ae5232b7571f272534d138cfa37409ca8d1671c7d514c64563c",
+    "issued_at": "2026-08-09T11:43:31.383575",
+    "valid_until": "2027-12-31",
+    "user_id": "P1"
+  },
+  "transaction": {
+    "contract_id": "PROC-10-WATER",
+    "sector": "BAU",
+    "gross_amount": 41.39,
+    "timestamp": null
+  },
+  "bho_delta": 0.0,
+  "proof_status": "UNVERIFIED",
+  "archived_at": "2026-08-09T11:43:31.383588"
+}

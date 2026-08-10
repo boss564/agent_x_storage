@@ -1,0 +1,27 @@
+{
+  "certificate": {
+    "certificate_id": "AGENTX-AUDIT-20260808-221816-0001",
+    "issuer": "Agent X B2G Orchestrator — Wave 34 Final Veredelung",
+    "contract_id": "TED-PROBE",
+    "sector": "BAU",
+    "gross_amount_eur": 119000.0,
+    "bho_delta_eur": 0.0,
+    "bho_invariant_holds": true,
+    "z3_proof_status": "UNVERIFIED",
+    "z3_proof_verified": false,
+    "proof_hash": "0x00cc47a7642c3cc1499526bea25c8117",
+    "seal": "fd09d25830c4d34dc7f59eb6dab7e6384b1b1e192292c98cf5dca22cceb3d0dc",
+    "issued_at": "2026-08-08T22:18:16.641007",
+    "valid_until": "2027-12-31",
+    "user_id": "probe"
+  },
+  "transaction": {
+    "contract_id": "TED-PROBE",
+    "sector": "BAU",
+    "gross_amount": 119000.0,
+    "timestamp": null
+  },
+  "bho_delta": 0.0,
+  "proof_status": "UNVERIFIED",
+  "archived_at": "2026-08-08T22:18:16.641431"
+}

@@ -1,0 +1,28 @@
+{
+  "certificate": {
+    "certificate_id": "AGENTX-AUDIT-20260809-114319-0073",
+    "issuer": "Agent X B2G Orchestrator — Wave 34 Final Veredelung",
+    "contract_id": "PROC-9-ENERGY",
+    "sector": "ENERGY",
+    "gross_amount_eur": 62.12,
+    "bho_delta_eur": 0.0,
+    "bho_split_source": "TRANSACTION",
+    "bho_invariant_holds": true,
+    "z3_proof_status": "UNVERIFIED",
+    "z3_proof_verified": false,
+    "proof_hash": "0x1da22d1347c36eaab53d4818e2eac2bf",
+    "seal": "22e7373a9ffb04546fe246da37f2dcd6fe86eeccf77e4a12541dc3aeb8060b4d",
+    "issued_at": "2026-08-09T11:43:19.930750",
+    "valid_until": "2027-12-31",
+    "user_id": "P1"
+  },
+  "transaction": {
+    "contract_id": "PROC-9-ENERGY",
+    "sector": "ENERGY",
+    "gross_amount": 62.12,
+    "timestamp": null
+  },
+  "bho_delta": 0.0,
+  "proof_status": "UNVERIFIED",
+  "archived_at": "2026-08-09T11:43:19.930762"
+}

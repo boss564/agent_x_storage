@@ -23,6 +23,9 @@ from pathlib import Path
 
 AGENTS_PER_WAVE = 9
 
+# Accumulator für --json-report (wird von check_tests befüllt)
+_test_results: dict = {}
+
 # Testskript -> (Ausgabe-Regex, Doku-Kontext-Regex)
 # Beide Regexe muessen genau 2 Gruppen haben: (bestanden, gesamt).
 # Der Kontext-Regex bestimmt, welche Zeile im Dokument das Ergebnis dieses Skripts
@@ -94,6 +97,41 @@ TEST_SCRIPTS: list[tuple[str, str, str]] = [
         r"ERGEBNIS:\s*(\d+)\s+passed,\s*\d+\s+failed\s*\((\d+)\s+total\)",
         r"Wave 32.*?Philately.*?(\d+)\s*/\s*(\d+)\s+tests? passed",
     ),
+    (
+        "scripts/test_wave33_survival.py",
+        r"ERGEBNIS:\s*(\d+)\s+passed,\s*\d+\s+failed\s*\((\d+)\s+total\)",
+        r"Wave 33.*?Survival.*?(\d+)\s*/\s*(\d+)\s+tests? passed",
+    ),
+    (
+        "scripts/test_esp32_firmware.py",
+        r"ERGEBNIS:\s*(\d+)\s+passed,\s*\d+\s+failed\s*\((\d+)\s+total\)",
+        r"ESP32.*?Firmware.*?(\d+)\s*/\s*(\d+)\s+(?:tests\s+)?passed",
+    ),
+    (
+        "scripts/test_finale.py",
+        r"ERGEBNIS:\s*(\d+)\s+passed,\s*\d+\s+failed\s*\((\d+)\s+total\)",
+        r"Wave 34.*?Finale.*?(\d+)\s*/\s*(\d+)\s+tests? passed",
+    ),
+    (
+        "scripts/test_simchain.py",
+        r"Results:\s*(\d+)/(\d+)\s+passed",
+        r"Wave 35.*?SimChain.*?(\d+)\s*/\s*(\d+)\s+tests? passed",
+    ),
+    (
+        "scripts/test_multichain.py",
+        r"Results:\s*(\d+)/(\d+)\s+passed",
+        r"Wave 36.*?MultiChain.*?(\d+)\s*/\s*(\d+)\s+tests? passed",
+    ),
+    (
+        "tests/test_bunker_integration.py",
+        r"ERGEBNIS:\s*(\d+)\s+passed,\s*\d+\s+failed\s*\((\d+)\s+total\)",
+        r"Bunker.*?Integration.*?(\d+)\s*/\s*(\d+)\s+tests?",
+    ),
+    (
+        "tests/test_hsm_adapter.py",
+        r"ERGEBNIS:\s*(\d+)\s+passed,\s*\d+\s+failed\s*\((\d+)\s+total\)",
+        r"HSM.*?Adapter.*?(\d+)\s*/\s*(\d+)\s+tests?",
+    ),
 ]
 
 # Skripte ohne x/y-Testbilanz — Generatoren, Fetcher, Reports.
@@ -104,12 +142,15 @@ NO_TEST_SUMMARY: set[str] = {
     "scripts/export_backtest_signals.py",  # Daten-Exporter, kein Test
     "scripts/fetch_xrechnung_schematron.py",  # Fetcher, kein Test
     "scripts/test_wave22_ops.py",           # 50+ Klassen-Import → OOM in Sandbox, braucht >256 MB
+    "scripts/demo_finale.py",               # Demo-Skript, kein Test
+    "scripts/demo_simchain.py",             # Demo-Skript, kein Test
 }
 
 
 class Report:
     def __init__(self) -> None:
         self.problems: list[dict] = []
+        self.env_skips: list[dict] = []
         self.checked = 0
 
     def ok(self) -> None:
@@ -119,6 +160,9 @@ class Report:
         self.checked += 1
         self.problems.append({"line": line, "kind": kind, "doc": doc,
                               "real": real, "note": note})
+
+    def env(self, script: str, note: str = "") -> None:
+        self.env_skips.append({"script": script, "note": note})
 
 
 def parse_waves(text: str) -> tuple[list[str], int | None]:
@@ -227,12 +271,25 @@ def check_tests(text: str, root: Path, rep: Report) -> None:
             rep.fail(None, f"Test {script}", "—", "Timeout")
             continue
         blob = out.stdout + out.stderr
+
+        # Umgebungsdefizit (fehlendes Modul) von echtem Testfehler unterscheiden
+        missing = re.search(r"ModuleNotFoundError: No module named '(\S+)'", blob)
+        if missing:
+            rep.env(script, f"Übersprungen — {missing.group(1)} nicht installiert")
+            continue
+
         m = re.search(out_pattern, blob)
         if not m:
             rep.fail(None, f"Test {script}", "—",
                      "Ergebnismuster nicht in der Ausgabe gefunden")
             continue
         real = f"{m.group(1)}/{m.group(2)}"
+        _test_results[script] = {
+            "passed": int(m.group(1)),
+            "total":  int(m.group(2)),
+            "failed": int(m.group(2)) - int(m.group(1)),
+            "exit_code": out.returncode,
+        }
 
         # Suche im Dokument die Zeile, die per doc_pattern zu diesem Skript gehoert
         found = False
@@ -266,8 +323,21 @@ def check_undocumented_tests(root: Path, rep: Report) -> None:
 
 
 def main() -> int:
-    args = [a for a in sys.argv[1:] if not a.startswith("-")]
-    root = Path(args[0]).resolve() if args else Path.cwd()
+    # Filtere Flags und deren Werte (--json-report <path>)
+    raw = sys.argv[1:]
+    positional = []
+    skip = False
+    for a in raw:
+        if skip:
+            skip = False
+            continue
+        if a == "--json-report":
+            skip = True   # nächster Wert ist der Pfad, kein Positionsargument
+            continue
+        if a.startswith("-"):
+            continue
+        positional.append(a)
+    root = Path(positional[0]).resolve() if positional else Path.cwd()
     doc = root / "CLAUDE.md"
     if not doc.exists():
         print(f"CLAUDE.md nicht gefunden in {root}", file=sys.stderr)
@@ -284,6 +354,22 @@ def main() -> int:
     if "--run-tests" in sys.argv:
         check_tests(text, root, rep)
 
+    # JSON-Report für /compliance Endpoint (--json-report <path>)
+    json_report_path = None
+    for i, arg in enumerate(sys.argv[1:], 1):
+        if arg == "--json-report" and i + 1 < len(sys.argv):
+            json_report_path = sys.argv[i + 1]
+            break
+    if json_report_path and "--run-tests" in sys.argv:
+        from datetime import datetime as _dt
+        report = {
+            "generated_at": _dt.now().isoformat(),
+            "repository": str(root),
+            "tests": _test_results,
+        }
+        with open(json_report_path, "w", encoding="utf-8") as f:
+            json.dump(report, f, indent=2, ensure_ascii=False)
+
     if "--json" in sys.argv:
         print(json.dumps({"checked": rep.checked, "problems": rep.problems},
                          indent=2, ensure_ascii=False))
@@ -295,7 +381,14 @@ def main() -> int:
     print(f"  -> {len(main_waves)} Hauptwellen x {per or AGENTS_PER_WAVE} "
           f"= {len(main_waves)*(per or AGENTS_PER_WAVE)} Agenten")
     print(f"  -> mit Unterwellen: {len(waves)*(per or AGENTS_PER_WAVE)}")
-    print(f"\n{rep.checked} Angaben geprueft, {len(rep.problems)} Abweichungen\n")
+    skipped = len(rep.env_skips)
+    status = f"{rep.checked} Angaben geprueft, {len(rep.problems)} Abweichungen"
+    if skipped:
+        status += f", {skipped} uebersprungen (Umgebung)"
+    print(f"\n{status}\n")
+
+    for s in rep.env_skips:
+        print(f"  ⏭️  {s['script']}  — {s['note']}")
 
     for p in rep.problems:
         loc = f"Zeile {p['line']:>4}" if p["line"] else "         "
@@ -303,7 +396,7 @@ def main() -> int:
         print(f"            Doku: {p['doc']}   tatsaechlich: {p['real']}"
               + (f"   ({p['note']})" if p["note"] else ""))
 
-    if not rep.problems:
+    if not rep.problems and not skipped:
         print("  Keine Abweichungen.")
     return 1 if rep.problems else 0
 

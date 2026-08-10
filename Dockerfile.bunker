@@ -1,0 +1,43 @@
+# Agent X — MPC-Bunker Container
+# Produktions-äquivalenter Container für Mock-Tests (SoftHSM statt NitroKey)
+#
+# Build:
+#   docker build -f Dockerfile.bunker -t agentx-bunker:mock .
+#
+# Run (Mock-Stack):
+#   docker compose -f docker-compose.mock.yml up
+#
+# Run (Standalone-Test):
+#   docker run --rm agentx-bunker:mock python3 tests/test_bunker_integration.py
+
+FROM python:3.11-slim
+
+# System-Abhängigkeiten
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    libsofthsm2 \
+    opensc \
+    softhsm2 \
+    && rm -rf /var/lib/apt/lists/*
+
+# SoftHSM konfigurieren
+RUN mkdir -p /var/lib/softhsm/tokens && \
+    echo "directories.tokendir = /var/lib/softhsm/tokens" > /etc/softhsm/softhsm2.conf && \
+    echo "objectstore.backend = file" >> /etc/softhsm/softhsm2.conf
+
+# Python-Abhängigkeiten
+RUN pip install --no-cache-dir \
+    cbor2 \
+    pycryptodome
+
+# Agent X Code
+WORKDIR /app
+COPY agents_b2g/ ./agents_b2g/
+COPY tests/ ./tests/
+
+# Healthcheck
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
+    CMD python3 -c "from tests.mock_hsm import MockHSM; h = MockHSM(); h.init_token('healthcheck'); print('OK')" || exit 1
+
+# Default: Integrationstest ausführen
+CMD ["python3", "-m", "unittest", "discover", "-s", "tests", "-p", "test_bunker_integration.py", "-v"]

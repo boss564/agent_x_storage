@@ -1,0 +1,28 @@
+{
+  "certificate": {
+    "certificate_id": "AGENTX-AUDIT-20260809-114331-0063",
+    "issuer": "Agent X B2G Orchestrator — Wave 34 Final Veredelung",
+    "contract_id": "OFFER-7-HYDROGEN",
+    "sector": "BAU",
+    "gross_amount_eur": 218.61,
+    "bho_delta_eur": 0.0,
+    "bho_split_source": "TRANSACTION",
+    "bho_invariant_holds": true,
+    "z3_proof_status": "UNVERIFIED",
+    "z3_proof_verified": false,
+    "proof_hash": "0x48f4f0b5ef74ea6904465d4ccd523322",
+    "seal": "c8cfa7ddad713185a31409a17c1436e4ced7e7f37a892bc848c77788ba95b5cd",
+    "issued_at": "2026-08-09T11:43:31.370975",
+    "valid_until": "2027-12-31",
+    "user_id": "P1"
+  },
+  "transaction": {
+    "contract_id": "OFFER-7-HYDROGEN",
+    "sector": "BAU",
+    "gross_amount": 218.61,
+    "timestamp": null
+  },
+  "bho_delta": 0.0,
+  "proof_status": "UNVERIFIED",
+  "archived_at": "2026-08-09T11:43:31.370989"
+}

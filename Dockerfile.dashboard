@@ -1,0 +1,39 @@
+# Agent X — Streamlit Kämmerer-Dashboard Container
+# Pitch-ready: Wirtschaftskreislauf, BHO-Balken, Z3-Proof live
+#
+# Build:
+#   docker build -f Dockerfile.dashboard -t agentx-dashboard .
+#
+# Run:
+#   docker run -p 8501:8501 agentx-dashboard
+
+FROM python:3.11-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Python-Dependencies
+RUN pip install --no-cache-dir \
+    streamlit>=1.28.0 \
+    plotly>=5.18.0 \
+    pycryptodome>=3.20.0
+
+# Agent X Code
+COPY agents_b2g/ ./agents_b2g/
+COPY services/ ./services/
+COPY scripts/demo_finale.py ./scripts/
+
+# Streamlit config
+RUN mkdir -p /root/.streamlit && \
+    echo '[server]\nheadless = true\nport = 8501\naddress = 0.0.0.0\n' > /root/.streamlit/config.toml
+
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
+    CMD curl -f http://localhost:8501/_stcore/health || exit 1
+
+EXPOSE 8501
+
+CMD ["streamlit", "run", "agents_b2g/finale/streamlit_app.py", \
+     "--server.port=8501", "--server.address=0.0.0.0"]

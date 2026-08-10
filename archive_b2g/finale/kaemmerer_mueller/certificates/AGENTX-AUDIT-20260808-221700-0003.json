@@ -1,0 +1,27 @@
+{
+  "certificate": {
+    "certificate_id": "AGENTX-AUDIT-20260808-221700-0003",
+    "issuer": "Agent X B2G Orchestrator — Wave 34 Final Veredelung",
+    "contract_id": "VOB-2026-HAM-2203",
+    "sector": "CUSTOMS",
+    "gross_amount_eur": 89500.0,
+    "bho_delta_eur": 0.0,
+    "bho_invariant_holds": true,
+    "z3_proof_status": "UNVERIFIED",
+    "z3_proof_verified": false,
+    "proof_hash": "0xf9d7385107fd746add68bb5b5ab59be1",
+    "seal": "95db6aace69ba5d762ab34a7ef0eb2d45a640c79b83982c7cc52afce249ac124",
+    "issued_at": "2026-08-08T22:17:00.813497",
+    "valid_until": "2027-12-31",
+    "user_id": "kaemmerer_mueller"
+  },
+  "transaction": {
+    "contract_id": "VOB-2026-HAM-2203",
+    "sector": "CUSTOMS",
+    "gross_amount": 89500.0,
+    "timestamp": "2026-08-08T22:17:00.811965"
+  },
+  "bho_delta": 0.0,
+  "proof_status": "UNVERIFIED",
+  "archived_at": "2026-08-08T22:17:00.813507"
+}
