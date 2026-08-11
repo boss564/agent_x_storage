@@ -69,13 +69,16 @@ services:
   nats:
     image: nats:2.10-alpine
     restart: unless-stopped
-    command: "--jetstream --store_dir /data"
+    command: "--jetstream --store_dir /data -m 8222"
+    ports:
+      - "4222:4222"
+      - "8222:8222"
     networks:
       - agent_x_b2g
     volumes:
       - nats_data:/data
     healthcheck:
-      test: ["CMD", "nats", "server", "check", "-s", "nats://localhost:4222"]
+      test: ["CMD", "wget", "-q", "-O-", "http://localhost:8222/healthz"]
       interval: 10s
       timeout: 3s
       retries: 5
@@ -614,6 +617,29 @@ services:
       - ./config/grafana/datasources:/etc/grafana/provisioning/datasources:ro
     ports:
       - "3002:3000"
+
+# ============================================================
+# Wave Surface: 9 Schnellboote (C01–C09) — NATS Queue-Group Workers
+# ============================================================
+  surface-agent:
+    build:
+      context: .
+      dockerfile: agents/surface/Dockerfile
+    deploy:
+      mode: replicated
+      replicas: 9
+      restart_policy:
+        condition: any
+        delay: 5s
+    environment:
+      - NATS_URL=nats://nats:4222
+      - LOG_LEVEL=INFO
+      - ZK_TRIGGER_RATE=0.1
+    depends_on:
+      nats:
+        condition: service_healthy
+    networks:
+      - agent_x_b2g
 
 # ============================================================
 # Networks

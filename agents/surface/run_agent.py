@@ -57,10 +57,12 @@ async def main():
     chain_id = AGENT_CONFIGS.get(agent_id, "appchain-default")
     nats_url = os.getenv("NATS_URL", "nats://localhost:4222")
 
+    zk_rate = float(os.getenv("ZK_TRIGGER_RATE", "0.0"))
     handler = SurfaceHandler(
         agent_id=agent_id,
         chain_id=chain_id,
         nats_url=nats_url,
+        zk_trigger_rate=zk_rate,
     )
     await handler.run_forever()
 

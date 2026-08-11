@@ -25,10 +25,12 @@ class SurfaceHandler:
         agent_id: str = "C01",
         chain_id: str = "appchain-eu",
         nats_url: str = "nats://localhost:4222",
+        zk_trigger_rate: float = 0.0,
     ):
         self.agent_id = agent_id
         self.chain_id = chain_id
         self.nats_url = nats_url
+        self.zk_trigger_rate = zk_trigger_rate
         self._nc: Any = None
         self._js: Any = None
 
@@ -38,6 +40,12 @@ class SurfaceHandler:
         self._last_tps: float = 0.0
         self._total_processed: int = 0
         self._total_errors: int = 0
+
+        # ZK forwarding
+        self._zk_forwarded: int = 0
+        self._zk_responses: int = 0
+        self._zk_errors: int = 0
+        self._zk_latency_window: list = []
 
         # Latency tracking
         self._latency_window: list = []  # last 100 latencies in µs
@@ -93,8 +101,12 @@ class SurfaceHandler:
                 self._total_errors += 1
                 return
 
-            # Forward to settlement pipeline (simulated)
             self._total_processed += 1
+
+            # ZK Trigger: forward subset to subsurface
+            if self.zk_trigger_rate > 0 and self._nc and self._nc.is_connected:
+                if hash(payload.get("payload_id", "")) % 100 < (self.zk_trigger_rate * 100):
+                    asyncio.create_task(self._forward_zk(payload, t0))
 
             # Track latency
             elapsed_us = (time.time() - t0) * 1_000_000
@@ -105,6 +117,25 @@ class SurfaceHandler:
         except Exception as e:
             self._total_errors += 1
             logger.error("%s message error: %s", self.agent_id, e)
+
+    # ── ZK Forwarding ───────────────────────────────────────────────────
+
+    async def _forward_zk(self, payload: dict, t0: float):
+        """Forward payload to subsurface ZK engine via NATS request."""
+        self._zk_forwarded += 1
+        try:
+            response = await self._nc.request(
+                "agentx.subsurface.zk_request",
+                json.dumps(payload).encode(),
+                timeout=2,
+            )
+            self._zk_responses += 1
+            zk_lat = (time.time() - t0) * 1_000_000
+            self._zk_latency_window.append(zk_lat)
+            if len(self._zk_latency_window) > self._latency_window_max:
+                self._zk_latency_window.pop(0)
+        except Exception:
+            self._zk_errors += 1
 
     # ── TPS Metering ────────────────────────────────────────────────────
 
@@ -133,4 +164,7 @@ class SurfaceHandler:
             "total_errors": self._total_errors,
             "avg_latency_us": round(avg_lat, 1),
             "nats_connected": self._nc is not None and self._nc.is_connected,
+            "zk_forwarded": self._zk_forwarded,
+            "zk_responses": self._zk_responses,
+            "zk_errors": self._zk_errors,
         }
