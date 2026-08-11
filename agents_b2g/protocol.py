@@ -657,6 +657,25 @@ class ValhallaHonor:
     source_incident: str = ""
 
 
+@_dc
+class AirRelayPayload:
+    """H01–H03 Helicopter relay payload — forward-declare for future air layer.
+
+    Inherits the standard SurfaceEnvelope pattern. Not yet referenced by any
+    surface agent (C01–C09). Will be activated when the helicopter services
+    (H01–H03) are deployed in a future session.
+    """
+    altitude_layer: str = "MACRO_AIR"
+    priority_level: int = 0       # 0 = Express (helicopter)
+    spatial_coordinates: Optional[Dict[str, float]] = _field(default_factory=dict)
+    spatial_data_hash: str = ""   # Merkle root of LiDAR/air data
+    emergency_target_agent: str = ""  # e.g. "C05" for emergency override
+
+    def __post_init__(self):
+        if self.priority_level == 0 and not self.spatial_data_hash:
+            raise ValueError("AirExpress requires spatial_data_hash")
+
+
 # ─── Demo ───────────────────────────────────────────────────────────────────
 
 def demo_surface_protocol():
