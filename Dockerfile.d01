@@ -1,0 +1,6 @@
+FROM python:3.12-slim
+WORKDIR /app
+RUN pip install --no-cache-dir nats-py web3
+COPY scripts/mock_d01_responder.py .
+ENV PYTHONUNBUFFERED=1
+CMD ["python", "-u", "mock_d01_responder.py"]

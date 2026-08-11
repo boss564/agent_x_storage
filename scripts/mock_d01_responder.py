@@ -47,6 +47,33 @@ def make_proof(payload: dict) -> dict:
     }
 
 
+ANVIL_RPC = os.getenv("ANVIL_RPC", "http://localhost:8545")
+ANVIL_ENABLED = os.getenv("ANVIL_ENABLED", "0") == "1"
+
+
+def anchor_to_l1(state_root: str, nullifier: str) -> str:
+    """Send state root hash to Anvil L1. Returns tx hash or '' on failure."""
+    try:
+        from web3 import Web3
+        w3 = Web3(Web3.HTTPProvider(ANVIL_RPC))
+        if not w3.is_connected():
+            return ""
+        # Use dev account (Anvil default: 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266)
+        acct = w3.eth.accounts[0]
+        # Anchor: store hash and nullifier as calldata
+        data = (
+            Web3.keccak(text="anchor(bytes32,bytes32)")[:4]
+            + Web3.to_bytes(hexstr=state_root).rjust(32, b'\0')
+            + Web3.to_bytes(hexstr=nullifier).rjust(32, b'\0')
+        )
+        tx_hash = w3.eth.send_transaction({
+            "from": acct, "to": acct, "data": data, "gas": 100_000,
+        })
+        return tx_hash.hex()
+    except Exception:
+        return ""
+
+
 async def main():
     latency_ms = 0.0
     if len(sys.argv) > 1 and sys.argv[1] == "--latency":
@@ -54,10 +81,11 @@ async def main():
 
     nc = await nats.connect(NATS_URL)
     count = 0
+    l1_count = 0
     t0 = time.time()
 
     async def handler(msg):
-        nonlocal count
+        nonlocal count, l1_count
         count += 1
         if latency_ms > 0:
             await asyncio.sleep(latency_ms)
@@ -65,10 +93,17 @@ async def main():
         proof = make_proof(payload)
         await nc.publish(msg.reply, json.dumps(proof).encode())
 
+        # L1 Anchor
+        if ANVIL_ENABLED:
+            tx = anchor_to_l1(proof["z3_proof"], proof["nullifier_hash"])
+            if tx:
+                l1_count += 1
+
         if count % 100 == 0:
             elapsed = time.time() - t0
             tps = count / elapsed if elapsed > 0 else 0
-            print(f"  [D01 Mock] {count} proofs | {tps:.0f}/s")
+            l1_info = f"| L1: {l1_count} anchored" if ANVIL_ENABLED else ""
+            print(f"  [D01 Mock] {count} proofs | {tps:.0f}/s {l1_info}")
 
     await nc.subscribe(SUBJECT, cb=handler, queue="d01-workers")
     print(f"🧮 D01 Mock ZK Responder ready on {SUBJECT} ({NATS_URL})")

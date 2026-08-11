@@ -619,6 +619,27 @@ services:
       - "3002:3000"
 
 # ============================================================
+# L1 Settlement Chain: Anvil (Foundry local EVM)
+# ============================================================
+  anvil:
+    image: ghcr.io/foundry-rs/foundry:latest
+    command: >
+      anvil --host 0.0.0.0 --port 8545
+            --block-time 1
+            --accounts 10
+            --balance 10000
+            --gas-price 1
+    ports:
+      - "8545:8545"
+    networks:
+      - agent_x_b2g
+    healthcheck:
+      test: ["CMD", "anvil", "--version"]
+      interval: 5s
+      timeout: 2s
+      retries: 10
+
+# ============================================================
 # Wave Surface: 9 Schnellboote (C01–C09) — NATS Queue-Group Workers
 # ============================================================
   surface-agent:
@@ -640,6 +661,26 @@ services:
         condition: service_healthy
     networks:
       - agent_x_b2g
+
+# ============================================================
+# D01 Mock ZK Responder — Subsurface Proof Engine
+# ============================================================
+  d01-mock-responder:
+    build:
+      context: .
+      dockerfile: Dockerfile.d01
+    environment:
+      - ANVIL_ENABLED=1
+      - ANVIL_RPC=http://anvil:8545
+      - NATS_URL=nats://nats:4222
+    depends_on:
+      nats:
+        condition: service_healthy
+      anvil:
+        condition: service_healthy
+    networks:
+      - agent_x_b2g
+    restart: unless-stopped
 
 # ============================================================
 # Networks
