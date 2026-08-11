@@ -658,6 +658,24 @@ class ValhallaHonor:
 
 
 @_dc
+class ParatrooperDropPayload:
+    """F01–F03 Ephemeral Intervention — WASM sandbox with 500ms TTL.
+
+    9 subagents across 3 tactical units. Each drop is a self-destructing
+    WASM module that executes, reports, and zeroizes its memory.
+    Session 3: WASM binaries compiled from TinyGo/Rust.
+    """
+    mission_id: str = ""
+    target_environment_uri: str = ""
+    subagent: str = ""              # f01.1–f03.3
+    ttl_milliseconds: int = 500
+    challenge_nonce: str = ""
+    expected_invariant_hash: str = ""
+    params: Dict[str, Any] = _field(default_factory=dict)
+    callback_nats_subject: str = "agentx.surface.drop_result"
+
+
+@_dc
 class AirRelayPayload:
     """H01–H03 Helicopter relay payload — forward-declare for future air layer.
 
