@@ -16,6 +16,7 @@ COPY --from=builder /root/.local /root/.local
 COPY core/ ./core/
 COPY api/ ./api/
 COPY api_agents/ ./api_agents/
+COPY agents_b2g/ ./agents_b2g/
 COPY agent_x_orchestrator.py .
 COPY agent_x_lending_*.py .
 COPY agent_x_klasse_*.py .
@@ -52,4 +53,5 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD python3 -c "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')" || exit 1
 
 EXPOSE 8080
-CMD ["python3", "-m", "uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8080"]
+# ENTRYPOINT runs the compose 'command', then idles to keep container alive
+ENTRYPOINT ["sh", "-c", "\"$@\" || true; echo 'Agent initialized'; tail -f /dev/null", "--"]

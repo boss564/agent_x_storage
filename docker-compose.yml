@@ -7,9 +7,8 @@
 #   docker-compose logs -f pilot_dashboard     # Stream dashboard logs
 # ============================================================
 
-version: "3.9"
-
 x-agent-defaults: &agent_defaults
+  build: .
   restart: unless-stopped
   networks:
     - agent_x_b2g
@@ -478,14 +477,12 @@ services:
   # ==========================================================
   ops_health_agent:
     <<: *agent_defaults
-    container_name: ops_health_agent
     command: ["python", "-m", "agents_b2g.ops.pilot_agents", "--role", "ops_health"]
     deploy:
       replicas: 2  # HA: primary + standby
 
   dead_letter_recovery_agent:
     <<: *agent_defaults
-    container_name: dead_letter_recovery_agent
     command: ["python", "-m", "agents_b2g.ops.pilot_agents", "--role", "dlq_recovery"]
     deploy:
       replicas: 2
@@ -499,10 +496,7 @@ services:
 
   tender_api_gateway:
     <<: *agent_defaults
-    container_name: tender_api_gateway
     command: ["python", "-m", "agents_b2g.ops.pilot_agents", "--role", "api_gateway"]
-    ports:
-      - "8443:8443"  # HTTPS API for authorities
     deploy:
       replicas: 3
 
@@ -530,11 +524,7 @@ services:
 
   pilot_dashboard:
     <<: *agent_defaults
-    container_name: pilot_dashboard
     command: ["python", "-m", "agents_b2g.ops.pilot_agents", "--role", "dashboard"]
-    ports:
-      - "3000:3000"   # WebSocket dashboard
-      - "3001:3001"   # HTTP fallback
     deploy:
       replicas: 2
 
@@ -543,7 +533,6 @@ services:
   # ==========================================================
   user_authenticator:
     <<: *agent_defaults
-    container_name: user_authenticator
     command: ["python", "-m", "agents_b2g.user.agents", "--role", "auth"]
     deploy:
       replicas: 2
