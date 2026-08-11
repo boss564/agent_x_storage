@@ -43,6 +43,8 @@ agent_x_storage/
 │   ├── demo_producer_cluster.py   # 27-Agenten-ABM: Provider/Evaluator/Economic (514 L)
 │   ├── pitch_test.sh              # Pre-Pitch-Verifikation (Health, BHO, Compliance)
 │   ├── test_esp32_firmware.py      # ESP32 Firmware Test Suite (15/15 passed)
+├── mock_d01_responder.py       # D01 Mock ZK Proof Responder (NATS + Anvil L1 anchor)
+├── simchain_ingest.py          # Producer: 96k–115k events/s NATS load generator
 │   └── export_backtest_signals.py # Backtest-Daten-Exporter
 ├── config/
 │   └── calibration_config.yaml   # Kalibrierungs-Konfiguration
@@ -57,6 +59,7 @@ agent_x_storage/
 ├── docker-compose.mock.yml         # 5-Bunker + Handwerker Mock-Stack, 161 L
 ├── Dockerfile.bunker               # MPC-Bunker Container (Python 3.11 + SoftHSM), 43 L
 ├── Dockerfile.dashboard            # Streamlit Dashboard Container, 39 L
+├── Dockerfile.d01                  # D01 Mock ZK Responder Container (nats-py + web3), 8 L
 ├── Makefile                        # make pitch / make full-pitch / make test-all / make demo-* (15+ targets, 180 L)
 ├── tests/                          # MPC-Bunker Mock-Stack & Integrationstests
 │   ├── mock_hsm.py                 # Mock NitroKey HSM 2: PKCS#11, MPC-Threshold (t=3,n=5), 357 L
@@ -476,6 +479,18 @@ agents_b2g/
 │   ├── __init__.py                # DemoOrchestrator, TransformProfiles
 │   ├── demo_orchestrator.py       # 9-agent pipeline, 8 unique sicker rates
 │   └── transform_profiles.py      # Per-agent fee/retention/burn rates
+├── surface/                       # C01–C09 Surface Agents: NATS Queue-Group Workers
+│   ├── __init__.py
+│   ├── handler.py                 # SurfaceHandler: NATS subscriber, TPS metering, ZK forwarding
+│   ├── run_agent.py               # AGENT_ID resolver, 9-chain config, asyncio event loop
+│   └── Dockerfile                 # Python 3.12-slim, nats-py
+├── ephemeral/                     # F01–F03 Paratrooper WASM Subagents (Session 3)
+│   ├── __init__.py
+│   ├── payload/
+│   │   └── types.py               # ParatrooperDropPayload, SubAgentID enum, 9 WASM modules
+│   ├── runtime/
+│   │   └── wasm_runner.py          # WasmSandbox with 500ms TTL (wasmtime placeholder)
+│   └── wasm/                       # Target directory for compiled .wasm modules
 ```
 
 ### Wave 7 Detail: Operations & Maintenance (9 Agents)
@@ -969,9 +984,10 @@ docker-compose logs -f pilot_dashboard
 |---------|-------|---------|
 | redis | redis:7.4-alpine | State store, session cache, pub/sub |
 | neo4j | neo4j:5.26-community | Graph database for audit trails, agent relationships |
-| nats | nats:2.10-alpine | JetStream message broker (replaces in-process EventBus) |
+| nats | nats:2.10-alpine | Core NATS + JetStream, ports 4222/8222, queue-group load balancing |
 | prometheus | prom/prometheus:v2.55.0 | Metrics collection from all agents |
 | grafana | grafana/grafana:11.3.0 | Dashboards for ops and project management |
+| anvil | ghcr.io/foundry-rs/foundry:latest | L1 Settlement Chain (Foundry local EVM, port 8545) |
 
 ### Wave 10 Detail: Query & Reports (9 Agents)
 
@@ -1427,4 +1443,4 @@ German for communication and documentation. Code comments in English.
 
 ## Version
 
-Agent X Core: 0.4.0 (stable, 90/100 backtest). Agent X B2G: 0.22.0 (252 agents in 28 main waves plus Wave 3.5 and 25 compliance agents — 286 total, plus Wave 34 Finale Veredelung, Wave 35 SimChain (9 Agents × 3 Chains, 2.200+ lines, 197/197 tests), Wave 36 MultiChain Sovereign Appchains (9 Appchains × 4 Layers, 1.800+ lines, 113/113 tests), Wave 37 Demo Pipeline (9 Agents, 8 unique sicker rates), plus Settlement (D01–D04 divers, C09 ingest, ComplianceExporter, ~1.500 lines), Crew (5-role pipeline + DID registry + 9 specialized agents), Gas (autonomous fuel management), Valhalla (ZK honor protocol), Telemetry Ingest (MQTT/HTTP bridge, 7 endpoints), Chaos Matrix (10 attack scenarios), 7 Solidity contracts (1.832+ lines, Foundry/Solc 0.8.35, inkl. ValhallaVerifier.sol) + ESP32 LoRaWAN Firmware (1.651 lines C++/Arduino), E2E: Waves 1–33 all green, Wave 34: 21/21, Wave 35: 199/199, Wave 36: 113/113, Wave 37: Pitch-fertig, Chaos Resilience: 4/4 experiments, CertiK Security Wave 20: 164/164, Skynet Monitor Wave 21: 80/80, Ops Security Wave 22: 48/48, Token Launch Wave 23: funktional, Trading Wave 24: FN=0/FP=0, Smart Wallet Wave 25: integriert, Clearing & Settlement Wave 27: 122/122, External Threat Defense Wave 28: 104/104, Token Runtime Operations Wave 29: 101/101, UX & Dashboard Wave 31: 92/92, Survival & Off-Grid Wave 33: 63/63, BSI C5/ISO 27001/SOC2/GoBD/eIDAS/GDPR/EVB-IT compliant, GAEB DA XML 3.3, XRechnung 3.0, VHB-221/222, GoBD/BHO-ready, 65.000+ lines).
+Agent X Core: 0.4.0 (stable, 90/100 backtest). Agent X B2G: 0.22.0 (252 agents in 28 main waves plus Wave 3.5 and 25 compliance agents — 286 total, plus Wave 34 Finale Veredelung, Wave 35 SimChain (9 Agents × 3 Chains, 2.200+ lines, 199/199 tests), Wave 36 MultiChain Sovereign Appchains (9 Appchains × 4 Layers, 1.800+ lines, 113/113 tests), Wave 37 Demo Pipeline (9 Agents, 8 unique sicker rates), plus Settlement (D01–D04 divers, C09 ingest, ComplianceExporter, ~1.500 lines), Crew (5-role pipeline + DID registry + 9 specialized agents), Gas (autonomous fuel management), Valhalla (ZK honor protocol), Surface Agents (C01–C09: NATS queue-group workers, 96k–115k events/s), D01 Mock Responder (containerized, Anvil L1 anchor), Ephemeral Paratroopers (F01–F03, 9 WASM subagents, 500ms TTL), Telemetry Ingest (MQTT/HTTP bridge, 7 endpoints), Chaos Matrix (10 attack scenarios), 7 Solidity contracts (1.832+ lines, Foundry/Solc 0.8.35, inkl. ValhallaVerifier.sol) + ESP32 LoRaWAN Firmware (1.651 lines C++/Arduino), E2E: Waves 1–33 all green, Wave 34: 21/21, Wave 35: 199/199, Wave 36: 113/113, Wave 37: Pitch-fertig, Chaos Resilience: 4/4 experiments, Docker: 109 containers (100/101 healthy), NATS: Core+JetStream (4222/8222), Anvil: Block 0→1 confirmed, CertiK Security Wave 20: 164/164, Skynet Monitor Wave 21: 80/80, Ops Security Wave 22: 48/48, Token Launch Wave 23: funktional, Trading Wave 24: FN=0/FP=0, Smart Wallet Wave 25: integriert, Clearing & Settlement Wave 27: 122/122, External Threat Defense Wave 28: 104/104, Token Runtime Operations Wave 29: 101/101, UX & Dashboard Wave 31: 92/92, Survival & Off-Grid Wave 33: 63/63, BSI C5/ISO 27001/SOC2/GoBD/eIDAS/GDPR/EVB-IT compliant, GAEB DA XML 3.3, XRechnung 3.0, VHB-221/222, GoBD/BHO-ready, 65.000+ lines).

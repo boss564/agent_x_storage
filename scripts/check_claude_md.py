@@ -273,7 +273,11 @@ def check_tests(text: str, root: Path, rep: Report) -> None:
         blob = out.stdout + out.stderr
 
         # Umgebungsdefizit (fehlendes Modul) von echtem Testfehler unterscheiden
+        # Pattern 1: raw ModuleNotFoundError traceback (e.g. pycryptodome)
         missing = re.search(r"ModuleNotFoundError: No module named '(\S+)'", blob)
+        # Pattern 2: caught import error in test output (e.g. streamlit/plotly)
+        if not missing:
+            missing = re.search(r"No module named '(\S+)'", blob)
         if missing:
             rep.env(script, f"Übersprungen — {missing.group(1)} nicht installiert")
             continue
