@@ -1,0 +1,72 @@
+# Chaos Fleet — F07/F08/F09 Zerstörungswerkzeug gegen den Core-Stack.
+# Voraussetzung: Core-Stack läuft im Netzwerk agent_x_b2g.
+# Nutzt den Docker-Socket für harte Container-Kills (nur Dev-Laptop!).
+
+networks:
+  agent_x_b2g:
+    external: true
+
+services:
+  # ===================================================
+  # F07 — Worker-Killer (SIGKILL auf zufällige d01-worker)
+  # ===================================================
+  chaos-killer:
+    build:
+      context: .
+      dockerfile: Dockerfile.killer
+    container_name: chaos-killer
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - WORKER_FILTER=name=d01-worker
+      - KILL_INTERVAL=25
+    networks:
+      - agent_x_b2g
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+
+  # ===================================================
+  # F08 — CPU-Throttler (stress-ng im Worker-Container)
+  # ===================================================
+  chaos-throttler:
+    build:
+      context: .
+      dockerfile: Dockerfile.throttler
+    container_name: chaos-throttler
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - WORKER_FILTER=name=d01-worker
+      - THROTTLE_INTERVAL=45
+      - CPU_LOAD=90
+    networks:
+      - agent_x_b2g
+    restart: unless-stopped
+    privileged: true
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+  # ===================================================
+  # F09 — Poison-Injector (Go-Binary, constraint-bloat)
+  # ===================================================
+  chaos-poison:
+    build:
+      context: .
+      dockerfile: Dockerfile.poison
+    container_name: chaos-poison
+    environment:
+      - NATS_URL=nats://nats:4222
+      - POISON_INTERVAL_MS=500
+      - POISON_BURST=5
+    networks:
+      - agent_x_b2g
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 64M

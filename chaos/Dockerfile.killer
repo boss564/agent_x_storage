@@ -1,0 +1,8 @@
+FROM alpine:latest
+
+RUN apk add --no-cache docker bash curl
+
+COPY scripts/killer.sh /killer.sh
+RUN chmod +x /killer.sh
+
+CMD ["/bin/bash", "/killer.sh"]

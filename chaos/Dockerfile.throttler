@@ -1,0 +1,14 @@
+FROM ubuntu:22.04
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    docker.io \
+    stress-ng \
+    bash \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY scripts/throttler.sh /throttler.sh
+RUN chmod +x /throttler.sh
+
+CMD ["/bin/bash", "/throttler.sh"]

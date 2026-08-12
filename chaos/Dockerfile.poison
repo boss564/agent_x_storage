@@ -1,0 +1,15 @@
+# Stage 1: Builder
+FROM golang:1.22-alpine AS builder
+
+WORKDIR /app
+COPY poison.go .
+
+RUN go mod init poison && go get github.com/nats-io/nats.go && go build -o poison -ldflags="-s -w" .
+
+# Stage 2: Runtime
+FROM alpine:latest
+
+COPY --from=builder /app/poison /poison
+RUN chmod +x /poison
+
+CMD ["/poison"]
