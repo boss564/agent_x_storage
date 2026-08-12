@@ -697,6 +697,34 @@ class ProtoGalaxyFoldPayload:
 
 
 @_dc
+class ShardedStateEnvelope:
+    """Sharded State Root — affinity-routed ZK proofing.
+
+    K=8 shards: each D01 replica owns a subtree of depth 17 (131072 leaves)
+    and subscribes exclusively to agentx.subsurface.shard.<shard_id>.
+    Global root = Poseidon(R_0, ..., R_7) via D00 master aggregator.
+    """
+    shard_id: int = 0                 # 0..7
+    account_id: str = ""              # Target account / leaf index
+    payload_id: str = ""
+    amount: int = 0
+    leaf_index: int = 0               # Position in subtree (0..131071)
+    is_cross_shard: bool = False
+    target_shard_id: Optional[int] = None
+    nullifier_hash: str = ""
+
+
+def get_shard_subject(account_id: str, num_shards: int = 8) -> str:
+    """Deterministic consistent-hashing: account_id → shard subject.
+
+    D01 replicas subscribe to agentx.subsurface.shard.<shard_id>.
+    Surface agents route ZK requests to the shard owning the account.
+    """
+    shard_id = int.from_bytes(hashlib.sha256(account_id.encode()).digest()[:4], "big") % num_shards
+    return f"agentx.subsurface.shard.{shard_id}"
+
+
+@_dc
 class AirRelayPayload:
     """H01–H03 Helicopter relay payload — forward-declare for future air layer.
 
