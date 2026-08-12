@@ -669,6 +669,12 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.d01
+    deploy:
+      mode: replicated
+      replicas: 8
+      restart_policy:
+        condition: any
+        delay: 5s
     environment:
       - ANVIL_ENABLED=1
       - ANVIL_RPC=http://anvil:8545
