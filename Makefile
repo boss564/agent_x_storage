@@ -172,6 +172,19 @@ dashboard:
 	streamlit run agents_b2g/multichain/streamlit_app.py --server.port 8502 &
 	wait
 
+# ── WASM Build (TinyGo required) ─────────────────────────────────────
+
+.PHONY: wasm
+wasm:
+	@echo "🪂 Building WASM paratrooper modules..."
+	@for src in agents/ephemeral/src/f0*.go; do \
+		name=$$(basename $$src .go); \
+		echo "  tinygo build -o agents/ephemeral/wasm/$$name.wasm -target wasi $$src"; \
+		tinygo build -o agents/ephemeral/wasm/$$name.wasm -target wasi $$src 2>/dev/null || \
+		(echo "  ⚠️ TinyGo not installed — skipping $$name. Install: brew install tinygo"; continue); \
+	done
+	@echo "✅ WASM modules ready in agents/ephemeral/wasm/"
+
 # ── Full Pitch (start APIs + run all demos) ───────────────────────────
 
 full-pitch:
