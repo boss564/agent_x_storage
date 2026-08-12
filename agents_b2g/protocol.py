@@ -676,6 +676,27 @@ class ParatrooperDropPayload:
 
 
 @_dc
+class ProtoGalaxyFoldPayload:
+    """D00 Master-Aggregator — ProtoGalaxy instance folding payload.
+
+    Replaces naive recursive SNARK aggregation (O(n) pairings) with
+    ProtoGalaxy folding (O(log n) vector ops). D01 replicas emit fold
+    instances; D00 folds k instances into a running accumulator, and
+    a single Decider circuit produces one L1 proof per epoch.
+
+    Topic: agentx.subsurface.fold_instance
+    """
+    replica_id: str = ""             # e.g. "D01-replica-4"
+    epoch_ticket: int = 0            # Global epoch window (block number)
+    batch_sequence_id: int = 0
+    instance_commitments: List[str] = _field(default_factory=list)  # [C_1..C_k]
+    public_inputs_hash: str = ""     # Merkle root of the batch's BHO events
+    lookup_table_id: str = ""        # BHO invariant table (Lasso/Plookup)
+    lookup_read_counts_hash: str = ""  # Lasso/Plookup table access proof
+    folding_time_ms: float = 0.0     # Telemetry: target < 5ms per fold
+
+
+@_dc
 class AirRelayPayload:
     """H01–H03 Helicopter relay payload — forward-declare for future air layer.
 
