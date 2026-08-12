@@ -42,15 +42,17 @@ class SurfaceHandler:
         self._total_processed: int = 0
         self._total_errors: int = 0
 
-        # ZK forwarding
+        # ZK forwarding — adaptive batching (dual-trigger: count OR delay)
         self._zk_forwarded: int = 0
         self._zk_responses: int = 0
         self._zk_errors: int = 0
         self._zk_latency_window: list = []
         self._zk_batch: list = []               # Batch accumulation buffer
-        self._zk_batch_size: int = 100           # Flush every N events
-        self._zk_batch_interval: float = 0.1     # or every 100ms
+        self._zk_batch_size: int = 100           # Volume trigger: flush at N events
+        self._zk_max_delay: float = 0.05         # Time trigger: flush after 50ms idle
         self._zk_last_flush: float = 0.0
+        self._zk_timer_task: asyncio.Task | None = None
+        self._last_activity: float = 0.0         # Warm-up heartbeat tracking
 
         # Latency tracking
         self._latency_window: list = []  # last 100 latencies in µs
@@ -84,6 +86,9 @@ class SurfaceHandler:
             )
             logger.info("📡 %s subscribed to %s (queue=surface-workers)", self.agent_id, subject)
 
+        # Warm-up heartbeat: keep D01 enclaves hot during idle
+        asyncio.create_task(self._warmup_loop())
+
         # Keep-alive loop
         while True:
             await asyncio.sleep(1)
@@ -107,21 +112,21 @@ class SurfaceHandler:
                 return
 
             self._total_processed += 1
+            self._last_activity = time.time()
 
-            # ZK Trigger: accumulate batch, flush periodically
+            # ZK Trigger: adaptive accumulation (dual-trigger: count OR delay)
             if self.zk_trigger_rate > 0 and self._nc and self._nc.is_connected:
                 if hash(payload.get("payload_id", "")) % 100 < (self.zk_trigger_rate * 100):
                     self._zk_batch.append(payload)
                     self._zk_forwarded += 1
-                    now = time.time()
-                    if (len(self._zk_batch) >= self._zk_batch_size or
-                        (self._zk_batch and now - self._zk_last_flush > self._zk_batch_interval)):
-                        self._zk_last_flush = now
-                        batch = self._zk_batch
-                        self._zk_batch = []
-                        task = asyncio.create_task(self._flush_zk_batch(batch))
-                        self._bg_tasks.add(task)
-                        task.add_done_callback(self._bg_tasks.discard)
+
+                    # Volume trigger: flush at N events
+                    if len(self._zk_batch) >= self._zk_batch_size:
+                        self._flush_now()
+
+                    # Time trigger: arm timer if first event in buffer
+                    elif len(self._zk_batch) == 1 and self._zk_timer_task is None:
+                        self._zk_timer_task = asyncio.create_task(self._time_flush())
 
             # Track latency
             elapsed_us = (time.time() - t0) * 1_000_000
@@ -134,6 +139,42 @@ class SurfaceHandler:
             logger.error("%s message error: %s", self.agent_id, e)
 
     # ── ZK Forwarding ───────────────────────────────────────────────────
+
+    def _flush_now(self):
+        """Synchronously hand off the current batch (no await, called from handler)."""
+        if not self._zk_batch:
+            return
+        if self._zk_timer_task and not self._zk_timer_task.done():
+            self._zk_timer_task.cancel()
+        self._zk_timer_task = None
+        batch = self._zk_batch
+        self._zk_batch = []
+        task = asyncio.create_task(self._flush_zk_batch(batch))
+        self._bg_tasks.add(task)
+        task.add_done_callback(self._bg_tasks.discard)
+
+    async def _time_flush(self):
+        """Time trigger: flush after max_delay even if volume cap not reached."""
+        await asyncio.sleep(self._zk_max_delay)
+        self._zk_timer_task = None
+        if self._zk_batch:
+            self._flush_now()
+
+    async def _warmup_loop(self):
+        """Keep D01 enclaves warm during idle (5s heartbeat)."""
+        while True:
+            await asyncio.sleep(5.0)
+            if self._nc and self._nc.is_connected and \
+               (time.time() - self._last_activity) >= 5.0:
+                warmup = {"type": "WARMUP_PING", "agent_id": self.agent_id,
+                          "timestamp_ns": time.time_ns(), "dummy_pairing": True}
+                try:
+                    await self._nc.publish(
+                        "agentx.subsurface.zk_request",
+                        json.dumps(warmup).encode(),
+                    )
+                except Exception:
+                    pass
 
     async def _flush_zk_batch(self, batch: list):
         """Flush accumulated ZK events as a single batch request to D01."""
