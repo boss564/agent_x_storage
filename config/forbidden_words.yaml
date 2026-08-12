@@ -40,7 +40,9 @@ ignore_dirs:
   - dist
   - build
   - lib
+  - test_forbidden_words  # Selbsttest-Fixtures enthalten die Begriffe absichtlich
 
 # Ganze Dateien von der Prüfung ausnehmen
 whitelist_files:
-  - forbidden_words.yaml  # die Config selbst listet die Begriffe auf
+  - forbidden_words.yaml          # die Config selbst listet die Begriffe auf
+  - forbidden_word_scanner.py     # DEFAULT_TERMS enthält die Begriffe als Mapping

@@ -234,7 +234,7 @@ class DemoOrchestrator:
             lines.append(
                 f"  Akt {act_num} ({first.act_name}): "
                 f"€{first.input_eur:,.2f} → €{last.output_eur:,.2f} "
-                f"({len(act_steps)} Agenten, Sicker: €{friction:,.2f})"
+                f"({len(act_steps)} Agenten, Friction: €{friction:,.2f})"
             )
         return "\n".join(lines)
 
@@ -308,7 +308,7 @@ def run_demo(input_eur: float = 27_945_000.0, events: int = 62_100):
     print(f"\n  ╔{'═'*86}╗")
     print(f"  ║  Input:     €{report.input_eur:>16,.2f}                               ║")
     print(f"  ║  Output:    €{report.steps[-1].output_eur:>16,.2f}                               ║")
-    print(f"  ║  Sicker:    €{report.total_friction_eur:>16,.2f} ({report.total_friction_pct:.3f}%)                     ║")
+    print(f"  ║  Friction:  €{report.total_friction_eur:>16,.2f} ({report.total_friction_pct:.3f}%)                     ║")
     print(f"  ║  BHO Δ:     €{report.bho_delta_eur:>16,.2f}                               ║")
     print(f"  ║  Duration:  {report.elapsed_total_us:>13,.0f} µs                          ║")
     print(f"  ╚{'═'*86}╝")

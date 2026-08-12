@@ -69,15 +69,13 @@ def load_config(root: Path) -> Dict:
     }
 
 
-def strip_python_strings_and_comments(line: str) -> str:
-    """Remove string literals and comments from a Python line (heuristic)."""
-    line = re.sub(r'(["\'])(?:(?=(\\?))\2.)*?\1', "", line)
-    line = re.sub(r"#.*$", "", line)
-    return line
-
-
 def scan_file(path: Path, cfg: Dict) -> List[Tuple[int, str, str]]:
-    """Scan one file. Returns list of (line_no, original_line, matched_term)."""
+    """Scan one file. Returns list of (line_no, original_line, matched_term).
+
+    Scans the FULL line (comments and string literals included) — those are
+    exactly where terminology drift survives. Only ALLOW-marker lines are exempt.
+    Word boundaries treat underscore as a separator: (?!...)[A-Za-z0-9] lookarounds.
+    """
     if path.name in cfg["whitelist"]:
         return []
     try:
@@ -90,9 +88,16 @@ def scan_file(path: Path, cfg: Dict) -> List[Tuple[int, str, str]]:
         stripped = line.strip()
         if any(re.search(marker, stripped) for marker in cfg["markers"]):
             continue
-        candidate = strip_python_strings_and_comments(line) if path.suffix == ".py" else line
+        # Skip very long lines (e.g. base64 blobs) to avoid false positives
+        if len(stripped) > 10000:
+            continue
         for term in cfg["terms"]:
-            if re.search(rf"\b{re.escape(term)}\b", candidate, re.IGNORECASE):
+            # Lookarounds treat underscore as a boundary: total_booty and
+            # sicker_loss_eur are caught, but "sauber" is not.
+            if re.search(
+                rf"(?<![A-Za-z0-9]){re.escape(term)}(?![A-Za-z0-9])",
+                line, re.IGNORECASE,
+            ):
                 violations.append((lineno, line.strip(), term))
                 break
     return violations

@@ -417,7 +417,7 @@ async def test_burnfee_basic():
 
 
 async def test_burnfee_friction_tracking():
-    """T3.2: Sicker loss accumulates correctly."""
+    """T3.2: Friction loss accumulates correctly."""
     agent = BurnFeeAgent(user_id="test", fee_rate=0.02, additional_burn_rate=0.01)
     positions = [{"position_id": f"S{i}", "token_id": f"T{i}", "liquid_amount": 100.0} for i in range(10)]
     await agent.process_batch(positions)
