@@ -33,6 +33,7 @@ class SurfaceHandler:
         self.zk_trigger_rate = zk_trigger_rate
         self._nc: Any = None
         self._js: Any = None
+        self._bg_tasks: set = set()  # GC-safe task references
 
         # TPS metering
         self._tick_count: int = 0
@@ -103,10 +104,14 @@ class SurfaceHandler:
 
             self._total_processed += 1
 
-            # ZK Trigger: forward subset to subsurface
+            # ZK Trigger: forward subset to subsurface (GC-safe task handling)
             if self.zk_trigger_rate > 0 and self._nc and self._nc.is_connected:
                 if hash(payload.get("payload_id", "")) % 100 < (self.zk_trigger_rate * 100):
-                    asyncio.create_task(self._forward_zk(payload, t0))
+                    task = asyncio.create_task(self._forward_zk(payload, t0))
+                    self._bg_tasks.add(task)
+                    task.add_done_callback(self._bg_tasks.discard)
+                    if self._zk_forwarded % 50 == 0:
+                        logger.debug("ZK forwarded %d events", self._zk_forwarded)
 
             # Track latency
             elapsed_us = (time.time() - t0) * 1_000_000
@@ -134,8 +139,10 @@ class SurfaceHandler:
             self._zk_latency_window.append(zk_lat)
             if len(self._zk_latency_window) > self._latency_window_max:
                 self._zk_latency_window.pop(0)
-        except Exception:
+        except Exception as e:
             self._zk_errors += 1
+            if self._zk_errors <= 3:
+                logger.error("ZK forward error: %s", e)
 
     # ── TPS Metering ────────────────────────────────────────────────────
 

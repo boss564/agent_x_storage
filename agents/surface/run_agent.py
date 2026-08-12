@@ -64,6 +64,22 @@ async def main():
         nats_url=nats_url,
         zk_trigger_rate=zk_rate,
     )
+
+    # Lightweight HTTP metrics endpoint — aiohttp installation:
+    # Add 'aiohttp' to agents/surface/Dockerfile for production metrics
+    try:
+        from aiohttp import web
+        async def metrics(request):
+            return web.json_response(handler.status())
+        app = web.Application()
+        app.router.add_get("/metrics", metrics)
+        runner = web.AppRunner(app)
+        await runner.setup()
+        await web.TCPSite(runner, "0.0.0.0", 8080).start()
+        logger.info("📊 Metrics endpoint on :8080/metrics")
+    except ImportError:
+        logger.info("⚠️ aiohttp not installed — metrics skipped. Add to Dockerfile.")
+
     await handler.run_forever()
 
 
