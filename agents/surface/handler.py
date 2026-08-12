@@ -42,13 +42,15 @@ class SurfaceHandler:
         self._total_processed: int = 0
         self._total_errors: int = 0
 
-        # ZK forwarding — adaptive batching (dual-trigger: count OR delay)
+        # ZK forwarding — adaptive batching (tri-trigger: count OR weight OR delay)
         self._zk_forwarded: int = 0
         self._zk_responses: int = 0
         self._zk_errors: int = 0
         self._zk_latency_window: list = []
         self._zk_batch: list = []               # Batch accumulation buffer
         self._zk_batch_size: int = 100           # Volume trigger: flush at N events
+        self._zk_weight_budget: int = 10_000     # Constraint-weight trigger
+        self._zk_current_weight: int = 0         # Accumulated weight in buffer
         self._zk_max_delay: float = 0.05         # Time trigger: flush after 50ms idle
         self._zk_last_flush: float = 0.0
         self._zk_timer_task: asyncio.Task | None = None
@@ -114,14 +116,18 @@ class SurfaceHandler:
             self._total_processed += 1
             self._last_activity = time.time()
 
-            # ZK Trigger: adaptive accumulation (dual-trigger: count OR delay)
+            # ZK Trigger: adaptive accumulation (tri-trigger: count OR weight OR delay)
             if self.zk_trigger_rate > 0 and self._nc and self._nc.is_connected:
                 if hash(payload.get("payload_id", "")) % 100 < (self.zk_trigger_rate * 100):
                     self._zk_batch.append(payload)
                     self._zk_forwarded += 1
+                    self._zk_current_weight += self.estimate_constraint_weight(payload)
 
                     # Volume trigger: flush at N events
                     if len(self._zk_batch) >= self._zk_batch_size:
+                        self._flush_now()
+                    # Weight trigger: flush when constraint budget exceeded
+                    elif self._zk_current_weight >= self._zk_weight_budget:
                         self._flush_now()
 
                     # Time trigger: arm timer if first event in buffer
@@ -140,6 +146,21 @@ class SurfaceHandler:
 
     # ── ZK Forwarding ───────────────────────────────────────────────────
 
+    @staticmethod
+    def estimate_constraint_weight(payload: dict) -> int:
+        """Estimate WitnessGen cost — defends against algorithmic complexity attacks.
+
+        Simple state transfer ≈ 50 constraints. Complex BHO special rule (§48b)
+        ≈ 800 constraints. Poisoned payloads with oversized custom_proof_data
+        or special exemptions get penalized to keep WitnessGen bounded.
+        """
+        weight = 50
+        if "custom_proof_data" in payload:
+            weight += len(str(payload["custom_proof_data"])) * 2
+        if payload.get("has_special_exemption", False):
+            weight += 750
+        return weight
+
     def _flush_now(self):
         """Synchronously hand off the current batch (no await, called from handler)."""
         if not self._zk_batch:
@@ -149,6 +170,7 @@ class SurfaceHandler:
         self._zk_timer_task = None
         batch = self._zk_batch
         self._zk_batch = []
+        self._zk_current_weight = 0
         task = asyncio.create_task(self._flush_zk_batch(batch))
         self._bg_tasks.add(task)
         task.add_done_callback(self._bg_tasks.discard)
