@@ -22,10 +22,17 @@ sys.path.insert(0, str(REPO_ROOT / "scripts"))
 from forbidden_word_scanner import load_config, scan_path  # noqa: E402
 
 FIXTURE_DIR = Path(__file__).parent / "fixtures"
+# Minimal config WITHOUT the test_forbidden_words ignore — so the self-test
+# actually scans its own fixtures instead of skipping them.
+SELF_TEST_CONFIG = Path(__file__).parent / "self_test_config.yaml"
+
+
+def _self_test_cfg():
+    return load_config(REPO_ROOT, config_path=SELF_TEST_CONFIG)
 
 
 def test_scanner_finds_underscore_and_string_violations():
-    cfg = load_config(REPO_ROOT)
+    cfg = _self_test_cfg()
     violations = scan_path(FIXTURE_DIR, cfg)
 
     # Expected: a.py (comment), b.py (underscore), d.md (markdown), f.py (dict key)
@@ -43,7 +50,7 @@ def test_scanner_finds_underscore_and_string_violations():
 
 
 def test_scanner_skips_allow_and_clean():
-    cfg = load_config(REPO_ROOT)
+    cfg = _self_test_cfg()
     violations = scan_path(FIXTURE_DIR, cfg)
     found_files = {v[0].name for v in violations}
     assert "c.py" not in found_files, "ALLOW-marked line should be skipped"
@@ -61,7 +68,7 @@ def test_scanner_real_repo_is_clean():
 
 if __name__ == "__main__":
     # Standalone runner (no pytest needed)
-    cfg = load_config(REPO_ROOT)
+    cfg = _self_test_cfg()
     violations = scan_path(FIXTURE_DIR, cfg)
     found_files = {v[0].name for v in violations}
     print(f"Fixture violations: {len(violations)} in {sorted(found_files)}")

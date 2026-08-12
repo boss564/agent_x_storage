@@ -20,5 +20,8 @@ jobs:
       - name: Install dependencies
         run: pip install pyyaml
 
-      - name: Run scanner
+      - name: Run self-test (checks the watcher sees violations)
+        run: python tests/test_forbidden_words/test_scanner.py
+
+      - name: Run scanner on the repo
         run: python scripts/forbidden_word_scanner.py

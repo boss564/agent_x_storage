@@ -1,0 +1,25 @@
+# Selbsttest-Config: wie config/forbidden_words.yaml, aber OHNE den
+# test_forbidden_words-Ausschluss. Damit findet der Selbsttest die
+# Fixtures, die er prüfen soll — statt sie zu ignorieren.
+
+forbidden_terms:
+  sicker: friction
+  booty: collected_fees
+  sicker_loss: friction_eur
+  sicker_rate: friction_rate
+
+allowed_markers:
+  - '^#\s*ALLOW:'
+  - '^"""\s*ALLOW'
+  - '^//\s*ALLOW'
+  - '^<!--\s*ALLOW'
+
+scan_extensions:
+  - .md
+  - .py
+
+ignore_dirs:
+  - .git
+  - __pycache__
+
+whitelist_files: []

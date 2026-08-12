@@ -30,9 +30,12 @@ DEFAULT_IGNORE_DIRS = {".git", "__pycache__", "node_modules", ".venv", "dist", "
 DEFAULT_MARKERS = (r"^#\s*ALLOW:", r'^"""\s*ALLOW', r"^//\s*ALLOW", r"^<!--\s*ALLOW")
 
 
-def load_config(root: Path) -> Dict:
-    """Load config/forbidden_words.yaml, falling back to defaults."""
-    config_path = root / "config" / "forbidden_words.yaml"
+def load_config(root: Path, config_path: Path | None = None) -> Dict:
+    """Load config (default config/forbidden_words.yaml), falling back to defaults.
+
+    An explicit config_path may be passed (e.g. the self-test's minimal config).
+    """
+    config_path = config_path or (root / "config" / "forbidden_words.yaml")
     terms = dict(DEFAULT_TERMS)
     extensions = set(DEFAULT_EXTENSIONS)
     ignore_dirs = set(DEFAULT_IGNORE_DIRS)
