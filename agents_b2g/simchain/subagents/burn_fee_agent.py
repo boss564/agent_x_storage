@@ -83,7 +83,7 @@ class BurnFeeAgent:
                     "burn_rate": self.additional_burn_rate,
                     "net_payout": net_payout,
                     "sicker_loss": sicker_loss,
-                    "sicker_loss_pct": round(
+                    "fee_burn_pct": round(
                         (sicker_loss / liquid * 100) if liquid > 0 else 0, 2
                     ),
                     "timestamp": datetime.now(timezone.utc).isoformat(),
