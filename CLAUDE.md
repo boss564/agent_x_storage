@@ -1,6 +1,6 @@
 # Agent X — Risk Management & B2G Procurement Platform
 
-6-Klassen-Risikomanagement + 286-Agent B2G Public-Sector Procurement Engine (28 Hauptwellen × 9 + Wave 3.5 + 25 Compliance = 286).
+6-Klassen-Risikomanagement + 277-Agent B2G Public-Sector Procurement Engine (27 Hauptwellen × 9 + Wave 3.5 + 25 Compliance = 277).
 
 ## Overview
 
@@ -8,7 +8,7 @@ Two integrated systems sharing core infrastructure (SymbolicsAgent, Consensus En
 
 1. **Agent X Core** — DeFi risk management: 6 classes (A–F), 60+ agents, consensus-driven state evaluation with CHI (Composite Health Index), backtesting against 8 historical crisis scenarios.
 
-2. **Agent X B2G** — Public-sector procurement: 252 agents (28 main waves × 9 + Wave 3.5 VOB/B + 25 compliance agents = 286 total) covering the complete lifecycle from GAEB tender receipt through VOB/B multi-installment payment, defect/dispute arbitration, BHO-compliant treasury reconciliation, GoBD archiving, multi-chain notarization, operations, user/project management with BundID SSO, a complete query & reporting layer, a **real-time macroeconomic engine** (Wave 17) with velocity tracking and programmable fiscal stimulus, a **VOB Shadow Contract & Pilot** (Wave 18) for risk-free blockchain adoption, a **Multi-Stakeholder Onboarding Ecosystem** (Wave 19) for craftsmen, builders, developers, IoT and banking partners, a **CertiK Security Audit & Formal Verification Engine** (Wave 20) with 81 subagents for mathematical proof, BSI C5/ISO 27001/SOC2 compliance, and real-time threat monitoring, through **Clearing & Settlement** (Wave 27) with multilateral netting and BHO zero-sum proofs, **External Threat Defense** (Wave 28) with swarm immunity and active countermeasures, **Omnichannel UX & Verwaltungs-Dashboard** (Wave 31) — the human interface for Kämmerer, Bauleiter, and citizens, and **Survival & Off-Grid Mode** (Wave 33) — sovereign post-quantum enclave with mesh networking, resource-backed economy, and air-gapped MPC bunkers.
+2. **Agent X B2G** — Public-sector procurement: 243 agents (27 main waves × 9 + Wave 3.5 VOB/B + 25 compliance agents = 277 total) covering the complete lifecycle from GAEB tender receipt through VOB/B multi-installment payment, defect/dispute arbitration, BHO-compliant treasury reconciliation, GoBD archiving, multi-chain notarization, operations, user/project management with BundID SSO, a complete query & reporting layer, a **real-time macroeconomic engine** (Wave 17) with velocity tracking and programmable fiscal stimulus, a **VOB Shadow Contract & Pilot** (Wave 18) for risk-free blockchain adoption, a **Multi-Stakeholder Onboarding Ecosystem** (Wave 19) for craftsmen, builders, developers, IoT and banking partners, a **CertiK Security Audit & Formal Verification Engine** (Wave 20) with 81 subagents for mathematical proof, BSI C5/ISO 27001/SOC2 compliance, and real-time threat monitoring, through **Clearing & Settlement** (Wave 27) with multilateral netting and BHO zero-sum proofs, **External Threat Defense** (Wave 28) with swarm immunity and active countermeasures, **Omnichannel UX & Verwaltungs-Dashboard** (Wave 31) — the human interface for Kämmerer, Bauleiter, and citizens, and **Survival & Off-Grid Mode** (Wave 33) — sovereign post-quantum enclave with mesh networking, resource-backed economy, and air-gapped MPC bunkers.
 
 ## Agent X Core — Projektstruktur
 
@@ -91,9 +91,17 @@ agent_x_storage/
 │       ├── sx1262_interface.h        # SX1262 LoRa Driver SPI (400 L)
 │       ├── sensor_reader.h           # ADC/CT-Clamp Sensor Interface (182 L)
 │       └── README.md                 # Build/Flash/Pin-Belegung
+├── chaos/                          # Chaos Fleet (F07–F09): killer, throttler, poison injector
+│   ├── docker-compose.chaos.yml    # 3 chaos services, docker.sock mounted
+│   ├── Dockerfile.killer           # alpine + docker CLI, SIGKILL random worker
+│   ├── Dockerfile.throttler        # ubuntu + stress-ng, CPU load 90%
+│   ├── Dockerfile.poison           # golang multi-stage, constraint-bloat injector
+│   ├── poison.go                   # 4.19M constraint bloat + 64KB junk payloads
+│   └── scripts/                    # killer.sh, throttler.sh
 ├── shadow_contract_pilot/          # Smart Contracts & Pilot (Wave 18 + IoT Oracle)
-│   ├── contract/                   # 6 Contracts: IoTVerifier, CommodityToken, ResourceTrader,
-│   │                               # CommodityLedger, VOB_Shadow_Escrow, ComplianceVerifier
+│   ├── contract/                   # 8 Contracts: IoTVerifier, CommodityToken, ResourceTrader,
+│   │                               # CommodityLedger, VOB_Shadow_Escrow, ComplianceVerifier,
+│   │                               # ValhallaVerifier, ProtoGalaxyVerifier
 │   ├── backend/pilot_backend.py    # 7 REST-Routen, Mock + Live-Modus
 │   ├── dashboard/index.html        # Echtzeit-Dashboard (5s Polling)
 │   └── test_lifecycle.py           # 25/25 Tests (Fund→Release→Retention)
@@ -126,7 +134,7 @@ agent_x_storage/
 
 ## Agent X B2G — Public Sector Procurement
 
-### Architecture: 28 Waves × 9 Agents = 252 Agents (+ Wave 3.5 VOB/B + 25 Compliance = 286 total)
+### Architecture: 27 Waves × 9 Agents = 243 Agents (+ Wave 3.5 VOB/B + 25 Compliance = 277 total)
 
 ```
 Wave 1 (Tendering):        Monitor → Parser → Eligibility → CHI-Risk → PoPW-Index →
@@ -283,14 +291,13 @@ Welle 3.5 (VOB/B Disput) ist eine Unterwelle von Welle 3 (Execution) und wird ni
 | 31 | UX & Verwaltungs-Dashboard | 9 | `ux/ux_orchestrator.py` | 6 Rollen, Responsive (Mobile/Tablet/Desktop), Sprach-Assistent, Workflow-Visualisierung, Analytics, Sandbox-Simulationen, Smart Alerts, GoBD-Berichte — 81 Subagenten |
 | 32 | Crypto-Philately & Digital Stamp | 9 | `philately/philately_orchestrator.py` | Briefmarken (ERC-1155), Poststempel, Seltenheitsbewertung, Sammelalben, Sekundärmarkt, Staking — 81 Subagenten |
 | 33 | Survival & Off-Grid Post-Quantum | 9 | `survival/survival_orchestrator.py` | PQC (Dilithium-5/Kyber-1024/SPHINCS+), MPC-Bunker (t=3,n=5), ZK-STARKs, LoRaWAN/HAM/Sat-Mesh, Ressourcen-Clearing, ZK-eID-Rationierung, 180d Autarkie — 9 Subagenten |
-| 35 | SimChain Multi-Chain Economy | 9 | `simchain/economic_orchestrator_multi.py` | 3 Chains (DEPIN/Settlement/Liquidity), Cross-Chain-Bridge, Heterogene Märkte, Friktion (Fees/Burns/Lockups), BHO Δ=0, 175/175 Tests — 9 Subagenten |
 
 Welle 34 (Finale Veredelung) ist ein Pitch-Orchestrator mit 3 Agenten + Streamlit-Dashboard und wird — analog zum Compliance-Modul — außerhalb der ×9-Formel dokumentiert.
 
 | Welle | Name | Agenten | Modul | Fokus |
 |-------|------|---------|-------|-------|
 | 34 | Finale Veredelung (Pitch & Go-Live) | 1+3 | `finale/finale_orchestrator.py` | Dashboard (Streamlit+Plotly), GoBD-Audit-Trail, Realtime-Monitor, Z3-Live-Integration, Pitch-Summary — 1.876 lines, 21/21 Tests |
-| 35 | SimChain Multi-Chain Economy | 9+27 | `simchain/economic_orchestrator_multi.py` | 3 Chains × 3 Agents, DePIN (1000 TPS), VOB/B Settlement (Z3-Proof), Liquidity (Token/Staking/Burn), Cross-Chain-Bridge, Heterogene Märkte, Friktion 0.6%, BHO Δ=0, 197/197 Tests — 2.200+ lines |
+| 35 | SimChain Multi-Chain Economy | 9+27 | `simchain/economic_orchestrator_multi.py` | 3 Chains × 3 Agents, DePIN (1000 TPS), VOB/B Settlement (Z3-Proof), Liquidity (Token/Staking/Burn), Cross-Chain-Bridge, Friktion 5.6% (Burns+Fees), Staking separat, value_conserved verifiziert, drei getrennte Chain-Bücher, BHO Δ=0, 199/199 Tests — 2.200+ lines |
 | 36 | MultiChain Sovereign Appchains | 9+27 | `multichain/chain_orchestrator.py` | 4 Chain Layers × 9 Sovereign Appchains, Merkle-Proof-Bridge, Identity Chain (SSI/ZK), Cross-Chain-Latenz, 113/113 Tests — 1.800+ lines |
 | 37 | Demo Pipeline (Pitch & Investoren) | 9+27 | `demo/demo_orchestrator.py` | 3 Akte × 9 Agenten, Differenzierte Transformationsprofile, 8 einzigartige Sicker-Raten, Live-Proof-Mode, BHO Δ=0 — Pitch-fertig |
 
@@ -481,16 +488,21 @@ agents_b2g/
 │   └── transform_profiles.py      # Per-agent fee/retention/burn rates
 ├── surface/                       # C01–C09 Surface Agents: NATS Queue-Group Workers
 │   ├── __init__.py
-│   ├── handler.py                 # SurfaceHandler: NATS subscriber, TPS metering, ZK forwarding
-│   ├── run_agent.py               # AGENT_ID resolver, 9-chain config, asyncio event loop
-│   └── Dockerfile                 # Python 3.12-slim, nats-py
-├── ephemeral/                     # F01–F03 Paratrooper WASM Subagents (Session 3)
+│   ├── handler.py                 # SurfaceHandler: NATS, TPS, adaptive batching, constraint metering
+│   ├── predictive_router.py       # PredictiveHealthRouter: score-based traffic shunting
+│   ├── run_agent.py               # AGENT_ID resolver, 9-chain config, /metrics endpoint
+│   └── Dockerfile                 # Python 3.12-slim, nats-py + aiohttp
+├── subsurface/                    # D00–D01 Prover Factory & Failover Orchestration
+│   ├── __init__.py
+│   └── prover_factory.py          # ZKProverBackend: SGX-TDX/SEV-SNP/CUDA/CPU, curve unification
+├── ephemeral/                     # F01–F03 Paratrooper WASM Subagents
 │   ├── __init__.py
 │   ├── payload/
 │   │   └── types.py               # ParatrooperDropPayload, SubAgentID enum, 9 WASM modules
 │   ├── runtime/
-│   │   └── wasm_runner.py          # WasmSandbox with 500ms TTL (wasmtime placeholder)
-│   └── wasm/                       # Target directory for compiled .wasm modules
+│   │   └── wasm_runner.py          # WasmSandbox with 500ms TTL
+│   ├── src/                        # Go source: f01_hash_breaker, f02_liquidity_freeze, f03_gps_spoof_detector
+│   └── wasm/                       # Compiled .wasm modules (3× 1.1MB)
 ```
 
 ### Wave 7 Detail: Operations & Maintenance (9 Agents)
@@ -628,7 +640,7 @@ GoBD → Ledger (BHO Δ=0,00€) → Chain-Hash → XRechnung → PoPW-Coverage 
 - **Wave 32 Crypto-Philately:** 51/51 tests passed (`scripts/test_wave32_philately.py`), 12 test groups covering all 9 agents + E2E lifecycle/multi-edition/collection + config, 81 Subagenten
 - **Wave 33 Survival & Off-Grid:** 63/63 tests passed (`scripts/test_wave33_survival.py`), 11 test groups covering all 9 agents + PQC (Dilithium/Kyber/SPHINCS+) + MPC-Bunker + ZK-STARKs + Mesh-Networking + Resource-Clearing + E2E Survival Demo, PQC-Backend: SHA3/SHAKE-Simulation (liboqs-ready)
 - **Wave 34 Finale Veredelung:** 21/21 tests passed (`scripts/test_finale.py`, benötigt `plotly` für Charts — ASCII-Fallback ohne), 5 test groups: Dashboard (4), Audit-Trail (4), Realtime-Monitor (5), Orchestrator (6), E2E (2) — Streamlit+Plotly+GoBD-WORM+Z3-Live-Integration, 1.876 lines
-- **Wave 35 SimChain Multi-Chain Economy:** 199/199 tests passed (`scripts/test_simchain.py`), 15 test groups covering all 9 agents + 3 chains + E2E multi-chain + heterogeneous markets + BHO zero-sum + friction + config + error handling + dashboard (8 tests) — 3 Chains (DEPIN/Settlement/Liquidity), Cross-Chain-Bridge, Friktion 0.6%, C01≠C09 verified, Streamlit Dashboard mit Live-TPS/Volumen/Latenz
+- **Wave 35 SimChain Multi-Chain Economy:** 199/199 tests passed (`scripts/test_simchain.py`), 15 test groups covering all 9 agents + 3 chains + E2E multi-chain + falsifiable friction + BHO zero-sum + value conservation + config + error handling + dashboard (8 tests) — 3 Chains (DEPIN/Settlement/Liquidity), Cross-Chain-Bridge, Friktion 5.6% (Burns+Fees), value_conserved verifiziert, drei getrennte Chain-Bücher, Streamlit Dashboard mit Live-TPS/Volumen/Latenz
 - **Wave 36 MultiChain Sovereign Appchains:** 113/113 tests passed (`scripts/test_multichain.py`), 11 test groups covering all 9 sovereign appchains + bridge protocol + Merkle proofs + orchestrator + identity chain — 4 Chain Layers, 9 Appchains mit eigenem State/Block-Height/Mempool, 167k events/s Durchsatz
 - **Bunker Integration:** 18/18 tests passed (`tests/test_bunker_integration.py`), 6 test groups: HSM Signing, LoRa Transmission, Handyman CBOR, BHO Zero-Sum, Merkle Chain, E2E
 - **HSM Adapter:** 6/6 tests passed (`tests/test_hsm_adapter.py`), Dual-Mode HSM (SoftHSM + Hardware), ECDSA-Signing
@@ -870,10 +882,11 @@ async def demo():
     result = await orch.run_simulation(cycles=50)
     report = result['artifacts'][0]
     fa = report['friction_analysis']
-    print(f'C01 (DePIN): €{fa[\"depin_input_eur\"]:,.2f}')
-    print(f'C09 (Net): €{fa[\"net_payout_eur\"]:,.2f}')
-    print(f'Sicker Loss: {fa[\"internal_sicker_loss_pct\"]}%')
-    print(f'Heterogeneous: {fa[\"heterogeneous_markets_verified\"]}')
+    print(f'Value In (minted): €{fa[\"value_in_eur\"]:,.2f}')
+    print(f'Net Payout (C09): €{fa[\"net_payout_eur\"]:,.2f}')
+    print(f'Friction (Burns+Fees): €{fa[\"friction_eur\"]:,.2f}')
+    print(f'Friction Verified: {fa[\"friction_verified\"]}')
+    print(f'Value Conserved: {fa[\"value_conserved\"]}')
     print(f'BHO Δ=0: {report[\"compliance\"][\"bho_zero_sum_verified\"]}')
 asyncio.run(demo())
 "
@@ -1443,4 +1456,4 @@ German for communication and documentation. Code comments in English.
 
 ## Version
 
-Agent X Core: 0.4.0 (stable, 90/100 backtest). Agent X B2G: 0.22.0 (252 agents in 28 main waves plus Wave 3.5 and 25 compliance agents — 286 total, plus Wave 34 Finale Veredelung, Wave 35 SimChain (9 Agents × 3 Chains, 2.200+ lines, 199/199 tests), Wave 36 MultiChain Sovereign Appchains (9 Appchains × 4 Layers, 1.800+ lines, 113/113 tests), Wave 37 Demo Pipeline (9 Agents, 8 unique sicker rates), plus Settlement (D01–D04 divers, C09 ingest, ComplianceExporter, ~1.500 lines), Crew (5-role pipeline + DID registry + 9 specialized agents), Gas (autonomous fuel management), Valhalla (ZK honor protocol), Surface Agents (C01–C09: NATS queue-group workers, 96k–115k events/s), D01 Mock Responder (containerized, Anvil L1 anchor), Ephemeral Paratroopers (F01–F03, 9 WASM subagents, 500ms TTL), Telemetry Ingest (MQTT/HTTP bridge, 7 endpoints), Chaos Matrix (10 attack scenarios), 7 Solidity contracts (1.832+ lines, Foundry/Solc 0.8.35, inkl. ValhallaVerifier.sol) + ESP32 LoRaWAN Firmware (1.651 lines C++/Arduino), E2E: Waves 1–33 all green, Wave 34: 21/21, Wave 35: 199/199, Wave 36: 113/113, Wave 37: Pitch-fertig, Chaos Resilience: 4/4 experiments, Docker: 109 containers (100/101 healthy), NATS: Core+JetStream (4222/8222), Anvil: Block 0→1 confirmed, CertiK Security Wave 20: 164/164, Skynet Monitor Wave 21: 80/80, Ops Security Wave 22: 48/48, Token Launch Wave 23: funktional, Trading Wave 24: FN=0/FP=0, Smart Wallet Wave 25: integriert, Clearing & Settlement Wave 27: 122/122, External Threat Defense Wave 28: 104/104, Token Runtime Operations Wave 29: 101/101, UX & Dashboard Wave 31: 92/92, Survival & Off-Grid Wave 33: 63/63, BSI C5/ISO 27001/SOC2/GoBD/eIDAS/GDPR/EVB-IT compliant, GAEB DA XML 3.3, XRechnung 3.0, VHB-221/222, GoBD/BHO-ready, 65.000+ lines).
+Agent X Core: 0.4.0 (stable, 90/100 backtest). Agent X B2G: 0.23.0 (243 agents in 27 main waves plus Wave 3.5 and 25 compliance agents — 277 total, plus Wave 34 Finale Veredelung, Wave 35 SimChain (9 Agents × 3 Chains, 2.200+ lines, 199/199 tests), Wave 36 MultiChain Sovereign Appchains (9 Appchains × 4 Layers, 1.800+ lines, 113/113 tests), Wave 37 Demo Pipeline (9 Agents, 8 unique sicker rates), plus Settlement (D01–D04 divers, C09 ingest, ComplianceExporter, ~1.500 lines), Crew (5-role pipeline + DID registry + 9 specialized agents), Gas (autonomous fuel management), Valhalla (ZK honor protocol), Surface Agents (C01–C09: NATS queue-group workers, adaptive batching, constraint metering, predictive health routing, 223k events/s burst), Subsurface Prover Factory (SGX-TDX/SEV-SNP/CUDA/CPU with curve unification), D01 Mock Responder (8 replicas, batch ZK, binary bisect quarantine), Ephemeral Paratroopers (F01–F03, 3 WASM modules compiled, 500ms TTL), Chaos Fleet (F07–F09: killer, throttler, poison injector), Telemetry Ingest (MQTT/HTTP bridge, 7 endpoints), Chaos Matrix (10 attack scenarios), 8 Solidity contracts (inkl. ValhallaVerifier.sol, ProtoGalaxyVerifier.sol, Foundry/Solc 0.8.35) + ESP32 LoRaWAN Firmware (1.651 lines C++/Arduino), E2E: Waves 1–33 all green, Wave 34: 21/21, Wave 35: 199/199, Wave 36: 113/113, Wave 37: Pitch-fertig, Chaos Resilience: 4/4 experiments, Docker: 109+ containers, NATS: Core+JetStream (4222/8222), Anvil: Block 0→1 confirmed, CertiK Security Wave 20: 164/164, Skynet Monitor Wave 21: 80/80, Ops Security Wave 22: 48/48, Token Launch Wave 23: funktional, Trading Wave 24: FN=0/FP=0, Smart Wallet Wave 25: integriert, Clearing & Settlement Wave 27: 122/122, External Threat Defense Wave 28: 104/104, Token Runtime Operations Wave 29: 101/101, UX & Dashboard Wave 31: 92/92, Survival & Off-Grid Wave 33: 63/63, BSI C5/ISO 27001/SOC2/GoBD/eIDAS/GDPR/EVB-IT compliant, GAEB DA XML 3.3, XRechnung 3.0, VHB-221/222, GoBD/BHO-ready, 68.000+ lines).

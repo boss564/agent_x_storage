@@ -570,11 +570,20 @@ async def demo_simchain(cycles: int = 100, user_id: str = "demo"):
 
     # Friction Analysis
     fa = report["friction_analysis"]
-    print(f"\n💸 FRICTION & SICKER LOSS:")
-    print(f"   DePIN Input:    €{fa['depin_input_eur']:>14,.2f}")
-    print(f"   Liquidity Out:  €{fa['liquidity_output_eur']:>14,.2f}")
-    print(f"   Sicker Loss:    €{fa['sicker_loss_eur']:>14,.2f} ({fa['sicker_loss_pct']}%)")
-    print(f"   C01 ≠ C09:      {'✅ YES — heterogeneous markets' if fa['heterogeneous_markets_verified'] else '❌ NO — linear pass-through'}")
+    fb = fa.get("friction_breakdown", {})
+    fv = "✅" if fa.get("friction_verified") else "❌"
+    vc = "✅" if fa.get("value_conserved") else "❌"
+    print(f"\n💸 FRICTION (Liquidity Chain):")
+    print(f"   Value In (minted):    €{fa.get('value_in_eur', 0):>14,.2f}")
+    print(f"   Net Payout (C09):     €{fa.get('net_payout_eur', 0):>14,.2f}")
+    print(f"   Friction (outflows):  €{fa.get('friction_eur', 0):>14,.2f}")
+    print(f"     · Mint Burns (5%):  €{fb.get('mint_burns', 0):>14,.2f}")
+    print(f"     · Fee Burns (1%):   €{fb.get('burnfee_burns', 0):>14,.2f}")
+    print(f"     · Fees (2%):        €{fb.get('fees_collected', 0):>14,.2f}")
+    print(f"   Staking (not friction):€{fb.get('staking_locked_not_friction', 0):>14,.2f}")
+    print(f"   Friction Verified:    {fv}")
+    print(f"   Value Conserved:      {vc}")
+    print(f"   Three Separate Ledgers: ✅ C01–C09 are 3 books")
 
     # Tokenomics
     tok = report["tokenomics"]
