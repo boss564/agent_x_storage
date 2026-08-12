@@ -42,4 +42,5 @@ ignore_dirs:
   - lib
 
 # Ganze Dateien von der Prüfung ausnehmen
-whitelist_files: []
+whitelist_files:
+  - forbidden_words.yaml  # die Config selbst listet die Begriffe auf
