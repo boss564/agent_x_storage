@@ -19,6 +19,69 @@ import uuid
 
 import nats
 
+# ─── WitnessGen DoS Defense ────────────────────────────────────────────────
+
+WITNESS_TIMEOUT_MS = 15.0  # Hard ceiling for witness generation
+QUARANTINE_SUBJECT = "agentx.surface.quarantine"
+
+
+class WitnessTimeoutException(Exception):
+    """Raised when witness generation exceeds the hard 15ms timeout."""
+    def __init__(self, batch_id: str, elapsed_ms: float):
+        self.batch_id = batch_id
+        self.elapsed_ms = elapsed_ms
+        super().__init__(f"WitnessGen timeout: {batch_id} took {elapsed_ms:.1f}ms "
+                         f"(limit {WITNESS_TIMEOUT_MS}ms)")
+
+
+def witness_gen_with_timeout(payload: dict) -> dict:
+    """Simulate witness generation with a hard timeout.
+
+    In production, this wraps the native C++/ark-circom WitnessGen.
+    Here we simulate a poisoned payload (huge custom_proof_data) causing
+    a timeout, and a healthy payload completing instantly.
+    """
+    # Simulate: oversized custom_proof_data is the algorithmic-complexity trigger
+    if payload.get("custom_proof_data") and len(str(payload["custom_proof_data"])) > 1000:
+        # Simulate expensive witness gen that exceeds timeout
+        raise WitnessTimeoutException(payload.get("payload_id", "unknown"), WITNESS_TIMEOUT_MS + 1)
+    return make_proof(payload)
+
+
+async def binary_bisect_and_quarantine(batch: list, nc) -> tuple:
+    """Recursively split a failing batch to isolate poison events.
+
+    Returns (healthy_proofs, quarantine_events).
+    """
+    healthy = []
+    quarantined = []
+
+    async def _process(sub_batch: list):
+        # Generate proofs into a temp list — only append if whole batch succeeds
+        local_proofs = []
+        for payload in sub_batch:
+            try:
+                proof = witness_gen_with_timeout(payload)
+                local_proofs.append(proof)
+            except WitnessTimeoutException:
+                # Poison found — don't append partial, split and recurse
+                if len(sub_batch) == 1:
+                    quarantined.append(sub_batch[0])
+                    await nc.publish(
+                        QUARANTINE_SUBJECT,
+                        json.dumps(sub_batch[0]).encode(),
+                    )
+                    return
+                mid = len(sub_batch) // 2
+                await _process(sub_batch[:mid])
+                await _process(sub_batch[mid:])
+                return
+        # Whole sub-batch healthy — append once
+        healthy.extend(local_proofs)
+
+    await _process(batch)
+    return healthy, quarantined
+
 NATS_URL = os.getenv("NATS_URL", "nats://localhost:4222")
 SUBJECT = "agentx.subsurface.zk_request"
 
@@ -90,8 +153,12 @@ async def main():
         if latency_ms > 0:
             await asyncio.sleep(latency_ms)
         payload = json.loads(msg.data.decode())
-        proof = make_proof(payload)
-        await nc.publish(msg.reply, json.dumps(proof).encode())
+        try:
+            proof = witness_gen_with_timeout(payload)
+            await nc.publish(msg.reply, json.dumps(proof).encode())
+        except WitnessTimeoutException:
+            # Single poison event — quarantine directly
+            await nc.publish(QUARANTINE_SUBJECT, json.dumps(payload).encode())
 
     # Batch handler: receives array of payloads, returns array of proofs
     async def batch_handler(msg):
@@ -99,10 +166,14 @@ async def main():
         batch_data = json.loads(msg.data.decode())
         if isinstance(batch_data, list):
             count += len(batch_data)
-            proofs = [make_proof(p) for p in batch_data]
-            await nc.publish(msg.reply, json.dumps(proofs).encode())
-            if len(batch_data) >= 100:
-                l1_count += 1  # One L1 anchor per batch
+            # Binary bisect: isolate poison events, keep healthy 99%
+            healthy, quarantined = await binary_bisect_and_quarantine(batch_data, nc)
+            await nc.publish(msg.reply, json.dumps(healthy).encode())
+            if quarantined:
+                print(f"  🚨 Quarantined {len(quarantined)} poison event(s) "
+                      f"out of {len(batch_data)}")
+            if len(healthy) >= 100:
+                l1_count += 1  # One L1 anchor per full batch
 
         # L1 Anchor
         if ANVIL_ENABLED:
