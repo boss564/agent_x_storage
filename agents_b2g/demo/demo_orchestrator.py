@@ -39,8 +39,8 @@ class AgentStep:
     retention_eur: float
     burn_eur: float
     output_eur: float
-    sicker_loss_eur: float
-    sicker_rate_pct: float
+    friction_eur: float
+    friction_rate_pct: float
     subagents: List[str]
     events_in: int
     events_out: int
@@ -55,8 +55,8 @@ class DemoReport:
     events_total: int
     steps: List[AgentStep] = field(default_factory=list)
     act_summaries: Dict[int, Dict] = field(default_factory=dict)
-    total_sicker_eur: float = 0.0
-    total_sicker_pct: float = 0.0
+    total_friction_eur: float = 0.0
+    total_friction_pct: float = 0.0
     bho_delta_eur: float = 0.0
     elapsed_total_us: float = 0.0
 
@@ -95,7 +95,7 @@ class DemoOrchestrator:
             input_eur=self.input_eur,
             events_total=self.events,
         )
-        total_sicker = 0.0
+        total_friction = 0.0
 
         # Iterate through all 9 profiles in order
         for agent_key in PROFILES:
@@ -118,8 +118,8 @@ class DemoOrchestrator:
                 retention_eur=round(breakdown["retention"], 2),
                 burn_eur=round(breakdown["burn"], 2),
                 output_eur=round(new_volume, 2),
-                sicker_loss_eur=round(breakdown["fee"] + breakdown["burn"], 2),
-                sicker_rate_pct=round(
+                friction_eur=round(breakdown["fee"] + breakdown["burn"], 2),
+                friction_rate_pct=round(
                     (breakdown["fee"] + breakdown["burn"]) / current_volume * 100
                     if current_volume > 0 else 0, 3
                 ),
@@ -130,7 +130,7 @@ class DemoOrchestrator:
             )
 
             report.steps.append(step)
-            total_sicker += step.sicker_loss_eur
+            total_friction += step.friction_eur
             current_volume = new_volume
             current_events = new_events
 
@@ -142,23 +142,23 @@ class DemoOrchestrator:
                     "act_name": act_steps[0].act_name,
                     "input_eur": act_steps[0].input_eur,
                     "output_eur": act_steps[-1].output_eur,
-                    "total_sicker": sum(s.sicker_loss_eur for s in act_steps),
+                    "total_friction": sum(s.friction_eur for s in act_steps),
                     "agents": [s.agent_name for s in act_steps],
                 }
 
-        report.total_sicker_eur = round(total_sicker, 2)
-        report.total_sicker_pct = round(
-            total_sicker / self.input_eur * 100 if self.input_eur > 0 else 0, 3
+        report.total_friction_eur = round(total_friction, 2)
+        report.total_friction_pct = round(
+            total_friction / self.input_eur * 100 if self.input_eur > 0 else 0, 3
         )
         report.bho_delta_eur = 0.0  # Verified: all steps conserve accounting identity
         report.elapsed_total_us = round((time.time() - t0) * 1_000_000, 1)
 
         self._steps = report.steps
         logger.info(
-            "Demo pipeline complete: input=€%.2f → output=€%.2f, sicker=%.2f%%",
+            "Demo pipeline complete: input=€%.2f → output=€%.2f, friction=%.2f%%",
             self.input_eur,
             current_volume,
-            report.total_sicker_pct,
+            report.total_friction_pct,
         )
         return report
 
@@ -198,7 +198,7 @@ class DemoOrchestrator:
             f"{'AGENT X DEMO — 9-Agent Pipeline':^90}",
             f"{'Input: €' + f'{self.input_eur:,.2f}':^90}",
             f"{'':─^90}",
-            f"{'Agent':<25} {'Input €':>14} {'Fee €':>10} {'Ret. €':>10} {'Burn €':>10} {'Output €':>14} {'Sicker %':>8}",
+            f"{'Agent':<25} {'Input €':>14} {'Fee €':>10} {'Ret. €':>10} {'Burn €':>10} {'Output €':>14} {'Friction %':>8}",
             f"{'':─^90}",
         ]
         for s in self._steps:
@@ -206,16 +206,16 @@ class DemoOrchestrator:
             lines.append(
                 f"{act_label:<25} {s.input_eur:>14,.2f} {s.fee_eur:>10,.2f} "
                 f"{s.retention_eur:>10,.2f} {s.burn_eur:>10,.2f} "
-                f"{s.output_eur:>14,.2f} {s.sicker_rate_pct:>7.3f}%"
+                f"{s.output_eur:>14,.2f} {s.friction_rate_pct:>7.3f}%"
             )
         lines.append(f"{'':─^90}")
 
         final = self._steps[-1] if self._steps else None
         if final:
-            total_sicker = sum(s.sicker_loss_eur for s in self._steps)
+            total_friction = sum(s.friction_eur for s in self._steps)
             lines.append(
                 f"{'TOTAL':<25} {'':>14} {'':>10} {'':>10} {'':>10} "
-                f"{final.output_eur:>14,.2f} {total_sicker/self.input_eur*100:>7.3f}%"
+                f"{final.output_eur:>14,.2f} {total_friction/self.input_eur*100:>7.3f}%"
             )
         lines.append(f"{'':─^90}")
         return "\n".join(lines)
@@ -230,11 +230,11 @@ class DemoOrchestrator:
             if not act_steps:
                 continue
             first, last = act_steps[0], act_steps[-1]
-            sicker = sum(s.sicker_loss_eur for s in act_steps)
+            friction = sum(s.friction_eur for s in act_steps)
             lines.append(
                 f"  Akt {act_num} ({first.act_name}): "
                 f"€{first.input_eur:,.2f} → €{last.output_eur:,.2f} "
-                f"({len(act_steps)} Agenten, Sicker: €{sicker:,.2f})"
+                f"({len(act_steps)} Agenten, Sicker: €{friction:,.2f})"
             )
         return "\n".join(lines)
 
@@ -256,8 +256,8 @@ class DemoOrchestrator:
                     "retention_eur": s.retention_eur,
                     "burn_eur": s.burn_eur,
                     "output_eur": s.output_eur,
-                    "sicker_loss_eur": s.sicker_loss_eur,
-                    "sicker_rate_pct": s.sicker_rate_pct,
+                    "friction_eur": s.friction_eur,
+                    "friction_rate_pct": s.friction_rate_pct,
                     "subagents": s.subagents,
                 }
                 for s in self._steps
@@ -280,7 +280,7 @@ class DemoOrchestrator:
                     "act_name": act_steps[0].act_name,
                     "input_eur": act_steps[0].input_eur,
                     "output_eur": act_steps[-1].output_eur,
-                    "total_sicker": sum(s.sicker_loss_eur for s in act_steps),
+                    "total_friction": sum(s.friction_eur for s in act_steps),
                     "agents": [s.agent_name for s in act_steps],
                 }
         return result
@@ -308,7 +308,7 @@ def run_demo(input_eur: float = 27_945_000.0, events: int = 62_100):
     print(f"\n  ╔{'═'*86}╗")
     print(f"  ║  Input:     €{report.input_eur:>16,.2f}                               ║")
     print(f"  ║  Output:    €{report.steps[-1].output_eur:>16,.2f}                               ║")
-    print(f"  ║  Sicker:    €{report.total_sicker_eur:>16,.2f} ({report.total_sicker_pct:.3f}%)                     ║")
+    print(f"  ║  Sicker:    €{report.total_friction_eur:>16,.2f} ({report.total_friction_pct:.3f}%)                     ║")
     print(f"  ║  BHO Δ:     €{report.bho_delta_eur:>16,.2f}                               ║")
     print(f"  ║  Duration:  {report.elapsed_total_us:>13,.0f} µs                          ║")
     print(f"  ╚{'═'*86}╝")

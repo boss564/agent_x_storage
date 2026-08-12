@@ -413,10 +413,10 @@ async def test_burnfee_basic():
     check("T3.1 fee=4.0", abs(op["fee"] - 4.0) < 0.01)
     check("T3.1 burn=2.0", abs(op["burn"] - 2.0) < 0.01)
     check("T3.1 net=194.0", abs(op["net_payout"] - 194.0) < 0.01)
-    check("T3.1 sicker=6.0", abs(op["sicker_loss"] - 6.0) < 0.01)
+    check("T3.1 friction=6.0", abs(op["friction_eur"] - 6.0) < 0.01)
 
 
-async def test_burnfee_sicker_tracking():
+async def test_burnfee_friction_tracking():
     """T3.2: Sicker loss accumulates correctly."""
     agent = BurnFeeAgent(user_id="test", fee_rate=0.02, additional_burn_rate=0.01)
     positions = [{"position_id": f"S{i}", "token_id": f"T{i}", "liquid_amount": 100.0} for i in range(10)]
@@ -424,7 +424,7 @@ async def test_burnfee_sicker_tracking():
     stats = agent.get_stats()
     check("T3.2 total_fees=20.0", abs(stats["total_fees_collected"] - 20.0) < 0.01)
     check("T3.2 total_burns=10.0", abs(stats["total_burns_executed"] - 10.0) < 0.01)
-    check("T3.2 total_sicker=30.0", abs(stats["total_sicker_loss"] - 30.0) < 0.01)
+    check("T3.2 total_friction=30.0", abs(stats["total_friction_eur"] - 30.0) < 0.01)
 
 
 async def test_burnfee_zero_liquid():
@@ -791,7 +791,7 @@ TEST_GROUPS = {
         test_staking_custom_lockup, test_staking_empty,
     ],
     "T3 — BurnFeeAgent": [
-        test_burnfee_basic, test_burnfee_sicker_tracking,
+        test_burnfee_basic, test_burnfee_friction_tracking,
         test_burnfee_zero_liquid, test_burnfee_empty,
     ],
     "O — Orchestrator": [

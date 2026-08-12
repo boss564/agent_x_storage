@@ -4,7 +4,7 @@
 Live visualization of all 3 chains (DEPIN, Settlement, Liquidity) with:
   - Real-time TPS, Volume, Latency per chain
   - Chain comparison charts (Plotly)
-  - Friction & sicker loss waterfall
+  - Friction loss waterfall
   - BHO compliance monitor
   - Tokenomics dashboard (mint/burn/stake/yield)
   - 9-Point chain volume comparison

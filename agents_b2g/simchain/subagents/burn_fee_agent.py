@@ -65,7 +65,7 @@ class BurnFeeAgent:
                 fee = round(liquid * self.fee_rate, 6)
                 burn = round(liquid * self.additional_burn_rate, 6)
                 net_payout = round(liquid - fee - burn, 6)
-                sicker_loss = round(fee + burn, 6)
+                friction_eur = round(fee + burn, 6)
 
                 self.total_fees_collected += fee
                 self.total_burns_executed += burn
@@ -82,21 +82,21 @@ class BurnFeeAgent:
                     "burn": burn,
                     "burn_rate": self.additional_burn_rate,
                     "net_payout": net_payout,
-                    "sicker_loss": sicker_loss,
+                    "friction_eur": friction_eur,
                     "fee_burn_pct": round(
-                        (sicker_loss / liquid * 100) if liquid > 0 else 0, 2
+                        (friction_eur / liquid * 100) if liquid > 0 else 0, 2
                     ),
                     "timestamp": datetime.now(timezone.utc).isoformat(),
                 }
                 results.append(final)
 
-            total_sicker = total_fees_batch + total_burns_batch
+            total_friction = total_fees_batch + total_burns_batch
             elapsed_ms = round((time.time() - start_time) * 1000, 2)
             logs.append(
                 f"[INFO] {len(results)} operations, "
                 f"fees={total_fees_batch:,.2f}€, "
                 f"burns={total_burns_batch:,.2f}€, "
-                f"sicker_total={total_sicker:,.2f}€, "
+                f"friction_total={total_friction:,.2f}€, "
                 f"elapsed={elapsed_ms}ms"
             )
 
@@ -110,7 +110,7 @@ class BurnFeeAgent:
                         "operation_count": len(results),
                         "total_fees_collected": round(total_fees_batch, 6),
                         "total_burns_executed": round(total_burns_batch, 6),
-                        "total_sicker_loss": round(total_sicker, 6),
+                        "total_friction_eur": round(total_friction, 6),
                         "fee_rate": self.fee_rate,
                         "burn_rate": self.additional_burn_rate,
                         "operations": results,
@@ -121,7 +121,7 @@ class BurnFeeAgent:
                 "metadata": {
                     "total_fees_all_time": round(self.total_fees_collected, 6),
                     "total_burns_all_time": round(self.total_burns_executed, 6),
-                    "total_sicker_all_time": round(
+                    "total_friction_all_time": round(
                         self.total_fees_collected + self.total_burns_executed, 6
                     ),
                     "operation_count_all_time": self._operation_count,
@@ -152,7 +152,7 @@ class BurnFeeAgent:
         return {
             "total_fees_collected": round(self.total_fees_collected, 6),
             "total_burns_executed": round(self.total_burns_executed, 6),
-            "total_sicker_loss": round(
+            "total_friction_eur": round(
                 self.total_fees_collected + self.total_burns_executed, 6
             ),
             "fee_rate": self.fee_rate,
