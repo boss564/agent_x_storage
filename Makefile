@@ -175,13 +175,20 @@ dashboard:
 # ── WASM Build (TinyGo required) ─────────────────────────────────────
 
 .PHONY: wasm
+TINYGO ?= $(shell which tinygo 2>/dev/null || echo /opt/homebrew/bin/tinygo)
+
+.PHONY: wasm
 wasm:
 	@echo "🪂 Building WASM paratrooper modules..."
+	@if [ ! -x "$(TINYGO)" ]; then \
+		echo "  ⚠️ TinyGo not found at $(TINYGO)"; \
+		echo "  Install: brew tap tinygo-org/tools && brew install tinygo go"; \
+		exit 1; \
+	fi
 	@for src in agents/ephemeral/src/f0*.go; do \
 		name=$$(basename $$src .go); \
-		echo "  tinygo build -o agents/ephemeral/wasm/$$name.wasm -target wasi $$src"; \
-		tinygo build -o agents/ephemeral/wasm/$$name.wasm -target wasi $$src 2>/dev/null || \
-		(echo "  ⚠️ TinyGo not installed — skipping $$name. Install: brew install tinygo"; continue); \
+		echo "  $(TINYGO) build -o agents/ephemeral/wasm/$$name.wasm -target wasi $$src"; \
+		$(TINYGO) build -o agents/ephemeral/wasm/$$name.wasm -target wasi $$src || exit 1; \
 	done
 	@echo "✅ WASM modules ready in agents/ephemeral/wasm/"
 

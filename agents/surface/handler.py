@@ -47,6 +47,10 @@ class SurfaceHandler:
         self._zk_responses: int = 0
         self._zk_errors: int = 0
         self._zk_latency_window: list = []
+        self._zk_batch: list = []               # Batch accumulation buffer
+        self._zk_batch_size: int = 100           # Flush every N events
+        self._zk_batch_interval: float = 0.1     # or every 100ms
+        self._zk_last_flush: float = 0.0
 
         # Latency tracking
         self._latency_window: list = []  # last 100 latencies in µs
@@ -104,14 +108,20 @@ class SurfaceHandler:
 
             self._total_processed += 1
 
-            # ZK Trigger: forward subset to subsurface (GC-safe task handling)
+            # ZK Trigger: accumulate batch, flush periodically
             if self.zk_trigger_rate > 0 and self._nc and self._nc.is_connected:
                 if hash(payload.get("payload_id", "")) % 100 < (self.zk_trigger_rate * 100):
-                    task = asyncio.create_task(self._forward_zk(payload, t0))
-                    self._bg_tasks.add(task)
-                    task.add_done_callback(self._bg_tasks.discard)
-                    if self._zk_forwarded % 50 == 0:
-                        logger.debug("ZK forwarded %d events", self._zk_forwarded)
+                    self._zk_batch.append(payload)
+                    self._zk_forwarded += 1
+                    now = time.time()
+                    if (len(self._zk_batch) >= self._zk_batch_size or
+                        (self._zk_batch and now - self._zk_last_flush > self._zk_batch_interval)):
+                        self._zk_last_flush = now
+                        batch = self._zk_batch
+                        self._zk_batch = []
+                        task = asyncio.create_task(self._flush_zk_batch(batch))
+                        self._bg_tasks.add(task)
+                        task.add_done_callback(self._bg_tasks.discard)
 
             # Track latency
             elapsed_us = (time.time() - t0) * 1_000_000
@@ -125,24 +135,25 @@ class SurfaceHandler:
 
     # ── ZK Forwarding ───────────────────────────────────────────────────
 
-    async def _forward_zk(self, payload: dict, t0: float):
-        """Forward payload to subsurface ZK engine via NATS request."""
-        self._zk_forwarded += 1
+    async def _flush_zk_batch(self, batch: list):
+        """Flush accumulated ZK events as a single batch request to D01."""
+        t0 = time.time()
+        batch_count = len(batch)
         try:
             response = await self._nc.request(
-                "agentx.subsurface.zk_request",
-                json.dumps(payload).encode(),
-                timeout=2,
+                "agentx.subsurface.zk_request_batch",
+                json.dumps(batch).encode(),
+                timeout=5,
             )
-            self._zk_responses += 1
-            zk_lat = (time.time() - t0) * 1_000_000
+            self._zk_responses += batch_count
+            zk_lat = (time.time() - t0) * 1_000_000 / batch_count
             self._zk_latency_window.append(zk_lat)
             if len(self._zk_latency_window) > self._latency_window_max:
                 self._zk_latency_window.pop(0)
         except Exception as e:
-            self._zk_errors += 1
-            if self._zk_errors <= 3:
-                logger.error("ZK forward error: %s", e)
+            self._zk_errors += batch_count
+            if self._zk_errors <= batch_count * 2:
+                logger.error("ZK batch error (%d events): %s", batch_count, e)
 
     # ── TPS Metering ────────────────────────────────────────────────────
 

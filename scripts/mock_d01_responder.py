@@ -93,6 +93,17 @@ async def main():
         proof = make_proof(payload)
         await nc.publish(msg.reply, json.dumps(proof).encode())
 
+    # Batch handler: receives array of payloads, returns array of proofs
+    async def batch_handler(msg):
+        nonlocal count, l1_count
+        batch_data = json.loads(msg.data.decode())
+        if isinstance(batch_data, list):
+            count += len(batch_data)
+            proofs = [make_proof(p) for p in batch_data]
+            await nc.publish(msg.reply, json.dumps(proofs).encode())
+            if len(batch_data) >= 100:
+                l1_count += 1  # One L1 anchor per batch
+
         # L1 Anchor
         if ANVIL_ENABLED:
             tx = anchor_to_l1(proof["z3_proof"], proof["nullifier_hash"])
@@ -106,7 +117,8 @@ async def main():
             print(f"  [D01 Mock] {count} proofs | {tps:.0f}/s {l1_info}")
 
     await nc.subscribe(SUBJECT, cb=handler, queue="d01-workers")
-    print(f"🧮 D01 Mock ZK Responder ready on {SUBJECT} ({NATS_URL})")
+    await nc.subscribe(SUBJECT + "_batch", cb=batch_handler, queue="d01-workers")
+    print(f"🧮 D01 Mock ZK Responder ready on {SUBJECT} (+ batch) ({NATS_URL})")
     if latency_ms > 0:
         print(f"   Simulated latency: {latency_ms*1000:.0f}ms")
 
