@@ -1,0 +1,45 @@
+# config/forbidden_words.yaml
+# Zentral gepflegte Blacklist für zurückgezogene Begriffe.
+# Die Scanner-Meldung nennt den Ersatzbegriff.
+
+forbidden_terms:
+  sicker: friction
+  booty: collected_fees
+  sicker_loss: friction_eur
+  sicker_rate: friction_rate
+  # "attack" ist bewusst NICHT aktiv — es kommt in Sicherheits-Dokumenten
+  # (Chaos Matrix, Intercept-Demo) legitim vor und würde False-Positives erzeugen.
+  # Falls jemals das Action-Enum ATTACK→PROCEED zurückgedreht wird, hier aktivieren:
+  # attack: proceed
+
+# Zeilen, die diese Marker tragen, werden übersprungen
+allowed_markers:
+  - '^#\s*ALLOW:'
+  - '^"""\s*ALLOW'
+  - '^//\s*ALLOW'
+  - '^<!--\s*ALLOW'
+
+# Zu scannende Dateiendungen
+scan_extensions:
+  - .md
+  - .txt
+  - .py
+  - .yml
+  - .yaml
+  - .json
+  - .sh
+  - .go
+  - .sol
+
+# Ignorierte Verzeichnisse
+ignore_dirs:
+  - .git
+  - __pycache__
+  - node_modules
+  - .venv
+  - dist
+  - build
+  - lib
+
+# Ganze Dateien von der Prüfung ausnehmen
+whitelist_files: []
