@@ -187,9 +187,31 @@ async def main():
             l1_info = f"| L1: {l1_count} anchored" if ANVIL_ENABLED else ""
             print(f"  [D01 Mock] {count} proofs | {tps:.0f}/s {l1_info}")
 
+    # Deep-state query responder (Panzergrenadier → Diver request/reply)
+    async def deep_state_handler(msg):
+        try:
+            q = json.loads(msg.data.decode())
+            account_id = q.get("account_id", "unknown")
+            # Simulated state: deterministic "spent" flag from account hash
+            spent = int.from_bytes(
+                hashlib.sha256(account_id.encode()).digest()[:2], "big"
+            ) % 2 == 0
+            proof = {
+                "account_id": account_id,
+                "request_type": q.get("request_type", "NULLIFIER_CHECK"),
+                "spent": spent,
+                "state_root": hashlib.sha256(account_id.encode()).hexdigest()[:32],
+                "shard_id": q.get("shard_id", 0),
+                "verified": True,
+            }
+            await nc.publish(msg.reply, json.dumps(proof).encode())
+        except Exception:
+            pass
+
     await nc.subscribe(SUBJECT, cb=handler, queue="d01-workers")
     await nc.subscribe(SUBJECT + "_batch", cb=batch_handler, queue="d01-workers")
-    print(f"🧮 D01 Mock ZK Responder ready on {SUBJECT} (+ batch) ({NATS_URL})")
+    await nc.subscribe("agentx.deep.state.query.*", cb=deep_state_handler, queue="d01-workers")
+    print(f"🧮 D01 Mock ZK Responder ready on {SUBJECT} (+ batch + deep-state) ({NATS_URL})")
     if latency_ms > 0:
         print(f"   Simulated latency: {latency_ms*1000:.0f}ms")
 

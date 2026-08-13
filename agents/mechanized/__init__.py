@@ -10,6 +10,7 @@ The main batch stays "mounted" (fast path); only complex edge cases
 """
 
 from .base import PanzergrenadierAgent, PanzergrenadierCoordinator, DeploymentState, ClearanceResult
+from .deep_state import fetch_deep_state_proof, fetch_nullifier_status
 from .p01_cross_shard import P01CrossShardLeader
 from .p02_state_conflict import P02StateConflictLeader
 from .p03_compliance import P03ComplianceLeader
@@ -25,6 +26,8 @@ __all__ = [
     "PanzergrenadierCoordinator",
     "DeploymentState",
     "ClearanceResult",
+    "fetch_deep_state_proof",
+    "fetch_nullifier_status",
     "P01CrossShardLeader",
     "P02StateConflictLeader",
     "P03ComplianceLeader",
