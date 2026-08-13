@@ -12,7 +12,10 @@ Subject: agentx.deep.state.query.<shard_id>
 import asyncio
 import json
 import logging
+import time
 from typing import Any, Dict, Optional
+
+from .metrics import REGISTRY
 
 logger = logging.getLogger("Panzergrenadier-DeepState")
 
@@ -36,8 +39,11 @@ async def fetch_deep_state_proof(
         "request_type": request_type,
     }).encode()
 
+    t0 = time.time()
     try:
         msg = await nats_client.request(subject, payload, timeout=DEEP_STATE_TIMEOUT_S)
+        elapsed_ms = (time.time() - t0) * 1000
+        REGISTRY.agent(f"D{shard_id:02d}").record_deep_state_query(elapsed_ms)
         return json.loads(msg.data.decode())
     except asyncio.TimeoutError:
         logger.error(

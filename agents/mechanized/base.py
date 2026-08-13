@@ -19,6 +19,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Callable, Dict, List, Optional
 
+from .metrics import REGISTRY
+
 logger = logging.getLogger("Panzergrenadier")
 
 
@@ -70,11 +72,16 @@ class PanzergrenadierAgent:
     async def _dismount_and_clear(self, event: Dict) -> ClearanceResult:
         self.state = DeploymentState.DISMOUNTED
         self.dismount_count += 1
+        REGISTRY.agent(self.agent_id).record_dismount()
         logger.warning("⚔️ %s SITZT AB! Event %s", self.agent_id, event.get("id"))
         t0 = time.time()
         try:
             cleared = await self._isolate_and_reconcile(event)
             self.clear_count += 1
+            elapsed_ms = (time.time() - t0) * 1000
+            REGISTRY.agent(self.agent_id).record_clearance(elapsed_ms)
+            if not cleared:
+                REGISTRY.agent(self.agent_id).record_reconstruction()
             logger.info("✅ %s SITZT AUF — Event %s bereinigt.", self.agent_id, event.get("id"))
             return ClearanceResult(
                 event_id=event.get("id", "?"),
