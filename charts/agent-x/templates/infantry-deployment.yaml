@@ -1,0 +1,31 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "agentx.fullname" . }}-infantry
+  labels:
+    {{- include "agentx.labels" . | nindent 4 }}
+    app.kubernetes.io/component: infantry
+spec:
+  replicas: {{ .Values.infantry.replicas }}
+  selector:
+    matchLabels:
+      {{- include "agentx.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: infantry
+  template:
+    metadata:
+      labels:
+        {{- include "agentx.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: infantry
+    spec:
+      containers:
+        - name: infantry
+          image: "{{ .Values.image.repository }}/{{ .Values.infantry.image }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: NATS_URL
+              value: {{ .Values.nats.url | quote }}
+          ports:
+            - name: metrics
+              containerPort: {{ .Values.infantry.metricsPort }}
+          resources:
+            {{- toYaml .Values.infantry.resources | nindent 12 }}

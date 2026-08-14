@@ -52,6 +52,54 @@ def resolve_agent_id() -> str:
     return "C01"
 
 
+def _to_prometheus_text(d: dict) -> str:
+    """Flatten a (possibly nested) metrics dict into Prometheus text format."""
+    out = []
+
+    def walk(obj, path):
+        if isinstance(obj, dict):
+            for k, v in obj.items():
+                walk(v, path + [str(k)])
+        elif isinstance(obj, (int, float)) and not isinstance(obj, bool):
+            out.append(f"{'_'.join(path)} {obj}")
+
+    walk(d, [])
+    return "\n".join(out) + ("\n" if out else "")
+
+
+def start_metrics_server(port: int, get_status) -> None:
+    """Serve /metrics — Prometheus text (default) or JSON (?format=json)."""
+    import json as _json
+    import threading
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+    from urllib.parse import urlparse, parse_qs
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            parsed = urlparse(self.path)
+            if parsed.path.rstrip("/") in ("/metrics", ""):
+                if parse_qs(parsed.query).get("format", [""])[0] == "json":
+                    body = _json.dumps(get_status()).encode()
+                    ctype = "application/json"
+                else:
+                    body = _to_prometheus_text(get_status()).encode()
+                    ctype = "text/plain; version=0.0.4"
+                self.send_response(200)
+                self.send_header("Content-Type", ctype)
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+            else:
+                self.send_response(404)
+                self.end_headers()
+
+        def log_message(self, *a):
+            pass
+
+    srv = HTTPServer(("0.0.0.0", port), Handler)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+
+
 async def main():
     agent_id = resolve_agent_id()
     chain_id = AGENT_CONFIGS.get(agent_id, "appchain-default")
@@ -65,20 +113,9 @@ async def main():
         zk_trigger_rate=zk_rate,
     )
 
-    # Lightweight HTTP metrics endpoint — aiohttp installation:
-    # Add 'aiohttp' to agents/surface/Dockerfile for production metrics
-    try:
-        from aiohttp import web
-        async def metrics(request):
-            return web.json_response(handler.status())
-        app = web.Application()
-        app.router.add_get("/metrics", metrics)
-        runner = web.AppRunner(app)
-        await runner.setup()
-        await web.TCPSite(runner, "0.0.0.0", 8080).start()
-        logger.info("📊 Metrics endpoint on :8080/metrics")
-    except ImportError:
-        logger.info("⚠️ aiohttp not installed — metrics skipped. Add to Dockerfile.")
+    # Dependency-free /metrics endpoint (stdlib http.server, daemon thread)
+    start_metrics_server(8080, handler.status)
+    logger.info("📊 Metrics endpoint on :8080/metrics")
 
     await handler.run_forever()
 

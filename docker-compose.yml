@@ -623,12 +623,13 @@ services:
 # ============================================================
   anvil:
     image: ghcr.io/foundry-rs/foundry:latest
-    command: >
-      anvil --host 0.0.0.0 --port 8545
-            --block-time 1
-            --accounts 10
-            --balance 10000
-            --gas-price 1
+    # The image ships ENTRYPOINT ["/bin/sh","-c"], which drops exec-form CMD
+    # args (only the first element is consumed as the -c command string).
+    # Clear it so anvil runs directly with all flags intact.
+    entrypoint: []
+    command: ["anvil", "--host", "0.0.0.0", "--port", "8545",
+              "--block-time", "1", "--accounts", "10",
+              "--balance", "10000", "--gas-price", "1"]
     ports:
       - "8545:8545"
     networks:
@@ -655,7 +656,7 @@ services:
     environment:
       - NATS_URL=nats://nats:4222
       - LOG_LEVEL=INFO
-      - ZK_TRIGGER_RATE=0.1
+      - ZK_TRIGGER_RATE=${ZK_TRIGGER_RATE:-0.1}
     depends_on:
       nats:
         condition: service_healthy
@@ -679,10 +680,39 @@ services:
       - ANVIL_ENABLED=1
       - ANVIL_RPC=http://anvil:8545
       - NATS_URL=nats://nats:4222
+      - L1_NETWORK=${L1_NETWORK:-anvil}
+      - SEPOLIA_RPC_URL=${SEPOLIA_RPC_URL:-}
+      - SEPOLIA_PRIVATE_KEY=${SEPOLIA_PRIVATE_KEY:-}
+      - SEPOLIA_CONTRACT_ADDRESS=${SEPOLIA_CONTRACT_ADDRESS:-}
+      - SETTLEMENT_EPOCH_SIZE=${SETTLEMENT_EPOCH_SIZE:-}
+      - SETTLEMENT_EPOCH_MAX_AGE_S=${SETTLEMENT_EPOCH_MAX_AGE_S:-}
     depends_on:
       nats:
         condition: service_healthy
       anvil:
+        condition: service_healthy
+    networks:
+      - agent_x_b2g
+    restart: unless-stopped
+
+# ============================================================
+# Panzergrenadier Infantry — P01–P09 edge-clearance consumer
+# ============================================================
+  infantry:
+    build:
+      context: .
+      dockerfile: agents/mechanized/Dockerfile
+    deploy:
+      mode: replicated
+      replicas: 3
+      restart_policy:
+        condition: any
+        delay: 5s
+    environment:
+      - NATS_URL=nats://nats:4222
+      - LOG_LEVEL=INFO
+    depends_on:
+      nats:
         condition: service_healthy
     networks:
       - agent_x_b2g

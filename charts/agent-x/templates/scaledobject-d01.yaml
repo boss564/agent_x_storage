@@ -1,0 +1,34 @@
+{{- if .Values.autoscaling.enabled }}
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: {{ include "agentx.fullname" . }}-d01
+  labels:
+    {{- include "agentx.labels" . | nindent 4 }}
+    app.kubernetes.io/component: subsurface
+spec:
+  scaleTargetRef:
+    name: {{ include "agentx.fullname" . }}-d01
+  minReplicaCount: {{ .Values.autoscaling.minReplicas }}
+  maxReplicaCount: {{ .Values.autoscaling.maxReplicas }}
+  cooldownPeriod: 60
+  triggers:
+    # Primary: scale on NATS JetStream consumer lag (async backpressure),
+    # NOT on CPU — CPU does not reflect message-queue backpressure.
+    - type: nats-jetstream
+      metadata:
+        natsServerMonitoringEndpoint: "nats.{{ .Release.Namespace }}.svc.cluster.local:8222"
+        stream: {{ .Values.autoscaling.nats.streamName | quote }}
+        consumer: {{ .Values.autoscaling.nats.consumerName | quote }}
+        lagThreshold: {{ .Values.autoscaling.nats.lagThreshold | quote }}
+        account: "$G"
+    {{- if .Values.autoscaling.prometheus.enabled }}
+    # Secondary: scale on constraint-budget pressure (custom app metric).
+    - type: prometheus
+      metadata:
+        serverAddress: {{ .Values.autoscaling.prometheus.serverAddress | quote }}
+        metricName: {{ .Values.autoscaling.prometheus.metricName | quote }}
+        threshold: {{ .Values.autoscaling.prometheus.threshold | quote }}
+        query: {{ .Values.autoscaling.prometheus.query | quote }}
+    {{- end }}
+{{- end }}

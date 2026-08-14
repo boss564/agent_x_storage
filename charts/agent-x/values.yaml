@@ -1,0 +1,87 @@
+# Agent X — Helm values
+
+nameOverride: ""
+fullnameOverride: ""
+
+image:
+  repository: ghcr.io/agent-x
+  tag: latest
+  pullPolicy: IfNotPresent
+
+nats:
+  url: "nats://nats:4222"
+  # JetStream is required for consumer-lag based autoscaling.
+  jetstream:
+    enabled: true
+    replicas: 3
+    storage: "2Gi"
+
+# ── Surface (C01–C09): NATS queue-group workers ─────────────────────────────
+surface:
+  replicas: 9
+  image: surface
+  zkTriggerRate: "0.1"
+  metricsPort: 8080
+  resources:
+    requests: { cpu: "100m", memory: "128Mi" }
+    limits: { cpu: "1", memory: "512Mi" }
+
+# ── Infantry (P01–P09): edge-clearance layer ────────────────────────────────
+infantry:
+  replicas: 3
+  image: infantry
+  metricsPort: 8082
+  resources:
+    requests: { cpu: "100m", memory: "128Mi" }
+    limits: { cpu: "1", memory: "512Mi" }
+
+# ── Subsurface (D01): ZK prover / TEE enclave workers ───────────────────────
+subsurface:
+  replicas: 8
+  image: d01-worker
+  metricsPort: 8081
+  # Hardware enclave: Intel SGX Enclave Page Cache (requires the intel.com/sgx
+  # device plugin on the cluster). Omit the resource key if no TEE available.
+  resources:
+    requests:
+      cpu: "1"
+      memory: "512Mi"
+    limits:
+      cpu: "4"
+      memory: "2Gi"
+      intel.com/sgx_epc: "128Mi"
+  anvilEnabled: "1"
+  anvilRpc: "http://anvil:8545"
+
+# ── L1 settlement target: "anvil" (local) or "sepolia" (public testnet) ─────
+settlement:
+  l1Network: "anvil"
+  sepoliaRpcUrl: ""
+  sepoliaPrivateKey: ""   # inject via Secret / external-secrets — never in values
+  epochSize: ""           # empty → default per network (100 anvil / 500 sepolia)
+  epochMaxAgeS: ""        # empty → default per network (2s anvil / 30s sepolia)
+
+# ── Event-driven autoscaling (KEDA) ─────────────────────────────────────────
+autoscaling:
+  enabled: true
+  minReplicas: 8
+  maxReplicas: 64
+  # Primary trigger: NATS JetStream consumer lag (pending messages).
+  nats:
+    streamName: "agentx-surface"
+    consumerName: "d01-workers"
+    lagThreshold: "500"
+  # Secondary trigger (optional): constraint-budget pressure via Prometheus.
+  prometheus:
+    enabled: false
+    serverAddress: "http://prometheus.agent-x.svc:9090"
+    metricName: "surface_constraint_weight_ratio"
+    threshold: "10000"
+    query: "max(surface_constraint_weight)"
+
+# ── Feature flags ───────────────────────────────────────────────────────────
+featureFlags:
+  zkTriggerRate: "0.1"
+  poisonRate: "0.05"
+  complexRate: "0.15"
+  witnessTimeoutMs: "15.0"

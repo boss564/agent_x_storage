@@ -1,0 +1,49 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "agentx.fullname" . }}-d01
+  labels:
+    {{- include "agentx.labels" . | nindent 4 }}
+    app.kubernetes.io/component: subsurface
+spec:
+  replicas: {{ .Values.subsurface.replicas }}
+  selector:
+    matchLabels:
+      {{- include "agentx.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: subsurface
+  template:
+    metadata:
+      labels:
+        {{- include "agentx.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: subsurface
+    spec:
+      containers:
+        - name: d01-worker
+          image: "{{ .Values.image.repository }}/{{ .Values.subsurface.image }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: NATS_URL
+              value: {{ .Values.nats.url | quote }}
+            - name: ANVIL_ENABLED
+              value: {{ .Values.subsurface.anvilEnabled | quote }}
+            - name: ANVIL_RPC
+              value: {{ .Values.subsurface.anvilRpc | quote }}
+            - name: L1_NETWORK
+              value: {{ .Values.settlement.l1Network | quote }}
+            - name: SEPOLIA_RPC_URL
+              value: {{ .Values.settlement.sepoliaRpcUrl | quote }}
+            {{- if .Values.settlement.epochSize }}
+            - name: SETTLEMENT_EPOCH_SIZE
+              value: {{ .Values.settlement.epochSize | quote }}
+            {{- end }}
+            {{- if .Values.settlement.epochMaxAgeS }}
+            - name: SETTLEMENT_EPOCH_MAX_AGE_S
+              value: {{ .Values.settlement.epochMaxAgeS | quote }}
+            {{- end }}
+          ports:
+            - name: metrics
+              containerPort: {{ .Values.subsurface.metricsPort }}
+          # Hardware enclave: Intel SGX EPC (requires the intel.com/sgx device
+          # plugin on the cluster). Remove intel.com/sgx_epc if no TEE present.
+          resources:
+            {{- toYaml .Values.subsurface.resources | nindent 12 }}

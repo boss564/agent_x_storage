@@ -1,0 +1,50 @@
+{{- if .Values.nats.jetstream.enabled }}
+# NATS JetStream cluster. For production prefer the dedicated nats-helm chart
+# (https://github.com/nats-io/k8s); this minimal StatefulSet keeps the chart
+# self-contained for a pilot. JetStream is required for consumer-lag autoscaling.
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "agentx.fullname" . }}-nats
+  labels:
+    {{- include "agentx.labels" . | nindent 4 }}
+    app.kubernetes.io/component: nats
+spec:
+  serviceName: {{ include "agentx.fullname" . }}-nats
+  replicas: {{ .Values.nats.jetstream.replicas }}
+  selector:
+    matchLabels:
+      {{- include "agentx.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: nats
+  template:
+    metadata:
+      labels:
+        {{- include "agentx.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: nats
+    spec:
+      containers:
+        - name: nats
+          image: nats:2.10-alpine
+          args:
+            - "--jetstream"
+            - "--store_dir"
+            - "/data"
+            - "-m"
+            - "8222"
+          ports:
+            - name: client
+              containerPort: 4222
+            - name: monitoring
+              containerPort: 8222
+          volumeMounts:
+            - name: data
+              mountPath: /data
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: {{ .Values.nats.jetstream.storage | quote }}
+{{- end }}

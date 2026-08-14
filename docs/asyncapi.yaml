@@ -1,0 +1,97 @@
+asyncapi: '3.0.0'
+info:
+  title: Agent X Event Bus Specification
+  version: '1.0.0'
+  description: High-Speed Multi-Layer Architecture over NATS JetStream
+
+servers:
+  nats_cluster:
+    host: nats://localhost:4222
+    protocol: nats
+
+channels:
+  surface_events:
+    address: agentx.surface.events
+    messages:
+      IngestEnvelope:
+        payload:
+          type: object
+          properties:
+            payload_id: { type: string }
+            account_id: { type: string }
+            constraint_weight: { type: integer }
+            schema: { type: string }
+            device_id: { type: string }
+            amount: { type: number }
+
+  infantry_edge:
+    address: agentx.infantry.edge
+    messages:
+      DismountTrigger:
+        payload:
+          type: object
+          properties:
+            agent_id: { type: string }
+            reason: { type: string }
+            raw_event: { type: object }
+
+  infantry_cleared:
+    address: agentx.infantry.cleared
+    messages:
+      ClearanceResult:
+        payload:
+          type: object
+          properties:
+            event_id: { type: string }
+            dismounted: { type: boolean }
+            cleared: { type: boolean }
+            agent_id: { type: string }
+
+  deep_state_query:
+    address: agentx.deep.state.query.{shard_id}
+    parameters:
+      shard_id:
+        description: Shard identifier (0-7)
+    messages:
+      StateRequest:
+        payload:
+          type: object
+          properties:
+            account_id: { type: string }
+            request_type: { type: string }
+
+  subsurface_shard:
+    address: agentx.subsurface.shard.{shard_id}
+    parameters:
+      shard_id:
+        description: Shard identifier (0-7)
+    messages:
+      ShardAssignment:
+        payload:
+          type: object
+          properties:
+            account_id: { type: string }
+            shard_id: { type: integer }
+
+  subsurface_fold:
+    address: agentx.subsurface.fold_instance
+    messages:
+      FoldPayload:
+        payload:
+          type: object
+          properties:
+            replica_id: { type: string }
+            epoch_ticket: { type: integer }
+            instance_commitments:
+              type: array
+              items: { type: string }
+
+  surface_quarantine:
+    address: agentx.surface.quarantine
+    messages:
+      QuarantineEvent:
+        payload:
+          type: object
+          properties:
+            payload_id: { type: string }
+            reason: { type: string }

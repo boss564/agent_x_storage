@@ -1,0 +1,6 @@
+apiVersion: v2
+name: agent-x
+description: Agent X — B2G Risk & Procurement platform (6-layer architecture, 277 agents)
+type: application
+version: 0.1.0
+appVersion: "0.23.0"

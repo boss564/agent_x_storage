@@ -144,6 +144,7 @@ NO_TEST_SUMMARY: set[str] = {
     "scripts/test_wave22_ops.py",           # 50+ Klassen-Import → OOM in Sandbox, braucht >256 MB
     "scripts/demo_finale.py",               # Demo-Skript, kein Test
     "scripts/demo_simchain.py",             # Demo-Skript, kein Test
+    "scripts/test_e2e_pipeline.py",         # E2E-Test, RESULT ✅/❌ (kein x/y-Bilanz)
 }
 
 

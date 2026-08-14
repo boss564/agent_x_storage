@@ -27,6 +27,7 @@ from .p06_correction import P06Correction
 from .p07_reintegration import P07Reintegration
 from .p08_security import P08Security
 from .p09_reconnaissance import P09Reconnaissance
+from .metrics import REGISTRY
 
 logger = logging.getLogger("PanzergrenadierHandler")
 
@@ -108,10 +109,75 @@ class PanzergrenadierHandler:
             "coordinator": self.coord.stats(),
         }
 
+    def metrics(self) -> Dict[str, Any]:
+        """status() + registry P99 (clearance + deep-state) for the /metrics endpoint."""
+        snap = REGISTRY.snapshot()
+        clear_p99 = max(
+            (a["clearance_p99_ms"] for a in snap["agents"].values()), default=0.0
+        )
+        ds_p99 = max(
+            (a["deep_state_p99_ms"] for a in snap["agents"].values()), default=0.0
+        )
+        return {
+            **self.status(),
+            "clearance_p99_ms": round(clear_p99, 3),
+            "deep_state_p99_ms": round(ds_p99, 3),
+            "registry": snap,
+        }
+
+
+def _to_prometheus_text(d: dict) -> str:
+    """Flatten a (possibly nested) metrics dict into Prometheus text format."""
+    out = []
+
+    def walk(obj, path):
+        if isinstance(obj, dict):
+            for k, v in obj.items():
+                walk(v, path + [str(k)])
+        elif isinstance(obj, (int, float)) and not isinstance(obj, bool):
+            out.append(f"{'_'.join(path)} {obj}")
+
+    walk(d, [])
+    return "\n".join(out) + ("\n" if out else "")
+
+
+def _start_metrics_server(port: int, get_metrics) -> None:
+    """Serve /metrics — Prometheus text (default) or JSON (?format=json)."""
+    import threading
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+    from urllib.parse import urlparse, parse_qs
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            parsed = urlparse(self.path)
+            if parsed.path.rstrip("/") in ("/metrics", ""):
+                if parse_qs(parsed.query).get("format", [""])[0] == "json":
+                    body = json.dumps(get_metrics()).encode()
+                    ctype = "application/json"
+                else:
+                    body = _to_prometheus_text(get_metrics()).encode()
+                    ctype = "text/plain; version=0.0.4"
+                self.send_response(200)
+                self.send_header("Content-Type", ctype)
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+            else:
+                self.send_response(404)
+                self.end_headers()
+
+        def log_message(self, *a):
+            pass
+
+    srv = HTTPServer(("0.0.0.0", port), Handler)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+
 
 async def main():
     logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
     handler = PanzergrenadierHandler()
+    _start_metrics_server(8082, handler.metrics)
+    logger.info("📊 Metrics endpoint on :8082/metrics")
     await handler.run_forever()
 
 

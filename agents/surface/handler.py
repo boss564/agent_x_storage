@@ -16,6 +16,14 @@ from typing import Any, Dict, Optional
 
 logger = logging.getLogger("SurfaceHandler")
 
+EDGE_SUBJECT = "agentx.infantry.edge"  # complex events → Panzergrenadier (infantry)
+
+# Latency histogram: bounded-memory P99 (µs). 1000 buckets × 2µs = 0..2000µs,
+# last bucket is overflow. O(1) memory — no leak under 1M events. 2µs buckets
+# resolve the ~10µs surface fast-path latency (100µs buckets would quantize to 0).
+LAT_BUCKET_US = 2
+LAT_BUCKETS = 1000
+
 
 class SurfaceHandler:
     """High-throughput surface agent: NATS ingest → validate → forward to settlement."""
@@ -59,6 +67,12 @@ class SurfaceHandler:
         # Latency tracking
         self._latency_window: list = []  # last 100 latencies in µs
         self._latency_window_max: int = 100
+        self._lat_hist: list = [0] * LAT_BUCKETS  # bounded P99 histogram (µs)
+        self._lat_sum: float = 0.0
+        self._lat_count: int = 0
+
+        # Complex-event routing to infantry (edge clearance)
+        self._complex_forwarded: int = 0
 
     # ── Lifecycle ───────────────────────────────────────────────────────
 
@@ -116,6 +130,20 @@ class SurfaceHandler:
             self._total_processed += 1
             self._last_activity = time.time()
 
+            # Route complex edge events to the Panzergrenadier layer without
+            # slowing the fast path (fire-and-forget).
+            if self._nc and self._nc.is_connected and (
+                payload.get("is_nested_cross_shard")
+                or payload.get("state_conflict")
+                or payload.get("compliance_edge")
+            ):
+                self._complex_forwarded += 1
+                task = asyncio.create_task(
+                    self._nc.publish(EDGE_SUBJECT, json.dumps(payload).encode())
+                )
+                self._bg_tasks.add(task)
+                task.add_done_callback(self._bg_tasks.discard)
+
             # ZK Trigger: adaptive accumulation (tri-trigger: count OR weight OR delay)
             if self.zk_trigger_rate > 0 and self._nc and self._nc.is_connected:
                 if hash(payload.get("payload_id", "")) % 100 < (self.zk_trigger_rate * 100):
@@ -134,11 +162,8 @@ class SurfaceHandler:
                     elif len(self._zk_batch) == 1 and self._zk_timer_task is None:
                         self._zk_timer_task = asyncio.create_task(self._time_flush())
 
-            # Track latency
-            elapsed_us = (time.time() - t0) * 1_000_000
-            self._latency_window.append(elapsed_us)
-            if len(self._latency_window) > self._latency_window_max:
-                self._latency_window.pop(0)
+            # Track latency (bounded histogram — O(1) memory, thread-safe read)
+            self._record_latency((time.time() - t0) * 1_000_000)
 
         except Exception as e:
             self._total_errors += 1
@@ -232,18 +257,37 @@ class SurfaceHandler:
 
     # ── Status ──────────────────────────────────────────────────────────
 
+    def _record_latency(self, elapsed_us: float) -> None:
+        idx = min(int(elapsed_us / LAT_BUCKET_US), LAT_BUCKETS - 1)
+        self._lat_hist[idx] += 1
+        self._lat_sum += elapsed_us
+        self._lat_count += 1
+
+    def _percentile_us(self, pct: float) -> float:
+        """Lower-bound percentile estimate from the bounded histogram."""
+        if self._lat_count == 0:
+            return 0.0
+        target = int(self._lat_count * pct)
+        cum = 0
+        for idx, n in enumerate(self._lat_hist):
+            cum += n
+            if cum >= target:
+                return idx * LAT_BUCKET_US
+        return LAT_BUCKET_US * LAT_BUCKETS
+
     def status(self) -> Dict[str, Any]:
-        avg_lat = (
-            sum(self._latency_window) / len(self._latency_window)
-            if self._latency_window else 0
-        )
+        avg_lat = self._lat_sum / self._lat_count if self._lat_count else 0.0
         return {
             "agent_id": self.agent_id,
             "chain_id": self.chain_id,
             "tps": round(self._last_tps, 1),
             "total_processed": self._total_processed,
+            "total_processed_events": self._total_processed,
             "total_errors": self._total_errors,
             "avg_latency_us": round(avg_lat, 1),
+            "latency_p50_us": round(self._percentile_us(0.50), 1),
+            "latency_p99_us": round(self._percentile_us(0.99), 1),
+            "complex_forwarded": self._complex_forwarded,
             "nats_connected": self._nc is not None and self._nc.is_connected,
             "zk_forwarded": self._zk_forwarded,
             "zk_responses": self._zk_responses,
