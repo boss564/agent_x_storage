@@ -42,6 +42,18 @@ from .a05_cas_bomber import (
     GPUBurstBackend,
 )
 from .a06_airspace_watch import AirspaceWatch, PoisonKind, WatchAlert
+from .a07_inflight_neutralizer import (
+    InFlightNeutralizer,
+    InFlightRegistry,
+    NeutralizationReport,
+)
+from .a08_fallback_coordinator import (
+    FallbackCoordinator,
+    FallbackReason,
+    FallbackTicket,
+    SURFACE_FALLBACK_SUBJECT,
+)
+from .a09_awacs_datalink import AWACSDatalink, ExportReport, FROZEN_TOPICS
 
 __all__ = [
     "AirAction",
@@ -75,4 +87,14 @@ __all__ = [
     "AirspaceWatch",
     "PoisonKind",
     "WatchAlert",
+    "InFlightNeutralizer",
+    "InFlightRegistry",
+    "NeutralizationReport",
+    "FallbackCoordinator",
+    "FallbackReason",
+    "FallbackTicket",
+    "SURFACE_FALLBACK_SUBJECT",
+    "AWACSDatalink",
+    "ExportReport",
+    "FROZEN_TOPICS",
 ]

@@ -15,7 +15,7 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass
 from enum import Enum
-from typing import Dict, List, Optional, Protocol
+from typing import Callable, Dict, List, Optional, Protocol
 
 from agents.air.finality_types import AttestationEnvelope
 
@@ -60,9 +60,14 @@ class AirspaceWatch:
         self._quarantine: Dict[str, WatchAlert] = {}
         self._seen_dedup: Dict[str, int] = {}   # dedup_key -> last epoch
         self._epoch = 0
+        self._alert_hooks: List[Callable[[WatchAlert], None]] = []
 
     def set_epoch(self, epoch: int) -> None:
         self._epoch = epoch
+
+    def register_alert_hook(self, hook: Callable[[WatchAlert], None]) -> None:
+        """Register a downstream actuator (A07 neutralizer) for detected alerts."""
+        self._alert_hooks.append(hook)
 
     # -- scan ---------------------------------------------------------
 
@@ -125,6 +130,9 @@ class AirspaceWatch:
                 "score": alert.score,
                 "epoch": env.epoch,
             })
+        # 4. Notify registered actuators (A07 neutralizer).
+        for hook in self._alert_hooks:
+            hook(alert)
 
     def quarantine_size(self) -> int:
         return len(self._quarantine)
