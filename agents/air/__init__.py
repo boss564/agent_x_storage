@@ -1,9 +1,8 @@
 """Air Interceptor — A01–A09 dual air-superiority layer.
 
-Commit 1 covers Schwarm 1 (Air Superiority): A01 AWACS (mode decision),
-A02 Fast-Path Jäger (speculative attestation), A03 Soft-Finality Verifikator
-(finality state machine + versioned cache). Commit 1.5 adds the refined
-SoftFinalityEngine + FastPathInterceptor on a DedupKey-based contract.
+Schwarm 1 (Air Superiority): A01 AWACS, A02 Fast-Path, A03 Soft-Finality.
+Schwarm 2 (Ground Attack): A04 CAS-Coordinator, A05 CAS-Bomber (GPU burst),
+A06 Airspace-Watch (poison scan). Schwarm 3 (A07–A09 Logistics) follows.
 """
 
 from .base import (
@@ -29,6 +28,20 @@ from .a03_soft_finality import (
     SoftFinalityEngine,
     CASConflictError,
 )
+from .a04_cas_coordinator import (
+    CASCoordinator,
+    CASRequest,
+    CASSlotOp,
+    CASResult,
+    CASStatus,
+)
+from .a05_cas_bomber import (
+    CASBomber,
+    BurstReport,
+    CPUBackend,
+    GPUBurstBackend,
+)
+from .a06_airspace_watch import AirspaceWatch, PoisonKind, WatchAlert
 
 __all__ = [
     "AirAction",
@@ -50,4 +63,16 @@ __all__ = [
     "A03SoftFinalityVerifier",
     "SoftFinalityEngine",
     "CASConflictError",
+    "CASCoordinator",
+    "CASRequest",
+    "CASSlotOp",
+    "CASResult",
+    "CASStatus",
+    "CASBomber",
+    "BurstReport",
+    "CPUBackend",
+    "GPUBurstBackend",
+    "AirspaceWatch",
+    "PoisonKind",
+    "WatchAlert",
 ]
