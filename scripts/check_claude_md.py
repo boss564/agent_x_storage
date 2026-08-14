@@ -145,6 +145,7 @@ NO_TEST_SUMMARY: set[str] = {
     "scripts/demo_finale.py",               # Demo-Skript, kein Test
     "scripts/demo_simchain.py",             # Demo-Skript, kein Test
     "scripts/test_e2e_pipeline.py",         # E2E-Test, RESULT ✅/❌ (kein x/y-Bilanz)
+    "scripts/test_air_layer.py",            # Air-Schicht Fault-Injection (Commit 1.5)
 }
 
 

@@ -29,21 +29,56 @@ class AirAction(Enum):
     NEUTRALIZE = "NEUTRALIZE"     # in-flight quarantine (A07)
 
 
-@dataclass
-class SoftFinalityGuarantee:
-    """Cryptographic soft-guarantee from A02, verifiable by A03."""
-    event_id: str
-    state_root: str
-    signature: str
-    timestamp_ns: int
-    agent_id: str = "A02"
+class FinalityTier(Enum):
+    """Three explicit finality levels."""
+    SPECULATIVE = "L0"   # in-flight, only routed — revocable without consequence
+    SOFT_FINAL = "L1"    # A03-attested, state-root in cache — revocable with compensation
+    HARD_FINAL = "L2"    # L1-anchored — irreversible
 
-    def verify(self, state_root: str) -> bool:
-        """A soft guarantee commits to a state root; verify the signature."""
-        expected = hashlib.sha256(
-            f"SOFT:{self.event_id}:{self.state_root}".encode()
+
+class FinalityState(Enum):
+    """RECEIVED → VERIFIED → SOFT_FINAL → ANCHORED; ROLLED_BACK/COMPENSATED = error exits."""
+    RECEIVED = "RECEIVED"
+    VERIFIED = "VERIFIED"
+    SOFT_FINAL = "SOFT_FINAL"
+    ANCHORED = "ANCHORED"
+    ROLLED_BACK = "ROLLED_BACK"
+    COMPENSATED = "COMPENSATED"
+
+
+# Legal transitions — core invariant: SOFT_FINAL → {ANCHORED, ROLLED_BACK, COMPENSATED}.
+FINALITY_TRANSITIONS = {
+    FinalityState.RECEIVED: {FinalityState.VERIFIED},
+    FinalityState.VERIFIED: {FinalityState.SOFT_FINAL, FinalityState.ROLLED_BACK},
+    FinalityState.SOFT_FINAL: {FinalityState.ANCHORED, FinalityState.ROLLED_BACK,
+                               FinalityState.COMPENSATED},
+    FinalityState.ANCHORED: set(),
+    FinalityState.ROLLED_BACK: {FinalityState.COMPENSATED},
+    FinalityState.COMPENSATED: set(),
+}
+
+
+@dataclass
+class AttestationEnvelope:
+    """Defined attestation envelope — replaces the naked ECDSA signature.
+
+    Fields: tx_hash, state_root, tier, signer, ts, expiry, epoch, seq.
+    The signature is a deterministic commitment over the envelope (production:
+    TEE-backed ECDSA / MPC t=3,n=5).
+    """
+    tx_hash: str
+    state_root: str
+    tier: FinalityTier
+    signer: str
+    ts: int          # timestamp_ns
+    expiry: int      # expiry_ns
+    epoch: int
+    seq: int
+
+    def signature(self) -> str:
+        return hashlib.sha256(
+            f"ATTEST:{self.tx_hash}:{self.state_root}:{self.tier.value}:{self.signer}".encode()
         ).hexdigest()
-        return self.signature == expected and self.state_root == state_root
 
 
 @dataclass
@@ -112,14 +147,14 @@ class AirCoordinator:
             hunter = self.agents.get("A02")
             verifier = self.agents.get("A03")
             t0 = time.perf_counter()
-            guarantee = hunter.sign_soft_finality(event)
-            state_root = event.get("state_root", guarantee.state_root)
-            ok = verifier.verify(guarantee, state_root)
+            envelope = hunter.sign_attestation(event)
+            state = verifier.attest(envelope)
             elapsed_us = (time.perf_counter() - t0) * 1_000_000
+            soft = state == FinalityState.SOFT_FINAL
             return AirInterceptResult(
-                event_id=event_id, action=action, soft_finality=ok,
+                event_id=event_id, action=action, soft_finality=soft,
                 elapsed_us=round(elapsed_us, 1), agent_id="A02+A03",
-                note="soft-finality" if ok else "soft-finality REJECTED",
+                note=f"finality={state.value}",
             )
 
         # CAS / NEUTRALIZE — Schwarm 2/3, wired in the next commit (A04–A09).
