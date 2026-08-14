@@ -35,7 +35,9 @@ class FinalityState(enum.Enum):
     REJECTED = "rejected"
 
 
-# Terminal states: every SOFT_FINAL must end ANCHORED or ROLLED_BACK.
+# Terminal states — three, on two disjoint paths:
+#   SOFT_FINAL path:  ANCHORED (L1 anchor) or ROLLED_BACK (compensated downstream).
+#   Pre-attestation:  REJECTED (malformed envelope / unauthorized signer).
 TERMINAL_STATES = frozenset({
     FinalityState.ANCHORED,
     FinalityState.ROLLED_BACK,
@@ -43,10 +45,13 @@ TERMINAL_STATES = frozenset({
 })
 
 
-# Legal transitions — core invariant: SOFT_FINAL → {ANCHORED, ROLLED_BACK}.
+# Legal transitions — two paths:
+#   happy:    RECEIVED → VERIFIED → SOFT_FINAL → ANCHORED
+#   reject:   RECEIVED → REJECTED (malformed / unauthorized, never attested)
+#   rollback: SOFT_FINAL → ROLLED_BACK (compensation downstream via D02)
 FINALITY_TRANSITIONS = {
     FinalityState.RECEIVED: {FinalityState.VERIFIED, FinalityState.REJECTED},
-    FinalityState.VERIFIED: {FinalityState.SOFT_FINAL, FinalityState.ROLLED_BACK},
+    FinalityState.VERIFIED: {FinalityState.SOFT_FINAL},
     FinalityState.SOFT_FINAL: {FinalityState.ANCHORED, FinalityState.ROLLED_BACK},
     FinalityState.ANCHORED: set(),
     FinalityState.ROLLED_BACK: set(),

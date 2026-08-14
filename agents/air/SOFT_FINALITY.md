@@ -17,32 +17,46 @@ Kein Konsument darf von dieser Spezifikation abweichen.
 
 ```
 RECEIVED → VERIFIED → SOFT_FINAL → ANCHORED
-                  ↘             ↘
-                   ROLLED_BACK → COMPENSATED
+    │                    ↘
+    │                     ROLLED_BACK
+    └→ REJECTED
 ```
 
-**Kerninvariante:** Jedes `SOFT_FINAL`-Event endet entweder `ANCHORED` oder
-`COMPENSATED` — niemals dangling. `ROLLED_BACK` ist ein transienter
-Zwischenzustand, der zwingend in `COMPENSATED` übergeht.
+Drei Terminalzustände auf zwei disjunkten Pfaden:
+
+| Terminal | Pfad | Bedeutung |
+|----------|------|-----------|
+| `ANCHORED` | SOFT_FINAL | L1-Anker bestätigt (irreversibel) |
+| `ROLLED_BACK` | SOFT_FINAL | zurückgerollt; Kompensation downstream via D02 Forensic Repair |
+| `REJECTED` | Pre-Attestation | malformed / unautorisierter Signer — erreicht nie SOFT_FINAL |
+
+**Kerninvariante:** Jedes `SOFT_FINAL`-Event endet in `ANCHORED` oder
+`ROLLED_BACK` — niemals dangling. `REJECTED` ist der Terminalzustand des
+Pre-Attestation-Pfads und erreicht nie `SOFT_FINAL`.
 
 Legale Übergänge (erzwungen durch `FINALITY_TRANSITIONS`):
 
 | Von | Nach |
 |-----|------|
-| RECEIVED | VERIFIED |
-| VERIFIED | SOFT_FINAL, ROLLED_BACK |
-| SOFT_FINAL | ANCHORED, ROLLED_BACK, COMPENSATED |
+| RECEIVED | VERIFIED, REJECTED |
+| VERIFIED | SOFT_FINAL |
+| SOFT_FINAL | ANCHORED, ROLLED_BACK |
 | ANCHORED | — (terminal) |
-| ROLLED_BACK | COMPENSATED |
-| COMPENSATED | — (terminal) |
+| ROLLED_BACK | — (terminal) |
+| REJECTED | — (terminal) |
 
 ## 3. AttestationEnvelope
 
 ```python
 AttestationEnvelope = {
-    tx_hash, state_root, tier, signer, ts, expiry, epoch, seq
+    tx_hash, state_root, tier, signer, ts, expiry, epoch, seq,
+    dedup_key, signature
 }
 ```
+
+`dedup_key = (sender, nonce, intent_hash)` — Replay-Schutz, nicht `tx_hash`.
+`signature` ist die (optionale) Krypto-Signatur; `digest()` liefert den
+GoBD-Audit-Content-Hash.
 
 - **Fast-Path:** Single-ECDSA (die 13,8 µs müssen halten).
 - **Eskalation:** Betrag > Schwelle oder Risiko ≥ Klasse D → 2 Attestierungen
