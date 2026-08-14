@@ -14,12 +14,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from agents.air import (
+from agents.air.base import (
     AttestationEnvelope,
     FinalityState,
     FinalityTier,
-    A03SoftFinalityVerifier,
 )
+from agents.air import A03SoftFinalityVerifier
 
 
 def _envelope(tx_hash="tx1", signer="A02", epoch=0, seq=0) -> AttestationEnvelope:
