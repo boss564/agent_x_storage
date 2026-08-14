@@ -43,11 +43,17 @@ agent_x_storage/
 │   ├── demo_producer_cluster.py   # 27-Agenten-ABM: Provider/Evaluator/Economic (514 L)
 │   ├── pitch_test.sh              # Pre-Pitch-Verifikation (Health, BHO, Compliance)
 │   ├── test_esp32_firmware.py      # ESP32 Firmware Test Suite (15/15 passed)
+│   ├── test_e2e_pipeline.py        # 6-Schichten-E2E (C01→P09→D05→Anvil)
+│   └── verify_1m_tsunami.py        # 1M-Tsunami-Verifier (Zero-Loss + P99 + RSS + L1-Anker)
 ├── mock_d01_responder.py       # D01 Mock ZK Proof Responder (NATS + Anvil L1 anchor)
 ├── simchain_ingest.py          # Producer: 96k–115k events/s NATS load generator
 │   └── export_backtest_signals.py # Backtest-Daten-Exporter
 ├── config/
-│   └── calibration_config.yaml   # Kalibrierungs-Konfiguration
+│   ├── calibration_config.yaml   # Kalibrierungs-Konfiguration
+│   ├── prometheus.yml            # Overwatch-Scrape (surface/d01/infantry, 1s)
+│   └── grafana/                  # Overwatch-Dashboard-Provisioning
+│       ├── datasources/prometheus.yml
+│       └── dashboards/           # overwatch.json + provider.yml
 ├── archive_b2g/                  # GAEB-XML + GoBD-JSON + Pitch-Dokumente
 │   ├── pitch_storyline.md         # Kämmerer-Pitch: 5 Akte, ~4 Minuten (127 L)
 │   ├── regulatory_roadmap.md      # B2G-Regulierungs-Roadmap (VOB/B, GoBD, eIDAS, MiCA), 224 L
@@ -107,6 +113,8 @@ agent_x_storage/
 │   └── test_lifecycle.py           # 25/25 Tests (Fund→Release→Retention)
 ├── foundry.toml                   # Foundry/Anvil Config (OpenZeppelin v5)
 ├── lib/openzeppelin-contracts/    # OpenZeppelin v5.0.0 (via Forge)
+├── charts/agent-x/               # Helm-Chart: KEDA Autoscaling + SGX Limits (9 Dateien)
+├── docs/                         # COMPLIANCE_PLAYBOOK.md (K1–K6) + asyncapi.yaml
 ├── event_bus.py                  # Pub/Sub + JSONL Audit-Log
 ├── gov_procurement_agent.py      # Root Orchestrator, BHO thresholds
 ├── tender_reader_agent.py        # GAEB-XML Reader
@@ -492,6 +500,14 @@ agents_b2g/
 │   ├── predictive_router.py       # PredictiveHealthRouter: score-based traffic shunting
 │   ├── run_agent.py               # AGENT_ID resolver, 9-chain config, /metrics endpoint
 │   └── Dockerfile                 # Python 3.12-slim, nats-py + aiohttp
+├── mechanized/                    # P01–P09 Panzergrenadier: Edge-Clearance (Infantry)
+│   ├── __init__.py                # PanzergrenadierCoordinator, P01–P09 Exports
+│   ├── base.py                    # Coordinator + DeploymentState + ClearanceResult
+│   ├── handler.py                 # NATS-Consumer (infantry.edge) + /metrics (8082)
+│   ├── metrics.py                 # MetricsRegistry (clearance_p99_ms, deep_state_p99_ms)
+│   ├── deep_state.py              # 2ms-Hard-SLA Deep-State-Query
+│   ├── p01_cross_shard.py … p09_reconnaissance.py  # 9 Agenten
+│   └── Dockerfile                 # Python 3.12-slim, nats-py
 ├── subsurface/                    # D00–D01 Prover Factory & Failover Orchestration
 │   ├── __init__.py
 │   └── prover_factory.py          # ZKProverBackend: SGX-TDX/SEV-SNP/CUDA/CPU, curve unification
@@ -1456,4 +1472,20 @@ German for communication and documentation. Code comments in English.
 
 ## Version
 
-Agent X Core: 0.4.0 (stable, 90/100 backtest). Agent X B2G: 0.23.0 (243 agents in 27 main waves plus Wave 3.5 and 25 compliance agents — 277 total, plus Wave 34 Finale Veredelung, Wave 35 SimChain (9 Agents × 3 Chains, 2.200+ lines, 199/199 tests), Wave 36 MultiChain Sovereign Appchains (9 Appchains × 4 Layers, 1.800+ lines, 113/113 tests), Wave 37 Demo Pipeline (9 Agents, 8 unique friction rates), plus Settlement (D01–D04 divers, C09 ingest, ComplianceExporter, ~1.500 lines), Crew (5-role pipeline + DID registry + 9 specialized agents), Gas (autonomous fuel management), Valhalla (ZK honor protocol), Surface Agents (C01–C09: NATS queue-group workers, adaptive batching, constraint metering, predictive health routing, 223k events/s burst), Subsurface Prover Factory (SGX-TDX/SEV-SNP/CUDA/CPU with curve unification), D01 Mock Responder (8 replicas, batch ZK, binary bisect quarantine), Ephemeral Paratroopers (F01–F03, 3 WASM modules compiled, 500ms TTL), Chaos Fleet (F07–F09: killer, throttler, poison injector), Telemetry Ingest (MQTT/HTTP bridge, 7 endpoints), Chaos Matrix (10 attack scenarios), 8 Solidity contracts (inkl. ValhallaVerifier.sol, ProtoGalaxyVerifier.sol, Foundry/Solc 0.8.35) + ESP32 LoRaWAN Firmware (1.651 lines C++/Arduino), E2E: Waves 1–33 all green, Wave 34: 21/21, Wave 35: 199/199, Wave 36: 113/113, Wave 37: Pitch-fertig, Chaos Resilience: 4/4 experiments, Docker: 109+ containers, NATS: Core+JetStream (4222/8222), Anvil: Block 0→1 confirmed, CertiK Security Wave 20: 164/164, Skynet Monitor Wave 21: 80/80, Ops Security Wave 22: 48/48, Token Launch Wave 23: funktional, Trading Wave 24: FN=0/FP=0, Smart Wallet Wave 25: integriert, Clearing & Settlement Wave 27: 122/122, External Threat Defense Wave 28: 104/104, Token Runtime Operations Wave 29: 101/101, UX & Dashboard Wave 31: 92/92, Survival & Off-Grid Wave 33: 63/63, BSI C5/ISO 27001/SOC2/GoBD/eIDAS/GDPR/EVB-IT compliant, GAEB DA XML 3.3, XRechnung 3.0, VHB-221/222, GoBD/BHO-ready, 68.000+ lines).
+Agent X Core: 0.4.0 (stable, 90/100 backtest). Agent X B2G: 0.23.0 (243 agents in 27 main waves plus Wave 3.5 and 25 compliance agents — 277 total, plus Wave 34 Finale Veredelung, Wave 35 SimChain (9 Agents × 3 Chains, 2.200+ lines, 199/199 tests), Wave 36 MultiChain Sovereign Appchains (9 Appchains × 4 Layers, 1.800+ lines, 113/113 tests), Wave 37 Demo Pipeline (9 Agents, 8 unique friction rates), plus Settlement (D01–D04 divers, C09 ingest, ComplianceExporter, ~1.500 lines), Crew (5-role pipeline + DID registry + 9 specialized agents), Gas (autonomous fuel management), Valhalla (ZK honor protocol), Surface Agents (C01–C09: NATS queue-group workers, adaptive batching, constraint metering, predictive health routing, 223k events/s burst), Subsurface Prover Factory (SGX-TDX/SEV-SNP/CUDA/CPU with curve unification), D01 Mock Responder (8 replicas, batch ZK, binary bisect quarantine), Ephemeral Paratroopers (F01–F03, 3 WASM modules compiled, 500ms TTL), Chaos Fleet (F07–F09: killer, throttler, poison injector), Telemetry Ingest (MQTT/HTTP bridge, 7 endpoints), Chaos Matrix (10 attack scenarios), 8 Solidity contracts (inkl. ValhallaVerifier.sol, ProtoGalaxyVerifier.sol, Foundry/Solc 0.8.35) + ESP32 LoRaWAN Firmware (1.651 lines C++/Arduino), E2E: Waves 1–33 all green, Wave 34: 21/21, Wave 35: 199/199, Wave 36: 113/113, Wave 37: Pitch-fertig, Chaos Resilience: 4/4 experiments, Docker: 109+ containers, NATS: Core+JetStream (4222/8222), Anvil: Block 0→1 confirmed, CertiK Security Wave 20: 164/164, Skynet Monitor Wave 21: 80/80, Ops Security Wave 22: 48/48, Token Launch Wave 23: funktional, Trading Wave 24: FN=0/FP=0, Smart Wallet Wave 25: integriert, Clearing & Settlement Wave 27: 122/122, External Threat Defense Wave 28: 104/104, Token Runtime Operations Wave 29: 101/101, UX & Dashboard Wave 31: 92/92, Survival & Off-Grid Wave 33: 63/63, BSI C5/ISO 27001/SOC2/GoBD/eIDAS/GDPR/EVB-IT compliant, GAEB DA XML 3.3, XRechnung 3.0, VHB-221/222, GoBD/BHO-ready, 68.000+ lines, plus 5-Pillar Scale-Up — 1M-Tsunami (0 Loss, 54µs P99, 9.554 echte L1-Anker), Testnet-Bridge (EIP-1559), Overwatch-Dashboard (Prometheus/Grafana), Compliance-Playbook (K1–K6), K8s/Helm-Chart (KEDA+SGX)).
+
+## 5-Pillar Scale-Up (2026-08-14)
+
+Überführung von docker-compose (109+ Container) auf ein produktionsreifes Fundament. Kompletter L1-Kreislauf: `Producer → NATS → Surface → D01 → Epochen-Akkumulator → Anvil (echte Ethereum-TXs)`.
+
+| Säule | Deliverable | Status |
+|-------|-------------|--------|
+| 4 · 1M-Tsunami | `scripts/verify_1m_tsunami.py` — 0 Loss, 54µs Surface-P99, 9.554 echte L1-Anker | ✅ |
+| c · Testnet-Bridge | `SepoliaSettlementBridge` (EIP-1559 + Fee-Escalation, `L1_NETWORK`-Routing) | ✅ |
+| d · Overwatch-Dashboard | Prometheus (1s Scrape) + Grafana (Port 3002), Dual-Format `/metrics` | ✅ |
+| e · Compliance-Playbook | `docs/COMPLIANCE_PLAYBOOK.md` (K1–K6 Matrix + Auditor-Runbook) | ✅ |
+| a · K8s/Helm | `charts/agent-x/` (KEDA Event-Driven Autoscaling + SGX Resource Limits) | ✅ |
+
+**Konservierungs-Invariante:** `Ingested = Cleared + Quarantined = L1 Settled` — 1.000.000 = 949.734 + 50.266 = 1.000.000.
+
+**Test-Suites:** 1M-Tsunami 13/13, Smoke 13/13; `test_e2e_pipeline.py` im CLAUDE.md-Checker registriert.
