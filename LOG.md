@@ -1,5 +1,11 @@
 # Agent X — Development Log
 
+## 2026-08-16 — Rescue-Koordination: Dossier fixiert
+
+Phasen-Pull-Koordination (szenarioabhängig), RoE = Access-Control nicht Timing-Koppler (ΔR≈−0.0037, Falsifikation), RNG-Trennung als Methodik-Lektion. α=0.01 vorab. Dossier: [`docs/RESCUE_KOORDINATION_DOSSIER.md`](docs/RESCUE_KOORDINATION_DOSSIER.md). Commits: `a90c1617` · `52828df1` · `4f80da57` · `ccf63be5`.
+
+---
+
 ## 2026-08-16 — Wirtschafts-Schwarm 0.24.2: NO_COUPLING (IFI-robust)
 
 Bausteine 1–5 (Fundament → Schranken → 9 Agenten → Routing → Kuramoto). IAAFT schien COUPLED (r≈0.535, p<0.002); IFI-Shuffle-Gegenprobe: **NO_COUPLING** (r_obs≈surr_mean, p=1.0) — Periodizitäts-Artefakt der Sim-Frequenzen 2/3/4. Gewaltenteilung = organisatorische Kopplung, keine Phasenkohärenz. Fire-Corridor bleibt Timing-Emergenz. Dossier: [`docs/WIRTSCHAFTS_SCHWARM_DOSSIER.md`](docs/WIRTSCHAFTS_SCHWARM_DOSSIER.md).
