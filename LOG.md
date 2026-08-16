@@ -1,5 +1,11 @@
 # Agent X — Development Log
 
+## 2026-08-16 — Rescue-Dichte-Studie: Dichte-Hypothese falsifiziert
+
+Vorab registriert (Spearman ρ>0 + KW): **NOT_CONFIRMED** (baseline ρ=−0.34 p≈0.99; Clearance ρ=−0.44). Zwei Dossier-Punkte waren kein Mechanismus. Explorativer Abwärtstrend nicht robust (KW base p=0.141). Dossier: [`docs/RESCUE_DICHTE_STUDIE.md`](docs/RESCUE_DICHTE_STUDIE.md). Commit Studie `17b0bc54`.
+
+---
+
 ## 2026-08-16 — Rescue-Koordination: Dossier fixiert
 
 Phasen-Pull-Koordination (szenarioabhängig), RoE = Access-Control nicht Timing-Koppler (ΔR≈−0.0037, Falsifikation), RNG-Trennung als Methodik-Lektion. α=0.01 vorab. Dossier: [`docs/RESCUE_KOORDINATION_DOSSIER.md`](docs/RESCUE_KOORDINATION_DOSSIER.md). Commits: `a90c1617` · `52828df1` · `4f80da57` · `ccf63be5`.

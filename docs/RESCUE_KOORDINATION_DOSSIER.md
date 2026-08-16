@@ -48,7 +48,7 @@ Im dichten Szenario emergiert signifikante Phasen-Kohärenz **ausschließlich au
 
 **Aber:** Die beiden Zeilen sind **verschiedene Szenarien** (die RNG-Trennung änderte den Szenario-Stream, daher detected 90 vs. 68) und nicht direkt vergleichbar. Die Koordination ist **szenarioabhängig**.
 
-**Arbeitshypothese (noch nicht systematisch getestet):** Koordination skaliert mit der **Interaktionsdichte** — mehr Opfer/Gebiete → mehr Nachrichten → mehr Phase-Pull → mehr Kohärenz. Das ist plausibel, aber bislang nur durch diese zwei Datenpunkte gestützt. → Härtung durch Option B (Multi-Seed-/Dichte-Studie) ausstehend.
+**Arbeitshypothese (systematisch getestet, falsifiziert):** Koordination skaliert mit der **Interaktionsdichte** — mehr Opfer/Gebiete → mehr Nachrichten → mehr Phase-Pull → mehr Kohärenz. → **Falsifiziert** in der vorab registrierten Multi-Seed × Dichte-Studie (`docs/RESCUE_DICHTE_STUDIE.md`, Commit `17b0bc54`): Spearman ρ negativ (−0.34 / −0.44), Verdict **NOT_CONFIRMED** in baseline und Clearance. Die beiden Datenpunkte oben waren kein genereller Mechanismus. **Szenarioabhängigkeit bleibt; der Dichte-Mechanismus ist falsch; was Koordination bestimmt, ist offen.**
 
 ## 5. Befund 2 — RoE ist Access-Control, kein Timing-Koppler (Falsifikation)
 
@@ -80,7 +80,7 @@ Der vor der RNG-Trennung beobachtete Flip *„ohne Gate COORDINATED, mit Gate UN
 
 ## 7. Einschränkungen & Ausblick
 
-- **Befund 1** beruht auf zwei Szenarien (ein COORDINATED, ein UNCOORDINATED). Die Dichte-Hypothese ist plausibel, aber nicht systematisch belegt. → **Option B:** Multi-Seed- × Multi-Dichte-Studie, um „Koordination skaliert mit Interaktionsdichte" zu belegen oder zu falsifizieren.
+- **Befund 1** beruht auf zwei Szenarien (ein COORDINATED, ein UNCOORDINATED). Die Dichte-Hypothese als Erklärung ist **falsifiziert** (`docs/RESCUE_DICHTE_STUDIE.md`); Szenarioabhängigkeit und der offene Mechanismus bleiben.
 - **Befund 2** ist sauber (szenario-identisches A/B) und abgeschlossen.
 - **Befund 3** ist eine dauerhafte Methodik-Regel.
 - **α=0.01-Grenzfälle:** Die dünnen Läufe liegen bei p≈0.026 (zwischen 0.01 und 0.05) — schwaches Koordinationssignal, korrekt als UNCOORDINATED berichtet. Kein p-Hacking.
