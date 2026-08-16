@@ -150,6 +150,7 @@ NO_TEST_SUMMARY: set[str] = {
     "scripts/demo_finale.py",               # Demo-Skript, kein Test
     "scripts/demo_simchain.py",             # Demo-Skript, kein Test
     "scripts/test_e2e_pipeline.py",         # E2E-Test, RESULT ✅/❌ (kein x/y-Bilanz)
+    "scripts/test_wirtschaft_base.py",      # Baustein 1: pytest, x/y-Bilanz erst mit Baustein 3
 }
 
 

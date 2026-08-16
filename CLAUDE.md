@@ -497,6 +497,7 @@ agents_b2g/
 │   ├── __init__.py                # DemoOrchestrator, TransformProfiles
 │   ├── demo_orchestrator.py       # 9-agent pipeline, 8 unique friction rates
 │   └── transform_profiles.py      # Per-agent fee/retention/burn rates
+├── wirtschaft/                    # 9 Wirtschaftsagenten Fundament (Baustein 1): WirtschaftAgent + StateKeeper/Gas/WORM/Crypto/MessageBus
 ├── surface/                       # C01–C09 Surface Agents: NATS Queue-Group Workers
 │   ├── __init__.py
 │   ├── handler.py                 # SurfaceHandler: NATS, TPS, adaptive batching, constraint metering
