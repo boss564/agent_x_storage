@@ -73,3 +73,13 @@ def test_all_agents_receive_messages():
     sim.run()
     for uid, u in sim.units.items():
         assert len(u.inbox) > 0, f"{uid} receives no messages (phase never pulled)"
+
+
+def test_heartbeat_increases_pull_frequency():
+    """Each agent must receive far more messages than its OODA cycle count."""
+    sim = HumanitarianNormalSimulation(seed=1, duration_s=200.0, t_warmup=50.0)
+    sim.run()
+    for uid, u in sim.units.items():
+        assert len(u.inbox) > u.cycles_completed, (
+            f"{uid}: {len(u.inbox)} msgs <= {u.cycles_completed} cycles; "
+            f"heartbeat not raising pull frequency")

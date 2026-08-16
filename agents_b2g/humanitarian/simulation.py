@@ -48,6 +48,8 @@ class HumanitarianNormalSimulation:
         self.delivered_count = 0
         self.phase_records: Dict[str, List[float]] = {uid: [] for uid in self.units}
         self._last_sample_t = -1.0
+        self.heartbeat_interval = 2.0   # sim-minutes, well below OODA cycles (10-30)
+        self._last_heartbeat_t = 0.0
 
     def run(self) -> Dict[str, List[float]]:
         while self.t < self.duration_s:
@@ -59,6 +61,17 @@ class HumanitarianNormalSimulation:
         for u in self.units.values():
             u.advance_ooda(self.dt, self.t)
         self._deliver()
+        # Heartbeat: OCHA pulls all agents on a short interval, independent of
+        # OODA cycles. Raises pull frequency from 1x/cycle to 1x/2min and
+        # compensates continuous frequency drift from jitter.
+        if self.t - self._last_heartbeat_t >= self.heartbeat_interval:
+            self._last_heartbeat_t = self.t
+            ocha_id = self._find_capability("priority_allocation")
+            if ocha_id:
+                for uid, u in self.units.items():
+                    if uid != ocha_id:
+                        self._send(self.units[ocha_id], uid, "coord_heartbeat", {})
+                        self._send(u, ocha_id, "heartbeat", {})
         for u in self.units.values():
             if u.cycles_completed > u._last_act_cycle:
                 u._last_act_cycle = u.cycles_completed
