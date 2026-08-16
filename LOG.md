@@ -1,5 +1,13 @@
 # Agent X — Development Log
 
+## 2026-08-16 — CI-Resilienz: Pre-Registration (vor Code)
+
+H0/H1/H2 vorab: R als Resilienz-Indikator unter Blackout/Cyber/Naturkatastrophe.
+Nullhypothese: **Phasen-Offset-Shuffle** (nicht IAAFT). Bau: erst H0-Gate (10 Seeds),
+dann Stress. Design: [`docs/CI_RESILIENZ_STUDIE_PREREG.md`](docs/CI_RESILIENZ_STUDIE_PREREG.md).
+
+---
+
 ## 2026-08-16 — Rescue-Dichte-Studie: Dichte-Hypothese falsifiziert
 
 Vorab registriert (Spearman ρ>0 + KW): **NOT_CONFIRMED** (baseline ρ=−0.34 p≈0.99; Clearance ρ=−0.44). Zwei Dossier-Punkte waren kein Mechanismus. Explorativer Abwärtstrend nicht robust (KW base p=0.141). Dossier: [`docs/RESCUE_DICHTE_STUDIE.md`](docs/RESCUE_DICHTE_STUDIE.md). Commit Studie `17b0bc54`.
