@@ -2,6 +2,7 @@
 
 Baustein 1: foundation. Baustein 2: Funktionsschranken + 9 profiles.
 Baustein 3: concrete agents + distributed Freigabe/Delegation.
+Baustein 4: KlassenResolver + Envelope↔AgentMessage routing.
 """
 from agents_b2g.wirtschaft.base import (
     KompetenzKlasse,
@@ -21,6 +22,10 @@ from agents_b2g.wirtschaft.agents import (
 )
 from agents_b2g.wirtschaft.schwarm import WirtschaftsSchwarm, build_schwarm
 from agents_b2g.wirtschaft.subagents import ComplianceEngine, PolicyStore
+from agents_b2g.wirtschaft.routing_adapter import (
+    KlassenResolver, WirtschaftsRouter,
+    envelope_to_agent_message, agent_message_to_envelope,
+)
 
 __all__ = [
     "KompetenzKlasse",
@@ -49,4 +54,8 @@ __all__ = [
     "build_schwarm",
     "ComplianceEngine",
     "PolicyStore",
+    "KlassenResolver",
+    "WirtschaftsRouter",
+    "envelope_to_agent_message",
+    "agent_message_to_envelope",
 ]
