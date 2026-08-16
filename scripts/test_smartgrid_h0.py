@@ -50,7 +50,7 @@ def test_phase_pull_wraps():
 def test_simulation_produces_generator_phases_and_w_dyn():
     sim = SmartGridNormalSimulation(seed=1, duration_s=200.0, t_warmup=50.0)
     phases = sim.run()
-    assert len(phases) == 3
+    assert len(phases) == 9                      # 3 agents x 3 inverters
     assert all(len(v) > 0 for v in phases.values())
     assert len(sim.w_dyn_records) > 0
     assert all(0.0 <= x <= 1.0 for x in sim.w_dyn_records)

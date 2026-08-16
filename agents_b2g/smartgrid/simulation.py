@@ -48,9 +48,21 @@ class SmartGridNormalSimulation:
         self.grid_bus_phase = 0.0
         self.grid_bus_period = 4.0
 
-        self.phase_records: Dict[str, List[float]] = {
-            uid: [] for uid, u in self.units.items() if u.unit_class == "A"
-        }
+        self.inverters_per_gen = 3
+        # R_grid over physical inverter phases (N_gen = 3 agents x 3 inverters = 9).
+        self.phase_records: Dict[str, List[float]] = {}
+        self._inverter_state: Dict[str, Dict[str, float]] = {}
+        for uid, u in self.units.items():
+            if u.unit_class == "A":
+                for k in range(self.inverters_per_gen):
+                    inv_id = f"{uid}_inv{k}"
+                    self.phase_records[inv_id] = []
+                    self._inverter_state[inv_id] = {
+                        "phase": self.jitter_rng.uniform(0, TWO_PI),
+                        "period": u.cycle_period_s * (
+                            1.0 + self.jitter_rng.uniform(-jitter_pct, jitter_pct)
+                        ),
+                    }
         self._last_sample_t = -1.0
         self.w_dyn_records: List[float] = []
 
@@ -64,9 +76,10 @@ class SmartGridNormalSimulation:
         self.grid_bus_phase = (self.grid_bus_phase + TWO_PI * self.dt / self.grid_bus_period) % TWO_PI
         for u in self.units.values():
             u.advance_ooda(self.dt, self.t)
-        for uid, u in self.units.items():
-            if u.unit_class == "A" and u.state != UnitState.OUT_OF_SERVICE:
-                u.ooda_phase = phase_pull(u.ooda_phase, self.grid_bus_phase, self.grid_coupling)
+        # Physical inverter phases feed R_grid (agent OODA stays for agent logic).
+        for inv_id, inv in self._inverter_state.items():
+            inv["phase"] = (inv["phase"] + TWO_PI * self.dt / inv["period"]) % TWO_PI
+            inv["phase"] = phase_pull(inv["phase"], self.grid_bus_phase, self.grid_coupling)
         for u in self.units.values():
             if u.cycles_completed > u._last_act_cycle:
                 u._last_act_cycle = u.cycles_completed
@@ -74,9 +87,8 @@ class SmartGridNormalSimulation:
         self._compute_power_balance()
         if self.t >= self.t_warmup and (self.t - self._last_sample_t) >= self.sample_interval:
             self._last_sample_t = self.t
-            for uid, u in self.units.items():
-                if u.unit_class == "A":
-                    self.phase_records[uid].append(u.ooda_phase)
+            for inv_id, inv in self._inverter_state.items():
+                self.phase_records[inv_id].append(inv["phase"])
 
     def _unit_act(self, unit: SmartGridUnit) -> None:
         pass
