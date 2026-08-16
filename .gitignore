@@ -48,3 +48,4 @@ rescue_density_study.json
 rescue_density_progress.txt
 ci_stress_study_results.json
 hum_stress_study_results.json
+smartgrid_stress_study_results.json

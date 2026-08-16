@@ -1,15 +1,15 @@
-"""Normal-operation simulation for the smart grid (H0 gate). NO stress injectors.
+"""Smart Grid simulation: H0 normal-op + stress injectors.
 
-Models OODA cycles (jitter +/-5%), power generation (Class A, stochastic),
-load profile (daily cycle), power balance -> W_dyn (autarky, lambda=0), and
-grid-bus coupling -> generator phase coherence -> R_grid.
+Normal (SmartGridNormalSimulation): inverter fleets, grid-bus coupling, W_dyn.
+Stress (SmartGridStressSimulation): bewoelkung / spitzenlast / leitungsausfall.
+Metrics: R_grid (Class-A inverter phases), W_dyn (autarky, lambda=0).
 """
 
 from __future__ import annotations
 
 import math
 import random
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 from agents_b2g.smartgrid.unit_base import SmartGridUnit, UnitState
 from agents_b2g.smartgrid.agents import build_smartgrid_swarm
@@ -24,6 +24,8 @@ def phase_pull(phase: float, target: float, strength: float) -> float:
 
 
 class SmartGridNormalSimulation:
+    """H0 gate: normal operation with inverter fleets (N=9) + W_dyn."""
+
     def __init__(self, seed: int = 42, duration_s: float = 1440.0, dt: float = 1.0,
                  grid_coupling: float = 0.60, t_warmup: float = 60.0,
                  jitter_pct: float = 0.05, sample_interval: float = 1.0,
@@ -49,7 +51,6 @@ class SmartGridNormalSimulation:
         self.grid_bus_period = 4.0
 
         self.inverters_per_gen = 3
-        # R_grid over physical inverter phases (N_gen = 3 agents x 3 inverters = 9).
         self.phase_records: Dict[str, List[float]] = {}
         self._inverter_state: Dict[str, Dict[str, float]] = {}
         for uid, u in self.units.items():
@@ -76,7 +77,6 @@ class SmartGridNormalSimulation:
         self.grid_bus_phase = (self.grid_bus_phase + TWO_PI * self.dt / self.grid_bus_period) % TWO_PI
         for u in self.units.values():
             u.advance_ooda(self.dt, self.t)
-        # Physical inverter phases feed R_grid (agent OODA stays for agent logic).
         for inv_id, inv in self._inverter_state.items():
             inv["phase"] = (inv["phase"] + TWO_PI * self.dt / inv["period"]) % TWO_PI
             inv["phase"] = phase_pull(inv["phase"], self.grid_bus_phase, self.grid_coupling)
@@ -113,3 +113,161 @@ class SmartGridNormalSimulation:
         w_dyn = max(0.0, min(1.0, served / load))
         if self.t >= self.t_warmup:
             self.w_dyn_records.append(w_dyn)
+
+
+class SmartGridStressSimulation:
+    """Stress study: within-run normal + stress windows; R_grid + W_dyn."""
+
+    def __init__(self, seed: int = 42, duration_s: float = 4320.0, dt: float = 1.0,
+                 grid_coupling: float = 0.60, t_warmup: float = 60.0,
+                 t_stress: float = 1440.0, burn_in: float = 60.0,
+                 jitter_pct: float = 0.05, sample_interval: float = 1.0,
+                 base_load: float = 180.0,
+                 stress_type: Optional[str] = None):
+        self.rng = random.Random(seed)
+        self.jitter_rng = random.Random(seed + 7777)
+        self.load_rng = random.Random(seed + 5555)
+        self.stress_rng = random.Random(seed + 999999)
+        self.duration_s = duration_s
+        self.dt = dt
+        self.grid_coupling = grid_coupling
+        self.t_warmup = t_warmup
+        self.t_stress = t_stress
+        self.burn_in = burn_in
+        self.sample_interval = sample_interval
+        self.base_load = base_load
+        self.stress_type = stress_type
+
+        self.units: Dict[str, SmartGridUnit] = build_smartgrid_swarm()
+        self.inverters_per_gen = 3
+        self.phase_normal: Dict[str, List[float]] = {}
+        self.phase_stress: Dict[str, List[float]] = {}
+        self._inverter_state: Dict[str, Dict[str, float]] = {}
+        for uid, u in self.units.items():
+            u.ooda_phase = self.jitter_rng.uniform(0, TWO_PI)
+            u.cycle_period_s = u.cycle_period_s * (1.0 + self.jitter_rng.uniform(-jitter_pct, jitter_pct))
+            u._last_act_cycle = -1
+            if u.unit_class == "A":
+                for k in range(self.inverters_per_gen):
+                    inv_id = f"{uid}_inv{k}"
+                    self.phase_normal[inv_id] = []
+                    self.phase_stress[inv_id] = []
+                    self._inverter_state[inv_id] = {
+                        "phase": self.jitter_rng.uniform(0, TWO_PI),
+                        "period": u.cycle_period_s * (
+                            1.0 + self.jitter_rng.uniform(-jitter_pct, jitter_pct)
+                        ),
+                        "capacity_factor": 1.0,
+                    }
+
+        self.t = 0.0
+        self.grid_bus_phase = 0.0
+        self.grid_bus_period = 4.0
+        self._last_sample_normal = -1.0
+        self._last_sample_stress = -1.0
+        self._stress_injected = False
+        self.w_dyn_normal: List[float] = []
+        self.w_dyn_stress: List[float] = []
+
+    def run(self) -> Dict:
+        while self.t < self.duration_s:
+            self.step()
+        return {
+            "normal": self.phase_normal,
+            "stress": self.phase_stress,
+            "w_dyn_normal": self.w_dyn_normal,
+            "w_dyn_stress": self.w_dyn_stress,
+        }
+
+    def step(self) -> None:
+        self.t += self.dt
+        if not self._stress_injected and self.t >= self.t_stress:
+            self._inject_stress()
+            self._stress_injected = True
+        self.grid_bus_phase = (self.grid_bus_phase + TWO_PI * self.dt / self.grid_bus_period) % TWO_PI
+        for u in self.units.values():
+            u.advance_ooda(self.dt, self.t)
+        for inv_id, inv in self._inverter_state.items():
+            inv["phase"] = (inv["phase"] + TWO_PI * self.dt / inv["period"]) % TWO_PI
+            # Offline inverters (capacity_factor==0): phase drifts, no bus coupling.
+            if inv.get("capacity_factor", 1.0) > 0.0:
+                inv["phase"] = phase_pull(inv["phase"], self.grid_bus_phase, self.grid_coupling)
+        for u in self.units.values():
+            if u.cycles_completed > u._last_act_cycle:
+                u._last_act_cycle = u.cycles_completed
+                self._unit_act(u)
+        self._compute_power_balance()
+        if self.t_warmup <= self.t < self.t_stress:
+            if (self.t - self._last_sample_normal) >= self.sample_interval:
+                self._last_sample_normal = self.t
+                for inv_id in self.phase_normal:
+                    self.phase_normal[inv_id].append(self._inverter_state[inv_id]["phase"])
+        elif (self.stress_type is not None
+              and self.t >= (self.t_stress + self.burn_in)):
+            if (self.t - self._last_sample_stress) >= self.sample_interval:
+                self._last_sample_stress = self.t
+                for inv_id in self.phase_stress:
+                    self.phase_stress[inv_id].append(self._inverter_state[inv_id]["phase"])
+
+    def _inject_stress(self) -> None:
+        if self.stress_type is None:
+            return
+        if self.stress_type == "bewoelkung":
+            self._stress_bewoelkung()
+        elif self.stress_type == "spitzenlast":
+            self._stress_spitzenlast()
+        elif self.stress_type == "leitungsausfall":
+            self._stress_leitungsausfall()
+
+    def _stress_bewoelkung(self) -> None:
+        for inv_id in self._inverter_state:
+            if "pv_prosumer" in inv_id:
+                self._inverter_state[inv_id]["capacity_factor"] = 0.1
+
+    def _stress_spitzenlast(self) -> None:
+        self.base_load *= 1.5
+
+    def _stress_leitungsausfall(self) -> None:
+        for inv_id in list(self._inverter_state.keys()):
+            if "wind_turbine" in inv_id:
+                self._inverter_state[inv_id]["capacity_factor"] = 0.0
+                self._inverter_state[inv_id]["period"] = 100.0
+
+    def _unit_act(self, unit: SmartGridUnit) -> None:
+        pass
+
+    def _compute_power_balance(self) -> None:
+        gen_total = 0.0
+        for inv_id, inv in self._inverter_state.items():
+            if "pv_prosumer" in inv_id:
+                base_cap = 50.0 / self.inverters_per_gen
+            elif "wind_turbine" in inv_id:
+                base_cap = 80.0 / self.inverters_per_gen
+            else:
+                base_cap = 100.0 / self.inverters_per_gen
+            cf = inv["capacity_factor"] * (0.2 + 0.7 * self.rng.random())
+            gen_total += base_cap * cf
+        load = self.base_load * (1.0 + 0.25 * math.sin(TWO_PI * self.t / 1440.0))
+        load += self.load_rng.uniform(-10.0, 10.0)
+        load = max(load, 1.0)
+        flex_available = sum(
+            u.power_capacity * 0.4 for uid, u in self.units.items()
+            if u.unit_class == "B" and u.state != UnitState.OUT_OF_SERVICE
+        )
+        served = min(gen_total + flex_available, load)
+        w_dyn = max(0.0, min(1.0, served / load))
+        if self.t_warmup <= self.t < self.t_stress:
+            self.w_dyn_normal.append(w_dyn)
+        elif self.t >= (self.t_stress + self.burn_in):
+            self.w_dyn_stress.append(w_dyn)
+
+    def compute_efficiency(self, window: str) -> Dict:
+        if window == "normal":
+            w = self.w_dyn_normal
+        elif window == "stress":
+            w = self.w_dyn_stress
+        else:
+            return {"mean_w_dyn": 0.0, "n_samples": 0}
+        if not w:
+            return {"mean_w_dyn": 0.0, "n_samples": 0}
+        return {"mean_w_dyn": sum(w) / len(w), "n_samples": len(w)}
