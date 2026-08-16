@@ -77,12 +77,14 @@ class CASBomber:
     def __init__(self, coordinator: CASCoordinator,
                  backend: Optional[ComputeBackend] = None,
                  batch_size: int = 1024,
-                 metrics=None, event_bus=None):
+                 metrics=None, event_bus=None,
+                 on_result=None):
         self._coordinator = coordinator
         self._backend = backend or CPUBackend()
         self._batch_size = batch_size
         self._metrics = metrics
         self._bus = event_bus
+        self._on_result = on_result
         self._queue: List[CASRequest] = []
 
     def enqueue(self, request: CASRequest) -> None:
@@ -115,6 +117,10 @@ class CASBomber:
                 # skip the commit lock, route straight to fallback.
                 shortcuts += 1
                 results.append(CASResult(req.request_id, CASStatus.CONFLICT))
+
+        if self._on_result is not None:
+            for result in results:
+                self._on_result(result)
 
         latency_us = (time.perf_counter_ns() - t0) / 1000.0
         report = BurstReport(

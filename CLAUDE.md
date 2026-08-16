@@ -22,6 +22,8 @@ agent_x_storage/
 ├── agent_x/                      # Analyse-Module
 │   └── metrics/
 │       └── compound_analyzer.py  # EWMA-Kalibrierungs-Analyzer
+├── agents/                       # Core runtime (Surface/Subsurface/Security/Air)
+│   └── air/                      # Air Interceptor Layer A01–A09: Soft-Finality, Transient-CAS, Poison-Neutralisierung, AWACS
 ├── agents_b2g/                   # B2G-Agenten (s.u. Wellen-Tabelle)
 │   ├── protocol.py                # ABM-Kommunikationsprotokoll: BaseAgent, TickController, 18 Payload-Typen (485 L)
 │   ├── bunker/                    # Bunker HSM Adapter — Dual-Mode (SoftHSM + NitroKey)
@@ -41,7 +43,8 @@ agent_x_storage/
 │   ├── fetch_xrechnung_schematron.py # XRechnung 3.0 Schematron Fetcher
 │   ├── demo_finale.py             # Durchsatz-Benchmark mit BHO-Verletzungserkennung (179 L)
 │   ├── demo_producer_cluster.py   # 27-Agenten-ABM: Provider/Evaluator/Economic (514 L)
-│   ├── pitch_test.sh              # Pre-Pitch-Verifikation (Health, BHO, Compliance)
+│   ├── pitch_test.sh              # Pre-Pitch-Gate: BHO + Compliance Zero-Sum (failed_count==0), 7/7 quick
+│   ├── test_air_layer.py          # Air Layer E2E A01–A09 + Chaos F07–F09 (18/18)
 │   ├── test_esp32_firmware.py      # ESP32 Firmware Test Suite (15/15 passed)
 │   ├── test_e2e_pipeline.py        # 6-Schichten-E2E (C01→P09→D05→Anvil)
 │   └── verify_1m_tsunami.py        # 1M-Tsunami-Verifier (Zero-Loss + P99 + RSS + L1-Anker)
@@ -55,7 +58,7 @@ agent_x_storage/
 │       ├── datasources/prometheus.yml
 │       └── dashboards/           # overwatch.json + provider.yml
 ├── archive_b2g/                  # GAEB-XML + GoBD-JSON + Pitch-Dokumente
-│   ├── pitch_storyline.md         # Kämmerer-Pitch: 5 Akte, ~4 Minuten (127 L)
+│   ├── pitch_storyline.md         # Kämmerer-Pitch 0.24.0: „Das System, das sich selbst prüft", 5 Akte, ~4 Min (107 L)
 │   ├── regulatory_roadmap.md      # B2G-Regulierungs-Roadmap (VOB/B, GoBD, eIDAS, MiCA), 224 L
 │   └── tokenomics_model.md        # Drei-Token-Modell ($AGX/veAGX/EURe), Burn-Tabelle, 364 L
 ├── orchestrator_b2g_full.py      # 286-Agenten-Pipeline (alle Waves inkl. 3.5), 378 lines
@@ -77,9 +80,9 @@ agent_x_storage/
 │   └── test_z3_integration.py      # 13 Tests: Z3-Kernel, HTTP, Orchestrator, IEEE-754, 268 L
 ├── services/                       # Microservices (FastAPI + Docker)
 │   ├── __init__.py
-│   ├── z3_solver/                  # Z3 Theorem Prover Service
-│   │   ├── main.py                 # /prove_bho_invariant, /health, 185 L
-│   │   ├── Dockerfile.z3           # Python 3.11-slim + Z3-Binaries, 32 L
+│   ├── z3_solver/                  # Z3 Theorem Prover + BSI-Compliance Gate
+│   │   ├── main.py                 # /prove_bho_invariant, /health, /compliance (681 L; gate/passed/failed_count, RPA-Triade, probe-promotion)
+│   │   ├── Dockerfile.z3           # Python 3.11-slim + Z3-Binaries; Quellbaum :ro unter / gemountet (_ROOT=/)
 │   │   └── requirements.txt        # fastapi, uvicorn, z3-solver, pydantic, 4 L
 │   ├── multichain_api.py           # MultiChain REST API (10 endpoints), 374 L
 │   ├── telemetry_ingest/           # MQTT/HTTP Bridge for ESP32 IoT sensors
@@ -628,8 +631,13 @@ GoBD → Ledger (BHO Δ=0,00€) → Chain-Hash → XRechnung → PoPW-Coverage 
 
 ### B2G Test Results
 
+- **BSI Compliance Gate:** `verified=30/42` · `claimed=1` (nur 1.1 NFC AusweisApp2 — dokumentierte Hardware-Ceiling) · `attested=11` · `failed=0` · `gate=PASS` · `KONFORM_MIT_VORBEHALT` (`services/z3_solver/main.py`)
+- **Probe-Promotion 2026-08-16:** 2.1 WORM · 3.4 GAEB (SON) · 3.6 VOB/B Mängel+4y Warranty (Option A) · 4.5 HSM_PIN · 5.4 Proof-Hash · 5.6 Dashboard · 7.5 CI/CD (5 Jobs)
+- **3.6 Integrität:** GuaranteeTracker an VOB/B §13 Abs. 4 angeglichen (`warranty_years: 4`); Probe assertiert 4 Jahre (BGB-5y-Abweichung behoben)
 - **E2E 90-Agent Test:** 11/11 waves passed (`scripts/end_to_end_90_agents.py`), 0.8s duration
-- **E2E Integration Test:** 20/25 passed (`scripts/end_to_end_b2g_test.py`)
+- **E2E Integration Test:** 25/25 passed (`scripts/end_to_end_b2g_test.py`)
+- **Air Layer E2E:** 18/18 passed (`scripts/test_air_layer.py`) — Soft-Finality P99 13.8µs (<200µs), Transient CAS, Poison-Neutralisierung, Chaos-Resilienz (F07–F09), Conservation + BHO Δ=0,00€
+- **GAEB DA XML 3.3:** 2/2 tests passed (`scripts/test_gaeb_reference.py`) — X83/X84 XSD validation ALLE VALIDE; X84 generation DP/VersDate/UP/TotalAmount compliant (`X84SerializerAgent`)
 - **Treasury Pipeline:** 4/4 installments, all BHO Δ=0.00€
 - **CHI Decomposition:** Functional, per-block penalty trace
 - **Wave 7+8 Integration:** 18 agents, Circuit Breaker, DLQ recovery, GoBD export, API gateway
@@ -1472,7 +1480,27 @@ German for communication and documentation. Code comments in English.
 
 ## Version
 
-Agent X Core: 0.4.0 (stable, 90/100 backtest). Agent X B2G: 0.23.0 (243 agents in 27 main waves plus Wave 3.5 and 25 compliance agents — 277 total, plus Wave 34 Finale Veredelung, Wave 35 SimChain (9 Agents × 3 Chains, 2.200+ lines, 199/199 tests), Wave 36 MultiChain Sovereign Appchains (9 Appchains × 4 Layers, 1.800+ lines, 113/113 tests), Wave 37 Demo Pipeline (9 Agents, 8 unique friction rates), plus Settlement (D01–D04 divers, C09 ingest, ComplianceExporter, ~1.500 lines), Crew (5-role pipeline + DID registry + 9 specialized agents), Gas (autonomous fuel management), Valhalla (ZK honor protocol), Surface Agents (C01–C09: NATS queue-group workers, adaptive batching, constraint metering, predictive health routing, 223k events/s burst), Subsurface Prover Factory (SGX-TDX/SEV-SNP/CUDA/CPU with curve unification), D01 Mock Responder (8 replicas, batch ZK, binary bisect quarantine), Ephemeral Paratroopers (F01–F03, 3 WASM modules compiled, 500ms TTL), Chaos Fleet (F07–F09: killer, throttler, poison injector), Telemetry Ingest (MQTT/HTTP bridge, 7 endpoints), Chaos Matrix (10 attack scenarios), 8 Solidity contracts (inkl. ValhallaVerifier.sol, ProtoGalaxyVerifier.sol, Foundry/Solc 0.8.35) + ESP32 LoRaWAN Firmware (1.651 lines C++/Arduino), E2E: Waves 1–33 all green, Wave 34: 21/21, Wave 35: 199/199, Wave 36: 113/113, Wave 37: Pitch-fertig, Chaos Resilience: 4/4 experiments, Docker: 109+ containers, NATS: Core+JetStream (4222/8222), Anvil: Block 0→1 confirmed, CertiK Security Wave 20: 164/164, Skynet Monitor Wave 21: 80/80, Ops Security Wave 22: 48/48, Token Launch Wave 23: funktional, Trading Wave 24: FN=0/FP=0, Smart Wallet Wave 25: integriert, Clearing & Settlement Wave 27: 122/122, External Threat Defense Wave 28: 104/104, Token Runtime Operations Wave 29: 101/101, UX & Dashboard Wave 31: 92/92, Survival & Off-Grid Wave 33: 63/63, BSI C5/ISO 27001/SOC2/GoBD/eIDAS/GDPR/EVB-IT compliant, GAEB DA XML 3.3, XRechnung 3.0, VHB-221/222, GoBD/BHO-ready, 68.000+ lines, plus 5-Pillar Scale-Up — 1M-Tsunami (0 Loss, 54µs P99, 9.554 echte L1-Anker), Testnet-Bridge (EIP-1559), Overwatch-Dashboard (Prometheus/Grafana), Compliance-Playbook (K1–K6), K8s/Helm-Chart (KEDA+SGX)).
+Agent X Core: 0.4.0 (stable, 90/100 backtest). Agent X B2G: 0.24.1 (243 agents in 27 main waves plus Wave 3.5 and 25 compliance agents — 277 total, plus Wave 34 Finale Veredelung, Wave 35 SimChain (9 Agents × 3 Chains, 2.200+ lines, 199/199 tests), Wave 36 MultiChain Sovereign Appchains (9 Appchains × 4 Layers, 1.800+ lines, 113/113 tests), Wave 37 Demo Pipeline (9 Agents, 8 unique friction rates), plus Settlement (D01–D04 divers, C09 ingest, ComplianceExporter, ~1.500 lines), Crew (5-role pipeline + DID registry + 9 specialized agents), Gas (autonomous fuel management), Valhalla (ZK honor protocol), Surface Agents (C01–C09: NATS queue-group workers, adaptive batching, constraint metering, predictive health routing, 223k events/s burst), Subsurface Prover Factory (SGX-TDX/SEV-SNP/CUDA/CPU with curve unification), D01 Mock Responder (8 replicas, batch ZK, binary bisect quarantine), Ephemeral Paratroopers (F01–F03, 3 WASM modules compiled, 500ms TTL), Air Layer E2E: 18/18, Chaos Resilience: F07–F09 abgefangen (Chaos Fleet: killer, throttler, poison injector), Telemetry Ingest (MQTT/HTTP bridge, 7 endpoints), Chaos Matrix (10 attack scenarios), 8 Solidity contracts (inkl. ValhallaVerifier.sol, ProtoGalaxyVerifier.sol, Foundry/Solc 0.8.35) + ESP32 LoRaWAN Firmware (1.651 lines C++/Arduino), E2E: Waves 1–33 all green, Wave 34: 21/21, Wave 35: 199/199, Wave 36: 113/113, Wave 37: Pitch-fertig, Chaos Resilience: 4/4 experiments, Docker: 109+ containers, NATS: Core+JetStream (4222/8222), Anvil: Block 0→1 confirmed, CertiK Security Wave 20: 164/164, Skynet Monitor Wave 21: 80/80, Ops Security Wave 22: 48/48, Token Launch Wave 23: funktional, Trading Wave 24: FN=0/FP=0, Smart Wallet Wave 25: integriert, Clearing & Settlement Wave 27: 122/122, External Threat Defense Wave 28: 104/104, Token Runtime Operations Wave 29: 101/101, UX & Dashboard Wave 31: 92/92, Survival & Off-Grid Wave 33: 63/63, BSI C5/ISO 27001/SOC2/GoBD/eIDAS/GDPR/EVB-IT compliant, GAEB DA XML 3.3, XRechnung 3.0, VHB-221/222, GoBD/BHO-ready, 68.000+ lines, plus 5-Pillar Scale-Up — 1M-Tsunami (0 Loss, 54µs P99, 9.554 echte L1-Anker), Testnet-Bridge (EIP-1559), Overwatch-Dashboard (Prometheus/Grafana), Compliance-Playbook (K1–K7), K8s/Helm-Chart (KEDA+SGX)).
+
+```
+0.24.1 (2026-08-16) — Emergenz TIER 0 (Mess-Validität):
+- Reproduzierbarkeit: zlib.crc32 statt hash() für Economic-Sharding
+  (adapter_agentx.py + demo_producer_cluster.py); PYTHONHASHSEED-unabhängig
+- TickController.run(): Docstring-Warnung Routing-No-op (Rollen-Adressierung)
+  + Determinismus-Hinweis (kein builtins.hash für Arbeitsverteilung)
+- Gate unverändert NO_COUPLING — Messung jetzt gültig
+
+0.24.0 (2026-08-16) — Compliance-Härtung & Air-Layer:
+- Air Interceptor Layer (A01–A09): Soft-Finality-Fastpath, Transient-CAS,
+  Poison-Neutralisierung, AWACS-Datalink; test_air_layer.py 18/18
+- Compliance-Gate: verified=30/42, claimed=1 (HW-Ceiling 1.1), attested=11,
+  failed=0, gate=PASS, KONFORM_MIT_VORBEHALT (Probe-Promotion)
+- E2E Integration: 25/25 (X84 GAEB-Pflichtfelder + BHO-Assertion)
+- 6 echte Fixes: HSM-Default-PIN→Env, X84 DP/VersDate/UP/TotalAmount,
+  CI-YAML-Reparatur (5 Jobs), Gewährleistung 5y→4y (VOB/B §13 Abs. 4),
+  BHO-Assertion-Inversion, Fehler-Trunkierung [:3] aufgehoben
+- Betrieb: SON-Nacht-Cron + Backup-Automatisierung, Probe-Regeln R1/R2
+```
 
 ## 5-Pillar Scale-Up (2026-08-14)
 
@@ -1483,7 +1511,7 @@ Agent X Core: 0.4.0 (stable, 90/100 backtest). Agent X B2G: 0.23.0 (243 agents i
 | 4 · 1M-Tsunami | `scripts/verify_1m_tsunami.py` — 0 Loss, 54µs Surface-P99, 9.554 echte L1-Anker | ✅ |
 | c · Testnet-Bridge | `SepoliaSettlementBridge` (EIP-1559 + Fee-Escalation, `L1_NETWORK`-Routing) | ✅ |
 | d · Overwatch-Dashboard | Prometheus (1s Scrape) + Grafana (Port 3002), Dual-Format `/metrics` | ✅ |
-| e · Compliance-Playbook | `docs/COMPLIANCE_PLAYBOOK.md` (K1–K6 Matrix + Auditor-Runbook) | ✅ |
+| e · Compliance-Playbook | `docs/COMPLIANCE_PLAYBOOK.md` (K1–K7 Matrix + Auditor-Runbook + Probe-Promotion) | ✅ |
 | a · K8s/Helm | `charts/agent-x/` (KEDA Event-Driven Autoscaling + SGX Resource Limits) | ✅ |
 
 **Konservierungs-Invariante:** `Ingested = Cleared + Quarantined = L1 Settled` — 1.000.000 = 949.734 + 50.266 = 1.000.000.
