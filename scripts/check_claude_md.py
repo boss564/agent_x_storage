@@ -158,6 +158,7 @@ NO_TEST_SUMMARY: set[str] = {
     "scripts/test_wirtschaft_emergence.py",   # Baustein 5b: Kuramoto-Adapter (ergebnisoffen)
     "scripts/test_rescue.py",                 # Rescue-Koordination (Katastrophenschutz, zivil)
     "scripts/test_rescue_simulation.py",      # Rescue volle Simulationsschleife (emergente Kopplung)
+    "scripts/test_rescue_clearance.py",       # Rescue Einsatzregeln / Infrastruktur-Freigabe (RoE)
     "scripts/test_astrocore_evaluator.py",  # AstroCore Kuramoto smoke (IAAFT CI-light)
 }
 

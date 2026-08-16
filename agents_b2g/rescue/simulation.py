@@ -19,6 +19,7 @@ from agents_b2g.rescue.unit_base import RescueUnit, UnitState
 from agents_b2g.rescue.coordinator import IncidentCoordinator
 from agents_b2g.rescue.agents import build_rescue_swarm
 from agents_b2g.rescue.ooda_evaluator import evaluate_coordination
+from agents_b2g.rescue.clearance import ClearanceGate, HazardLevel, ClearanceStatus
 
 TWO_PI = 2.0 * math.pi
 
@@ -48,10 +49,18 @@ class ScenarioGenerator:
         # exponential interval -> non-periodic drive
         self._next_at = t + self.rng.expovariate(1.0 / self.mean_interval_s)
         self._area_seq += 1
+        severity = self.rng.choice(["minor", "moderate", "severe"])
+        if severity == "severe" and self.rng.random() < 0.6:
+            hazard = "unsafe"
+        elif severity == "moderate" and self.rng.random() < 0.25:
+            hazard = "unsafe"
+        else:
+            hazard = "safe"
         return {
             "area_id": f"area_{self._area_seq:03d}",
-            "severity": self.rng.choice(["minor", "moderate", "severe"]),
+            "severity": severity,
             "victims": self.rng.randint(self.victims_lo, self.victims_hi),
+            "hazard": hazard,
             "t": t,
         }
 
@@ -59,7 +68,8 @@ class ScenarioGenerator:
 class RescueSimulation:
     def __init__(self, seed: int = 42, duration_s: float = 600.0, dt: float = 1.0,
                  coupling: float = 0.30, resupply_threshold: float = 30.0,
-                 resupply_amount: float = 60.0, work_cycles: int = 3):
+                 resupply_amount: float = 60.0, work_cycles: int = 3,
+                 enable_clearance: bool = False, assess_stable_p: float = 0.85):
         self.rng = random.Random(seed)
         self.duration_s = duration_s
         self.dt = dt
@@ -67,6 +77,10 @@ class RescueSimulation:
         self.resupply_threshold = resupply_threshold
         self.resupply_amount = resupply_amount
         self.work_cycles = work_cycles
+        self.enable_clearance = enable_clearance
+        self.clearance_gate = ClearanceGate() if enable_clearance else None
+        self.assess_stable_p = assess_stable_p
+        self._assessment_queue: List[str] = []
 
         self.units: Dict[str, RescueUnit] = build_rescue_swarm()
         self.coordinator = IncidentCoordinator()
@@ -160,22 +174,28 @@ class RescueSimulation:
         rep = self.undetected.pop(0)
         self.coordinator.report_damage(rep["area_id"], rep["severity"],
                                        rep["victims"], self.t)
+        if self.clearance_gate is not None:
+            self.clearance_gate.register_area(rep["area_id"],
+                                              HazardLevel(rep.get("hazard", "safe")))
+            if self.clearance_gate.is_blocked(rep["area_id"]):
+                self._assessment_queue.append(rep["area_id"])
         cmd = self._find_capability("incident_command")
         if cmd:
             self._send(unit, cmd, "damage_report",
                        {"area": rep["area_id"], "victims": rep["victims"]})
 
     def _act_rescue(self, unit: RescueUnit) -> None:
-        if unit.supplies < self.resupply_threshold:       # resupply dependency
+        if self.clearance_gate is not None and unit.capability == "route_clearing":
+            self._do_assessment(unit)
+        if unit.supplies < self.resupply_threshold:
             log = self._find_capability("resupply")
             if log:
-                self._send(unit, log, "resupply_request",
-                           {"supplies": unit.supplies})
+                self._send(unit, log, "resupply_request", {"supplies": unit.supplies})
         task = self.active_tasks.get(unit.unit_id)
         if not task:
             return
         if unit.supplies < unit.supply_drain_per_action:
-            return                                        # stalled, awaiting resupply
+            return
         unit.consume_supplies(unit.supply_drain_per_action)
         task["work_left"] -= 1
         if task["work_left"] <= 0:
@@ -187,18 +207,48 @@ class RescueSimulation:
                             "served": task["assignment"]["victims"]})
             del self.active_tasks[unit.unit_id]
 
+    def _do_assessment(self, unit: RescueUnit) -> None:
+        if not self._assessment_queue:
+            return
+        area_id = self._assessment_queue[0]
+        status = self.clearance_gate.status.get(area_id)
+        if status not in (ClearanceStatus.BLOCKED, ClearanceStatus.ASSESSING):
+            self._assessment_queue.pop(0)          # already cleared
+            return
+        self.clearance_gate.begin_assessment(area_id, unit.unit_id)
+        stable = self.rng.random() < self.assess_stable_p
+        self.clearance_gate.record_assessment(area_id, stable)
+        cmd = self._find_capability("incident_command")
+        if cmd:
+            self._send(unit, cmd, "assessment_report",
+                       {"area": area_id, "stable": stable})
+        if stable:
+            self._assessment_queue.pop(0)
+        # unstable -> stays in queue, re-assessed next cycle (shoring work)
+
     def _act_command(self, unit: RescueUnit) -> None:
         if unit.capability == "incident_command":
+            # 1) clearance for assessed-stable areas (only C can issue)
+            if self.clearance_gate is not None:
+                for area_id in list(self.clearance_gate.status):
+                    if (self.clearance_gate.status[area_id] == ClearanceStatus.ASSESSING
+                            and self.clearance_gate.assessment_result(area_id) == "stable"):
+                        self.clearance_gate.issue_clearance(area_id, unit.unit_id, "C")
+            # 2) allocate detected areas, respecting the clearance gate
             for area in self.coordinator.victims:
                 if area["status"] != "detected":
                     continue
+                area_id = area["area_id"]
+                if (self.clearance_gate is not None
+                        and not self.clearance_gate.is_cleared(area_id)):
+                    continue                       # unsafe -> no SAR entry yet
                 res = self.coordinator.allocate(area)
                 if res.get("status") == "dispatched":
                     self.active_tasks[res["unit"]] = {
                         "assignment": res, "work_left": self.work_cycles,
                     }
                     self._send(unit, res["unit"], "task_assignment",
-                               {"area": area["area_id"], "victims": area["victims"]})
+                               {"area": area_id, "victims": area["victims"]})
         elif unit.capability == "resupply":
             for uid in list(self.resupply_requests):
                 target = self.units.get(uid)
@@ -221,7 +271,7 @@ class RescueSimulation:
         coordination = evaluate_coordination(self.units)
         operational = sum(1 for u in self.units.values()
                           if u.state == UnitState.OPERATIONAL)
-        return {
+        report = {
             "t": self.t,
             "conservation": conservation,
             "coordination": coordination,
@@ -237,3 +287,6 @@ class RescueSimulation:
                         f"p={coordination.get('p_value')}) | "
                         f"operational={operational}/{len(self.units)}"),
         }
+        report["clearance"] = (self.clearance_gate.stats()
+                               if self.clearance_gate is not None else None)
+        return report
