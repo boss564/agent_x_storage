@@ -1,5 +1,13 @@
 # Agent X — Development Log
 
+## 2026-08-16 — Humanitäre Logistik: Pre-Registration (vor Code)
+
+H0–H3 vorab: OODA-Zyklen (nicht Request-Fulfillment als Phase), Phasen-Offset-Shuffle,
+Takte 3:1 kalibriert, Jitter ±10% vorab (CI-Caveat 1 vermeiden). Stress: Hub/Nachbeben/Komm.
+Design: [`docs/HUMANITAERE_LOGISTIK_PREREG.md`](docs/HUMANITAERE_LOGISTIK_PREREG.md).
+
+---
+
 ## 2026-08-16 — CI-Resilienz-Studie: H1+H2 CONFIRMED (mit Caveats)
 
 H0 PASSES (Option A 3/5/5/10s). Stress 30 Läufe: Natur ΔR=0.16 > Blackout 0.13 > Cyber 0.02;
