@@ -32,6 +32,7 @@ def capture(
     kappa: float = 0.0,
     epsilon: float = 0.0,
     *,
+    seed: int = 1,
     relax: bool = False,
     corridor_width: Optional[int] = None,
     corridor_gap: Optional[int] = None,
@@ -58,7 +59,9 @@ def capture(
                   dpc.EvaluatorAgent("evaluator", orch),
                   dpc.EconomicAgent("economic", orch)]
 
-    tc = TickController(seed=1)
+    # seed is accepted for API/prereg multi-seed sweeps; TickController currently
+    # stores no RNG (deterministic sticky/crc32 path) — see Hebel-3 runner note.
+    tc = TickController(seed=seed)
     gases = {}
     oscillators = {}
     use_corridor = corridor_width is not None
