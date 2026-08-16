@@ -1,5 +1,11 @@
 # Agent X — Development Log
 
+## 2026-08-16 — Wirtschafts-Schwarm 0.24.2: NO_COUPLING (IFI-robust)
+
+Bausteine 1–5 (Fundament → Schranken → 9 Agenten → Routing → Kuramoto). IAAFT schien COUPLED (r≈0.535, p<0.002); IFI-Shuffle-Gegenprobe: **NO_COUPLING** (r_obs≈surr_mean, p=1.0) — Periodizitäts-Artefakt der Sim-Frequenzen 2/3/4. Gewaltenteilung = organisatorische Kopplung, keine Phasenkohärenz. Fire-Corridor bleibt Timing-Emergenz. Dossier: [`docs/WIRTSCHAFTS_SCHWARM_DOSSIER.md`](docs/WIRTSCHAFTS_SCHWARM_DOSSIER.md).
+
+---
+
 ## 2026-08-16 — Emergenz-Kampagne abgeschlossen: Gate COUPLED
 
 Gate COUPLED (2c Feuer-Korridor, **W=2/gap=1**), 2× byte-identisch reproduzierbar; Emergent-Trigger / Fixed-Geometrie — Opt-in (`--corridor`), Default ungekoppelt. Effektstärke: r=0.2709 vs 1/√27≈0.192 (~+41 %, Oberkante) bzw. vs Surrogat-Mittel 0.253 (~+7 %) — nachweisbar, schwach. Dossier: [`docs/EMERGENZ_DOSSIER.md`](docs/EMERGENZ_DOSSIER.md).
