@@ -19,6 +19,11 @@ GATE_THRESHOLD = 7
 
 def run_h0_gate(n_seeds: int = N_SEEDS, duration_s: float = 600.0,
                 coupling: float = 0.30):
+    from agents_b2g.ci.agents import CYCLE_TIMES
+    periods = sorted(CYCLE_TIMES.values())
+    print(f"CONFIG: cycle spread {periods[0]:.1f}s..{periods[-1]:.1f}s "
+          f"({periods[-1]/periods[0]:.1f}x) | coupling={coupling} | "
+          f"alpha={ALPHA} | gate>={GATE_THRESHOLD}/{n_seeds}")
     significant = 0
     for seed in range(n_seeds):
         sim = CINormalSimulation(seed=seed, duration_s=duration_s, coupling=coupling)

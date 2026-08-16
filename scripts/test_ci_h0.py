@@ -5,7 +5,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from agents_b2g.ci.agents import build_ci_swarm
+from agents_b2g.ci.agents import build_ci_swarm, CYCLE_TIMES
 from agents_b2g.ci.simulation import CINormalSimulation, phase_pull
 from agents_b2g.ci.ooda_evaluator import evaluate_h0
 
@@ -19,7 +19,16 @@ def test_swarm_has_nine_units_three_classes():
 def test_cycle_time_spread():
     swarm = build_ci_swarm()
     periods = sorted(u.cycle_period_s for u in swarm.values())
-    assert periods[0] == 1.0 and periods[-1] == 10.0   # 10x spread as designed
+    assert periods[0] == 3.0 and periods[-1] == 10.0   # 3:10 spread (Option A)
+
+
+def test_option_a_cycle_config():
+    """Option A: Sensorik auf 3/5/5 s, B=5 s, C=10 s (unveraendert)."""
+    assert CYCLE_TIMES["infra_sensor"] == 3.0      # war 1.0
+    assert CYCLE_TIMES["cyber_monitor"] == 5.0     # war 2.0
+    assert CYCLE_TIMES["env_sensor"] == 5.0        # unveraendert
+    assert CYCLE_TIMES["grid_controller"] == 5.0   # B unveraendert
+    assert CYCLE_TIMES["central_command"] == 10.0  # C unveraendert
 
 
 def test_phase_pull_wraps():
