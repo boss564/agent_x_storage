@@ -185,6 +185,17 @@ services:
     container_name: z3_solver_engine
     environment:
       - LOG_LEVEL=INFO
+      # main.py liegt flach unter /app → _ROOT = dirname(__file__)/../.. = /
+      # Quellbaum daher an / mounten (nicht /app), sonst schlagen impl:/test:-Probes fehl.
+      - SON_REPORT_PATH=/archive_b2g/son_report.json
+    volumes:
+      # :ro — Z3 darf den Quellbaum niemals beschreiben
+      - ./agents_b2g:/agents_b2g:ro
+      - ./scripts:/scripts:ro
+      - ./tests:/tests:ro
+      - ./shadow_contract_pilot:/shadow_contract_pilot:ro
+      - ./.github:/.github:ro
+      - ./archive_b2g:/archive_b2g:ro
     ports:
       - "8000:8000"
     networks:

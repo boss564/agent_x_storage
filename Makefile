@@ -243,3 +243,10 @@ test-all:
 	@echo ""
 	@echo "✅ All test suites complete"
 	@echo "✅ Alle Container, Images und Volumes entfernt"
+
+.PHONY: son-report backup
+son-report: ## Regenerate SON report (24h validity for compliance gate)
+	python3 scripts/check_claude_md.py --run-tests --json-report archive_b2g/son_report.json
+
+backup: ## Nightly backup (compose + env + Neo4j dump + retention)
+	bash scripts/backup_agent_x.sh

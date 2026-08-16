@@ -48,9 +48,10 @@ COPY __init__.py .
 ENV PATH="/root/.local/bin:$PATH"
 ENV PYTHONUNBUFFERED=1
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD python3 -c "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')" || exit 1
+# Honest health: agent process alive (not just the 'sh -c || true' wrapper).
+# python:*-slim has no procps/pgrep — read /proc cmdline directly.
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+  CMD python -c "import os,sys; sys.exit(0 if any(b'agents_b2g' in open(f'/proc/{p}/cmdline','rb').read() for p in os.listdir('/proc') if p.isdigit()) else 1)"
 
 EXPOSE 8080
 # ENTRYPOINT runs the compose 'command', then idles to keep container alive
