@@ -33,11 +33,22 @@ class KompetenzKlasse(str, Enum):
 
 @dataclass
 class KompetenzProfil:
-    """Separation-of-powers profile. Data only; enforced in Baustein 2."""
+    """Separation-of-powers profile. Baustein 2 adds enforcement hooks."""
     klasse: Optional[KompetenzKlasse] = None
     exklusive_rechte: List[str] = field(default_factory=list)
     defizite: List[str] = field(default_factory=list)
     freigabe_pfad: Optional[KompetenzKlasse] = None
+    # Baustein 2: rights that need prior approval + per-deficit routing
+    genehmigungspflichtig: List[str] = field(default_factory=list)
+    defizit_routing: Dict[str, KompetenzKlasse] = field(default_factory=dict)
+
+    def needs_freigabe(self, aktion: str) -> bool:
+        """True if aktion is a deficit OR an approval-required right."""
+        return aktion in self.defizite or aktion in self.genehmigungspflichtig
+
+    def freigabe_klasse_fuer(self, aktion: str) -> Optional[KompetenzKlasse]:
+        """Resolve the class that must approve/handle aktion."""
+        return self.defizit_routing.get(aktion, self.freigabe_pfad)
 
 
 # --- StateKeeper -----------------------------------------------------------
@@ -254,6 +265,7 @@ class WirtschaftAgent(BaseAgent):
         self.crypto = CryptoModule(enabled=crypto_enabled)
         self.message_bus = MessageBus(agent_id)
         self._drained = False
+        self._freigaben: set = set()   # granted approvals (Baustein 2)
 
     # -- VALHALLA_DRAIN hook (full state machine = later Baustein) --
 
@@ -280,6 +292,71 @@ class WirtschaftAgent(BaseAgent):
             envelope["signature"] = self.crypto.sign(payload)
         self.worm_log.append("SEND", {"topic": envelope["topic"], "kind": kind})
         return envelope
+
+    # --- Baustein 2: Funktionsschranken (Gewaltenteilung) -----------------
+
+    def may(self, aktion: str) -> bool:
+        """Default-deny: allowed only if aktion is an explicit exclusive right."""
+        if self.competence is None:
+            return False
+        return aktion in self.competence.exklusive_rechte
+
+    def needs_freigabe(self, aktion: str) -> bool:
+        if self.competence is None:
+            return False
+        return self.competence.needs_freigabe(aktion)
+
+    def grant_freigabe(self, aktion: str) -> None:
+        """Record an approval issued by the responsible class.
+        Distributed approval-message handling lands in Baustein 3."""
+        self._freigaben.add(aktion)
+
+    def request_freigabe(self, aktion: str,
+                         payload: Optional[Dict[str, Any]] = None) -> Optional[dict]:
+        """Send an approval/delegation request to the responsible class."""
+        if self.competence is None:
+            return None
+        target_klasse = self.competence.freigabe_klasse_fuer(aktion)
+        if target_klasse is None:
+            self.worm_log.append("FREIGABE_NO_PATH", {"aktion": aktion})
+            return None
+        return self.send(
+            target=f"klasse.{target_klasse.value}",
+            payload={
+                "typ": "FREIGABE_REQUEST",
+                "aktion": aktion,
+                "requester": self.id,
+                "requester_klasse": (self.competence.klasse.value
+                                     if self.competence.klasse else None),
+                "details": payload or {},
+            },
+            kind="request",
+        )
+
+    def execute(self, aktion: str,
+                payload: Optional[Dict[str, Any]] = None) -> dict:
+        """Gewaltenteilung gate: execute, request approval, or delegate."""
+        payload = payload or {}
+        if self.competence is None:
+            self.worm_log.append("EXECUTE_BLOCKED",
+                                 {"aktion": aktion, "grund": "NO_PROFILE"})
+            return {"status": "blocked", "aktion": aktion,
+                    "grund": "no_competence_profile"}
+        if self.may(aktion):
+            needs = self.competence.needs_freigabe(aktion)
+            if needs and aktion not in self._freigaben:
+                freigabe = self.request_freigabe(aktion, payload)
+                self.worm_log.append("EXECUTE_PENDING_FREIGABE", {"aktion": aktion})
+                return {"status": "freigabe_required", "aktion": aktion,
+                        "freigabe_request": freigabe}
+            self.worm_log.append("EXECUTE",
+                                 {"aktion": aktion, "mit_freigabe": needs})
+            return {"status": "executed", "aktion": aktion, "mit_freigabe": needs}
+        # Not an exclusive right -> deficit -> delegate to responsible class
+        freigabe = self.request_freigabe(aktion, payload)
+        self.worm_log.append("EXECUTE_DELEGATED", {"aktion": aktion})
+        return {"status": "delegated", "aktion": aktion,
+                "freigabe_request": freigabe}
 
     def tick(self, environment: Dict[str, Any]) -> List[Any]:
         outgoing = super().tick(environment)
