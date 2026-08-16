@@ -1,6 +1,7 @@
 """Wirtschaftsagenten: 9 economic agents (Kapital / Ausfuehrung / Governance).
 
 Baustein 1: foundation. Baustein 2: Funktionsschranken + 9 profiles.
+Baustein 3: concrete agents + distributed Freigabe/Delegation.
 """
 from agents_b2g.wirtschaft.base import (
     KompetenzKlasse,
@@ -13,6 +14,13 @@ from agents_b2g.wirtschaft.base import (
     WirtschaftAgent,
 )
 from agents_b2g.wirtschaft.profiles import Aktion, WIRTSCHAFT_PROFILE, profil_fuer
+from agents_b2g.wirtschaft.agents import (
+    LiquidityAgent, TreasuryAgent, StakingAgent, MinterAgent, SettlementAgent,
+    PaymasterAgent, BurnAgent, RetentionAgent, RiskAuditorAgent,
+    AGENT_CLASSES, create_agent,
+)
+from agents_b2g.wirtschaft.schwarm import WirtschaftsSchwarm, build_schwarm
+from agents_b2g.wirtschaft.subagents import ComplianceEngine, PolicyStore
 
 __all__ = [
     "KompetenzKlasse",
@@ -26,4 +34,19 @@ __all__ = [
     "Aktion",
     "WIRTSCHAFT_PROFILE",
     "profil_fuer",
+    "LiquidityAgent",
+    "TreasuryAgent",
+    "StakingAgent",
+    "MinterAgent",
+    "SettlementAgent",
+    "PaymasterAgent",
+    "BurnAgent",
+    "RetentionAgent",
+    "RiskAuditorAgent",
+    "AGENT_CLASSES",
+    "create_agent",
+    "WirtschaftsSchwarm",
+    "build_schwarm",
+    "ComplianceEngine",
+    "PolicyStore",
 ]

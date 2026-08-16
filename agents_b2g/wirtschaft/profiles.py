@@ -93,7 +93,7 @@ WIRTSCHAFT_PROFILE = {
     ),
     "settlement": _profil(
         B,
-        rechte=[Aktion.LEDGER_FINALIZE],
+        rechte=[Aktion.LEDGER_FINALIZE, Aktion.TX_EXECUTE],
         genehmigungspflichtig=[Aktion.LEDGER_FINALIZE],
         routing={Aktion.LEDGER_FINALIZE: C},
         default_pfad=C,
@@ -116,14 +116,15 @@ WIRTSCHAFT_PROFILE = {
     ),
     "retention": _profil(
         C,
-        rechte=[Aktion.Z3_SOLVE, Aktion.TX_APPROVE, Aktion.TX_BLOCK],
+        rechte=[Aktion.Z3_SOLVE, Aktion.TX_APPROVE, Aktion.TX_BLOCK,
+                Aktion.COMPLIANCE_CHECK],
         defizite=[Aktion.TX_EXECUTE],
         routing={Aktion.TX_EXECUTE: B},
         default_pfad=B,
     ),
     "risk_auditor": _profil(
         C,
-        rechte=[Aktion.AGENT_DRAIN],
+        rechte=[Aktion.AGENT_DRAIN, Aktion.RISK_ASSESS],
         default_pfad=None,
     ),
 }
