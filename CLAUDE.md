@@ -498,6 +498,7 @@ agents_b2g/
 │   ├── demo_orchestrator.py       # 9-agent pipeline, 8 unique friction rates
 │   └── transform_profiles.py      # Per-agent fee/retention/burn rates
 ├── wirtschaft/                    # 9 Wirtschaftsagenten (Klassen A/B/C): Gewaltenteilung, Bausteine 1–5; NO_COUPLING (IFI-robust) — docs/WIRTSCHAFTS_SCHWARM_DOSSIER.md
+├── rescue/                        # Katastrophenschutz-Rettungskoordination (9 Einheiten A/B/C, OODA, Sensor-to-Rescue)
 ├── surface/                       # C01–C09 Surface Agents: NATS Queue-Group Workers
 │   ├── __init__.py
 │   ├── handler.py                 # SurfaceHandler: NATS, TPS, adaptive batching, constraint metering
