@@ -26,6 +26,9 @@ from agents_b2g.wirtschaft.routing_adapter import (
     KlassenResolver, WirtschaftsRouter,
     envelope_to_agent_message, agent_message_to_envelope,
 )
+from agents_b2g.wirtschaft.emergence_adapter import (
+    EmergenceResult, run_simulation_logs, evaluate_emergence,
+)
 
 __all__ = [
     "KompetenzKlasse",
@@ -58,4 +61,7 @@ __all__ = [
     "WirtschaftsRouter",
     "envelope_to_agent_message",
     "agent_message_to_envelope",
+    "EmergenceResult",
+    "run_simulation_logs",
+    "evaluate_emergence",
 ]
