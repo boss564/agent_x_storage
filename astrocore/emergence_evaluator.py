@@ -275,9 +275,10 @@ class KuramotoEvaluator:
             if (i + 1) % 100 == 0:
                 print(f"  -> {i + 1}/{n_surrogates} Surrogate verarbeitet")
 
-        # 4. p-Wert berechnen (Monte-Carlo)
+        # 4. p-Wert berechnen (Monte-Carlo mit +1-Korrektur)
+        # Floor at n_surr=500: (0+1)/(500+1) ≈ 0.002 — never report p=0.0000
         R_surr_array = np.array(R_surr_list)
-        p_value = np.mean(R_surr_array >= R_obs)
+        p_value = float((np.sum(R_surr_array >= R_obs) + 1) / (n_surrogates + 1))
         print(f"[Evaluator] p-Wert = {p_value:.6f}")
 
         # 5. Entscheidung

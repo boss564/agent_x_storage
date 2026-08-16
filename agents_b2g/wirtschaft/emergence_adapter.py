@@ -29,8 +29,13 @@ class EmergenceResult:
         return self.status == "EMERGENCE_PASSED"
 
     def summary(self) -> str:
+        # Report floor as p<… when at Monte-Carlo minimum (1/(n_surr+1))
+        if self.p_value > 0 and self.p_value <= 0.0020001:
+            p_part = f"p<{self.p_value:.3f}"
+        else:
+            p_part = f"p={self.p_value:.4f}"
         return (f"verdict={self.verdict}  mean_r={self.mean_r:.3f}  "
-                f"p={self.p_value:.4f}  agents={self.n_agents}  "
+                f"{p_part}  agents={self.n_agents}  "
                 f"events={self.n_events}  status={self.status}")
 
 

@@ -51,4 +51,5 @@ def test_emergence_mean_r_deterministic():
 def test_summary_string():
     r = evaluate_emergence(ticks=TICKS, n_surrogates=N_SURR)
     s = r.summary()
-    assert "verdict=" in s and "mean_r=" in s and "p=" in s
+    assert "verdict=" in s and "mean_r=" in s
+    assert "p=" in s or "p<" in s
