@@ -22,7 +22,8 @@ GATE_THRESHOLD = 7
 def run_h0_gate(n_seeds: int = N_SEEDS, duration_s: float = 1440.0,
                 coupling: float = 0.30):
     print(f"CONFIG: humanitarian normal op | coupling={coupling} | "
-          f"alpha={ALPHA} | gate>={GATE_THRESHOLD}/{n_seeds} | jitter=ON")
+          f"alpha={ALPHA} | gate>={GATE_THRESHOLD}/{n_seeds} | jitter=ON "
+          f"| recal=step1(coupling)")
     significant = 0
     for seed in range(n_seeds):
         sim = HumanitarianNormalSimulation(seed=seed, duration_s=duration_s,
@@ -41,4 +42,4 @@ def run_h0_gate(n_seeds: int = N_SEEDS, duration_s: float = 1440.0,
 
 
 if __name__ == "__main__":
-    run_h0_gate()
+    run_h0_gate(coupling=0.50)   # war 0.30 (Re-Kalibrierung Schritt 1)
