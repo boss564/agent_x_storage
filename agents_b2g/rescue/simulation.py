@@ -88,7 +88,8 @@ class RescueSimulation:
             self.coordinator.add_unit(u)
             u._last_act_cycle = -1                      # OODA-act bookkeeping
 
-        self.scenario = ScenarioGenerator(self.rng)
+        # Independent scenario stream: assessments must not shift damage sequence
+        self.scenario = ScenarioGenerator(random.Random(seed + 1000003))
         self.t = 0.0
         self.transit: List[tuple] = []                  # (deliver_at, msg)
         self.delivered_count = 0
