@@ -1,5 +1,14 @@
 # Agent X — Development Log
 
+## 2026-08-16 — CI-Resilienz-Studie: H1+H2 CONFIRMED (mit Caveats)
+
+H0 PASSES (Option A 3/5/5/10s). Stress 30 Läufe: Natur ΔR=0.16 > Blackout 0.13 > Cyber 0.02;
+H1+H2 CONFIRMED. Caveats: byte-gleiche Seeds; Cyber nur Payload (Fenster-Effekt).
+Ergebnis: [`docs/CI_RESILIENZ_STUDIE_ERGEBNIS.md`](docs/CI_RESILIENZ_STUDIE_ERGEBNIS.md).
+Pre-Reg: [`docs/CI_RESILIENZ_STUDIE_PREREG.md`](docs/CI_RESILIENZ_STUDIE_PREREG.md). Commit `fd55dadc`.
+
+---
+
 ## 2026-08-16 — CI-Resilienz: Pre-Registration (vor Code)
 
 H0/H1/H2 vorab: R als Resilienz-Indikator unter Blackout/Cyber/Naturkatastrophe.

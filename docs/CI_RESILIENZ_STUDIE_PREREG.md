@@ -1,6 +1,6 @@
 # CI-Resilienz-Studie — Vorab-registriertes Studien-Design
 
-**Status:** Pre-Registration — Auswertungsregel festgelegt, bevor Code entsteht  
+**Status:** Pre-Registration — Auswertungsregel festgelegt; Ergebnis siehe `CI_RESILIENZ_STUDIE_ERGEBNIS.md` (H1+H2 CONFIRMED)  
 **Datum:** 2026-08-16  
 **Charakter:** Vorab registriert. Keine Regel-Justage nach Daten-Sichtung.
 
