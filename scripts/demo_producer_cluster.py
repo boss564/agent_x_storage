@@ -29,6 +29,8 @@ from typing import Any, Dict, List
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
+from agents_b2g.emergence.partner_select import StickySelector
+
 from agents_b2g.protocol import (
     AgentMessage, AgentState, BaseAgent, PayloadType, StateMachine, TickController,
     offer, bho_proof, alert,
@@ -399,6 +401,13 @@ def main():
     evaluators = [a for a in agents if isinstance(a, EvaluatorAgent)]
     economics  = [a for a in agents if isinstance(a, EconomicAgent)]
 
+    # TIER 1: kumulative Zustellungen = Last; StickySelector gegen Dichte-Inflation
+    recv_load: Dict[str, int] = {a.id: 0 for a in agents}
+    sticky = StickySelector(threshold=8)
+
+    def _load(a):
+        return recv_load.get(a.id, 0) + len(a.inbox)
+
     t_start = time.perf_counter()
     for _ in range(args.cycles):
         tc.cycle += 1
@@ -409,29 +418,42 @@ def main():
             msgs = agent.tick(env)
             tick_msgs += len(msgs)
 
-        # Message-Passing mit Archetyp-Routing (sharded im Full-Mode)
+        # Message-Passing mit Archetyp-Routing (TIER 1: 1 Partner / Rolle, sticky)
         all_out = []
         for agent in tc.agents:
             all_out.extend(agent.outbox)
             agent.outbox.clear()
         for msg in all_out:
             if msg.receiver == "broadcast":
-                for agent in tc.agents:
-                    agent.receive(msg)
+                # Settlement-Ankündigung: genau EIN Provider (nicht 27× fan-out)
+                if not providers:
+                    continue
+                partner = sticky.select(
+                    msg.sender, "broadcast→provider", providers, _load,
+                )
+                partner.receive(msg)
+                recv_load[partner.id] = recv_load.get(partner.id, 0) + 1
             elif msg.receiver == "evaluator":
-                # BHO-Prüfung: Alle Evaluatoren prüfen (Redundanz erwünscht)
-                for agent in evaluators:
-                    agent.receive(msg)
+                if not evaluators:
+                    continue
+                partner = sticky.select(msg.sender, "evaluator", evaluators, _load)
+                partner.receive(msg)
+                recv_load[partner.id] = recv_load.get(partner.id, 0) + 1
             elif msg.receiver == "economic":
-                # Settlement: Nur EINEN Economic-Agenten pro TX (Sharding via Hash)
-                cid = msg.content.get("contract_id", "")
-                idx = hash(cid) % len(economics) if economics else 0
-                economics[idx].receive(msg)
+                if not economics:
+                    continue
+                # TIER-1 Sticky-Key: sender:contract_id (gemeinsam mit Adapter)
+                partner = sticky.select(
+                    f"{msg.sender}:{msg.content.get('contract_id', '')}",
+                    "economic", economics, _load,
+                )
+                partner.receive(msg)
+                recv_load[partner.id] = recv_load.get(partner.id, 0) + 1
             else:
-                # Direkt-Routing an spezifische ID
                 for agent in tc.agents:
                     if agent.id == msg.receiver:
                         agent.receive(msg)
+                        recv_load[agent.id] = recv_load.get(agent.id, 0) + 1
 
         tc.total_messages += tick_msgs
 

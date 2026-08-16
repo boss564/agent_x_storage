@@ -437,6 +437,20 @@ class TickController:
         Args:
             cycles: Anzahl der Zyklen
             environment: Optionale Start-Umgebung (wird pro Tick aktualisiert)
+
+        Reproduzierbarkeit & Routing — WARNUNG (Stand 0.24.1):
+        1) Zustellung: Diese Methode stellt eine Nachricht NUR dann zu, wenn
+           ``msg.receiver`` exakt einer ``agent.id`` entspricht. Im
+           27-Agenten- bzw. Rollen-Adressierungsmodus (``receiver="evaluator"``,
+           ``receiver="economic"`` u.ä.) existiert kein Agent mit diesem Namen —
+           ``run()`` liefert dort NICHTS aus (stiller No-op). Das Routing
+           übernimmt in diesem Modus der Archetyp-Dispatcher in
+           ``scripts/demo_producer_cluster.py``. Wer ``TickController`` dort
+           wiederverwendet, misst null Nachrichten.
+        2) Determinismus: Für reproduzierbare Arbeitsverteilung ``zlib.crc32``
+           (oder ``hashlib.sha256``) verwenden, NIEMALS das eingebaute
+           ``hash()`` — dieses ist pro Prozess randomisiert (PYTHONHASHSEED)
+           und bricht die Reproduzierbarkeit über Läufe hinweg.
         """
         if environment:
             self.environment = environment
