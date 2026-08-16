@@ -44,3 +44,5 @@ data/
 # Foundry build artifacts
 out/
 archive_b2g/finale/emergence-probe/
+rescue_density_study.json
+rescue_density_progress.txt

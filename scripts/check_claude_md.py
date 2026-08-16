@@ -159,6 +159,7 @@ NO_TEST_SUMMARY: set[str] = {
     "scripts/test_rescue.py",                 # Rescue-Koordination (Katastrophenschutz, zivil)
     "scripts/test_rescue_simulation.py",      # Rescue volle Simulationsschleife (emergente Kopplung)
     "scripts/test_rescue_clearance.py",       # Rescue Einsatzregeln / Infrastruktur-Freigabe (RoE)
+    "scripts/test_study_rescue_density.py",   # Rescue Dichte-Studie Statistik-Helfer (Spearman/KW)
     "scripts/test_astrocore_evaluator.py",  # AstroCore Kuramoto smoke (IAAFT CI-light)
 }
 
