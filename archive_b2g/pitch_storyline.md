@@ -1,127 +1,107 @@
-# Agent X — Pitch-Storyline für den Kämmerer
+# Agent X B2G — Kämmerer-Pitch „Das System, das sich selbst prüft"
 
-## Die eine Frage, die alles ändert
+**Stand:** 0.24.0 · **Dauer:** ~4 Minuten · **5 Akte**
+**Zielgruppe:** Kämmerer / Rechnungsprüfungsamt / Vergabestelle
 
-> **„Herr Kämmerer — wissen Sie in diesem Moment, ob auch nur eine einzige
-> Abschlagszahlung in Ihrem Haushalt um einen Cent von der VOB/B abweicht?"**
-
----
-
-## Akt I: Das Problem (30 Sekunden)
-
-Jede deutsche Kommune wickelt Bauprojekte so ab wie vor 50 Jahren:
-
-- **Papier.** GAEB-Leistungsverzeichnisse, VOB/B-Verträge, XRechnungen. Alles auf Papier oder als PDF. Kein System weiß, was das andere tut.
-- **60 Tage.** Die durchschnittliche Zahlungsfrist im öffentlichen Bau. Der Handwerker geht in Vorleistung, die Kommune verliert den Überblick.
-- **Kein Live-Budget.** Der Kämmerer sieht die Haushaltslage einmal im Quartal — im Bericht des Rechnungsprüfungsamts. Nicht live. Nicht pro Transaktion.
-
-Das ist kein Technologieproblem. Es ist ein **Vertrauensproblem**. Zwischen Kommune und Handwerker, zwischen Bauamt und Kämmerer, zwischen Haushalt und Realität.
+> Kernbotschaft: Agent X ist nicht „compliance-fähig" — es belegt Compliance zur Laufzeit,
+> und es findet seine eigenen Mängel, bevor der Prüfer sie findet.
 
 ---
 
-## Akt II: Die Garantie (60 Sekunden)
+## Akt 1 · Die Last (≈40 s)
 
-Agent X gibt eine Garantie, die kein Papierprozess geben kann:
+*[Regie: Schwarze Folie, dann ein einzelner Aktenordner-Berg / Prüfbericht]*
 
-> **Δ = 0,00 €. Mathematisch bewiesen. Für jede einzelne Transaktion.**
+Jede Abschlagszahlung, jeder Einbehalt, jede Rechnung wandert am Ende über Ihren Tisch — und trägt Ihre Unterschrift. VOB/B-Fristen, §17-Einbehalt, §13b-Umsatzsteuer, GoBD-Archivierung. Und über allem schwebt die eine Frage des Rechnungshofs: Ist das alles ordnungsgemäß — oder gibt es Bemerkungen?
 
-Was bedeutet das?
-
-Eine Abschlagszahlung von 45.000 € wird in drei Teile zerlegt:
-- **80 % Netto (36.000 €)** → sofort an den Handwerker
-- **15 % Steuer §48b EStG (6.750 €)** → direkt ans Finanzamt
-- **5 % Einbehalt §17 VOB/B (2.250 €)** → treuhänderisch auf separates Unterkonto
-
-Die Summe muss exakt dem Brutto entsprechen — **auf den Cent genau**.
-
-Agent X beweist das **vor jeder Freigabe im Escrow-Pfad** mit einem mathematischen
-Theorem-Prover. Kein Mensch muss prüfen. Kein Rechnungsprüfungsamt muss
-stichproben. Der Computer beweist: Δ = 0,00 €. Wenn nicht, wird die
-Zahlung markiert und die BHO-Verletzung protokolliert.
-
-Das ist der Unterschied zwischen *„wir haben das geprüft"* und *„es ist mathematisch unmöglich, dass es falsch ist"*.
-
-*(Live-Demo: `http://localhost:8501` → Transaktion starten → BHO-Balken zeigt Δ = 0)*
+Die Last ist nicht die Arbeit. Die Last ist die persönliche Verantwortung für die Entlastung.
 
 ---
 
-## Akt III: Der Beweis (60 Sekunden)
+## Akt 2 · Das Versprechen (≈45 s)
 
-Sie müssen das nicht glauben. Sie können es nachmessen.
+*[Regie: Architektur-Folie — 27 Wellen, GAEB→VOB/B→BHO→GoBD-Lebenszyklus]*
 
-Agent X hat **42 BSI-Compliance-Checks** — und sagt Ihnen, welche davon
-maschinell verifiziert sind und welche auf menschlicher Zusicherung beruhen:
+Agent X bildet den gesamten Beschaffungs-Lebenszyklus ab: vom GAEB-Eingang über die VOB/B-Ausführung mit Abschlägen und Mängelrüge bis zur BHO-konformen Kasse und dem GoBD-Archiv.
 
-*(Live-Demo: `http://localhost:8000/compliance` → 23 verifiziert, 8 durch Implementierung belegt, 11 zugesichert)*
+Aber der Punkt ist nicht die Abdeckung. Der Punkt ist die eine Invariante, unter der alles läuft: **BHO-Nullsumme**. Jeder Zahlungsvorgang erfüllt Einzahlungen = Auszahlungen + Einbehalt + Kassenbestand. Weicht das System auch nur einen Cent ab — größer 0,01 Euro — stoppt es jede weitere Zahlung.
 
-| Was geprüft wird | Wie | Status |
-|------------------|-----|--------|
-| BHO-Nullsumme | Z3-Theorem-Prover (UNSAT-Beweis, <50 µs) | verifiziert |
-| GoBD-WORM | SHA-256-Hash-Kette, Merkle-Proofs | verifiziert |
-| VOB/B §17 | 5 % Einbehalt, 4 Jahre, automatische Freigabe | verifiziert |
-| eIDAS | ZK-Proofs, BundID-kompatibel | belegt |
-| MiCA | EURe via Monerium (EMI-lizenziert, FME Island) | zugesichert |
-
-Kein externes Audit, das einmal im Jahr kommt. **Continuous Compliance** — jederzeit, live, maschinenlesbar.
+Nicht der Mensch muss die Kasse prüfen. Die Kasse prüft sich selbst.
 
 ---
 
-## Akt IV: Die Krise (30 Sekunden)
+## Akt 3 · Der Live-Beweis (≈50 s)
 
-Was passiert, wenn das Internet ausfällt? Wenn die Banken nicht erreichbar sind?
+*[Regie: Terminal — `make full-pitch` laufen lassen; parallel Overwatch-Dashboard]*
 
-Agent X hat einen **Off-Grid-Modus** — als 5-Knoten-MPC-Verbund implementiert
-und im Mock-Stack vollständig lauffähig (63 Tests grün, inklusive
-Dilithium-Signaturen und LoRaWAN-Mesh).
+Ich behaupte das nicht — ich zeige es. Ein Befehl: `make full-pitch`. Vier Akte, etwa fünfzehn Sekunden, BHO-Delta am Ende: **0,00 Euro**.
 
-- 5 MPC-Knoten (Software-Architektur), Threshold 3 von 5
-- Kommunikation über LoRaWAN-Funk (868 MHz, UDP-Simulation im Mock-Stack)
-- Post-Quantum-Kryptografie (Dilithium/Kyber, resistent gegen Quantencomputer)
-- 3 von 5 Knoten müssen signieren — selbst bei Ausfall von 2 Knoten läuft das System
-- Für den Pilotbetrieb wären fünf physische Standorte einzurichten; die Software ist dafür fertig
+Und weil ein Demo-Datensatz nichts beweist, haben wir den Stresstest **protokolliert**: eine Million Ereignisse durch die komplette Kette. **Null Verlust.** **54 Mikrosekunden** P99-Latenz. **9.554 echte L1-Anker** auf der Kette. Das ist kein Versprechen — das ist ein nachprüfbarer Lauf.
 
-Die BHO-Garantie gilt auch ohne Banken. Dann in Ressourcen-Einheiten (kWh, Liter, kg) statt Euro — aber die Mathematik ist dieselbe.
+Die Erhaltungsinvariante geht exakt auf: `1.000.000 = 949.734` gecleart + `50.266` quarantined. Nichts verschwindet.
 
 ---
 
-## Akt V: Die Wirtschaft (30 Sekunden)
+## Akt 4 · Der Punch — Das System prüft sich selbst (≈70 s)
 
-Und wenn 500 Bauprojekte gleichzeitig laufen?
+*[Regie: `curl /compliance` live; dann die sechs Funde als Liste einblenden]*
 
-Agent X enthält ein **agentenbasiertes Wirtschaftsmodell (ABM)**. 27 spezialisierte Agenten — Produzenten, Prüfer, Verwalter — laufen im Hintergrund und melden, wie sich der Markt verhält:
+Und jetzt der Punkt, der für Sie als Kämmerer entscheidend ist. Compliance ist bei Agent X kein Zertifikat an der Wand. Es ist ein Prüf-Gate, das zur Laufzeit läuft. Sehen Sie selbst:
 
-- **32.429 Zustandsübergänge** in 50 Zyklen (reproduzierbar: `python3 scripts/demo_producer_cluster.py --full --cycles 50`)
-- **5.589 Settlement-Transaktionen** über die SimChain verbucht
-- **171 BHO-Verletzungen erkannt** — 9 Provider mit unterschiedlichen Risikoprofilen, darunter absichtlich manipulierte Meldungen
+`curl /compliance` — **gate: PASS**. 30 von 42 Prüfungen sind nicht behauptet, sondern belegt: 13 davon laufen in dem Moment, in dem Sie die URL aufrufen. 17 weitere sind durch den Testlauf von heute Morgen gedeckt — das Alter dieses Laufs steht im selben JSON. 11 sind Selbstauskünfte, die wir ehrlich als Vorbehalt kennzeichnen. Und **0** Prüfungen sind verletzt.
 
-Das Modell ist bereit für Pilotdaten aus Ihren ersten drei Bauvorhaben. Sobald echte Zahlen einfließen, sehen Sie live: Wie entwickelt sich das Auftragsvolumen? Wo entstehen Zahlungsengpässe? Welche Gewerke sind ausgelastet?
+Verdict: **KONFORM — mit dokumentiertem Vorbehalt**. Nicht „voll konform" — das wäre eine leere Behauptung. Sondern: nachweisbar konform, dort wo es softwareseitig beweisbar ist.
 
-Nicht im Quartalsbericht — **in Echtzeit**.
+Eine Zahl fehlt in dieser Aufzählung — und sie fehlt mit Absicht. Die 42. Prüfung ist das NFC-Auslesen des Personalausweises über das AusweisApp2-SDK. Das ist hardwaregebunden, softwareseitig nicht beweisbar — deshalb führen wir sie offen als nicht-verifizierte Ceiling, nicht als verifizierte Prüfung. Wir behaupten nichts, was wir nicht belegen können. Das ist kein Makel — das ist der Beweis der Prüfungssicherheit.
 
----
+Und hier wird es für Sie interessant. Diese Proben haben bei uns selbst **sechs echte Mängel** gefunden — und wir haben sie behoben, bevor irgendein Auditor sie hätte finden können:
 
-## Der Abschluss (30 Sekunden)
+- eine hartkodierte HSM-PIN — jetzt erzwungen aus der Umgebung,
+- fehlende Pflichtfelder im GAEB-X84 — jetzt vollständig,
+- eine syntaktisch kaputte CI-Pipeline — jetzt fünf saubere Jobs,
+- eine Gewährleistungsfrist von 5 statt der VOB/B-konformen 4 Jahre — korrigiert,
+- eine BHO-Prüfung, die das Falsche asserted hat — invertiert,
+- und eine Fehlerausgabe, die Meldungen abgeschnitten hat — jetzt vollständig.
 
-Sie haben heute drei Optionen gehört. Sie können:
-
-1. **Weitermachen wie bisher.** Papier. 60 Tage. Rechnungsprüfungsamt.
-2. **Eine Insellösung kaufen.** Die macht eine Sache gut und alles andere nicht.
-3. **Agent X als Pilot in drei Bauvorhaben einsetzen.** Keine Risiken. Keine Prozessänderung. Ihr System läuft parallel weiter. Sie sehen in Echtzeit, was passiert — und entscheiden nach dem Pilot, ob Sie umsteigen.
-
-Option 3 kostet Sie heute: **nichts.**
-
-Keine Lizenzgebühr im Pilot. Keine Hardware-Anschaffung. Keine Prozessänderung.
-
-Was Sie heute bekommen, ist eine mathematische Garantie, dass Ihre Bauzahlungen auf den Cent stimmen. Was Sie morgen bekommen, ist ein Wirtschaftsmodell, das Ihnen sagt, wie sich Ihr Haushalt entwickelt — bevor es das Rechnungsprüfungsamt tut.
+Das ist kein Schönheitsfehler im Vortrag. Das ist der Beweis der Prüfungssicherheit: Ein System, das seine eigenen Fehler findet und schließt, bevor der Rechnungshof fragt, ist ein System, dem Sie die Entlastung anvertrauen können.
 
 ---
 
-## Die eine Antwort
+## Akt 5 · Der Weg (≈35 s)
 
-> **„Ja, Herr Kämmerer. Ich weiß es. Δ = 0,00 €. Für jede einzelne Zahlung.
-> Seit heute."**
+*[Regie: Pilot-Roadmap-Folie; Call-to-Action]*
+
+Sie müssen dafür nichts an Ihren Prozessen ändern. Wir starten im Schattenbetrieb: der VOB-Shadow-Contract läuft parallel zur heutigen Abwicklung, Sie beobachten und validieren, ohne Risiko.
+
+Am Ende steht die RPA-Entlastungspipeline: acht Prüfschritte, GoBD bis PDF/A-3, mit einem klaren Verdikt — ENTLASTET, VORBEHALT oder VERWEIGERT. Transparent, nachvollziehbar, gerichtsfest.
+
+Der nächste Schritt ist ein zweistündiger Sandbox-Termin bei Ihnen im Haus. Sie bringen Ihren Prüfungsleiter mit, wir laufen gemeinsam `make full-pitch`, und Sie prüfen selbst die BHO-Nullsumme und das Compliance-Gate. Kein Verkaufsgespräch — ein Nachweis unter Ihrer Aufsicht.
 
 ---
 
-*Pitch-Dauer: ca. 4 Minuten. Live-Demo: 2 Minuten. Fragen: nach Bedarf.*
-*Technische Validierung: 48 Dateien, 11.426 Zeilen, 0 Hook-Abweichungen, alle Suiten grün.*
+## Zahlenkarte (für den Sprecher)
+
+| Metrik | Wert |
+|--------|------|
+| BHO-Nullsumme | Δ=0,00 € · Stopp bei >0,01 € |
+| 1M-Tsunami | 0 Verlust · 54 µs P99 · 9.554 L1-Anker |
+| Erhaltung | 1.000.000 = 949.734 + 50.266 |
+| Compliance-Gate | PASS · 30/42 verified · 11 attested · 0 failed |
+| Verdict | KONFORM_MIT_VORBEHALT (ehrlich benannt) |
+| E2E | 25/25 · alle Wellen grün |
+| full-pitch | 4 Akte · ~15 s · BHO Δ=0,00 € |
+| Selbstfund | 6 echte Mängel entdeckt und behoben (0.24.0) |
+
+---
+
+## Regie-Hinweise
+
+1. **Akt 4 ist der Differentiator** — dort nicht hetzen. Die sechs Funde langsam und konkret sprechen. Wenn die Zeit drückt, kürze Akt 2, niemals Akt 4.
+2. **Ehrlichkeit als Stilmittel:** „KONFORM mit Vorbehalt" bewusst betonen — glaubwürdiger als „voll konform"; deckt sich mit der dokumentierten Hardware-Ceiling (1.1 NFC).
+3. **Live-Demos absichern:** `make full-pitch` und `curl /compliance` vor dem Termin einmal frisch durchlaufen (SON-Cron hält den Report frisch). Fallback-Screenshot bereithalten.
+4. **Zahlenkarte** getrennt ausdrucken — Zahlen frei sprechen, nicht ablesen.
+
+---
+
+*Pitch-Dauer: ca. 4 Minuten. Live-Demo: `make full-pitch` + `curl /compliance`. Fragen: nach Bedarf.*
+*Technische Validierung (0.24.0): gate=PASS, verified=30/42, failed=0, E2E 25/25, Air-Layer 18/18, Checker 0 Abweichungen.*

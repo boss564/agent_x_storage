@@ -186,11 +186,37 @@ async def prove_bho_invariant(req: BHOCheckRequest):
 #   "impl:<path>"    → verifiziert durch existierende Implementierung
 
 import hashlib as _hashlib
-
 import json as _json
 import os as _os
+import sys
 from datetime import datetime as _dt
+
 _ROOT = _os.path.abspath(_os.path.join(_os.path.dirname(__file__), "..", ".."))
+
+
+def _ensure_root_path() -> None:
+    """Probes run inside the z3 container; source tree is mounted at _ROOT."""
+    if _ROOT not in sys.path:
+        sys.path.insert(0, _ROOT)
+
+
+def _maybe_await(value):
+    """Resolve coroutine results synchronously (probe context).
+
+    FastAPI already owns a running loop when /compliance invokes probes;
+    asyncio.run() would fail there — fall back to a worker-thread loop.
+    """
+    import asyncio
+    if not asyncio.iscoroutine(value):
+        return value
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(value)
+    import concurrent.futures
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+        return pool.submit(asyncio.run, value).result()
+
 
 def _probe_z3_bho() -> bool:
     """Echtzeit: Z3 BHO-Proof mit korrekten Werten."""
@@ -200,6 +226,7 @@ def _probe_z3_bho() -> bool:
     except Exception:
         return False
 
+
 def _probe_z3_violation() -> bool:
     """Echtzeit: Z3 erkennt absichtliche Verletzung."""
     try:
@@ -208,15 +235,212 @@ def _probe_z3_violation() -> bool:
     except Exception:
         return False
 
+
 def _probe_z3_importable() -> bool:
     try:
         import z3; z3.get_version_string(); return True
     except Exception:
         return False
 
+
 def _probe_sha3() -> bool:
     try:
         _hashlib.sha3_256(b"compliance-probe").hexdigest(); return True
+    except Exception:
+        return False
+
+
+def _probe_cicd_jobs() -> bool:
+    """7.5: CI/CD workflow offgrid-test.yml defines >= 4 jobs."""
+    try:
+        import yaml
+        wf_path = _os.path.join(_ROOT, ".github", "workflows", "offgrid-test.yml")
+        if not _os.path.exists(wf_path):
+            return False
+        with open(wf_path, "r", encoding="utf-8") as f:
+            wf = yaml.safe_load(f) or {}
+        return len(wf.get("jobs", {})) >= 4
+    except Exception:
+        return False
+
+
+def _probe_hsm_pin_env() -> bool:
+    """4.5: cert PIN sourced from HSM_PIN env var, no hardcoded fallback."""
+    try:
+        import ast
+        src_path = _os.path.join(_ROOT, "agents_b2g", "bunker", "hsm_adapter.py")
+        with open(src_path, encoding="utf-8") as f:
+            tree = ast.parse(f.read())
+        env_reads = 0
+        hardcoded_defaults = 0
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) \
+               and node.func.attr in ("get",):
+                if node.args and isinstance(node.args[0], ast.Constant) \
+                   and node.args[0].value == "HSM_PIN":
+                    env_reads += 1
+                    if len(node.args) > 1 and isinstance(node.args[1], ast.Constant) \
+                       and isinstance(node.args[1].value, str) and node.args[1].value:
+                        hardcoded_defaults += 1
+            elif isinstance(node, ast.Subscript) and isinstance(node.value, ast.Attribute) \
+                 and node.value.attr == "environ":
+                sl = node.slice
+                if isinstance(sl, ast.Constant) and sl.value == "HSM_PIN":
+                    env_reads += 1
+        return env_reads >= 1 and hardcoded_defaults == 0
+    except Exception:
+        return False
+
+
+def _probe_worm_audit_trail() -> bool:
+    """2.1: GoBD WORM audit trail — write entries, verify hash chain;
+    in-memory tampering must be detected (status TAMPERED)."""
+    try:
+        _ensure_root_path()
+        import importlib
+        import tempfile
+        mod = importlib.import_module("agents_b2g.finale.subagents.audit_trail")
+        agent = mod.AuditTrailAgent(
+            user_id="probe-worm",
+            data_root=tempfile.mkdtemp(prefix="worm_probe_"),
+        )
+        tx = {
+            "contract_id": "PROBE-2.1", "sector": "BAU",
+            "gross_amount": 1190.0, "net_amount": 950.0,
+            "tax_amount": 190.0, "retention_amount": 50.0,
+            "contractor": "ProbeContractor", "inspector": "ProbeInspector",
+            "milestone": "M1", "timestamp": "2026-08-16T00:00:00Z",
+        }
+        # 1) Write 3 entries — log_transaction takes a single dict
+        for _ in range(3):
+            agent.log_transaction(tx)
+        # 2) Intact chain must verify
+        v1 = agent.verify_chain()["artifacts"][0]
+        if not v1.get("verified") or v1.get("status") != "INTACT":
+            return False
+        # 3) In-memory tamper (mirrors test_finale.py reference)
+        agent.trail[1]["previous_hash"] = "0xbroken"
+        v2 = agent.verify_chain()["artifacts"][0]
+        return (not v2.get("verified")) and v2.get("status") == "TAMPERED"
+    except Exception:
+        return False
+
+
+def _probe_dashboard_render() -> bool:
+    """5.6: dashboard renderer produces BHO visualization incl. violation flag."""
+    try:
+        _ensure_root_path()
+        import importlib
+        mod = importlib.import_module("agents_b2g.finale.subagents.dashboard_renderer")
+        agent = mod.DashboardRendererAgent(user_id="probe-dashboard")
+        tx_ok = {
+            "contract_id": "PROBE-5.6", "sector": "BAU",
+            "gross_amount": 1190.0, "net_amount": 950.0,
+            "tax_amount": 190.0, "retention_amount": 50.0,
+            "contractor": "ProbeContractor", "inspector": "ProbeInspector",
+            "milestone": "M1", "timestamp": "2026-08-16T00:00:00Z",
+        }
+        r1 = _maybe_await(agent.render(tx_ok))
+        if r1.get("status") not in ("started", "completed"):
+            return False
+        a1 = r1["artifacts"][0]
+        if not any(str(k).startswith("bho_") for k in a1.keys()):
+            return False
+        tx_bad = dict(tx_ok)
+        tx_bad["net_amount"] = 100.0
+        r2 = _maybe_await(agent.render(tx_bad))
+        return bool(r2["artifacts"][0].get("bho_violation"))
+    except Exception:
+        return False
+
+
+def _probe_vob_defect_machine() -> bool:
+    """3.6: VOB/B §13 defect machine + §13(4) warranty.
+    Verifies raise_defect sets REMEDIATION_DEADLINE with ~14d (major) /
+    ~30d (minor) deadlines, AND GuaranteeTracker implements the VOB/B
+    4-year warranty (Option A — corrected from BGB 5y on 2026-08-16)."""
+    try:
+        _ensure_root_path()
+        import importlib
+        import re
+        from datetime import datetime, timezone
+        mod = importlib.import_module("agents_b2g.execution.vob_extension")
+        agent = mod.DisputeArbiterAgent()
+
+        def _days_until(deadline_iso: str) -> float:
+            dt = datetime.fromisoformat(deadline_iso)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            return (dt - datetime.now(timezone.utc)).total_seconds() / 86400.0
+
+        def _state_name(key: str) -> str:
+            st = agent._states[key]
+            return getattr(st, "name", str(st))
+
+        # Major defect -> REMEDIATION_DEADLINE + ~14 day deadline
+        key_major = _maybe_await(agent.raise_defect(
+            "PROBE-3.6",
+            {"position_id": "P1", "description": "Probe-Mangel (major)",
+             "severity": "major"},
+        ))
+        if _state_name(key_major) != "REMEDIATION_DEADLINE":
+            return False
+        if not (13.0 <= _days_until(agent._defects[key_major]["deadline"]) <= 15.0):
+            return False
+        # Minor defect -> ~30 day deadline
+        key_minor = _maybe_await(agent.raise_defect(
+            "PROBE-3.6",
+            {"position_id": "P2", "description": "Probe-Mangel (minor)",
+             "severity": "minor"},
+        ))
+        if not (29.0 <= _days_until(agent._defects[key_minor]["deadline"]) <= 31.0):
+            return False
+        # Warranty: VOB/B §13(4) = 4 years (Option A). Structural check that
+        # GuaranteeTracker implements 4y, not BGB 5y.
+        src_path = _os.path.join(_ROOT, "agents_b2g", "execution",
+                                 "vob_extension.py")
+        with open(src_path, encoding="utf-8") as f:
+            src = f.read()
+        m = re.search(r'warranty_years["\']?\s*[:=]\s*(\d+)', src)
+        if not m or int(m.group(1)) != 4:
+            return False
+        return True
+    except Exception:
+        return False
+
+
+def _probe_proof_hash_embedded() -> bool:
+    """5.4: finale audit package embeds a non-empty proof_hash."""
+    try:
+        _ensure_root_path()
+        import importlib
+        mod = importlib.import_module("agents_b2g.finale.finale_orchestrator")
+        orch_cls = getattr(mod, "FinaleOrchestrator")
+        try:
+            orch = orch_cls(user_id="probe-finale")
+        except TypeError:
+            orch = orch_cls()
+        tx = {
+            "contract_id": "PROBE-5.4", "sector": "BAU",
+            "gross_amount": 1190.0, "net_amount": 950.0,
+            "tax_amount": 190.0, "retention_amount": 50.0,
+            "contractor": "ProbeContractor", "inspector": "ProbeInspector",
+            "milestone": "M1", "timestamp": "2026-08-16T00:00:00Z",
+        }
+        pkg = _maybe_await(orch.generate_full_audit_package(tx))
+
+        def _has_proof_hash(obj) -> bool:
+            if isinstance(obj, dict):
+                for k, v in obj.items():
+                    if k == "proof_hash" and v:
+                        return True
+                    if _has_proof_hash(v):
+                        return True
+            elif isinstance(obj, (list, tuple)):
+                return any(_has_proof_hash(i) for i in obj)
+            return False
+
+        return _has_proof_hash(pkg)
     except Exception:
         return False
 
@@ -235,7 +459,7 @@ COMPLIANCE_CHECKS = {
     "GoBD_WORM": {
         "label": "GoBD & WORM-Archivierung",
         "checks": [
-            {"id": "2.1", "label": "Revisionssichere Archivierung (10 Jahre WORM-Storage)", "verified_by": "impl:agents_b2g/finale/subagents/audit_trail.py"},
+            {"id": "2.1", "label": "Revisionssichere Archivierung (10 Jahre WORM-Storage)", "verified_by": "probe:_probe_worm_audit_trail"},
             {"id": "2.2", "label": "Unveränderbarkeit (SHA-256-Hash-Kette, Merkle-Proofs)", "verified_by": "probe:_probe_sha3"},
             {"id": "2.3", "label": "XRechnung/ZUGFeRD (EN 16931)", "verified_by": "test:scripts/test_wave27_clearing.py"},
             {"id": "2.4", "label": "Vertrauenswürdiger Zeitstempel", "verified_by": None},
@@ -251,7 +475,7 @@ COMPLIANCE_CHECKS = {
             {"id": "3.3", "label": "15% Bauabzugssteuer (§48b EStG, Reverse-Charge)", "verified_by": "test:scripts/test_finale.py::test_16_vob_split_validation"},
             {"id": "3.4", "label": "GAEB-XML-Import (Leistungsverzeichnis)", "verified_by": "test:scripts/test_gaeb_reference.py"},
             {"id": "3.5", "label": "Meilenstein-basierte Zahlungsfreigabe", "verified_by": "test:shadow_contract_pilot/test_lifecycle.py"},
-            {"id": "3.6", "label": "Mängelhaftung (Gewährleistung 4 Jahre)", "verified_by": "impl:agents_b2g/execution/vob_extension.py"},
+            {"id": "3.6", "label": "Mängelhaftung (Gewährleistung 4 Jahre)", "verified_by": "probe:_probe_vob_defect_machine"},
         ],
     },
     "HSM_BSI_TR_03128": {
@@ -261,7 +485,7 @@ COMPLIANCE_CHECKS = {
             {"id": "4.2", "label": "ECDSA-Signatur (secp256r1/secp256k1 via PKCS#11)", "verified_by": "test:tests/test_hsm_adapter.py::test_hsm_signature_length"},
             {"id": "4.3", "label": "MPC-Multisig (3 von 5 Bunkern, Threshold-Signatur)", "verified_by": "test:tests/test_bunker_integration.py::TestMockHSM"},
             {"id": "4.4", "label": "Post-Quantum-Resilienz (Dilithium-5/Kyber-1024)", "verified_by": "test:scripts/test_wave33_survival.py::TestPQCSignerAgent"},
-            {"id": "4.5", "label": "Zertifikats-PIN (nicht auslesbar, Environment-Variable)", "verified_by": "impl:agents_b2g/bunker/hsm_adapter.py"},
+            {"id": "4.5", "label": "Zertifikats-PIN (nicht auslesbar, Environment-Variable)", "verified_by": "probe:_probe_hsm_pin_env"},
             {"id": "4.6", "label": "FIPS 140-2 Level 3 (Hardware, NitroKey HSM 2)", "verified_by": None},
         ],
     },
@@ -271,9 +495,9 @@ COMPLIANCE_CHECKS = {
             {"id": "5.1", "label": "Nullsummen-Invarianz: Brutto = Netto + Steuer + Einbehalt", "verified_by": "probe:_probe_z3_bho"},
             {"id": "5.2", "label": "Keine IEEE-754-Rundungsfehler (Z3 Real-Arithmetik)", "verified_by": "probe:_probe_z3_bho"},
             {"id": "5.3", "label": "Abweichungserkennung >0,00€ (Z3 SAT → HTTP 422)", "verified_by": "probe:_probe_z3_violation"},
-            {"id": "5.4", "label": "Proof-Hash in XRechnung eingebettet", "verified_by": "impl:agents_b2g/finale/finale_orchestrator.py"},
+            {"id": "5.4", "label": "Proof-Hash in XRechnung eingebettet", "verified_by": "probe:_probe_proof_hash_embedded"},
             {"id": "5.5", "label": "BHO-konforme Haushaltsführung (GoBD)", "verified_by": "test:scripts/test_finale.py"},
-            {"id": "5.6", "label": "Dashboard mit Z3-Visualisierung", "verified_by": "impl:agents_b2g/finale/subagents/dashboard_renderer.py"},
+            {"id": "5.6", "label": "Dashboard mit Z3-Visualisierung", "verified_by": "probe:_probe_dashboard_render"},
         ],
     },
     "OffGrid_TR_03109": {
@@ -294,7 +518,7 @@ COMPLIANCE_CHECKS = {
             {"id": "7.2", "label": "95th-Percentile Latenz <10ms", "verified_by": None},
             {"id": "7.3", "label": "100% BHO-Konformität unter Last (Z3 pro TX)", "verified_by": "probe:_probe_z3_bho"},
             {"id": "7.4", "label": "Stresstest: 1-Cent-Abweichung wird blockiert", "verified_by": "probe:_probe_z3_violation"},
-            {"id": "7.5", "label": "CI/CD-Integration (GitHub Actions, 4 Jobs)", "verified_by": "impl:.github/workflows/offgrid-test.yml"},
+            {"id": "7.5", "label": "CI/CD-Integration (GitHub Actions, 5 Jobs)", "verified_by": "probe:_probe_cicd_jobs"},
             {"id": "7.6", "label": "Automatisches SLA-Reporting", "verified_by": None},
         ],
     },
@@ -337,15 +561,19 @@ async def compliance_checklist():
     except Exception:
         pass  # Report nicht lesbar → alle test:-Einträge werden als "claimed" markiert
 
-    # Prüfe Alter des SON-Reports (nicht älter als 24h)
+    # Prüfe Alter des SON-Reports (nicht älter als 24h; naive Timestamps als UTC)
     son_age_h = None
     try:
         if son_report and son_data.get("generated_at"):
             gen = _dt.fromisoformat(son_data["generated_at"])
-            son_age_h = (_dt.now().timestamp() - gen.timestamp()) / 3600
+            if gen.tzinfo is None:
+                from datetime import timezone as _tz
+                gen = gen.replace(tzinfo=_tz.utc)
+            from datetime import timezone as _tz
+            son_age_h = (_dt.now(_tz.utc) - gen).total_seconds() / 3600
     except Exception:
         pass
-    son_valid = son_age_h is not None and son_age_h <= 24
+    son_valid = son_age_h is not None and 0 <= son_age_h <= 24
 
     for cat_key, cat in COMPLIANCE_CHECKS.items():
         checks_out = []
@@ -411,23 +639,35 @@ async def compliance_checklist():
             "checks": checks_out,
         }
 
+    # Gate-Semantik (RPA-Triade):
+    #   ABWEICHUNGEN         ≙ ENTLASTUNG_VERWEIGERT (failed_probes > 0)
+    #   KONFORM_MIT_VORBEHALT ≙ ENTLASTET mit Hinweis (staler SON / claimed / attested)
+    #   KONFORM              ≙ ENTLASTET (alles hart verifiziert)
+    total = verified_count + claimed_count + attested_count + len(failed_probes)
+    if failed_probes:
+        verdict = "ABWEICHUNGEN"
+    elif (not son_valid) or claimed_count or attested_count:
+        verdict = "KONFORM_MIT_VORBEHALT"
+    else:
+        verdict = "KONFORM"
+
     return {
         "standard": "Agent X — BSI-Compliance-Checkliste",
         "version": "1.0",
         "date": "2026-08-09",
         "categories": results,
         "summary": {
-            "total_checks": verified_count + claimed_count + attested_count + len(failed_probes),
-            "verified": verified_count,        # probe durchgelaufen ODER SON-Report: Tests grün
-            "claimed": claimed_count,           # test/impl-Datei existiert, kein SON-Beleg
-            "attested": attested_count,         # menschliche Zusicherung
-            "failed_probes": failed_probes,    # probe fehlgeschlagen ODER Pfad existiert nicht
-            "son_report_age_h": round(son_age_h, 1) if son_age_h else None,
+            "total_checks": total,
+            "passed": verified_count,              # nur hart verifizierte Probes
+            "failed_count": len(failed_probes),    # das BLOCKING-Signal
+            "verified": verified_count,            # probe durchgelaufen ODER SON-Report: Tests grün
+            "claimed": claimed_count,              # test/impl-Datei existiert, kein SON-Beleg
+            "attested": attested_count,            # menschliche Zusicherung
+            "failed_probes": failed_probes,        # probe fehlgeschlagen ODER Pfad existiert nicht
+            "gate": "PASS" if not failed_probes else "BLOCKING",
+            "son_report_age_h": round(son_age_h, 1) if son_age_h is not None else None,
             "son_report_valid": son_valid,
-            "verdict": (
-                "VOLLSTÄNDIG KONFORM" if not failed_probes
-                else "ABWEICHUNGEN"
-            ),
+            "verdict": verdict,
         },
     }
 

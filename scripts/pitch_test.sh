@@ -61,8 +61,25 @@ BHO_VIOLATION=$(curl -s -X POST http://localhost:8000/prove_bho_invariant \
     -d '{"sector":"TEST","gross_amount":100,"net_amount":80,"tax_amount":15,"retention_amount":4}' 2>/dev/null || echo '{}')
 check "BHO-Violation detection" python3 -c "import sys,json; d=json.load(sys.stdin); sys.exit(0 if 'detail' in d else 1)" <<<"$BHO_VIOLATION"
 
-COMPLIANCE=$(curl -s http://localhost:8000/compliance 2>/dev/null || echo '{"summary":{"passed":0}}')
-check "Compliance (42/42)" python3 -c "import sys,json; s=json.load(sys.stdin)['summary']; assert s['passed']==42, f'{s[\"passed\"]}/42'" <<<"$COMPLIANCE"
+# COMPLIANCE GATE (B2G Key Decision: BLOCKING bei Verletzung, nicht bei Attestierung)
+# Invariante: verified + claimed + attested + failed = total  (Zero-Sum der Checks)
+# Gate:       failed_count == 0                                (keine Abweichung)
+# Note: passed==42 war unerreichbar (11 attested sind prinzipbedingt nicht software-probbar).
+COMPLIANCE=$(curl -s http://localhost:8000/compliance 2>/dev/null || echo '{"summary":{"failed_count":1,"total_checks":0,"verified":0,"claimed":0,"attested":0,"gate":"BLOCKING","verdict":"DOWN"}}')
+if echo "$COMPLIANCE" | python3 -c "
+import sys, json
+s = json.load(sys.stdin)['summary']
+parts = s.get('verified', 0) + s.get('claimed', 0) + s.get('attested', 0) + s.get('failed_count', 1)
+ok = (parts == s.get('total_checks', -1) > 0) and (s.get('failed_count', 1) == 0)
+print(f\"  total={s.get('total_checks')} verified={s.get('verified')} claimed={s.get('claimed')} attested={s.get('attested')} failed={s.get('failed_count')} gate={s.get('gate')} verdict={s.get('verdict')}\", file=sys.stderr)
+sys.exit(0 if ok else 1)
+" 2>&1; then
+    echo -e "  ${GREEN}✅${NC} Compliance Gate (failed_count==0, Zero-Sum)"
+    ((PASS++)) || true
+else
+    echo -e "  ${RED}❌${NC} COMPLIANCE BLOCKING"
+    ((FAIL++)) || true
+fi
 echo ""
 
 # ── Core Tests ───────────────────────────────────────────────────────

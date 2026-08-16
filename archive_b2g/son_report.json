@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-08-09T09:30:20.595795",
+  "generated_at": "2026-08-16T07:04:41.334782+00:00",
   "repository": "/Volumes/THX_OS_ULTRA/Users/olivermueller/agent_x_storage",
   "tests": {
     "scripts/test_public_portal.py": {
@@ -15,10 +15,10 @@
       "exit_code": 0
     },
     "scripts/end_to_end_b2g_test.py": {
-      "passed": 20,
+      "passed": 25,
       "total": 25,
-      "failed": 5,
-      "exit_code": 1
+      "failed": 0,
+      "exit_code": 0
     },
     "scripts/test_wave16_bridge.py": {
       "passed": 43,
@@ -98,6 +98,18 @@
       "failed": 0,
       "exit_code": 0
     },
+    "scripts/test_simchain.py": {
+      "passed": 199,
+      "total": 199,
+      "failed": 0,
+      "exit_code": 0
+    },
+    "scripts/test_multichain.py": {
+      "passed": 113,
+      "total": 113,
+      "failed": 0,
+      "exit_code": 0
+    },
     "tests/test_bunker_integration.py": {
       "passed": 18,
       "total": 18,
@@ -107,6 +119,18 @@
     "tests/test_hsm_adapter.py": {
       "passed": 6,
       "total": 6,
+      "failed": 0,
+      "exit_code": 0
+    },
+    "scripts/test_air_layer.py": {
+      "passed": 18,
+      "total": 18,
+      "failed": 0,
+      "exit_code": 0
+    },
+    "scripts/test_gaeb_reference.py": {
+      "passed": 2,
+      "total": 2,
       "failed": 0,
       "exit_code": 0
     }

@@ -189,8 +189,8 @@ class RetentionManagerAgent:
         return tx
 
     async def track_guarantee(self, project_id: str) -> dict:
-        """Subagent: GuaranteeTracker — monitors 5-year warranty period."""
-        return {"warranty_years": 5, "expires": (datetime.now(timezone.utc) + timedelta(days=5*365)).isoformat()}
+        """Subagent: GuaranteeTracker — monitors 4-year warranty period (VOB/B §13 Abs. 4)."""
+        return {"warranty_years": 4, "expires": (datetime.now(timezone.utc) + timedelta(days=4*365)).isoformat()}
 
     async def get_total_retained(self, project_id: str) -> float:
         return self._retention_pool.get(project_id, {}).get("total_retained", 0.0)

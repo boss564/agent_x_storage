@@ -21,13 +21,6 @@ on:
       - 'scripts/test_*.py'
       - 'services/**'
   pull_request:
-    branches: [main]
-      - 'scripts/test_wave33_survival.py'
-      - 'Dockerfile.bunker'
-      - 'docker-compose.mock.yml'
-      - '.github/workflows/offgrid-test.yml'
-  pull_request:
-    branches: [main]
     paths:
       - 'agents_b2g/**'
       - 'tests/**'

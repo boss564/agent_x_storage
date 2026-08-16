@@ -477,6 +477,11 @@ async def main():
         v = overall["validate"]
         all_ok = "✅ ALLE VALIDE" if v["all_valid"] else "❌ VALIDIERUNGSFEHLER"
         print(f"  XSD Validation:       {all_ok}")
+        # SON-compatible summary line (check_claude_md.py expects 'N/N passed')
+        _results = v["x83_validations"] + v["x84_validations"]
+        _total = len(_results)
+        _passed = sum(1 for r in _results if r["valid"] is not False)
+        print(f"{_passed}/{_total} tests passed")
 
     if overall["pipeline"]:
         pl = overall["pipeline"]

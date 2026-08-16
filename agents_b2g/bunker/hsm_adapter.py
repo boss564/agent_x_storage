@@ -23,7 +23,11 @@ class UnifiedPKCS11HSM:
         self.mode = os.environ.get("HSM_MODE", "SOFTHSM")
         self.module = os.environ.get("PKCS11_MODULE", "/usr/lib/softhsm/libsofthsm2.so")
         self.token_label = os.environ.get("HSM_TOKEN_LABEL", "AgentX_Vault_MUC")
-        self.pin = os.environ.get("HSM_PIN", "1234")
+        self.pin = os.environ.get("HSM_PIN")
+        if not self.pin:
+            raise ValueError(
+                "HSM_PIN environment variable is required (no hardcoded default)"
+            )
 
         # In SOFTHSM-Mode: Mock-Session. In HARDWARE: PKCS#11-Session.
         self._session: Optional[str] = None

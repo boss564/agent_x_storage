@@ -2,7 +2,7 @@
 
 **Nachweisdokument für Auditoren und Behörden**
 Geltungsbereich: §48b BHO, GoBD, ISO/IEC 27001:2022, DSGVO (Art. 5, 25, 32)
-Stand: 2026-08-14 · Version 1.0
+Stand: 2026-08-16 · Version 1.1
 
 ---
 
@@ -110,3 +110,49 @@ python3 scripts/test_wave27_clearing.py
 | Subsurface (D00–D01) | ZK-Prover + Quarantäne + L1-Anker | `scripts/mock_d01_responder.py`, `agents/subsurface/` |
 | Security (P08) | Audit-Logger (HMAC-Kette) | `agents/security/p08_audit.py` |
 | Clearing (W27) | BHO-Zero-Sum-Netting | `agents_b2g/clearing/` |
+
+---
+
+## K7 · Compliance-Verifikationsmodell (Probe-Promotion, Stand 0.24.0)
+
+### Drei Verifikationsstufen
+
+| Stufe | Bedeutung | Rechtswert |
+|---|---|---|
+| **verified** | Probe-Funktion oder SON-Report belegt die Behauptung zur Laufzeit | gerichtsfest |
+| **claimed** | Implementierung existiert (Datei/Pfad), aber kein Verhaltensbeweis | Nachweis pendent |
+| **attested** | Selbstauskunft (Hardware/Organisation), softwareseitig nicht prüfbar | VORBEHALT |
+
+### Gate-Semantik (`/compliance`)
+
+- `failed_count == 0` → `gate: PASS`, sonst `BLOCKING`
+- **Zero-Sum der Checks:** `verified + claimed + attested + failed == total_checks`
+- Verdict: `ABWEICHUNGEN` (failed>0) · `KONFORM_MIT_VORBEHALT` (failed=0, aber claimed/attested/SON stale) · `KONFORM` (alles verified + SON frisch)
+
+### Probe-Inventar (`services/z3_solver/main.py`)
+
+| Probe | Checks | Methode |
+|---|---|---|
+| `_probe_sha3` | 1.2, 2.2 | SHA3-Hash-Echtzeitproof |
+| `_probe_z3_bho` | 5.1, 5.2, 7.3 | Z3-Nullsummen-Proof |
+| `_probe_z3_violation` | 5.3, 7.4 | Z3-Verletzungserkennung |
+| `_probe_worm_audit_trail` | 2.1 | WORM write→verify→tamper-detect |
+| `_probe_dashboard_render` | 5.6 | Render + BHO-Violation-Flag |
+| `_probe_vob_defect_machine` | 3.6 | §13-Fristen 14d/30d + 4-Jahres-Gewährleistung |
+| `_probe_proof_hash_embedded` | 5.4 | Audit-Package enthält Proof-Hash |
+| `_probe_hsm_pin_env` | 4.5 | PIN aus Env, kein Hardcoded-Default |
+| `_probe_cicd_jobs` | 7.5 | CI-Workflow ≥4 Jobs, YAML parsebar |
+
+### Dokumentierte Ceilings
+
+- **Check 1.1** (NFC/nPA via AusweisApp2): hardwaregebunden, bleibt `claimed` — kein ehrlicher Software-Probe möglich.
+
+### Operationelle Regeln
+
+- **R1:** Proben laufen im FastAPI-Request-Kontext. `asyncio.run()` ist dort verboten (RuntimeError im laufenden Loop); asynchrone Aufrufe laufen über den `_maybe_await`-Thread-Pool.
+- **R2:** GRÜN-Test im Container ist notwendig, aber nicht hinreichend. Jede verdrahtete Probe wird zusätzlich über den Live-Endpoint (`curl /compliance`) verifiziert — Umgebungskontext schlägt Isolationstest.
+
+### SON-Report-Frische
+
+- `son_report_valid` erfordert `age ≤ 24h`. Nächtliche Regeneration per Cron (03:00), Backup sichert den Report mit (03:30).
+- Der Executor nutzt den Report auch bei `son_valid=false` für `test:`-Pfade; das Flag steuert nur das Summary-Verdict.

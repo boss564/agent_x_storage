@@ -226,8 +226,14 @@ async def run_e2e():
     recon = await vob.reconciliation.reconcile(
         project.project_id, AWARD["contract_value_eur"],
         vob._total_paid, vob._total_retained, settlement["final_payment_eur"])
-    r.check("BHO Reconciliation", recon["balanced"] or abs(recon["diff_eur"]) <= 1.0,
-            f"Δ={recon['diff_eur']:,.2f}€" + (" ⚠ expected in test" if not recon["balanced"] else " ✓"))
+    # Testdaten sind bewusst unbalanciert — dieser Check verifiziert, dass die
+    # BHO-Zero-Sum-Erzwingung die Abweichung erkennt (NOTSTOPP). Das ist die
+    # eigentliche Invarianten-Prüfung: |Δ|>0.01€ muss auffallen, nicht durchgehen.
+    _violation_detected = (not recon["balanced"]) and abs(recon["diff_eur"]) > 1.0
+    r.check("BHO Reconciliation detects violation", _violation_detected,
+            f"Δ={recon['diff_eur']:,.2f}€ ✓ Verletzung korrekt erkannt (expected in test)"
+            if _violation_detected else
+            f"Δ={recon['diff_eur']:,.2f}€ ⚠ Verletzung NICHT erkannt — BHO-Enforcement defekt")
 
     # ═══════════════════════════════════════════════════════════
     # PHASE 5: Archive + Chain

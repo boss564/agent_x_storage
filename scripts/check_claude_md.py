@@ -132,12 +132,17 @@ TEST_SCRIPTS: list[tuple[str, str, str]] = [
         r"ERGEBNIS:\s*(\d+)\s+passed,\s*\d+\s+failed\s*\((\d+)\s+total\)",
         r"HSM.*?Adapter.*?(\d+)\s*/\s*(\d+)\s+tests?",
     ),
+    (
+        "scripts/test_air_layer.py",
+        r"ERGEBNIS:\s*(\d+)\s+passed,\s*\d+\s+failed\s*\((\d+)\s+total\)",
+        r"Air Layer E2E.*?(\d+)\s*/\s*(\d+)\s+passed",
+    ),
 ]
 
 # Skripte ohne x/y-Testbilanz — Generatoren, Fetcher, Reports.
 # Bewusst nicht in TEST_SCRIPTS, damit die Auto-Discovery sie nicht erneut meldet.
 NO_TEST_SUMMARY: set[str] = {
-    "scripts/test_gaeb_reference.py",      # GAEB-Generator, gibt Preis + Pfad aus
+    "scripts/test_gaeb_reference.py",  # X83-Fixtures gitignore; TMP-checkout ohne Referenzdaten
     "scripts/test_bvbs_pruefdatei.py",     # braucht externe Pruefdatei
     "scripts/export_backtest_signals.py",  # Daten-Exporter, kein Test
     "scripts/fetch_xrechnung_schematron.py",  # Fetcher, kein Test
@@ -145,7 +150,6 @@ NO_TEST_SUMMARY: set[str] = {
     "scripts/demo_finale.py",               # Demo-Skript, kein Test
     "scripts/demo_simchain.py",             # Demo-Skript, kein Test
     "scripts/test_e2e_pipeline.py",         # E2E-Test, RESULT ✅/❌ (kein x/y-Bilanz)
-    "scripts/test_air_layer.py",            # Air-Schicht Fault-Injection (Commit 1.5)
 }
 
 
@@ -245,6 +249,28 @@ def check_counts(text: str, waves: list[str], per: int | None, rep: Report) -> N
                     rep.ok()
 
 
+def _resolve_test_root(doc_root: Path) -> Path:
+    """Repo-Root für Testläufe (Fixtures), unabhängig vom staged checkout-index TMP.
+
+    Pre-commit exportiert den Index nach TMP — dort fehlen gitignorierte
+    Referenzdaten (z.B. GAEB X83). AGENT_X_TEST_ROOT oder git toplevel nutzen.
+    """
+    import os
+    env = os.environ.get("AGENT_X_TEST_ROOT")
+    if env:
+        return Path(env).resolve()
+    try:
+        r = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"],
+            capture_output=True, text=True, timeout=5,
+        )
+        if r.returncode == 0 and r.stdout.strip():
+            return Path(r.stdout.strip()).resolve()
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return doc_root
+
+
 def check_tests(text: str, root: Path, rep: Report) -> None:
     """Testskripte laufen lassen, Ausgabe gegen die Zahlen im Text halten.
 
@@ -252,6 +278,7 @@ def check_tests(text: str, root: Path, rep: Report) -> None:
     identifiziert, in denen sein Ergebnis dokumentiert ist. Nur x/y-Paare aus
     diesen Zeilen werden mit der tatsaechlichen Testausgabe verglichen.
     """
+    test_root = _resolve_test_root(root)
     for script, out_pattern, doc_pattern in TEST_SCRIPTS:
         # Guard: both patterns must have exactly 2 groups (passed, total)
         bad = False
@@ -263,11 +290,13 @@ def check_tests(text: str, root: Path, rep: Report) -> None:
                 bad = True
         if bad:
             continue
-        f = root / script
+        # Immer Repo-Skript (nicht TMP): Path(__file__) muss Fixtures/Imports finden.
+        # CLAUDE.md kommt weiterhin aus root (staged Index).
+        f = test_root / script
         if not f.exists():
             continue
         try:
-            out = subprocess.run([sys.executable, str(f)], cwd=root,
+            out = subprocess.run([sys.executable, str(f)], cwd=str(test_root),
                                  capture_output=True, text=True, timeout=300)
         except subprocess.TimeoutExpired:
             rep.fail(None, f"Test {script}", "—", "Timeout")
@@ -367,9 +396,9 @@ def main() -> int:
             json_report_path = sys.argv[i + 1]
             break
     if json_report_path and "--run-tests" in sys.argv:
-        from datetime import datetime as _dt
+        from datetime import datetime as _dt, timezone as _tz
         report = {
-            "generated_at": _dt.now().isoformat(),
+            "generated_at": _dt.now(_tz.utc).isoformat(),
             "repository": str(root),
             "tests": _test_results,
         }

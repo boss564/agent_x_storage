@@ -322,7 +322,7 @@ agents_b2g/
 ├── tendering/
 │   └── agents.py                 # Wave 1: 9 agents, 741 lines
 ├── composing/
-│   └── agents.py                 # Wave 2: 9 agents, 634 lines
+│   └── agents.py                 # Wave 2: 9 agents, 645 lines
 ├── execution/
 │   ├── agents.py                 # Wave 3: 9 agents, 523 lines
 │   ├── vob_extension.py          # Wave 3.5: 9 agents, 515 lines

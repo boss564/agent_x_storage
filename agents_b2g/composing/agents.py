@@ -303,6 +303,8 @@ class X84SerializerAgent:
         lines = [
             f'<?xml version="1.0" encoding="UTF-8"?>',
             f'<GAEB_DA_XML xmlns="{ns}" Version="3.3" Phase="X84" Currency="EUR">',
+            f'  <DP>84</DP>',              # GAEB-Phase X84 (Pflichtfeld)
+            f'  <VersDate>2021-05</VersDate>',  # GAEB DA XML 3.3 Veröffentlichungsdatum
             f'  <PrjInfo>',
             f'    <PrjNo>{tid}</PrjNo>',
             f'    <LblPrj>{proj_meta.get("project_name", "Bauvorhaben")}</LblPrj>',
@@ -337,7 +339,7 @@ class X84SerializerAgent:
                 lines.append(f'        <Qty>{qty}</Qty>')
                 lines.append(f'        <QU>{pos.get("unit", "Stk")}</QU>')
                 lines.append(f'        <Amount>')
-                lines.append(f'          <UnitPrice>{up:.2f}</UnitPrice>')
+                lines.append(f'          <UP>{up:.2f}</UP>')  # Validator-Regel prüft auf <UP>
                 lines.append(f'          <Total>{total:.2f}</Total>')
                 lines.append(f'        </Amount>')
                 if gap:
@@ -345,8 +347,17 @@ class X84SerializerAgent:
                 lines.append(f'      </Item>')
             lines.append(f'    </BoQCtgy>')
 
+        # TotalAmount = Summe über alle Positionen (GAEB DA XML 3.3 Pflichtfeld)
+        total_amount = sum(
+            p.get("total_net", p.get("calculated_unit_price", 0) * p.get("quantity", 1))
+            for p in positions
+        )
+        if not total_amount:
+            total_amount = float(summary.get("total_gross_eur") or summary.get("total_net_eur") or 0)
+
         lines.append(f'  </BoQ>')
         lines.append(f'  <BidSummary>')
+        lines.append(f'    <TotalAmount>{total_amount:.2f}</TotalAmount>')
         lines.append(f'    <TotalNet>{summary.get("total_net_eur", 0):.2f}</TotalNet>')
         lines.append(f'    <TotalGross>{summary.get("total_gross_eur", 0):.2f}</TotalGross>')
         lines.append(f'    <VATNote>{summary.get("vat_note", "")}</VATNote>')
@@ -416,7 +427,7 @@ class X84ValidatorAgent:
             print(f"  [X84Validator]  ✅ XML valid (Schema + Typen + Plausibilität)")
         else:
             print(f"  [X84Validator]  ❌ {len(all_errors)} Validierungsfehler:")
-            for e in all_errors[:3]:
+            for e in all_errors:        # alle Validierungsfehler anzeigen
                 print(f"    - {e}")
 
         return is_valid, all_errors
