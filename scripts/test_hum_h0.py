@@ -65,3 +65,11 @@ def test_simulation_produces_trajectories():
     traj = sim.run()
     assert len(traj) == 9
     assert all(len(v) > 0 for v in traj.values())
+
+
+def test_all_agents_receive_messages():
+    """Every agent must receive at least one message (phase-pull participation)."""
+    sim = HumanitarianNormalSimulation(seed=1, duration_s=200.0, t_warmup=50.0)
+    sim.run()
+    for uid, u in sim.units.items():
+        assert len(u.inbox) > 0, f"{uid} receives no messages (phase never pulled)"

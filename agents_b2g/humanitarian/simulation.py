@@ -115,6 +115,10 @@ class HumanitarianNormalSimulation:
                 self._send(unit, ocha, "status", {"pol": unit.pol})
         elif unit.unit_class == "C":
             if unit.capability == "priority_allocation":
+                # Coordination signal to ALL agents (A, B, and other C),
+                # so every unit's phase gets pulled into the OCHA hub.
+                # Previously only class B received, leaving class A and
+                # b2g_agent un-pulled (4/9 agents at random phase).
                 for uid, u in self.units.items():
-                    if u.unit_class == "B":
-                        self._send(unit, uid, "priority_update", {"cmd": "dispatch"})
+                    if uid != unit.unit_id:
+                        self._send(unit, uid, "coordination_signal", {"cmd": "sync"})
