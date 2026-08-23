@@ -1,0 +1,76 @@
+{
+  "window_start": "2026-05-20T00:00:00+00:00",
+  "window_end": "2026-08-17T23:59:59+00:00",
+  "window_days": 90,
+  "rules": [
+    {
+      "candidate_id": "chainlink",
+      "min_day_coverage": 0.8
+    },
+    {
+      "candidate_id": "intent_relayers",
+      "min_day_coverage": 0.6
+    },
+    {
+      "candidate_id": "liquidations",
+      "min_day_coverage": 0.4
+    },
+    {
+      "candidate_id": "stablecoin_mint_burn",
+      "min_day_coverage": 0.6
+    },
+    {
+      "candidate_id": "mev_cluster",
+      "min_day_coverage": 0.7
+    }
+  ],
+  "results": {
+    "chainlink": {
+      "file": "bridge_stufe_a_v3_chainlink.jsonl",
+      "status": "TESTBAR",
+      "reason": "ok",
+      "n_events": 12199,
+      "coverage_days": 90,
+      "coverage_ratio": 1.0,
+      "min_day_coverage": 0.8
+    },
+    "intent_relayers": {
+      "file": "bridge_stufe_a_v3_intent_relayers.jsonl",
+      "status": "TESTBAR",
+      "reason": "ok",
+      "n_events": 746034,
+      "coverage_days": 90,
+      "coverage_ratio": 1.0,
+      "min_day_coverage": 0.6
+    },
+    "liquidations": {
+      "file": "bridge_stufe_a_v3_liquidations.jsonl",
+      "status": "TESTBAR",
+      "reason": "ok",
+      "n_events": 2865,
+      "coverage_days": 76,
+      "coverage_ratio": 0.844444,
+      "min_day_coverage": 0.4
+    },
+    "stablecoin_mint_burn": {
+      "file": "bridge_stufe_a_v3_stablecoin_mint_burn.jsonl",
+      "status": "TESTBAR",
+      "reason": "ok",
+      "n_events": 530194,
+      "coverage_days": 90,
+      "coverage_ratio": 1.0,
+      "min_day_coverage": 0.6
+    },
+    "mev_cluster": {
+      "file": "bridge_stufe_a_v3_mev_cluster.jsonl",
+      "status": "TESTBAR",
+      "reason": "ok",
+      "n_events": 74237,
+      "coverage_days": 90,
+      "coverage_ratio": 1.0,
+      "min_day_coverage": 0.7
+    }
+  },
+  "testable_candidates": 5,
+  "untestable_candidates": 0
+}

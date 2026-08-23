@@ -1,0 +1,76 @@
+{
+  "schema": "bridge_seal_v1",
+  "sealed_at": "2026-08-23T10:20:00.087050+00:00",
+  "studies": [
+    "bridge_stufe_a_v3",
+    "bridge_diagnostic"
+  ],
+  "dossiers": [
+    "docs/BRIDGE_STUFE_A_V3_ERGEBNIS.md",
+    "docs/BRIDGE_DIAGNOSTIC_ERGEBNIS.md"
+  ],
+  "artifacts_json": {
+    "bridge_stufe_a_v3_coverage_gate.json": {
+      "sha256": "0ea38152984dbeb634cb8d874a93295d17883e391b171a1d48f34ef2a72433df",
+      "bytes": 1857,
+      "mtime_utc": "2026-08-23T10:06:21Z"
+    },
+    "bridge_stufe_a_v3_integrity_gate.json": {
+      "sha256": "604b7e0facb24228500c1aeaa950da7ab122f9439101b969c063274875eee85f",
+      "bytes": 1874,
+      "mtime_utc": "2026-08-22T11:03:28Z"
+    },
+    "bridge_diagnostic_informativity_gate.json": {
+      "sha256": "34f0f96c59a72ddf9dd67066a8432182712c8cd1c8935b7b0240d614141bd0d0",
+      "bytes": 4228,
+      "mtime_utc": "2026-08-22T14:40:34Z"
+    },
+    "bridge_stufe_a_v3_ergebnis.json": {
+      "sha256": "0a7b573e11960d4c44312626dab5581c015f3eccd360595f00452cb68feeab13",
+      "bytes": 89119,
+      "mtime_utc": "2026-08-22T13:28:55Z"
+    },
+    "bridge_diagnostic_ablation.json": {
+      "sha256": "da6742fb9dbb5315fe48e1c5700ef33dc5f1da763e0288948c259759ea54c374",
+      "bytes": 3537,
+      "mtime_utc": "2026-08-22T15:11:01Z"
+    },
+    "bridge_diagnostic_permutation.json": {
+      "sha256": "73d5e959b781cb788518ffcdc74b9cd32bdebeeae80528be3a785e83ba9a4060",
+      "bytes": 1320,
+      "mtime_utc": "2026-08-22T15:11:01Z"
+    },
+    "bridge_diagnostic_kfold.json": {
+      "sha256": "582d17e99ea146885a9ab3abfce9a557187dc0c23af1b60fba782d0fcb124618",
+      "bytes": 2022,
+      "mtime_utc": "2026-08-22T15:11:01Z"
+    },
+    "bridge_diagnostic_ergebnis.json": {
+      "sha256": "0e77fb47ac9974074c9baa1b3fbecb804f03a2d02b60ce514e22371f93021553",
+      "bytes": 10151,
+      "mtime_utc": "2026-08-22T15:11:01Z"
+    }
+  },
+  "captures_jsonl": {
+    "bridge_eth.jsonl": {
+      "sha256": "2ef4f6fce1e18e55a2ae9d50a8f9137eaff468215ec1b894efac69a30a719836",
+      "bytes": 2727172,
+      "mtime_utc": "2026-08-17T17:57:07Z"
+    },
+    "bridge_gnosis.jsonl": {
+      "sha256": "d8895dc99f8aaf5fdcfaf16fe1ba43b55ad41e27bfcbcb59dbefe6882a7faa25",
+      "bytes": 2731668,
+      "mtime_utc": "2026-08-17T18:42:24Z"
+    },
+    "drivers_90d.jsonl": {
+      "sha256": "4c503aa441172b876b932b5f6955033f72b65c54c547bde422179d340680319d",
+      "bytes": 14576985,
+      "mtime_utc": "2026-08-17T18:59:44Z"
+    },
+    "bridge_stufe_a_v3_mev_cluster.jsonl": {
+      "sha256": "0b341378423b6758a19fb0cf0b02fa21e35cd5c1675f12609dd7ba58e1f341dc",
+      "bytes": 16041440,
+      "mtime_utc": "2026-08-22T10:19:40Z"
+    }
+  }
+}

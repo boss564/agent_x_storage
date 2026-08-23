@@ -1,0 +1,149 @@
+{
+  "reference": "Z_alt_union_all_z_neu_ter",
+  "sum_cte_ref": {
+    "ab": 0.04705795505747812,
+    "ba": 0.06302388182182472
+  },
+  "ablations": [
+    {
+      "removed_candidate": "chainlink",
+      "sum_cte_ref": {
+        "ab": 0.04705795505747812,
+        "ba": 0.06302388182182472
+      },
+      "sum_cte_loo": {
+        "ab": 0.03568559010742067,
+        "ba": 0.05106113286711089
+      },
+      "delta_sum_cte": {
+        "ab": 0.011372364950057445,
+        "ba": 0.011962748954713831
+      },
+      "rel_loo": {
+        "ab": 0.241667,
+        "ba": 0.189813
+      },
+      "rel_loo_max": 0.241667,
+      "byte_identical_to_ref": false,
+      "encoding_status_gate": "OK",
+      "role": "cleansing_worker",
+      "role_reasons": [],
+      "perm_collapse_ratio": 0.922425
+    },
+    {
+      "removed_candidate": "intent_relayers",
+      "sum_cte_ref": {
+        "ab": 0.04705795505747812,
+        "ba": 0.06302388182182472
+      },
+      "sum_cte_loo": {
+        "ab": 0.04705795505747812,
+        "ba": 0.06302388182182472
+      },
+      "delta_sum_cte": {
+        "ab": 0.0,
+        "ba": 0.0
+      },
+      "rel_loo": {
+        "ab": 0.0,
+        "ba": 0.0
+      },
+      "rel_loo_max": 0.0,
+      "byte_identical_to_ref": true,
+      "encoding_status_gate": "INERT_ENCODING",
+      "role": "inert",
+      "role_reasons": [
+        "byte_identical"
+      ],
+      "perm_collapse_ratio": 0.0
+    },
+    {
+      "removed_candidate": "liquidations",
+      "sum_cte_ref": {
+        "ab": 0.04705795505747812,
+        "ba": 0.06302388182182472
+      },
+      "sum_cte_loo": {
+        "ab": 0.044338067658658886,
+        "ba": 0.05977097326096725
+      },
+      "delta_sum_cte": {
+        "ab": 0.002719887398819232,
+        "ba": 0.0032529085608574704
+      },
+      "rel_loo": {
+        "ab": 0.057799,
+        "ba": 0.051614
+      },
+      "rel_loo_max": 0.057799,
+      "byte_identical_to_ref": false,
+      "encoding_status_gate": "OK",
+      "role": "cleansing_worker",
+      "role_reasons": [],
+      "perm_collapse_ratio": 0.575868
+    },
+    {
+      "removed_candidate": "stablecoin_mint_burn",
+      "sum_cte_ref": {
+        "ab": 0.04705795505747812,
+        "ba": 0.06302388182182472
+      },
+      "sum_cte_loo": {
+        "ab": 0.04705795505747812,
+        "ba": 0.06302388182182472
+      },
+      "delta_sum_cte": {
+        "ab": 0.0,
+        "ba": 0.0
+      },
+      "rel_loo": {
+        "ab": 0.0,
+        "ba": 0.0
+      },
+      "rel_loo_max": 0.0,
+      "byte_identical_to_ref": true,
+      "encoding_status_gate": "INERT_ENCODING",
+      "role": "inert",
+      "role_reasons": [
+        "byte_identical"
+      ],
+      "perm_collapse_ratio": 0.0
+    },
+    {
+      "removed_candidate": "mev_cluster",
+      "sum_cte_ref": {
+        "ab": 0.04705795505747812,
+        "ba": 0.06302388182182472
+      },
+      "sum_cte_loo": {
+        "ab": 0.033634889617059294,
+        "ba": 0.04741403108993225
+      },
+      "delta_sum_cte": {
+        "ab": 0.013423065440418824,
+        "ba": 0.015609850731892472
+      },
+      "rel_loo": {
+        "ab": 0.285245,
+        "ba": 0.247682
+      },
+      "rel_loo_max": 0.285245,
+      "byte_identical_to_ref": false,
+      "encoding_status_gate": "OK",
+      "role": "cleansing_worker",
+      "role_reasons": [],
+      "perm_collapse_ratio": 0.918447
+    }
+  ],
+  "cleansing_workers": [
+    "chainlink",
+    "liquidations",
+    "mev_cluster"
+  ],
+  "inert_components": [
+    "intent_relayers",
+    "stablecoin_mint_burn"
+  ],
+  "neutral_components": [],
+  "unclassified": []
+}

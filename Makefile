@@ -58,6 +58,9 @@ verify:
 	@echo "0b. SON-Report (Test-Suiten)..."
 	@python3 scripts/check_claude_md.py --run-tests --json-report archive_b2g/son_report.json 2>/dev/null || true
 	@echo ""
+	@echo "0c. Bridge-Siegel (Manifest)..."
+	@python3 scripts/check_bridge_seal.py || true
+	@echo ""
 	@echo "1. Z3 Health:"
 	@curl -s http://localhost:8000/health | python3 -m json.tool 2>/dev/null || echo "   ❌ Z3-Service nicht erreichbar"
 	@echo ""

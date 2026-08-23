@@ -1,0 +1,134 @@
+{
+  "generated_at": "2026-08-22T14:40:34.059106+00:00",
+  "pre_reg": "docs/BRIDGE_DIAGNOSTIC_PREREG.md",
+  "protocol_sentence_v3_section8": "Ein Gate, das Kandidaten nicht trotz, sondern wegen S\u00e4ttigung durchwinkt (coverage_ratio = 1.0 als G\u00fctesiegel), belohnt genau die Eigenschaft, die sie als bin\u00e4re Konditionierer wertlos macht \u2014 Bestehen und Unbrauchbarkeit korrelieren. Neben Abdeckung braucht jede bin\u00e4re Belegungskodierung ein Gate auf Varianz oder Terzil-Dispersion.",
+  "status": "PASS",
+  "blockers": [],
+  "integrity_gate_ref": "/Volumes/THX_OS_ULTRA/Users/olivermueller/agent_x_storage/bridge_stufe_a_v3_integrity_gate.json",
+  "v3_ergebnis_ref": "/Volumes/THX_OS_ULTRA/Users/olivermueller/agent_x_storage/bridge_stufe_a_v3_ergebnis.json",
+  "v3_verdict_required": "V3_PERSISTENZ",
+  "v3_verdict_observed": "V3_PERSISTENZ",
+  "thresholds": {
+    "OCC_SAT": 0.9,
+    "min_distinct_tertile_bins": 2
+  },
+  "candidates": {
+    "chainlink": {
+      "capture_file": "bridge_stufe_a_v3_chainlink.jsonl",
+      "n_events_raw": 12109,
+      "n_bins": 129600,
+      "n_occupied": 9605,
+      "occupancy_rate": 0.074113,
+      "n_distinct_tertile_bins": 2,
+      "tertile_bin_counts": {
+        "0": 119995,
+        "1": 0,
+        "2": 9605
+      },
+      "n_dropped_bins": 0,
+      "events_per_minute_std": 0.370285,
+      "events_per_minute_max": 8,
+      "occupied_minute_event_std": 0.6152,
+      "encoding_status": "OK",
+      "inert_reasons": [],
+      "perm_testable": true
+    },
+    "intent_relayers": {
+      "capture_file": "bridge_stufe_a_v3_intent_relayers.jsonl",
+      "n_events_raw": 746034,
+      "n_bins": 129600,
+      "n_occupied": 128009,
+      "occupancy_rate": 0.987724,
+      "n_distinct_tertile_bins": 1,
+      "tertile_bin_counts": {
+        "0": 129600,
+        "1": 0,
+        "2": 0
+      },
+      "n_dropped_bins": 0,
+      "events_per_minute_std": 3.308551,
+      "events_per_minute_max": 64,
+      "occupied_minute_event_std": 3.265822,
+      "encoding_status": "INERT_ENCODING",
+      "inert_reasons": [
+        "occupancy_saturated",
+        "tertile_collapsed"
+      ],
+      "perm_testable": false
+    },
+    "liquidations": {
+      "capture_file": "bridge_stufe_a_v3_liquidations.jsonl",
+      "n_events_raw": 2865,
+      "n_bins": 129600,
+      "n_occupied": 757,
+      "occupancy_rate": 0.005841,
+      "n_distinct_tertile_bins": 2,
+      "tertile_bin_counts": {
+        "0": 128843,
+        "1": 0,
+        "2": 757
+      },
+      "n_dropped_bins": 0,
+      "events_per_minute_std": 0.71202,
+      "events_per_minute_max": 101,
+      "occupied_minute_event_std": 8.517904,
+      "encoding_status": "OK",
+      "inert_reasons": [],
+      "perm_testable": true
+    },
+    "stablecoin_mint_burn": {
+      "capture_file": "bridge_stufe_a_v3_stablecoin_mint_burn.jsonl",
+      "n_events_raw": 530194,
+      "n_bins": 129600,
+      "n_occupied": 123812,
+      "occupancy_rate": 0.95534,
+      "n_distinct_tertile_bins": 1,
+      "tertile_bin_counts": {
+        "0": 129600,
+        "1": 0,
+        "2": 0
+      },
+      "n_dropped_bins": 0,
+      "events_per_minute_std": 3.237767,
+      "events_per_minute_max": 340,
+      "occupied_minute_event_std": 3.186571,
+      "encoding_status": "INERT_ENCODING",
+      "inert_reasons": [
+        "occupancy_saturated",
+        "tertile_collapsed"
+      ],
+      "perm_testable": false
+    },
+    "mev_cluster": {
+      "capture_file": "bridge_stufe_a_v3_mev_cluster.jsonl",
+      "n_events_raw": 74237,
+      "n_bins": 129600,
+      "n_occupied": 74237,
+      "occupancy_rate": 0.572816,
+      "n_distinct_tertile_bins": 2,
+      "tertile_bin_counts": {
+        "0": 55363,
+        "1": 74237,
+        "2": 0
+      },
+      "n_dropped_bins": 0,
+      "events_per_minute_std": 0.494669,
+      "events_per_minute_max": 1,
+      "occupied_minute_event_std": 0.0,
+      "encoding_status": "OK",
+      "inert_reasons": [],
+      "perm_testable": true
+    }
+  },
+  "summary": {
+    "n_candidates": 5,
+    "n_inert_encoding": 2,
+    "n_ok": 3,
+    "perm_testable_candidates": [
+      "chainlink",
+      "liquidations",
+      "mev_cluster"
+    ],
+    "note": "Gate checks encoding only \u2014 not cleansing effect (no CTE)."
+  }
+}

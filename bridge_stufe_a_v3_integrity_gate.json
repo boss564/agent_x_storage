@@ -1,0 +1,75 @@
+{
+  "generated_at": "2026-08-22T11:03:28.712303+00:00",
+  "pre_reg": "docs/BRIDGE_STUFE_A_V3_PREREG.md",
+  "window_start": "2026-05-20T00:00:00+00:00",
+  "window_end": "2026-08-17T23:59:59+00:00",
+  "n_minute_bins": 129600,
+  "status": "PASS",
+  "issues": [],
+  "coverage_gate_ref": "bridge_stufe_a_v3_coverage_gate.json",
+  "coverage_gate": {
+    "testable_candidates": 5,
+    "results": {
+      "chainlink": "TESTBAR",
+      "intent_relayers": "TESTBAR",
+      "liquidations": "TESTBAR",
+      "stablecoin_mint_burn": "TESTBAR",
+      "mev_cluster": "TESTBAR"
+    }
+  },
+  "treatment": {
+    "eth": {
+      "n_events": 6197,
+      "n_bins": 129600,
+      "n_occupied": 5682,
+      "occupancy_rate": 0.043843
+    },
+    "gnosis": {
+      "n_events": 6258,
+      "n_bins": 129600,
+      "n_occupied": 5725,
+      "occupancy_rate": 0.044174
+    }
+  },
+  "z_alt": {
+    "driver_coverage_joint": 0.997562,
+    "min_required": 0.8
+  },
+  "candidates": {
+    "chainlink": {
+      "n_bins": 129600,
+      "n_occupied": 9605,
+      "occupancy_rate": 0.074113,
+      "n_events_raw": 12109
+    },
+    "intent_relayers": {
+      "n_bins": 129600,
+      "n_occupied": 128009,
+      "occupancy_rate": 0.987724,
+      "n_events_raw": 746034
+    },
+    "liquidations": {
+      "n_bins": 129600,
+      "n_occupied": 757,
+      "occupancy_rate": 0.005841,
+      "n_events_raw": 2865
+    },
+    "stablecoin_mint_burn": {
+      "n_bins": 129600,
+      "n_occupied": 123812,
+      "occupancy_rate": 0.95534,
+      "n_events_raw": 530194
+    },
+    "mev_cluster": {
+      "n_bins": 129600,
+      "n_occupied": 74237,
+      "occupancy_rate": 0.572816,
+      "n_events_raw": 74237
+    }
+  },
+  "join_rules": {
+    "multi_event_per_minute": "OR \u2192 occupancy=1",
+    "chainlink": "OR feeds except excluded USDT/USD ethereum",
+    "mev_cluster": "sparse occupied minutes, no dedup needed"
+  }
+}

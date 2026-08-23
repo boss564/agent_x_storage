@@ -1,0 +1,107 @@
+{
+  "k_folds": 9,
+  "note": "Descriptive only \u2014 P_sign non-discriminative (Leserhinweise \u00a76)",
+  "folds": [
+    {
+      "fold_index": 0,
+      "minute_range": [
+        0,
+        14400
+      ],
+      "p_sign_ab": 1.0,
+      "p_sign_ba": 1.0,
+      "localized_break": false,
+      "attribution": null
+    },
+    {
+      "fold_index": 1,
+      "minute_range": [
+        14400,
+        28800
+      ],
+      "p_sign_ab": 1.0,
+      "p_sign_ba": 1.0,
+      "localized_break": false,
+      "attribution": null
+    },
+    {
+      "fold_index": 2,
+      "minute_range": [
+        28800,
+        43200
+      ],
+      "p_sign_ab": 1.0,
+      "p_sign_ba": 1.0,
+      "localized_break": false,
+      "attribution": null
+    },
+    {
+      "fold_index": 3,
+      "minute_range": [
+        43200,
+        57600
+      ],
+      "p_sign_ab": 1.0,
+      "p_sign_ba": 1.0,
+      "localized_break": false,
+      "attribution": null
+    },
+    {
+      "fold_index": 4,
+      "minute_range": [
+        57600,
+        72000
+      ],
+      "p_sign_ab": 1.0,
+      "p_sign_ba": 1.0,
+      "localized_break": false,
+      "attribution": null
+    },
+    {
+      "fold_index": 5,
+      "minute_range": [
+        72000,
+        86400
+      ],
+      "p_sign_ab": 1.0,
+      "p_sign_ba": 1.0,
+      "localized_break": false,
+      "attribution": null
+    },
+    {
+      "fold_index": 6,
+      "minute_range": [
+        86400,
+        100800
+      ],
+      "p_sign_ab": 1.0,
+      "p_sign_ba": 1.0,
+      "localized_break": false,
+      "attribution": null
+    },
+    {
+      "fold_index": 7,
+      "minute_range": [
+        100800,
+        115200
+      ],
+      "p_sign_ab": 1.0,
+      "p_sign_ba": 1.0,
+      "localized_break": false,
+      "attribution": null
+    },
+    {
+      "fold_index": 8,
+      "minute_range": [
+        115200,
+        129600
+      ],
+      "p_sign_ab": 1.0,
+      "p_sign_ba": 1.0,
+      "localized_break": false,
+      "attribution": null
+    }
+  ],
+  "n_unstable_folds": 0,
+  "verdict_fragment": "KFOLD_STABLE"
+}

@@ -1,0 +1,54 @@
+{
+  "n_shifts": 100,
+  "alpha_perm": 0.05,
+  "eps_inert": 0.001,
+  "targets": {
+    "chainlink": {
+      "occupancy_rate": 0.074113,
+      "perm_testable": true,
+      "p_perm": 0.98,
+      "perm_neutral": true,
+      "mean_shift_rel": 0.018747,
+      "perm_collapse_ratio": 0.922425,
+      "n_shifts": 100
+    },
+    "intent_relayers": {
+      "occupancy_rate": 0.987724,
+      "perm_testable": false,
+      "p_perm": 0.0,
+      "perm_neutral": true,
+      "mean_shift_rel": 0.0,
+      "perm_collapse_ratio": 0.0,
+      "n_shifts": 100
+    },
+    "liquidations": {
+      "occupancy_rate": 0.005841,
+      "perm_testable": true,
+      "p_perm": 0.99,
+      "perm_neutral": true,
+      "mean_shift_rel": 0.024514,
+      "perm_collapse_ratio": 0.575868,
+      "n_shifts": 100
+    },
+    "stablecoin_mint_burn": {
+      "occupancy_rate": 0.95534,
+      "perm_testable": false,
+      "p_perm": 0.0,
+      "perm_neutral": true,
+      "mean_shift_rel": 0.0,
+      "perm_collapse_ratio": 0.0,
+      "n_shifts": 100
+    },
+    "mev_cluster": {
+      "occupancy_rate": 0.572816,
+      "perm_testable": true,
+      "p_perm": 0.99,
+      "perm_neutral": true,
+      "mean_shift_rel": 0.023263,
+      "perm_collapse_ratio": 0.918447,
+      "n_shifts": 100
+    }
+  },
+  "perm_fail_candidates": [],
+  "verdict_fragment": "PERM_PASS"
+}
