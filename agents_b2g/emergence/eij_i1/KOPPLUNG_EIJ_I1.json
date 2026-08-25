@@ -1,0 +1,44 @@
+{
+  "pre_reg": "docs/KOPPLUNG_EIJ_v1_PREREG.md",
+  "status": "BINDEND",
+  "check": "I1-Edge",
+  "run_seed": 20261001,
+  "warmup": 32,
+  "cycles": 64,
+  "kappa": 0.0,
+  "n_sticky_edges": 64,
+  "criteria": {
+    "I1E-V": {
+      "value": 0.303298,
+      "threshold": 0.05,
+      "pass": true
+    },
+    "I1E-S": {
+      "value": 0.300408,
+      "threshold": 0.05,
+      "pass": true
+    },
+    "I1E-U": {
+      "value": 0.734375,
+      "threshold": 0.4,
+      "pass": true,
+      "n_updated": 47
+    },
+    "I1E-G": {
+      "value": 0.388643,
+      "threshold": 0.9,
+      "pass": true,
+      "n_corr": 55
+    }
+  },
+  "i1_pass": true,
+  "verdict": "I1_PASS",
+  "params": {
+    "gamma": 0.05,
+    "prior": "Beta(1,1)",
+    "risk_limit": 0.8
+  },
+  "n_edges_total": 78,
+  "n_edges_updated_ever": 78,
+  "elapsed_s": 1.7
+}

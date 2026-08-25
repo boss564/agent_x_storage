@@ -69,14 +69,29 @@ def backpressure_factor(
     return coupling_factor(partner_inbox_len, inbox_capacity, kappa)
 
 
-def init_timing(agent: Any, *, base_interval: float = 1.0) -> None:
-    """Attach discrete-time phase state (idempotent)."""
+def init_timing(
+    agent: Any,
+    *,
+    base_interval: float = 1.0,
+    run_seed: int = 0,
+) -> None:
+    """Attach discrete-time phase state (idempotent).
+
+    Initial phase is spread by ``crc32(f"{agent_id}|{run_seed}")`` — Pre-Reg §5.1
+    interval path. Independent of ``base_interval`` / fee heterogeneity (fee only
+    scales the interval after coupling, not the hash input). Must run before
+    warm-up so Sticky freeze sees seed-diverse trajectories.
+    """
+    import zlib
+
     if not hasattr(agent, "base_interval"):
         agent.base_interval = float(base_interval)
     if not hasattr(agent, "effective_interval"):
         agent.effective_interval = float(base_interval)
     if not hasattr(agent, "phase"):
-        agent.phase = 0.0
+        aid = str(getattr(agent, "id", "") or "")
+        h = zlib.crc32(f"{aid}|{int(run_seed)}".encode()) & 0xFFFFFFFF
+        agent.phase = (h % 1000) / 1000.0 * float(base_interval)
     if not hasattr(agent, "inbox_capacity"):
         agent.inbox_capacity = INBOX_CAPACITY_DEFAULT
     if not hasattr(agent, "last_transaction_time"):
@@ -92,12 +107,29 @@ def update_sender_interval(
     t_now: float = 0.0,
     tau_ticks: float = TAU_TICKS_DEFAULT,
     gas: Any = None,
+    partner_s_honor: Optional[float] = None,
 ) -> float:
-    """Set agent.effective_interval from partner load + recent activity.
+    """Set agent.effective_interval from partner-local signal.
 
     Returns the factor applied. Partner-local only — never a global signal.
+
+    If ``partner_s_honor`` is not None (KOPPLUNG_REPUTATION_v1), use
+    ``factor = 1 + κ · s(H_partner)`` (Pre-Reg §2.2). Otherwise legacy inbox path.
     """
     init_timing(agent)
+
+    if partner_s_honor is not None:
+        # Reputation Pre-Reg: missing partner → caller passes 0.0
+        factor = 1.0 + float(kappa) * float(partner_s_honor)
+        if gas is not None and kappa > 0.0:
+            ok = gas.consume(1)
+            if not ok:
+                factor = max(factor, 10.0)
+            elif gas.needs_refuel():
+                gas.refuel(gas.initial_balance * 0.30)
+        agent.effective_interval = agent.base_interval * factor
+        return factor
+
     inbox_len = len(getattr(partner, "inbox", [])) if partner is not None else 0
     capacity = float(
         getattr(partner, "inbox_capacity", INBOX_CAPACITY_DEFAULT)
@@ -171,6 +203,7 @@ def oscillator_from_gas(
     gas: Any,
     *,
     agent_id: str = "",
+    run_seed: int = 0,
     target_median_rate: float = 0.30,
     fee_ref: float = 0.8,
 ) -> RelaxationOscillator:
@@ -180,7 +213,7 @@ def oscillator_from_gas(
     kappa / median(base_rate) ∈ ~1–5 for the planned kappa sweep.
     Period ≈ threshold/base_rate ≈ 3–4 cycles — dense enough to keep
     TIER-1 message topology (density ~0.13), sparse enough to entrain.
-    Initial charge is agent-dependent (phase diversity, avoid trivial sync).
+    Initial charge is agent- and run_seed-dependent (Pre-Reg §5.1).
     """
     import zlib
 
@@ -188,8 +221,9 @@ def oscillator_from_gas(
     base_rate = target_median_rate * (fee / fee_ref)
     base_rate = min(0.50, max(0.15, base_rate))
     threshold = 1.0
-    # Spread initial phase across [0, threshold)
-    seed = zlib.crc32(agent_id.encode() if agent_id else b"osc") & 0xFFFFFFFF
+    # Spread initial phase across [0, threshold); run_seed diversifies replicates
+    material = f"{agent_id}|{int(run_seed)}" if agent_id else f"osc|{int(run_seed)}"
+    seed = zlib.crc32(material.encode()) & 0xFFFFFFFF
     charge = (seed % 1000) / 1000.0 * threshold * 0.99
     osc = RelaxationOscillator(base_rate=base_rate, threshold=threshold, charge=charge)
     # Heterogeneous lock trigger: slower agents (low base_rate) trigger slightly earlier

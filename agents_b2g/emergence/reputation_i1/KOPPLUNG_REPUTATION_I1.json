@@ -1,0 +1,66 @@
+{
+  "pre_reg": "docs/KOPPLUNG_REPUTATION_v1_PREREG.md",
+  "status": "BINDEND",
+  "check": "I1",
+  "run_seed": 20260901,
+  "warmup": 32,
+  "cycles": 64,
+  "kappa": 0.0,
+  "criteria": {
+    "I1-V": {
+      "value": 257.196685,
+      "threshold": 10.0,
+      "pass": true
+    },
+    "I1-S": {
+      "value": 0.0,
+      "threshold": 0.05,
+      "pass": false,
+      "n_edges": 64
+    },
+    "I1-U": {
+      "value": 1.0,
+      "threshold": 0.4,
+      "pass": true,
+      "n_changed": 27
+    },
+    "I1-G": {
+      "value": 0.994464,
+      "threshold": 0.9,
+      "pass": false,
+      "n_corr": 27
+    }
+  },
+  "i1_pass": false,
+  "verdict": "SIGNAL_BLIND",
+  "honor_final": {
+    "P01-constructor": 1331.8999999999999,
+    "P02-roofing": 1051.5000000000002,
+    "P03-electrical": 1261.8,
+    "P04-solar": 1682.3999999999994,
+    "P05-water": 1752.4999999999993,
+    "P06-hydrogen": 1261.8,
+    "P07-grain": 1472.0999999999997,
+    "P08-diesel": 1331.8999999999999,
+    "P09-logistics": 1331.8999999999999,
+    "E01-bho-checker": 911.3000000000002,
+    "E02-z3-prover": 1051.5000000000002,
+    "E03-gobd-auditor": 1261.8,
+    "E04-compliance": 771.1000000000001,
+    "E05-iot-verifier": 1612.2999999999995,
+    "E06-qes-validator": 630.9000000000001,
+    "E07-geofence": 1051.5000000000002,
+    "E08-fraud-detector": 1261.8,
+    "E09-tax-auditor": 1612.2999999999995,
+    "C01-settlement": 1121.6000000000001,
+    "C02-staking": 1121.6000000000001,
+    "C03-burn-executor": 1121.6000000000001,
+    "C04-liquidity": 1121.6000000000001,
+    "C05-fee-distributor": 1121.6000000000001,
+    "C06-gas-paymaster": 1191.7,
+    "C07-retention": 1121.6000000000001,
+    "C08-treasury": 1121.6000000000001,
+    "C09-token-minter": 1121.6000000000001
+  },
+  "elapsed_s": 1.06
+}

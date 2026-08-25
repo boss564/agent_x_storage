@@ -100,7 +100,9 @@ Startbedingungen verschiedene Zukünfte entstehen.
 ## Methodische Herkunft
 
 Resultierender Vektor, Rayleigh-Logik, Surrogatverfahren und die Warnung vor
-multiplen Vergleichen stammen aus `astrocore/PHASENKOPPLUNG.md` (cherrystudio_projekte).
+multiplen Vergleichen stammen aus
+`/Volumes/THX_CORE_16TB/cherrystudio_projekte/astrocore/PHASENKOPPLUNG.md`
+(Nachtrag 2026-08-16: IAAFT-Ko-Periodizitäts-Artefakt; frequenzangepasstes Nullmodell).
 Was dort für Blockchain-Phasenquellen entworfen wurde, ist hier das Instrument
 für die Frage, ob 27 Agenten sich aufeinander einschwingen.
 
@@ -116,3 +118,32 @@ python3 agents_b2g/emergence/adapter_agentx.py 512 --corridor 2 --gap 1
 # Default: ungekoppelt
 python3 agents_b2g/emergence/adapter_agentx.py 128
 ```
+
+## Kopplungs-Umbau 2026-08-25 — geschlossen (Falsifikation)
+
+Pre-Reg [`docs/EMERGENZ_KOPPLUNG_PREREG.md`](../../docs/EMERGENZ_KOPPLUNG_PREREG.md) · Auswertung
+[`EMERGENZ_KOPPLUNG_ERGEBNIS.md`](EMERGENZ_KOPPLUNG_ERGEBNIS.md) · Rohartefakte
+[`kopplung_full/`](kopplung_full/).
+
+| Feld | Wert |
+|------|------|
+| Verdict | **`KOPPLUNG_INVALID`** |
+| §1.1 | widerlegt |
+| κ\* | `None` |
+| Gate B↔C | nirgends ≥4/6 |
+| Nachjustierung | keine |
+
+Kein weiterer Sweep auf derselben Fragestellung ohne neue Pre-Reg.
+
+**Diagnose (append-only):** Queue-Länge partnerblind — nicht „Kopplung zu stark“.  
+**Reputation-Strang:** [`docs/KOPPLUNG_REPUTATION_v1_PREREG.md`](../../docs/KOPPLUNG_REPUTATION_v1_PREREG.md)  
+**Status:** `BINDEND → I1_FAILED` · Verdict **`SIGNAL_BLIND`** · κ-Sweep gesperrt · keine Nachjustierung.  
+**I1-Artefakte:** [`reputation_i1/`](reputation_i1/). Fortsetzung nur neuer DRAFT.  
+**Zustandsraum-Screening** (diagnostischer Vorlauf, kein Verdict): [`state_screen/`](state_screen/)  
+Outcome **`NONE_CLOSE`** · 0 Kandidaten · **Ausgang 3** (kein partnerselektiver Knoten-Zustand) · HARKing-Sperre aktiv.  
+Abschluss: [`state_screen/SCREENING_ABSCHLUSS.md`](state_screen/SCREENING_ABSCHLUSS.md).  
+**Architektur-Referenz** (keine Pre-Reg): [`ARCHITEKTUR_REFERENZ_EIJ.md`](ARCHITEKTUR_REFERENZ_EIJ.md).  
+**DRAFT 1 (Pfad 1):** [`docs/KOPPLUNG_EIJ_v1_PREREG.md`](../../docs/KOPPLUNG_EIJ_v1_PREREG.md) — **BINDEND**.  
+**I1-Edge:** [`eij_i1/`](eij_i1/) → **`I1_PASS`**.  
+**κ-Sweep:** [`eij_sweep/`](eij_sweep/) · [`KOPPLUNG_EIJ_ERGEBNIS.md`](KOPPLUNG_EIJ_ERGEBNIS.md) → **`KOPPLUNG_INVALID`** (§1.1) · final · keine Nachjustierung.  
+HARKing auf historischen Datensätzen aktiv.

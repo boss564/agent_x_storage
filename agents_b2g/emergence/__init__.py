@@ -8,11 +8,11 @@
 from .measure import (
     SwarmTrace, assess, divergence, graph_structure, kuramoto, kuramoto_firing,
 )
-from .partner_select import StickySelector, select_partner
+from .partner_select import StickySelector, select_partner, permute_sticky_map
 from .coupling import backpressure_factor
 
 __all__ = [
     "SwarmTrace", "assess", "divergence", "graph_structure", "kuramoto",
     "kuramoto_firing",
-    "select_partner", "StickySelector", "backpressure_factor",
+    "select_partner", "StickySelector", "permute_sticky_map", "backpressure_factor",
 ]

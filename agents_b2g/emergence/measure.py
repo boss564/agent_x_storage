@@ -14,8 +14,8 @@ Die drei zusammen ergeben erst ein Urteil. Perfekte Synchronie identischer
 Agenten (D~0, r~1) ist KEINE Emergenz, sondern eine Tautologie — deshalb
 schaltet die Interpretation bei D~0 auf TRIVIAL_SYNC.
 
-Methodik-Vorbild: astrocore/PHASENKOPPLUNG.md (resultierender Vektor,
-Rayleigh-Test, Surrogate gegen Scheinbefunde).
+Methodik-Vorbild: /Volumes/THX_CORE_16TB/cherrystudio_projekte/astrocore/PHASENKOPPLUNG.md
+(resultierender Vektor, Rayleigh-Test, Surrogate; Nachtrag: IAAFT-Ko-Periodizität).
 """
 from __future__ import annotations
 

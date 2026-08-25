@@ -1,0 +1,330 @@
+{
+  "kind": "state_space_screening",
+  "not_a_study": true,
+  "harking_guard": "Candidates must not be hypothesis-tested on this same run. Next study = new DRAFT Pre-Reg + new seeds/runs.",
+  "T": 64,
+  "N": 27,
+  "D_screened": 18,
+  "mae_min": 0.05,
+  "rho_max": 0.9,
+  "outcome": "NONE_CLOSE",
+  "candidates": [],
+  "dimensions": [
+    {
+      "dimension": "phase",
+      "static_over_window": true,
+      "sigma_last": 0.306565,
+      "mae_raw": 0.311031,
+      "mae_scaled": 0.316732,
+      "median_abs_rho": null,
+      "median_abs_rho_scaled": null,
+      "n_edges": 64,
+      "n_corr": 0,
+      "flags": {
+        "variance": true,
+        "partner_selective_scaled": false,
+        "not_global": false,
+        "candidate": false
+      }
+    },
+    {
+      "dimension": "risk_factor",
+      "static_over_window": true,
+      "sigma_last": 0.042591,
+      "mae_raw": 0.040625,
+      "mae_scaled": 0.270833,
+      "median_abs_rho": null,
+      "median_abs_rho_scaled": null,
+      "n_edges": 64,
+      "n_corr": 0,
+      "flags": {
+        "variance": true,
+        "partner_selective_scaled": false,
+        "not_global": false,
+        "candidate": false
+      }
+    },
+    {
+      "dimension": "decision_bias",
+      "static_over_window": true,
+      "sigma_last": 0.318361,
+      "mae_raw": 0.20625,
+      "mae_scaled": 0.229167,
+      "median_abs_rho": null,
+      "median_abs_rho_scaled": null,
+      "n_edges": 64,
+      "n_corr": 0,
+      "flags": {
+        "variance": true,
+        "partner_selective_scaled": false,
+        "not_global": false,
+        "candidate": false
+      }
+    },
+    {
+      "dimension": "honor",
+      "static_over_window": false,
+      "sigma_last": 257.196685,
+      "mae_raw": 72.187939,
+      "mae_scaled": 0.046808,
+      "median_abs_rho": 0.994464,
+      "median_abs_rho_scaled": 0.994464,
+      "n_edges": 64,
+      "n_corr": 27,
+      "flags": {
+        "variance": true,
+        "partner_selective_scaled": false,
+        "not_global": false,
+        "candidate": false
+      }
+    },
+    {
+      "dimension": "checks_failed",
+      "static_over_window": false,
+      "sigma_last": 2.601775,
+      "mae_raw": 0.337402,
+      "mae_scaled": 0.037489,
+      "median_abs_rho": 0.959944,
+      "median_abs_rho_scaled": 0.959944,
+      "n_edges": 64,
+      "n_corr": 7,
+      "flags": {
+        "variance": true,
+        "partner_selective_scaled": false,
+        "not_global": false,
+        "candidate": false
+      }
+    },
+    {
+      "dimension": "amount_multiplier",
+      "static_over_window": true,
+      "sigma_last": 0.332138,
+      "mae_raw": 0.025938,
+      "mae_scaled": 0.025938,
+      "median_abs_rho": null,
+      "median_abs_rho_scaled": null,
+      "n_edges": 64,
+      "n_corr": 0,
+      "flags": {
+        "variance": true,
+        "partner_selective_scaled": false,
+        "not_global": false,
+        "candidate": false
+      }
+    },
+    {
+      "dimension": "strictness",
+      "static_over_window": true,
+      "sigma_last": 0.410267,
+      "mae_raw": 0.025,
+      "mae_scaled": 0.025,
+      "median_abs_rho": null,
+      "median_abs_rho_scaled": null,
+      "n_edges": 64,
+      "n_corr": 0,
+      "flags": {
+        "variance": true,
+        "partner_selective_scaled": false,
+        "not_global": false,
+        "candidate": false
+      }
+    },
+    {
+      "dimension": "checks_passed",
+      "static_over_window": false,
+      "sigma_last": 8.200132,
+      "mae_raw": 0.571289,
+      "mae_scaled": 0.024839,
+      "median_abs_rho": 0.997063,
+      "median_abs_rho_scaled": 0.997063,
+      "n_edges": 64,
+      "n_corr": 9,
+      "flags": {
+        "variance": true,
+        "partner_selective_scaled": false,
+        "not_global": false,
+        "candidate": false
+      }
+    },
+    {
+      "dimension": "checks_performed",
+      "static_over_window": false,
+      "sigma_last": 9.863744,
+      "mae_raw": 0.427734,
+      "mae_scaled": 0.016451,
+      "median_abs_rho": 0.996596,
+      "median_abs_rho_scaled": 0.996596,
+      "n_edges": 64,
+      "n_corr": 9,
+      "flags": {
+        "variance": true,
+        "partner_selective_scaled": false,
+        "not_global": false,
+        "candidate": false
+      }
+    },
+    {
+      "dimension": "settlements",
+      "static_over_window": false,
+      "sigma_last": 7.741736,
+      "mae_raw": 0.242676,
+      "mae_scaled": 0.014275,
+      "median_abs_rho": 0.994399,
+      "median_abs_rho_scaled": 0.994399,
+      "n_edges": 64,
+      "n_corr": 9,
+      "flags": {
+        "variance": true,
+        "partner_selective_scaled": false,
+        "not_global": false,
+        "candidate": false
+      }
+    },
+    {
+      "dimension": "total_fee_burned",
+      "static_over_window": false,
+      "sigma_last": 104.513433,
+      "mae_raw": 3.276123,
+      "mae_scaled": 0.014275,
+      "median_abs_rho": 0.994399,
+      "median_abs_rho_scaled": 0.994399,
+      "n_edges": 64,
+      "n_corr": 9,
+      "flags": {
+        "variance": true,
+        "partner_selective_scaled": false,
+        "not_global": false,
+        "candidate": false
+      }
+    },
+    {
+      "dimension": "total_volume",
+      "static_over_window": false,
+      "sigma_last": 348378.110237,
+      "mae_raw": 10920.410156,
+      "mae_scaled": 0.014275,
+      "median_abs_rho": 0.994399,
+      "median_abs_rho_scaled": 0.994399,
+      "n_edges": 64,
+      "n_corr": 9,
+      "flags": {
+        "variance": true,
+        "partner_selective_scaled": false,
+        "not_global": false,
+        "candidate": false
+      }
+    },
+    {
+      "dimension": "total_reported",
+      "static_over_window": false,
+      "sigma_last": 592358.374601,
+      "mae_raw": 24315.478516,
+      "mae_scaled": 0.013331,
+      "median_abs_rho": 0.996916,
+      "median_abs_rho_scaled": 0.996916,
+      "n_edges": 64,
+      "n_corr": 9,
+      "flags": {
+        "variance": true,
+        "partner_selective_scaled": false,
+        "not_global": false,
+        "candidate": false
+      }
+    },
+    {
+      "dimension": "inbox_len",
+      "static_over_window": false,
+      "sigma_last": 7.69282,
+      "mae_raw": 0.222168,
+      "mae_scaled": 0.013069,
+      "median_abs_rho": 0.044413,
+      "median_abs_rho_scaled": 0.044413,
+      "n_edges": 64,
+      "n_corr": 27,
+      "flags": {
+        "variance": true,
+        "partner_selective_scaled": false,
+        "not_global": true,
+        "candidate": false
+      }
+    },
+    {
+      "dimension": "milestone_count",
+      "static_over_window": false,
+      "sigma_last": 9.970469,
+      "mae_raw": 0.21582,
+      "mae_scaled": 0.008301,
+      "median_abs_rho": 0.996801,
+      "median_abs_rho_scaled": 0.996801,
+      "n_edges": 64,
+      "n_corr": 9,
+      "flags": {
+        "variance": true,
+        "partner_selective_scaled": false,
+        "not_global": false,
+        "candidate": false
+      }
+    },
+    {
+      "dimension": "failure_count",
+      "static_over_window": true,
+      "sigma_last": 0.0,
+      "mae_raw": 0.0,
+      "mae_scaled": 0.0,
+      "median_abs_rho": null,
+      "median_abs_rho_scaled": null,
+      "n_edges": 64,
+      "n_corr": 0,
+      "flags": {
+        "variance": false,
+        "partner_selective_scaled": false,
+        "not_global": false,
+        "candidate": false
+      }
+    },
+    {
+      "dimension": "s_honor",
+      "static_over_window": true,
+      "sigma_last": 0.0,
+      "mae_raw": 0.0,
+      "mae_scaled": 0.0,
+      "median_abs_rho": null,
+      "median_abs_rho_scaled": null,
+      "n_edges": 64,
+      "n_corr": 0,
+      "flags": {
+        "variance": false,
+        "partner_selective_scaled": false,
+        "not_global": false,
+        "candidate": false
+      }
+    },
+    {
+      "dimension": "tick_count",
+      "static_over_window": false,
+      "sigma_last": 0.0,
+      "mae_raw": 0.0,
+      "mae_scaled": 0.0,
+      "median_abs_rho": 1.0,
+      "median_abs_rho_scaled": 1.0,
+      "n_edges": 64,
+      "n_corr": 27,
+      "flags": {
+        "variance": false,
+        "partner_selective_scaled": false,
+        "not_global": false,
+        "candidate": false
+      }
+    }
+  ],
+  "run_seed": 20260901,
+  "warmup": 32,
+  "cycles": 64,
+  "kappa": 0.0,
+  "elapsed_s": 1.06,
+  "n_messages": 328,
+  "status": "SCREENING_CLOSED",
+  "role": "diagnostic_precursor_not_study_verdict",
+  "architectural_reading": "outcome_3_no_partner_selective_node_state",
+  "harking_guard_active": true
+}

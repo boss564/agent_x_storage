@@ -661,7 +661,7 @@ GoBD → Ledger (BHO Δ=0,00€) → Chain-Hash → XRechnung → PoPW-Coverage 
 - **Wave 24 Trading Infrastructure:** Combined Risk+Trading pipeline E2E: 36 events, 21 trading signals, FN=0, FP=0. Compliance Gate (sanctions/MiCAR/circuit breaker) as Phase 0. DEX routing over 5 DEXes, MEV protection, ERC-4337 gasless trading, SAR+Archive post-trade. VOB_Shadow_Escrow.sol compiled (Foundry/OZ v5), deployed on Anvil local node.
 - **Wave 25 Smart Wallet:** ERC-4337, eIDAS/BundID, ZK-Privacy, BHO-Kasse, Amtsübergabe — Integration mit W1-W24 im demo_kammerer.sh
 - **Wave 27 Clearing & Settlement:** 122/122 tests passed (`scripts/test_wave27_clearing.py`), 14 test groups covering all 9 agents + E2E + BHO Zero-Sum + empty list + cycle detection + config, 100 TXs → 1–3 Netto-Zahlungen, ≥95% Reduction
-- **Wave 28 External Threat Defense:** 104/104 tests passed (`scripts/test_wave28_defense.py`), 14 test groups covering all 9 agents + E2E legitimate/cartel/rate-limit/geo-block/sybil + config, 81 Subagenten
+- **Wave 28 External Threat Defense:** 105/105 tests passed (`scripts/test_wave28_defense.py`), 14 test groups covering all 9 agents + E2E legitimate/cartel/rate-limit/geo-block/sybil + config, 81 Subagenten
 - **Wave 29 Token Runtime Operations:** 101/101 tests passed (`scripts/test_wave29_tokenomics.py`), 12 test groups covering all 9 agents + E2E full cycle + empty inputs + token state + config, 81 Subagenten, 9-stage pipeline all green
 - **Wave 31 UX & Dashboard:** 92/92 tests passed (`scripts/test_wave31_ux.py`), 14 test groups covering all 9 agents + E2E login/commands/simulation/reports/multi-role + config, 81 Subagenten, 6 Rollen (Kämmerer, Bauleiter, Prüfer, Bürger, Entwickler, Bank)
 - **Wave 32 Crypto-Philately:** 51/51 tests passed (`scripts/test_wave32_philately.py`), 12 test groups covering all 9 agents + E2E lifecycle/multi-edition/collection + config, 81 Subagenten
@@ -802,7 +802,7 @@ python3 scripts/test_wave27_clearing.py                    # Run all 122 tests
 
 # B2G — External Threat Defense (Wave 28)
 python3 agents_b2g/defense/swarm_defense_orchestrator.py   # Full defense demo
-python3 scripts/test_wave28_defense.py                     # Run all 104 tests
+python3 scripts/test_wave28_defense.py                     # Run all 105 tests
 
 # B2G — Token Runtime Operations (Wave 29)
 python3 agents_b2g/tokenomics/token_runtime_orchestrator.py # Full runtime cycle demo
@@ -1381,7 +1381,7 @@ Accumulator → Bilateral → Multilateral → Priority → Dispatch → Verify 
 
 Aktive, lernende Abwehr gegen externe Bedrohungen. Schwarm-Erkennung, Perimeter-Schutz, Honeypot-Fallen und selbstlernende KI-Abwehr.
 
-**8-Stufen-Defense-Pipeline (E2E: 104/104 tests passed):**
+**8-Stufen-Defense-Pipeline (E2E: 105/105 tests passed):**
 ```
 Perimeter → Radar → Classifier → Response → Honeypot → Learning → Intel → Dashboard
   Gateway    Swarm    Threat     Counter    Deception    Model    External   KPI
@@ -1409,7 +1409,7 @@ Perimeter → Radar → Classifier → Response → Honeypot → Learning → In
 - External Intel: Chainalysis, Forta, CVE/NVD, DarkWeb, BSI/BaFin
 - Multi-Tenancy: Reports unter `{data_root}/{user_id}/defense/`
 - JSONLogger + _safe_call auf allen 81 Subagenten
-- E2E Test: `python3 scripts/test_wave28_defense.py` — 104/104 passed
+- E2E Test: `python3 scripts/test_wave28_defense.py` — 105/105 passed
 
 ### Wave 29 Detail: Token Runtime Operations — $AGX Live Mechanics (9 Agents + 81 Subagents)
 
@@ -1483,7 +1483,7 @@ German for communication and documentation. Code comments in English.
 
 ## Version
 
-Agent X Core: 0.4.0 (stable, 90/100 backtest). Agent X B2G: 0.24.7 (243 agents in 27 main waves plus Wave 3.5 and 25 compliance agents — 277 total, plus Wave 34 Finale Veredelung, Wave 35 SimChain (9 Agents × 3 Chains, 2.200+ lines, 199/199 tests), Wave 36 MultiChain Sovereign Appchains (9 Appchains × 4 Layers, 1.800+ lines, 113/113 tests), Wave 37 Demo Pipeline (9 Agents, 8 unique friction rates), plus Settlement (D01–D04 divers, C09 ingest, ComplianceExporter, ~1.500 lines), Crew (5-role pipeline + DID registry + 9 specialized agents), Gas (autonomous fuel management), Valhalla (ZK honor protocol), Surface Agents (C01–C09: NATS queue-group workers, adaptive batching, constraint metering, predictive health routing, 223k events/s burst), Subsurface Prover Factory (SGX-TDX/SEV-SNP/CUDA/CPU with curve unification), D01 Mock Responder (8 replicas, batch ZK, binary bisect quarantine), Ephemeral Paratroopers (F01–F03, 3 WASM modules compiled, 500ms TTL), Air Layer E2E: 18/18, Chaos Resilience: F07–F09 abgefangen (Chaos Fleet: killer, throttler, poison injector), Telemetry Ingest (MQTT/HTTP bridge, 7 endpoints), Chaos Matrix (10 attack scenarios), 8 Solidity contracts (inkl. ValhallaVerifier.sol, ProtoGalaxyVerifier.sol, Foundry/Solc 0.8.35) + ESP32 LoRaWAN Firmware (1.651 lines C++/Arduino), E2E: Waves 1–33 all green, Wave 34: 21/21, Wave 35: 199/199, Wave 36: 113/113, Wave 37: Pitch-fertig, Chaos Resilience: 4/4 experiments, Docker: 109+ containers, NATS: Core+JetStream (4222/8222), Anvil: Block 0→1 confirmed, CertiK Security Wave 20: 164/164, Skynet Monitor Wave 21: 80/80, Ops Security Wave 22: 48/48, Token Launch Wave 23: funktional, Trading Wave 24: FN=0/FP=0, Smart Wallet Wave 25: integriert, Clearing & Settlement Wave 27: 122/122, External Threat Defense Wave 28: 104/104, Token Runtime Operations Wave 29: 101/101, UX & Dashboard Wave 31: 92/92, Survival & Off-Grid Wave 33: 63/63, BSI C5/ISO 27001/SOC2/GoBD/eIDAS/GDPR/EVB-IT compliant, GAEB DA XML 3.3, XRechnung 3.0, VHB-221/222, GoBD/BHO-ready, 68.000+ lines, plus 5-Pillar Scale-Up — 1M-Tsunami (0 Loss, 54µs P99, 9.554 echte L1-Anker), Testnet-Bridge (EIP-1559), Overwatch-Dashboard (Prometheus/Grafana), Compliance-Playbook (K1–K7), K8s/Helm-Chart (KEDA+SGX), plus Wirtschafts-Schwarm + Rescue + CI-Resilienz + Humanitäre Logistik + Smart-Grid Meta-Stabilität (H1 falsifiziert, Plastizitäts-Hebel Stubs) — docs/SMART_GRID_ERGEBNIS.md).
+Agent X Core: 0.4.0 (stable, 90/100 backtest). Agent X B2G: 0.24.7 (243 agents in 27 main waves plus Wave 3.5 and 25 compliance agents — 277 total, plus Wave 34 Finale Veredelung, Wave 35 SimChain (9 Agents × 3 Chains, 2.200+ lines, 199/199 tests), Wave 36 MultiChain Sovereign Appchains (9 Appchains × 4 Layers, 1.800+ lines, 113/113 tests), Wave 37 Demo Pipeline (9 Agents, 8 unique friction rates), plus Settlement (D01–D04 divers, C09 ingest, ComplianceExporter, ~1.500 lines), Crew (5-role pipeline + DID registry + 9 specialized agents), Gas (autonomous fuel management), Valhalla (ZK honor protocol), Surface Agents (C01–C09: NATS queue-group workers, adaptive batching, constraint metering, predictive health routing, 223k events/s burst), Subsurface Prover Factory (SGX-TDX/SEV-SNP/CUDA/CPU with curve unification), D01 Mock Responder (8 replicas, batch ZK, binary bisect quarantine), Ephemeral Paratroopers (F01–F03, 3 WASM modules compiled, 500ms TTL), Air Layer E2E: 18/18, Chaos Resilience: F07–F09 abgefangen (Chaos Fleet: killer, throttler, poison injector), Telemetry Ingest (MQTT/HTTP bridge, 7 endpoints), Chaos Matrix (10 attack scenarios), 8 Solidity contracts (inkl. ValhallaVerifier.sol, ProtoGalaxyVerifier.sol, Foundry/Solc 0.8.35) + ESP32 LoRaWAN Firmware (1.651 lines C++/Arduino), E2E: Waves 1–33 all green, Wave 34: 21/21, Wave 35: 199/199, Wave 36: 113/113, Wave 37: Pitch-fertig, Chaos Resilience: 4/4 experiments, Docker: 109+ containers, NATS: Core+JetStream (4222/8222), Anvil: Block 0→1 confirmed, CertiK Security Wave 20: 164/164, Skynet Monitor Wave 21: 80/80, Ops Security Wave 22: 48/48, Token Launch Wave 23: funktional, Trading Wave 24: FN=0/FP=0, Smart Wallet Wave 25: integriert, Clearing & Settlement Wave 27: 122/122, External Threat Defense Wave 28: 105/105, Token Runtime Operations Wave 29: 101/101, UX & Dashboard Wave 31: 92/92, Survival & Off-Grid Wave 33: 63/63, BSI C5/ISO 27001/SOC2/GoBD/eIDAS/GDPR/EVB-IT compliant, GAEB DA XML 3.3, XRechnung 3.0, VHB-221/222, GoBD/BHO-ready, 68.000+ lines, plus 5-Pillar Scale-Up — 1M-Tsunami (0 Loss, 54µs P99, 9.554 echte L1-Anker), Testnet-Bridge (EIP-1559), Overwatch-Dashboard (Prometheus/Grafana), Compliance-Playbook (K1–K7), K8s/Helm-Chart (KEDA+SGX), plus Wirtschafts-Schwarm + Rescue + CI-Resilienz + Humanitäre Logistik + Smart-Grid Meta-Stabilität (H1 falsifiziert, Plastizitäts-Hebel Stubs) — docs/SMART_GRID_ERGEBNIS.md).
 
 ```
 0.24.7 (2026-08-17) — Smart Grid Meta-Stabilitäts-Studie (Dezentrale Energienetze):
