@@ -1,0 +1,18 @@
+{
+  "L1": {
+    "precondition_intact": true,
+    "precondition_label": "INTACT",
+    "mae_norm": 10.015621,
+    "median_abs_rho": 0.855032,
+    "n_corr": 17,
+    "sigma": 0.04743649700484751
+  },
+  "L2": {
+    "precondition_intact": false,
+    "precondition_label": "PRECONDITION_LOST",
+    "mae_norm": 44.774279,
+    "median_abs_rho": 0.943335,
+    "n_corr": 17,
+    "sigma": 0.04743649700484751
+  }
+}

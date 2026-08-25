@@ -1,0 +1,31 @@
+{
+  "pre_reg": "docs/KOPPLUNG_LEDGER_v1_PREREG.md",
+  "status": "BINDEND",
+  "elapsed_s": 719.9,
+  "spot_check": {
+    "L1": {
+      "precondition_intact": true,
+      "precondition_label": "INTACT",
+      "mae_norm": 1.624517,
+      "median_abs_rho": 0.348407,
+      "n_corr": 64,
+      "sigma": 0.1666988103885077
+    },
+    "L2": {
+      "precondition_intact": true,
+      "precondition_label": "INTACT",
+      "mae_norm": 1.336582,
+      "median_abs_rho": 0.155926,
+      "n_corr": 64,
+      "sigma": 1.1256563749845585
+    }
+  },
+  "verdicts": {
+    "avg_latency": "KOPPLUNG_INVALID",
+    "interaction_count": "KOPPLUNG_INVALID"
+  },
+  "reasons": {
+    "avg_latency": "Arm C COUPLED (Mehrheit) on precondition-intact \u03ba \u2014 \u00a71.1 falsified",
+    "interaction_count": "Arm C COUPLED (Mehrheit) on precondition-intact \u03ba \u2014 \u00a71.1 falsified"
+  }
+}
