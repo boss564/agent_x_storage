@@ -1,10 +1,13 @@
 """Hebel 1 — Evaluator redundancy: structural + runtime assertions.
 
 Pre-reg: docs/HEBEL1_EVALUATOR_REDUNDANZ_PREREG.md
+Follow-up: docs/HEBEL1_DIFFERENZIERUNG_PREREG.md
 
-Finding: strictness is set but never read; all nine evaluators apply
-abs(delta) <= 0.01. Pairwise disagreement ≡ 0 by construction.
-Routing is 1-of-9 (StickySelector), not fan-out.
+Historical finding: strictness is set but never read (dead config).
+Follow-up: rules are now differentiated by self.id; pairwise disagreement
+across IDs is intentional — this suite only asserts that *strictness*
+does not affect the verdict for a fixed evaluator id.
+Routing remains 1-of-9 (StickySelector), not fan-out.
 """
 from __future__ import annotations
 
@@ -16,21 +19,14 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from agents_b2g.protocol import AgentMessage, PayloadType
 from agents_b2g.emergence.partner_select import StickySelector
 
-# Import archetypes from the demo (source of EVALUATOR_PROFILES + EvaluatorAgent)
 from scripts.demo_producer_cluster import (
     EVALUATOR_PROFILES,
-    EvaluatorAgent,
     create_agent,
 )
+from scripts.hebel1_evaluator_rules import rule_default
 
 
 STRICTNESS_VALUES = [p[2] for p in EVALUATOR_PROFILES]  # decision_bias → strictness
-
-
-def _verdict_from_amounts(net: float, tax: float, ret: float, gross: float) -> bool:
-    """The actual rule used in EvaluatorAgent.act (strictness deliberately unused)."""
-    delta = round(gross - (net + tax + ret), 10)
-    return abs(delta) <= 0.01
 
 
 def test_nine_distinct_evaluator_profiles():
@@ -40,37 +36,36 @@ def test_nine_distinct_evaluator_profiles():
     assert "E01-bho-checker" in ids and "E09-tax-auditor" in ids
 
 
-def test_strictness_does_not_affect_verdict():
-    """Structural: verdict is pure function of amounts; strictness unused."""
+def test_strictness_does_not_affect_default_rule():
+    """Structural: rule_default ignores any external strictness parameter."""
     cases = [
-        (100.0, 19.0, 0.0, 119.0),      # delta = 0.0
-        (100.0, 19.0, 0.0, 119.005),    # delta = 0.005
-        (100.0, 19.0, 0.0, 119.01),     # delta = 0.01 (boundary)
-        (100.0, 19.0, 0.0, 119.02),     # delta = 0.02
+        (100.0, 19.0, 0.0, 119.0),
+        (100.0, 19.0, 0.0, 119.005),
+        (100.0, 19.0, 0.0, 119.01),
+        (100.0, 19.0, 0.0, 119.02),
     ]
     for net, tax, ret, gross in cases:
-        verdicts = set()
-        for _s in STRICTNESS_VALUES:
-            holds = _verdict_from_amounts(net, tax, ret, gross)
-            verdicts.add(holds)
+        verdicts = {
+            rule_default(net, tax, ret, gross, False, "TX")
+            for _s in STRICTNESS_VALUES
+        }
         assert len(verdicts) == 1, f"disagreement at gross={gross}"
 
 
 def test_strictness_is_dead_config_on_evaluator_agent():
-    """Runtime: EvaluatorAgent.act ignores agent.strictness."""
+    """Runtime: mutating agent.strictness does not change the verdict for a fixed id."""
+    profile = EVALUATOR_PROFILES[1]  # E02-z3-prover (balance + non-neg)
     cases = [
-        # (net, tax, ret, gross, expect_pass)
-        (80.0, 15.0, 5.0, 100.0, True),    # delta = 0
-        (83.0, 15.0, 5.0, 100.0, False),   # delta = -3 (inflated-style)
-        (80.0, 15.0, 5.0, 100.005, True),  # |delta| = 0.005 <= 0.01
-        (80.0, 15.0, 5.0, 100.02, False),  # |delta| = 0.02 > 0.01
+        (80.0, 15.0, 5.0, 100.0, True),
+        (83.0, 15.0, 5.0, 100.0, False),
+        (80.0, 15.0, 5.0, 100.005, True),
+        (80.0, 15.0, 5.0, 100.02, False),
     ]
     for net, tax, ret, gross, expect_pass in cases:
         outcomes = []
-        for profile in EVALUATOR_PROFILES:
+        for s in (0.0, 0.5, 1.0, profile[2]):
             agent = create_agent(profile, "evaluator", orch=None)
-            assert hasattr(agent, "strictness")
-            assert agent.strictness == profile[2]
+            agent.strictness = s
             agent.inbox.append(AgentMessage(
                 sender="P01-test",
                 receiver=agent.id,
@@ -81,7 +76,7 @@ def test_strictness_is_dead_config_on_evaluator_agent():
                     "net_amount": net,
                     "tax_amount": tax,
                     "retention_amount": ret,
-                    "inflated": not expect_pass,
+                    "inflated": False,
                 },
             ))
             agent.act()
@@ -90,7 +85,7 @@ def test_strictness_is_dead_config_on_evaluator_agent():
             assert passed or failed
             outcomes.append(passed)
         assert len(set(outcomes)) == 1, (
-            f"strictness-dependent disagreement at gross={gross}: {outcomes}"
+            f"strictness changed verdict at gross={gross}: {outcomes}"
         )
         assert outcomes[0] is expect_pass
 

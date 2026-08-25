@@ -36,6 +36,7 @@ from agents_b2g.protocol import (
     offer, bho_proof, alert,
 )
 from agents_b2g.finale import FinaleOrchestrator
+from scripts.hebel1_evaluator_rules import EVALUATOR_RULES, rule_default
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -161,8 +162,12 @@ class EvaluatorAgent(BaseAgent):
             net   = content["net_amount"]
             tax   = content["tax_amount"]
             ret   = content["retention_amount"]
+            inflated = content.get("inflated", False)
+            contract_id = content["contract_id"]
             delta = round(gross - (net + tax + ret), 10)
-            holds = abs(delta) <= 0.01
+            # Hebel 1 Follow-up: differentiated rules by self.id (registry)
+            rule = EVALUATOR_RULES.get(self.id, rule_default)
+            holds = rule(net, tax, ret, gross, inflated, contract_id)
 
             self.sm.transition(AgentState.NEGOTIATING, triggered_by=msg.msg_id)
             self.sm.transition(AgentState.TRANSACTING, triggered_by="verify")
