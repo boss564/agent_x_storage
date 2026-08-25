@@ -106,7 +106,27 @@ Der **Fire-Corridor bleibt die belegte Timing-Emergenz** des Projekts. Die
 Gewaltenteilung ergänzt sie um eine funktionale, nicht-oszillatorische Kopplungsart.
 Beide sind valide; sie sind **verschieden**, und dieses Dossier grenzt sie sauber ab.
 
-## 8. Einschränkungen & Ausblick
+## 8. Unabhängige Replikation — Frequenz-Nullmodell (AstroCore, 2026-08-17)
+
+Dieselbe IAAFT-Falle trat in der zweiten Projekthälfte unabhängig auf:
+Sonne vs. gleichperiodischer Oszillator (`indep_same`, alte Kontrolle `sun+0.25`)
+bekam IAAFT **p=0.0020 SIG** — das alte Nullmodell konnte **nicht nein sagen**.
+
+Ein Frequenz-Nullmodell (Validierung 5/5, Nachtrag in
+[`PHASENKOPPLUNG.md`](/Volumes/THX_CORE_16TB/cherrystudio_projekte/astrocore/PHASENKOPPLUNG.md))
+korrigiert beide Falsch-Positiven auf n.s.
+und erkennt echtes Entrainment, sobald der Treiber fluktuiert
+(verrauschter Treiber: eingeregelt **freq p=0.0040 SIG**, unabhängig gleiche
+Periode **p=0.5669 n.s.**). ETH-Epoche unverändert n.s. (Periodenfaktor ~3385,
+R=0.0002).
+
+**Lehre (beide Hälften):** Die Grenze ist eine Eigenschaft der **Daten**, nicht
+des Verfahrens. Gegen einen rauschfreien, streng periodischen Treiber gibt es
+keine Signatur — Kopplungsaussagen sind nur zwischen Quellen *verschiedener*
+Grundperiode interpretierbar. IAAFT auf gemeinsamer Periode ist in beiden
+Projekthälften dasselbe Artefakt.
+
+## 9. Einschränkungen & Ausblick
 
 - Der Befund gilt für den konkreten Antrieb (Frequenzen 2/3/4, Rearm 10). Andere
   Antriebe (stochastische Frequenzen, lastabhängiges Ticken) sind nicht getestet.
@@ -116,7 +136,7 @@ Beide sind valide; sie sind **verschieden**, und dieses Dossier grenzt sie saube
   (z. B. Kreuzkorrelation der Freigabe-Sequenzen, Graph-Metriken des Abhängigkeits-Graphen)
   statt Kuramoto — Kuramoto misst Oszillator-Synchronisation, nicht Abhängigkeits-Struktur.
 
-## 9. Reproduktion
+## 10. Reproduktion
 
 ```bash
 cd /Volumes/THX_OS_ULTRA\ -\ Data/Users/olivermueller/agent_x_storage

@@ -1,7 +1,9 @@
-"""Smart Grid simulation: H0 normal-op + stress injectors.
+"""Smart Grid simulation: H0 normal-op + stress injectors + Hebel-4 plasticity.
 
 Normal (SmartGridNormalSimulation): inverter fleets, grid-bus coupling, W_dyn.
 Stress (SmartGridStressSimulation): bewoelkung / spitzenlast / leitungsausfall.
+Hebel 4: plasticity=True enables Class-B waterfall dispatch (replaces 0.4 stub).
+
 Metrics: R_grid (Class-A inverter phases), W_dyn (autarky, lambda=0).
 """
 
@@ -13,6 +15,13 @@ from typing import Dict, List, Optional
 
 from agents_b2g.smartgrid.unit_base import SmartGridUnit, UnitState
 from agents_b2g.smartgrid.agents import build_smartgrid_swarm
+from agents_b2g.smartgrid.flex_dispatch import (
+    PASSIVE_FLEX_FRACTION,
+    WATERFALL_ORDER,
+    flex_available_null,
+    flex_available_treatment,
+    run_waterfall,
+)
 
 TWO_PI = 2 * math.pi
 
@@ -30,7 +39,7 @@ class SmartGridNormalSimulation:
                  grid_coupling: float = 0.60, t_warmup: float = 60.0,
                  jitter_pct: float = 0.05, sample_interval: float = 1.0,
                  base_load: float = 180.0):
-        self.rng = random.Random(seed)
+        self.rng = random.Random(seed + 1)
         self.jitter_rng = random.Random(seed + 7777)
         self.load_rng = random.Random(seed + 5555)
         self.duration_s = duration_s
@@ -106,7 +115,7 @@ class SmartGridNormalSimulation:
         load += self.load_rng.uniform(-10.0, 10.0)
         load = max(load, 1.0)
         flex_available = sum(
-            u.power_capacity * 0.4 for uid, u in self.units.items()
+            u.power_capacity * PASSIVE_FLEX_FRACTION for uid, u in self.units.items()
             if u.unit_class == "B" and u.state != UnitState.OUT_OF_SERVICE
         )
         served = min(gen_total + flex_available, load)
@@ -116,15 +125,21 @@ class SmartGridNormalSimulation:
 
 
 class SmartGridStressSimulation:
-    """Stress study: within-run normal + stress windows; R_grid + W_dyn."""
+    """Stress study: within-run normal + stress windows; R_grid + W_dyn.
+
+    plasticity=False (null): Class-B contributes PASSIVE_FLEX_FRACTION × capacity.
+    plasticity=True (treatment): waterfall dispatch replaces 0.4 (no max).
+    """
 
     def __init__(self, seed: int = 42, duration_s: float = 4320.0, dt: float = 1.0,
                  grid_coupling: float = 0.60, t_warmup: float = 60.0,
                  t_stress: float = 1440.0, burn_in: float = 60.0,
                  jitter_pct: float = 0.05, sample_interval: float = 1.0,
                  base_load: float = 180.0,
-                 stress_type: Optional[str] = None):
-        self.rng = random.Random(seed)
+                 stress_type: Optional[str] = None,
+                 plasticity: bool = False):
+        # Independent RNG streams per seed (Hebel-3 determinism caveat avoided)
+        self.rng = random.Random(seed + 1)
         self.jitter_rng = random.Random(seed + 7777)
         self.load_rng = random.Random(seed + 5555)
         self.stress_rng = random.Random(seed + 999999)
@@ -132,11 +147,26 @@ class SmartGridStressSimulation:
         self.dt = dt
         self.grid_coupling = grid_coupling
         self.t_warmup = t_warmup
-        self.t_stress = t_stress
+        self.t_stress_nominal = t_stress
+        # Stress onset jitter ±30 sim-min — seed-dependent. Clamp only when the
+        # nominal schedule leaves room for a stress window (≥120 samples).
+        jitter = self.stress_rng.uniform(-30.0, 30.0)
+        t_cand = t_stress + jitter
+        t_lo = t_warmup + 120.0
+        t_hi = duration_s - burn_in - 120.0
+        if t_hi > t_lo:
+            self.t_stress = min(max(t_cand, t_lo), t_hi)
+        else:
+            # Short unit-test runs: keep nominal±jitter inside [warmup, end-burn_in)
+            self.t_stress = min(
+                max(t_cand, t_warmup + self.dt),
+                max(duration_s - burn_in - self.dt, t_warmup + self.dt),
+            )
         self.burn_in = burn_in
         self.sample_interval = sample_interval
         self.base_load = base_load
         self.stress_type = stress_type
+        self.plasticity = plasticity
 
         self.units: Dict[str, SmartGridUnit] = build_smartgrid_swarm()
         self.inverters_per_gen = 3
@@ -160,6 +190,16 @@ class SmartGridStressSimulation:
                         "capacity_factor": 1.0,
                     }
 
+        self.soc: Dict[str, float] = {
+            "battery_storage": 0.80,
+            "ev_mobility": 0.60,
+        }
+        self.shed_headroom = 1.0
+        self.flex_dispatch: Dict[str, float] = {uid: 0.0 for uid in WATERFALL_ORDER}
+        self.dispatch_stress_samples: List[float] = []
+        self.last_deficit = 0.0
+        self.last_flex_available = 0.0
+
         self.t = 0.0
         self.grid_bus_phase = 0.0
         self.grid_bus_period = 4.0
@@ -169,6 +209,13 @@ class SmartGridStressSimulation:
         self.w_dyn_normal: List[float] = []
         self.w_dyn_stress: List[float] = []
 
+    def _class_b_capacities(self) -> Dict[str, float]:
+        return {
+            uid: u.power_capacity
+            for uid, u in self.units.items()
+            if u.unit_class == "B" and u.state != UnitState.OUT_OF_SERVICE
+        }
+
     def run(self) -> Dict:
         while self.t < self.duration_s:
             self.step()
@@ -177,6 +224,12 @@ class SmartGridStressSimulation:
             "stress": self.phase_stress,
             "w_dyn_normal": self.w_dyn_normal,
             "w_dyn_stress": self.w_dyn_stress,
+            "mean_dispatch_kw": (
+                sum(self.dispatch_stress_samples) / len(self.dispatch_stress_samples)
+                if self.dispatch_stress_samples else 0.0
+            ),
+            "t_stress_effective": self.t_stress,
+            "plasticity": self.plasticity,
         }
 
     def step(self) -> None:
@@ -189,7 +242,6 @@ class SmartGridStressSimulation:
             u.advance_ooda(self.dt, self.t)
         for inv_id, inv in self._inverter_state.items():
             inv["phase"] = (inv["phase"] + TWO_PI * self.dt / inv["period"]) % TWO_PI
-            # Offline inverters (capacity_factor==0): phase drifts, no bus coupling.
             if inv.get("capacity_factor", 1.0) > 0.0:
                 inv["phase"] = phase_pull(inv["phase"], self.grid_bus_phase, self.grid_coupling)
         for u in self.units.values():
@@ -234,9 +286,10 @@ class SmartGridStressSimulation:
                 self._inverter_state[inv_id]["period"] = 100.0
 
     def _unit_act(self, unit: SmartGridUnit) -> None:
+        # Class-B dispatch is step-synchronous in _compute_power_balance (spec).
         pass
 
-    def _compute_power_balance(self) -> None:
+    def _gen_and_load(self) -> tuple:
         gen_total = 0.0
         for inv_id, inv in self._inverter_state.items():
             if "pv_prosumer" in inv_id:
@@ -250,16 +303,34 @@ class SmartGridStressSimulation:
         load = self.base_load * (1.0 + 0.25 * math.sin(TWO_PI * self.t / 1440.0))
         load += self.load_rng.uniform(-10.0, 10.0)
         load = max(load, 1.0)
-        flex_available = sum(
-            u.power_capacity * 0.4 for uid, u in self.units.items()
-            if u.unit_class == "B" and u.state != UnitState.OUT_OF_SERVICE
-        )
+        return gen_total, load
+
+    def _compute_power_balance(self) -> None:
+        gen_total, load = self._gen_and_load()
+        deficit = max(0.0, load - gen_total)
+        self.last_deficit = deficit
+        caps = self._class_b_capacities()
+
+        if self.plasticity:
+            dispatch, _residual, self.soc = run_waterfall(
+                deficit, caps, self.soc, self.shed_headroom,
+            )
+            self.flex_dispatch = dispatch
+            flex_available = flex_available_treatment(dispatch)
+        else:
+            self.flex_dispatch = {uid: 0.0 for uid in WATERFALL_ORDER}
+            flex_available = flex_available_null(caps)
+
+        self.last_flex_available = flex_available
         served = min(gen_total + flex_available, load)
         w_dyn = max(0.0, min(1.0, served / load))
+
         if self.t_warmup <= self.t < self.t_stress:
             self.w_dyn_normal.append(w_dyn)
         elif self.t >= (self.t_stress + self.burn_in):
             self.w_dyn_stress.append(w_dyn)
+            if self.plasticity:
+                self.dispatch_stress_samples.append(flex_available)
 
     def compute_efficiency(self, window: str) -> Dict:
         if window == "normal":
