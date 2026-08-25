@@ -51,3 +51,33 @@ hum_stress_study_results.json
 smartgrid_stress_study_results.json
 tier2a_runs.json
 tier2a_durchsatz_sweep.json
+hebel2_zuweisung_ergebnis.json
+hebel1_differenzierung_ergebnis.json
+natural_offers.json
+hebel4_plastizitaet_ergebnis.json
+blocktimes_probe.json
+bridge_stufe_a_events.json
+bridge_stufe_a_drivers.json
+bridge_stufe_a_ergebnis.json
+bridge_stufe_a_v2_ergebnis.json
+bridge_stufe_a_v2_ergebnis.json.compact.json
+bridge_stufe_a_v2_pipeline.log
+bridge_stufe_a_v2_draw_*.json
+bridge_eth.jsonl
+bridge_gnosis.jsonl
+uniswap_eth.jsonl
+uniswap_arb.jsonl
+drivers_90d.jsonl
+*.jsonl.manifest.json
+
+# Bridge Stufe A v3 — lokale Captures (Siegel: bridge_manifest.json)
+bridge_stufe_a_v3_*.jsonl
+/bridge_stufe_a_v3_*_resolved.json
+/bridge_stufe_a_v3_*_verification_gate.json
+/bridge_stufe_a_v3_*_capture.log
+/bridge_stufe_a_v3_pipeline.log
+/bridge_stufe_a_v3_*_activity*.sqlite
+/bridge_stufe_a_v3_*_activity*.sqlite-*
+
+# Wave 38 Live-Archive (lokal; Referenz: docs/reanalysis_closing_evidence.md)
+archive_b2g/diagnostic/

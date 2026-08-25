@@ -1,0 +1,8 @@
+{
+  "status": "wave38_binding_exclusion_list",
+  "prereg_ref": "docs/WAVE38_LIVE_PREREG.md",
+  "method_ref": "docs/BRIDGE_STUFE_A_V3_PREREG.md §3.0.5",
+  "inherits": "config/bridge_stufe_a_v3_mev_cluster_exclusion_list.json",
+  "note": "Wave 38 binds the Bridge V3 MEV exclusion list by reference (63 addresses). Amend this file to diverge; do not rewrite sealed Bridge artifacts.",
+  "entries": []
+}

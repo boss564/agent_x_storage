@@ -117,7 +117,7 @@ agent_x_storage/
 ├── foundry.toml                   # Foundry/Anvil Config (OpenZeppelin v5)
 ├── lib/openzeppelin-contracts/    # OpenZeppelin v5.0.0 (via Forge)
 ├── charts/agent-x/               # Helm-Chart: KEDA Autoscaling + SGX Limits (9 Dateien)
-├── docs/                         # COMPLIANCE_PLAYBOOK.md (K1–K6) + asyncapi.yaml
+├── docs/                         # COMPLIANCE_PLAYBOOK.md (K1–K8) + asyncapi.yaml
 ├── event_bus.py                  # Pub/Sub + JSONL Audit-Log
 ├── gov_procurement_agent.py      # Root Orchestrator, BHO thresholds
 ├── tender_reader_agent.py        # GAEB-XML Reader
@@ -311,6 +311,9 @@ Welle 34 (Finale Veredelung) ist ein Pitch-Orchestrator mit 3 Agenten + Streamli
 | 35 | SimChain Multi-Chain Economy | 9+27 | `simchain/economic_orchestrator_multi.py` | 3 Chains × 3 Agents, DePIN (1000 TPS), VOB/B Settlement (Z3-Proof), Liquidity (Token/Staking/Burn), Cross-Chain-Bridge, Friktion 5.6% (Burns+Fees), Staking separat, value_conserved verifiziert, drei getrennte Chain-Bücher, BHO Δ=0, 199/199 Tests — 2.200+ lines |
 | 36 | MultiChain Sovereign Appchains | 9+27 | `multichain/chain_orchestrator.py` | 4 Chain Layers × 9 Sovereign Appchains, Merkle-Proof-Bridge, Identity Chain (SSI/ZK), Cross-Chain-Latenz, 113/113 Tests — 1.800+ lines |
 | 37 | Demo Pipeline (Pitch & Investoren) | 9+27 | `demo/demo_orchestrator.py` | 3 Akte × 9 Agenten, Differenzierte Transformationsprofile, 8 einzigartige Friktions-Raten, Live-Proof-Mode, BHO Δ=0 — Pitch-fertig |
+| 38 | Causal Audit & Signal Guard (Diagnostic) | 9+ | `diagnostic/` | Live-Pre-Reg, Capture→CTE→Gatekeeper, Occupancy/Permutation/FDR, GoBD+EventBus — 281 Checks; live-90d unter ethischer Aufsicht; **Post-MEV** (`diagnostic/post_mev/`, keine neue Hauptwelle): PM1–PM3 nach `mev_tail_completed`, Pre-Reg-Freeze, 27/27 |
+| 39 | Ethical Boundary (Vierfach-Sperre) | 9+81 | `ethical_boundary/` | PreReg→Scope→Assertion→Audit→Charter→Integrity→Reporter→Certifier; Hook vor Wave-38-Gatekeeper; `CERTIFIED`/`certificate_id`; Spec §5.4 — 82/82 Tests |
+| 40 | Execution Resilience & Risk Shield | 9+81 | `resilience/` | 4-Quadrant-Pipeline (Infra/MEV/Modell/Operativ): Reorg, RPC-Failover, MEV-Shield, Gas-Budget, Confounder, Black-Swan, Fiscal, Forensic-WORM — 105/105 Tests |
 
 ### B2G Module Structure
 
@@ -497,6 +500,23 @@ agents_b2g/
 │   ├── __init__.py                # DemoOrchestrator, TransformProfiles
 │   ├── demo_orchestrator.py       # 9-agent pipeline, 8 unique friction rates
 │   └── transform_profiles.py      # Per-agent fee/retention/burn rates
+├── diagnostic/                    # Wave 38: Causal Audit & Signal Guard
+│   ├── wave38_live_pipeline.py    # Freeze → Capture → Analyse 6→9 → Gatekeeper
+│   ├── gatekeeper_dispatcher_agent.py  # Agent 9 + Wave-39 ethical pre-flight
+│   ├── ethical_boundary_hook.py   # Additive hook; Spec §5.4 regression normalizer
+│   └── post_mev/                  # Post-MEV Diagnostic (additive; keine Hauptwelle)
+│       ├── post_mev_orchestrator.py  # PM1→PM2→PM3 + EventBus mev_tail_completed
+│       ├── post_mev_causal_consistency_validator.py  # PM1
+│       ├── adversarial_signal_quarantiner.py         # PM2 (24h Cooldown)
+│       └── causal_graph_post_mev_reconciler.py       # PM3 Pre-Reg-Freeze / Amendments
+├── ethical_boundary/              # Wave 39: Ethical Boundary (Vierfach-Sperre)
+│   ├── orchestrator.py            # Root: PreReg→…→Certifier → EthicalBoundaryEnvelope
+│   ├── types.py                   # CERTIFIED + certificate_id / BLOCKED + ETHICAL_BOUNDARY
+│   └── audit_trail_writer.py      # GoBD-WORM Hash-Kette (GENESIS, OBSERVATION_AND_DEFENSE)
+├── resilience/                    # Wave 40: Execution Resilience & Risk Shield
+│   ├── execution_resilience_orchestrator.py  # Root: 4-Quadrant-Pipeline A1–A8
+│   ├── types.py                   # ResilienceEnvelope (fiscal_ok/forensic_ok/…)
+│   └── subagents/                 # Reorg, RPC, MEV, Gas, Confounder, BlackSwan, Fiscal, Forensic
 ├── wirtschaft/                    # 9 Wirtschaftsagenten (Klassen A/B/C): Gewaltenteilung, Bausteine 1–5; NO_COUPLING (IFI-robust) — docs/WIRTSCHAFTS_SCHWARM_DOSSIER.md
 ├── rescue/                        # Katastrophenschutz: 9 Einheiten A/B/C, OODA, Phase-Pull/RoE/RNG; Dichte-Hypothese falsifiziert — docs/RESCUE_KOORDINATION_DOSSIER.md · docs/RESCUE_DICHTE_STUDIE.md
 ├── ci/                            # Kritische Infrastruktur: 9 Agenten A/B/C, H0 PASSES (3/5/5/10s); Stress H1+H2 CONFIRMED (Natur>Blackout>Cyber) — docs/CI_RESILIENZ_STUDIE_PREREG.md · docs/CI_RESILIENZ_STUDIE_ERGEBNIS.md
@@ -662,6 +682,8 @@ GoBD → Ledger (BHO Δ=0,00€) → Chain-Hash → XRechnung → PoPW-Coverage 
 - **Wave 25 Smart Wallet:** ERC-4337, eIDAS/BundID, ZK-Privacy, BHO-Kasse, Amtsübergabe — Integration mit W1-W24 im demo_kammerer.sh
 - **Wave 27 Clearing & Settlement:** 122/122 tests passed (`scripts/test_wave27_clearing.py`), 14 test groups covering all 9 agents + E2E + BHO Zero-Sum + empty list + cycle detection + config, 100 TXs → 1–3 Netto-Zahlungen, ≥95% Reduction
 - **Wave 28 External Threat Defense:** 105/105 tests passed (`scripts/test_wave28_defense.py`), 14 test groups covering all 9 agents + E2E legitimate/cartel/rate-limit/geo-block/sybil + config, 81 Subagenten
+- **Wave 28 Threat Engine:** 31/31 passed (`scripts/test_wave28_threat_engine.py`) — Sensitivity/Memory/Censorship-Resilience + DefenseOrchestrator-Injection
+- **Bridge Diagnostic:** 9/10 passed (`scripts/test_bridge_diagnostic.py`) — Pre-Reg/Orchestrator-Skeleton; 1 known fail (`DiagnosticReportComposer.compose` arity)
 - **Wave 29 Token Runtime Operations:** 101/101 tests passed (`scripts/test_wave29_tokenomics.py`), 12 test groups covering all 9 agents + E2E full cycle + empty inputs + token state + config, 81 Subagenten, 9-stage pipeline all green
 - **Wave 31 UX & Dashboard:** 92/92 tests passed (`scripts/test_wave31_ux.py`), 14 test groups covering all 9 agents + E2E login/commands/simulation/reports/multi-role + config, 81 Subagenten, 6 Rollen (Kämmerer, Bauleiter, Prüfer, Bürger, Entwickler, Bank)
 - **Wave 32 Crypto-Philately:** 51/51 tests passed (`scripts/test_wave32_philately.py`), 12 test groups covering all 9 agents + E2E lifecycle/multi-edition/collection + config, 81 Subagenten
@@ -669,6 +691,10 @@ GoBD → Ledger (BHO Δ=0,00€) → Chain-Hash → XRechnung → PoPW-Coverage 
 - **Wave 34 Finale Veredelung:** 21/21 tests passed (`scripts/test_finale.py`, benötigt `plotly` für Charts — ASCII-Fallback ohne), 5 test groups: Dashboard (4), Audit-Trail (4), Realtime-Monitor (5), Orchestrator (6), E2E (2) — Streamlit+Plotly+GoBD-WORM+Z3-Live-Integration, 1.876 lines
 - **Wave 35 SimChain Multi-Chain Economy:** 199/199 tests passed (`scripts/test_simchain.py`), 15 test groups covering all 9 agents + 3 chains + E2E multi-chain + falsifiable friction + BHO zero-sum + value conservation + config + error handling + dashboard (8 tests) — 3 Chains (DEPIN/Settlement/Liquidity), Cross-Chain-Bridge, Friktion 5.6% (Burns+Fees), value_conserved verifiziert, drei getrennte Chain-Bücher, Streamlit Dashboard mit Live-TPS/Volumen/Latenz
 - **Wave 36 MultiChain Sovereign Appchains:** 113/113 tests passed (`scripts/test_multichain.py`), 11 test groups covering all 9 sovereign appchains + bridge protocol + Merkle proofs + orchestrator + identity chain — 4 Chain Layers, 9 Appchains mit eigenem State/Block-Height/Mempool, 167k events/s Durchsatz
+- **Wave 38 Causal Audit & Signal Guard:** 281/281 checks passed (`scripts/test_wave38_diagnostic.py`) — Live-Pre-Reg, Capture/Checkpoint/Etherscan-first, Gatekeeper+GoBD+EventBus; live-90d Re-Analyse unter Wave-39-Vierfach-Sperre (`docs/reanalysis_closing_evidence.md`)
+- **Wave 39 Ethical Boundary (Vierfach-Sperre):** 82/82 tests passed (`scripts/test_wave39_ethical_boundary.py`) — 8-Stufen-Pipeline, Hook Spec §5.4, `CERTIFIED` + `certificate_id` im Envelope, GoBD-WORM ab GENESIS
+- **Wave 40 Execution Resilience & Risk Shield:** 105/105 tests passed (`scripts/test_wave40_resilience.py`) — 12 Gruppen: Reorg/RPC/MEV/Gas/Confounder/Black-Swan/Fiscal/Forensic/Orchestrator/Multi-Tenancy/Config/Full-E2E (1.000 TXs, 0 Loss, WORM-verified); Spec `docs/WAVE40_EXECUTION_RESILIENCE_SPEC.md` (Wave-39-§5.4 unberührt)
+- **Post-MEV Diagnostic Extension:** 27/27 tests passed (`scripts/test_post_mev_diagnostic.py`) — PM1 CausalConsistency / PM2 AdversarialQuarantine / PM3 CausalReconciler + Pre-Reg-Freeze (`BLOCKED`+`PRE_REG_MUTATION_ATTEMPT`); EventBus-Hook `mev_tail_completed`; Spec `docs/POST_MEV_DIAGNOSTIC_SPEC.md` (keine neue Hauptwelle; Wave 38 A7–A9 / Wave-39-§5.4 / Wave-40-K8 unberührt)
 - **Bunker Integration:** 18/18 tests passed (`tests/test_bunker_integration.py`), 6 test groups: HSM Signing, LoRa Transmission, Handyman CBOR, BHO Zero-Sum, Merkle Chain, E2E
 - **HSM Adapter:** 6/6 tests passed (`tests/test_hsm_adapter.py`), Dual-Mode HSM (SoftHSM + Hardware), ECDSA-Signing
 
@@ -1483,9 +1509,28 @@ German for communication and documentation. Code comments in English.
 
 ## Version
 
-Agent X Core: 0.4.0 (stable, 90/100 backtest). Agent X B2G: 0.24.7 (243 agents in 27 main waves plus Wave 3.5 and 25 compliance agents — 277 total, plus Wave 34 Finale Veredelung, Wave 35 SimChain (9 Agents × 3 Chains, 2.200+ lines, 199/199 tests), Wave 36 MultiChain Sovereign Appchains (9 Appchains × 4 Layers, 1.800+ lines, 113/113 tests), Wave 37 Demo Pipeline (9 Agents, 8 unique friction rates), plus Settlement (D01–D04 divers, C09 ingest, ComplianceExporter, ~1.500 lines), Crew (5-role pipeline + DID registry + 9 specialized agents), Gas (autonomous fuel management), Valhalla (ZK honor protocol), Surface Agents (C01–C09: NATS queue-group workers, adaptive batching, constraint metering, predictive health routing, 223k events/s burst), Subsurface Prover Factory (SGX-TDX/SEV-SNP/CUDA/CPU with curve unification), D01 Mock Responder (8 replicas, batch ZK, binary bisect quarantine), Ephemeral Paratroopers (F01–F03, 3 WASM modules compiled, 500ms TTL), Air Layer E2E: 18/18, Chaos Resilience: F07–F09 abgefangen (Chaos Fleet: killer, throttler, poison injector), Telemetry Ingest (MQTT/HTTP bridge, 7 endpoints), Chaos Matrix (10 attack scenarios), 8 Solidity contracts (inkl. ValhallaVerifier.sol, ProtoGalaxyVerifier.sol, Foundry/Solc 0.8.35) + ESP32 LoRaWAN Firmware (1.651 lines C++/Arduino), E2E: Waves 1–33 all green, Wave 34: 21/21, Wave 35: 199/199, Wave 36: 113/113, Wave 37: Pitch-fertig, Chaos Resilience: 4/4 experiments, Docker: 109+ containers, NATS: Core+JetStream (4222/8222), Anvil: Block 0→1 confirmed, CertiK Security Wave 20: 164/164, Skynet Monitor Wave 21: 80/80, Ops Security Wave 22: 48/48, Token Launch Wave 23: funktional, Trading Wave 24: FN=0/FP=0, Smart Wallet Wave 25: integriert, Clearing & Settlement Wave 27: 122/122, External Threat Defense Wave 28: 105/105, Token Runtime Operations Wave 29: 101/101, UX & Dashboard Wave 31: 92/92, Survival & Off-Grid Wave 33: 63/63, BSI C5/ISO 27001/SOC2/GoBD/eIDAS/GDPR/EVB-IT compliant, GAEB DA XML 3.3, XRechnung 3.0, VHB-221/222, GoBD/BHO-ready, 68.000+ lines, plus 5-Pillar Scale-Up — 1M-Tsunami (0 Loss, 54µs P99, 9.554 echte L1-Anker), Testnet-Bridge (EIP-1559), Overwatch-Dashboard (Prometheus/Grafana), Compliance-Playbook (K1–K7), K8s/Helm-Chart (KEDA+SGX), plus Wirtschafts-Schwarm + Rescue + CI-Resilienz + Humanitäre Logistik + Smart-Grid Meta-Stabilität (H1 falsifiziert, Plastizitäts-Hebel Stubs) — docs/SMART_GRID_ERGEBNIS.md).
+Agent X Core: 0.4.0 (stable, 90/100 backtest). Agent X B2G: 0.25.1 (243 agents in 27 main waves plus Wave 3.5 and 25 compliance agents — 277 total, plus Wave 34–37, Wave 38 Causal Audit & Signal Guard (281/281) + Post-MEV Diagnostic Extension (27/27, PM1–PM3, keine neue Hauptwelle), Wave 39 Ethical Boundary / Vierfach-Sperre (82/82, `certificate_id` im Envelope), Wave 40 Execution Resilience & Risk Shield (105/105), plus Settlement (D01–D04 divers, C09 ingest, ComplianceExporter, ~1.500 lines), Crew (5-role pipeline + DID registry + 9 specialized agents), Gas (autonomous fuel management), Valhalla (ZK honor protocol), Surface Agents (C01–C09: NATS queue-group workers, adaptive batching, constraint metering, predictive health routing, 223k events/s burst), Subsurface Prover Factory (SGX-TDX/SEV-SNP/CUDA/CPU with curve unification), D01 Mock Responder (8 replicas, batch ZK, binary bisect quarantine), Ephemeral Paratroopers (F01–F03, 3 WASM modules compiled, 500ms TTL), Air Layer E2E: 18/18, Chaos Resilience: F07–F09 abgefangen (Chaos Fleet: killer, throttler, poison injector), Telemetry Ingest (MQTT/HTTP bridge, 7 endpoints), Chaos Matrix (10 attack scenarios), 8 Solidity contracts (inkl. ValhallaVerifier.sol, ProtoGalaxyVerifier.sol, Foundry/Solc 0.8.35) + ESP32 LoRaWAN Firmware (1.651 lines C++/Arduino), E2E: Waves 1–33 all green, Wave 34: 21/21, Wave 35: 199/199, Wave 36: 113/113, Wave 37: Pitch-fertig, Wave 38: 281/281, Post-MEV: 27/27, Wave 39: 82/82, Wave 40: 105/105, Chaos Resilience: 4/4 experiments, Docker: 109+ containers, NATS: Core+JetStream (4222/8222), Anvil: Block 0→1 confirmed, CertiK Security Wave 20: 164/164, Skynet Monitor Wave 21: 80/80, Ops Security Wave 22: 48/48, Token Launch Wave 23: funktional, Trading Wave 24: FN=0/FP=0, Smart Wallet Wave 25: integriert, Clearing & Settlement Wave 27: 122/122, External Threat Defense Wave 28: 105/105, Token Runtime Operations Wave 29: 101/101, UX & Dashboard Wave 31: 92/92, Survival & Off-Grid Wave 33: 63/63, BSI C5/ISO 27001/SOC2/GoBD/eIDAS/GDPR/EVB-IT compliant, GAEB DA XML 3.3, XRechnung 3.0, VHB-221/222, GoBD/BHO-ready, 68.000+ lines, plus 5-Pillar Scale-Up — 1M-Tsunami (0 Loss, 54µs P99, 9.554 echte L1-Anker), Testnet-Bridge (EIP-1559), Overwatch-Dashboard (Prometheus/Grafana), Compliance-Playbook (K1–K8), K8s/Helm-Chart (KEDA+SGX), plus Wirtschafts-Schwarm + Rescue + CI-Resilienz + Humanitäre Logistik + Smart-Grid Meta-Stabilität (H1 falsifiziert, Plastizitäts-Hebel Stubs) — docs/SMART_GRID_ERGEBNIS.md).
 
 ```
+0.25.1 (2026-08-24) — Post-MEV Diagnostic Extension (additive, keine neue Hauptwelle):
+- agents_b2g/diagnostic/post_mev/: PM1 CausalConsistency → PM2 AdversarialQuarantine (24h) → PM3 CausalReconciler
+- Trigger: EventBus `mev_tail_completed` → register_mev_tail_hook; Pre-Reg-Freeze (Mutation → BLOCKED + PRE_REG_MUTATION_ATTEMPT)
+- Append-only Amendments (`original_pre_reg_hash` + `amendment_id`); Wave 38 A7–A9 / Wave-39-§5.4 / Wave-40-K8 unberührt
+- Spec: docs/POST_MEV_DIAGNOSTIC_SPEC.md
+- Tests: scripts/test_post_mev_diagnostic.py 27/27
+
+0.25.0 (2026-08-24) — Wave 40 Execution Resilience & Risk Shield:
+- agents_b2g/resilience/: 4-Quadrant-Pipeline (Infra/MEV/Modell/Operativ), 9+81 Subagenten
+- Invarianten: Finality-Gate, Private-Only, Hard Gas-Cap, Confounder-Quarantäne, Black-Swan-Halt, BHO-Δ=0 Gas, Fiscal/DATEV, Forensic-WORM
+- Spec: docs/WAVE40_EXECUTION_RESILIENCE_SPEC.md (Wave-39-§5.4 unberührt)
+- Tests: scripts/test_wave40_resilience.py 105/105
+
+0.24.8 (2026-08-24) — Wave 38/39 Closing + certificate_id im Envelope:
+- Wave 38 live-90d Capture + Re-Analyse unter Vierfach-Sperre (additive CERTIFIED)
+- Wave 39: EthicalBoundaryEnvelope.certificate_id (SHA-256 Job+Scope) in to_dict()
+- Spec §5.4 Regression-Normalisierung; Abschlussnachweis docs/reanalysis_closing_evidence.md
+- Tests: Wave 38 281/281 · Wave 39 82/82
+
 0.24.7 (2026-08-17) — Smart Grid Meta-Stabilitäts-Studie (Dezentrale Energienetze):
 - 9 Agenten A Erzeugung / B Flexibilität / C Netz-Guardians, Inverter-Flotten N_gen=9,
   Grid-Bus-Kopplung 0.60, Jitter ±5%
@@ -1573,7 +1618,7 @@ Agent X Core: 0.4.0 (stable, 90/100 backtest). Agent X B2G: 0.24.7 (243 agents i
 | 4 · 1M-Tsunami | `scripts/verify_1m_tsunami.py` — 0 Loss, 54µs Surface-P99, 9.554 echte L1-Anker | ✅ |
 | c · Testnet-Bridge | `SepoliaSettlementBridge` (EIP-1559 + Fee-Escalation, `L1_NETWORK`-Routing) | ✅ |
 | d · Overwatch-Dashboard | Prometheus (1s Scrape) + Grafana (Port 3002), Dual-Format `/metrics` | ✅ |
-| e · Compliance-Playbook | `docs/COMPLIANCE_PLAYBOOK.md` (K1–K7 Matrix + Auditor-Runbook + Probe-Promotion) | ✅ |
+| e · Compliance-Playbook | `docs/COMPLIANCE_PLAYBOOK.md` (K1–K8 Matrix + Auditor-Runbook + Probe-Promotion + Wave-40 Risk Shield) | ✅ |
 | a · K8s/Helm | `charts/agent-x/` (KEDA Event-Driven Autoscaling + SGX Resource Limits) | ✅ |
 
 **Konservierungs-Invariante:** `Ingested = Cleared + Quarantined = L1 Settled` — 1.000.000 = 949.734 + 50.266 = 1.000.000.

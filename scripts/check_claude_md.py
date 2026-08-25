@@ -123,6 +123,36 @@ TEST_SCRIPTS: list[tuple[str, str, str]] = [
         r"Wave 36.*?MultiChain.*?(\d+)\s*/\s*(\d+)\s+tests? passed",
     ),
     (
+        "scripts/test_wave38_diagnostic.py",
+        r"(?m)^(\d+)/(\d+) passed$",
+        r"Wave 38.*?(\d+)\s*/\s*(\d+)\s+(?:checks?|tests?) passed",
+    ),
+    (
+        "scripts/test_wave39_ethical_boundary.py",
+        r"Wave 39 Ethical Boundary:\s*(\d+)/(\d+)\s+passed",
+        r"Wave 39.*?Ethical Boundary.*?(\d+)\s*/\s*(\d+)\s+tests? passed",
+    ),
+    (
+        "scripts/test_wave40_resilience.py",
+        r"Wave 40 Resilience:\s*(\d+)/(\d+)\s+passed",
+        r"Wave 40.*?Execution Resilience.*?(\d+)\s*/\s*(\d+)\s+tests? passed",
+    ),
+    (
+        "scripts/test_post_mev_diagnostic.py",
+        r"Post-MEV Diagnostic:\s*(\d+)/(\d+)\s+passed",
+        r"Post-MEV Diagnostic Extension.*?(\d+)\s*/\s*(\d+)\s+tests? passed",
+    ),
+    (
+        "scripts/test_bridge_diagnostic.py",
+        r"(?m)^(\d+)/(\d+) passed$",
+        r"Bridge Diagnostic.*?(\d+)\s*/\s*(\d+)\s+passed",
+    ),
+    (
+        "scripts/test_wave28_threat_engine.py",
+        r"Result:\s*(\d+)\s+passed,\s*\d+\s+failed\s*\((\d+)\s+total\)",
+        r"Wave 28.*?Threat Engine.*?(\d+)\s*/\s*(\d+)\s+(?:tests?\s+)?passed",
+    ),
+    (
         "tests/test_bunker_integration.py",
         r"ERGEBNIS:\s*(\d+)\s+passed,\s*\d+\s+failed\s*\((\d+)\s+total\)",
         r"Bunker.*?Integration.*?(\d+)\s*/\s*(\d+)\s+tests?",
@@ -168,7 +198,12 @@ NO_TEST_SUMMARY: set[str] = {
     "scripts/test_smartgrid_stress.py",       # Smart Grid Stress-Injektoren (Bewölkung/Spitzenlast/Leitung)
     "scripts/test_evaluator_redundancy.py",   # Hebel 1: Evaluator-Redundanz (strictness tot, 1-von-9)
     "scripts/test_tier2a_eval.py",            # Hebel 3: TIER-2a Effizienz-Auswertung (±5% Pre-Reg)
+    "scripts/test_hebel2_zuweisung.py",       # Hebel 2: Assignment Nullmodell vs Treatment
+    "scripts/test_hebel1_differenzierung.py", # Hebel 1 Follow-up: Regel-Differenzierung + Uneinigkeit
+    "scripts/test_hebel4_plastizitaet.py",    # Hebel 4: Class-B-Dispatch + IUT
     "scripts/test_astrocore_evaluator.py",  # AstroCore Kuramoto smoke (IAAFT CI-light)
+    "scripts/test_bridge_stufe_a.py",         # Stufe A OmniBridge Pre-Reg lock (Hawkes/CTE/BH)
+    "scripts/test_bridge_stufe_a_v2.py",      # Stufe A v2 matched-N + signed Hawkes + majority
     "scripts/test_emergence_kopplung_vorarbeit.py",  # Emergence Kopplung Vorarbeit (freeze/shuffle/κ=0)
 }
 

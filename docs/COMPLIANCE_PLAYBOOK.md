@@ -2,7 +2,7 @@
 
 **Nachweisdokument für Auditoren und Behörden**
 Geltungsbereich: §48b BHO, GoBD, ISO/IEC 27001:2022, DSGVO (Art. 5, 25, 32)
-Stand: 2026-08-16 · Version 1.1
+Stand: 2026-08-24 · Version 1.2
 
 ---
 
@@ -26,6 +26,9 @@ verifizieren kann. Keine Behauptung ohne Audit-Pfad.
 | **K4** | **Krypto-Agilität**<br>ISO A.8.24, A.8.25 | Multi-Vendor-Prover-Factory: TEE (SGX-TDX/SEV-SNP) primär, CUDA-Fallback bei TEE-Degradation; Kurve einheitlich auf BN254 erzwungen. | `agents/subsurface/prover_factory.py` → `ZKProverBackend`, `ProofMetadata` (DCAP/SEV-Attestation, CUDA-Kernel-Hash) | `python3 -c "from agents.subsurface.prover_factory import ZKProverBackend, ProverCapability; print('ProverFactory: TEE→CUDA, bn254 geladen')"` |
 | **K5** | **Finality / L1-Anchoring**<br>GoBD, ISO A.8.14 | Epochen-Akkumulator (100 bzw. 500 Proofs pro Epoche, 2s/30s Zeit-SLA) entkoppelt Settlement von Poison-fragmentierten Ingest-Batches → **Fragmentierungs-DoS-immun**. EIP-1559-Fee-Escalation (+2 gwei je Retry) gegen Congestion/`underpriced`. | `scripts/mock_d01_responder.py` → `_flush_epoch()`, `SepoliaSettlementBridge.anchor()` | `python3 scripts/verify_1m_tsunami.py` (prüft `nonce == l1_anchors`, 0 Fehlschläge) |
 | **K6** | **BHO Zero-Sum**<br>§48b BHO | Jede Zahlung: `Einzahlungen = Auszahlungen + Einbehalte + Vault-Bestand`; `|Δ| > 0,01 €` stoppt alle Zahlungen (Decimal-Arithmetik). | `agents_b2g/treasury/agents.py`, `agents_b2g/clearing/clearing_settlement_orchestrator.py` | `python3 scripts/test_wave27_clearing.py` |
+| **K8** | **Execution Resilience & Risk Shield**<br>GoBD (WORM), §48b BHO (Gas-Δ=0), ISO A.5.29 / A.8.14, §13b UStG | Wave 40: Finality-Gate (≥12 L1 / ≥64 L2), RPC-Failover (>200 ms / 429), Private-Only-MEV (Leakage=0), Hard Gas-Cap + BHO-Gas-Ledger, Confounder-Quarantäne (24 h), Black-Swan-Halt (σ>5 / Vol>3×30d), Fiscal/DATEV/§13b, Forensic-WORM + Gnosis/peaq-Anchor. | `agents_b2g/resilience/` · Spec `docs/WAVE40_EXECUTION_RESILIENCE_SPEC.md` | `python3 scripts/test_wave40_resilience.py` (105/105) |
+
+> **Nummerierung:** **K7** bleibt das Compliance-Verifikationsmodell (Probe-Promotion, § unten). Wave-40-Kontrollen sind **K8** — append-only, keine Überschreibung von K1–K7.
 
 ---
 
@@ -94,7 +97,11 @@ python3 agents/subsurface/prover_factory.py
 # 5. BHO Zero-Sum / Clearing
 python3 scripts/test_wave27_clearing.py
 
-# 6. Live-Monitoring (SLA-Überwachung)
+# 6. Wave 40 — Execution Resilience & Risk Shield (K8)
+python3 scripts/test_wave40_resilience.py
+# Erwartung: Wave 40 Resilience: 105/105 passed
+
+# 7. Live-Monitoring (SLA-Überwachung)
 # Grafana: http://localhost:3002  →  "AGENT X OVERWATCH"
 # Prometheus: http://localhost:9092
 ```
@@ -110,6 +117,7 @@ python3 scripts/test_wave27_clearing.py
 | Subsurface (D00–D01) | ZK-Prover + Quarantäne + L1-Anker | `scripts/mock_d01_responder.py`, `agents/subsurface/` |
 | Security (P08) | Audit-Logger (HMAC-Kette) | `agents/security/p08_audit.py` |
 | Clearing (W27) | BHO-Zero-Sum-Netting | `agents_b2g/clearing/` |
+| Resilience (W40) | Execution Risk Shield (4 Quadranten) | `agents_b2g/resilience/` |
 
 ---
 
@@ -156,3 +164,61 @@ python3 scripts/test_wave27_clearing.py
 
 - `son_report_valid` erfordert `age ≤ 24h`. Nächtliche Regeneration per Cron (03:00), Backup sichert den Report mit (03:30).
 - Der Executor nutzt den Report auch bei `son_valid=false` für `test:`-Pfade; das Flag steuert nur das Summary-Verdict.
+
+---
+
+## K8 · Execution Resilience & Risk Shield (Wave 40, Stand 0.25.0)
+
+**Ziel:** Nachweis der Betriebsstabilität, MEV-Resistenz und steuerlichen Lückenlosigkeit
+unter realen Blockchain- und Marktbedingungen.
+
+**Modul:** `agents_b2g/resilience/`  
+**Spec:** `docs/WAVE40_EXECUTION_RESILIENCE_SPEC.md`  
+**E2E:** `scripts/test_wave40_resilience.py` — **105/105**  
+**Abgrenzung:** Wave-39-Spec **§5.4** (Hook-Härte) bleibt unberührt. K8 erweitert weder
+Wave-39-Envelope noch Gatekeeper-Semantik.
+
+### K8-Kontrollmatrix (Invariante → Gate → Nachweis)
+
+| Invarianten-Kategorie | Prüfregel (Compliance Gate) | Nachweis / Artefakt |
+|---|---|---|
+| **Infrastruktur-Finality** | Kein Kausalsignal wird ausgeführt vor ≥12 Confirmations (L1) bzw. ≥64 (L2). | `ReorgMonitor` + Orchestrator-`FinalityGate`; Reject bei Deep-Reorg / Fork |
+| **RPC-Resilienz** | Auto-Failover bei Latenz >200 ms oder HTTP 429. Surface-P99-Referenz **54 µs** (`RESILIENCE_RPC_P99_SLA_US`). | `RPCHealthSentinel` SLA-/Failover-Report im Envelope `rpc_ok` |
+| **MEV-Schutz** | 100 % Private-Only-Submission (Flashbots/Builder). Mempool-Leakage = 0. | `MEVShield` / `MempoolLeakageScanner`; Envelope `mev_ok`, `leakage_count` |
+| **Gas-Budget (BHO)** | Hartes Cap pro TX + kumulatives Daily-Limit. `Gas_In = Gas_Used + Gas_Refunded + Reserve` (Δ≤0,01). | `GasBudgetEnforcer` Circuit-Breaker + `BudgetLedger`; Envelope `gas_ok`, `gas_bho_delta` |
+| **Confounder-Quarantäne** | Unregistrierte / exogene Faktoren (CEX-Schock, Third-Chain-Hack, Novel) → Signal-Invalidierung + 24 h Kühlphase. Pre-Reg-Gate: nur registrierte Faktoren. | `ConfounderDetector` Quarantäne-Register; Envelope `confounder_ok` |
+| **Black-Swan-Halt** | Volatilität >3× 30d-Durchschnitt oder σ>5 → automatischer Halt aller Execution-Agenten. | `BlackSwanCircuitBreaker` Auto-Halt-Trigger; Envelope `blackswan_ok` |
+| **Fiscal-Compliance** | Lückenlose Handelsbuchführung, §13b UStG Reverse-Charge, BZSt-Abgleich, DATEV-konformer Export. | `FiscalComplianceAuditor` DATEV-Export + Seal-Hash; Envelope `fiscal_ok` |
+| **Forensic WORM** | Jeder Execution-Schritt append-only mit Hash-Kette und Multi-Chain-Anchor (Gnosis/peaq). | `ExecutionForensicRecorder` QES-Signatur + Anchor-TX; Envelope `forensic_ok`, `tip_hash` |
+
+### Auditor-Reproduktion (K8)
+
+```bash
+# Vollständige Wave-40-Suite (12 Gruppen, inkl. 1.000-TX-E2E)
+python3 scripts/test_wave40_resilience.py
+# Erwartung: Wave 40 Resilience: 105/105 passed
+
+# Smoke: Orchestrator READY + BHO-Δ=0
+python3 -c "
+from agents_b2g.resilience import ExecutionResilienceOrchestrator, ResilienceVerdict
+orch = ExecutionResilienceOrchestrator(user_id='auditor_k8')
+env = orch.evaluate({
+    'tip_block': 120, 'signal_block': 100, 'layer': 'L1', 'reorg_depth': 0,
+    'block_hash': '0xdeadbeef01', 'parent_hash': '0xcafebabe01', 'expected_parent': '0xcafebabe01',
+    'latency_samples_ms': [12, 14], 'use_public_mempool': False,
+    'quoted_price': 1.0, 'limit_price': 1.002, 'gas_limit': 21000, 'this_burn': 21000,
+    'estimated_gas': 18000, 'gas_in': 100, 'gas_used': 70, 'gas_refunded': 20, 'gas_reserve': 10,
+    'registered_factors': ['oracle_lag'], 'signal_factors': ['oracle_lag'],
+    'candidate_factors': ['oracle_lag'], 'abs_sigma': 1.0, 'current_vol': 0.1, 'vol_30d': 0.1,
+}, job_id='k8-smoke')
+assert env.status == ResilienceVerdict.READY
+assert abs(env.gas_bho_delta) <= 0.01 and env.fiscal_ok and env.forensic_ok
+print('K8 SMOKE PASS', env.status.value, 'tip', env.quadrant_results['operational']['forensic']['tip_hash'][:16])
+"
+```
+
+### Formale Zusätze (K8)
+
+- **I-4 Gas-BHO:** `Gas_In = Gas_Used + Gas_Refunded + Gas_Budget_Reserve`; Verletzung öffnet den Budget-Circuit.
+- **I-5 Private-Only:** öffentliche Mempool-Submission ⇒ `leakage_count ≥ 1` ⇒ Pipeline nicht `READY`.
+- **I-6 Append-only Forensic:** Tip-Hash = SHA-256-Kette ab Genesis; Replay muss Tip matchen; Auditor-ACL `write_denied=True`.

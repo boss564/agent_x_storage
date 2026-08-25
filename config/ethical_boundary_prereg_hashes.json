@@ -1,0 +1,18 @@
+{
+  "version": "1.0",
+  "registered_at": "2026-08-23T12:00:00+00:00",
+  "hashes": {
+    "bridge_stufe_a_v3": {
+      "path": "docs/BRIDGE_STUFE_A_V3_PREREG.md",
+      "sha256": "42d2ec0c7cbb96bad4663bb1e6585be939a0372304a0175daad280dabd0e4b75"
+    },
+    "bridge_diagnostic": {
+      "path": "docs/BRIDGE_DIAGNOSTIC_PREREG.md",
+      "sha256": "3a87421f1ba812a42f3811aa13121f7362277010de46a69e45b3b53f041c759a"
+    },
+    "wave38_live": {
+      "path": "docs/WAVE38_LIVE_PREREG.md",
+      "sha256": "5dd80e7b1ac495955f78c30a6aa515394ed870ba344eb42ad33ab3dc9c27b430"
+    }
+  }
+}
