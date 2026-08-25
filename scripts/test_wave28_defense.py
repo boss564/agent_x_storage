@@ -298,9 +298,11 @@ def test_4_response():
     ev = resp.legal_evidence_collector(threat)
     check("4.6 Evidence collected", ev["legal_ready"])
 
-    # 4.7 CounterSwarmDeployer
+    # 4.7 CensorshipBypassRouter (ex CounterSwarmDeployer; alias kept)
     cs = resp.counter_swarm_deployer({"source_ips": ["10.0.0.1", "10.0.0.2", "10.0.0.3"]})
-    check("4.7 Counter swarm", cs["counter_agents"] >= 3)
+    check("4.7 Censorship bypass (alias)", cs.get("action") == "CENSORSHIP_BYPASS")
+    cs2 = resp.censorship_bypass_router({"censorship_type": "STABLECOIN_FREEZE", "asset_symbol": "USDC"})
+    check("4.7 Censorship bypass router", cs2.get("action") == "CENSORSHIP_BYPASS")
 
     # 4.8 EscalationTrigger
     esc = resp.escalation_trigger(threat, 600000)

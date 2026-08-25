@@ -227,9 +227,10 @@ class PerimeterGatewayDefender:
       1.9 GatewayOrchestrator — ZULASSEN/WEITERLEITEN/BLOCKIEREN/HONEYPOT
     """
 
-    def __init__(self, logger: JSONLogger, blacklist: IPBlacklist):
+    def __init__(self, logger: JSONLogger, blacklist: IPBlacklist, sanctions_adapter=None):
         self.logger = logger
         self.blacklist = blacklist
+        self.sanctions_adapter = sanctions_adapter
         self._known_fingerprints: Set[str] = set()
 
     # 1.1
@@ -259,16 +260,37 @@ class PerimeterGatewayDefender:
         return {"valid": valid, "method": method, "reason": "VALID" if valid else "NO_VALID_CREDENTIAL"}
 
     # 1.3
-    def reputation_score_lookup(self, address: str) -> dict:
+    def reputation_score_lookup(self, address: str, *, poisoning_targets: list = None) -> dict:
         # Simulation: Chainalysis/MistTrack API
         risk_categories = {"0xTREASURY": 0, "0xEXCHANGE": 15, "0xMIXER": 85, "0xSANCTIONED": 100}
         score = risk_categories.get(address, 50)
-        return {
+        out = {
             "address": address,
             "risk_score": score,
             "category": "HIGH_RISK" if score > 70 else "MEDIUM_RISK" if score > 30 else "LOW_RISK",
             "source": "chainalysis_sim",
         }
+        if self.sanctions_adapter is not None and str(address).startswith("0x") and len(address) == 42:
+            try:
+                screened = self.sanctions_adapter.screen_address(
+                    address, poisoning_targets=poisoning_targets or []
+                )
+                if screened.get("status") == "completed":
+                    art = screened["artifacts"][0]
+                    out["sanctions"] = art
+                    out["risk_score"] = max(out["risk_score"], art.get("risk_score", 0))
+                    out["category"] = (
+                        "HIGH_RISK"
+                        if out["risk_score"] > 70
+                        else "MEDIUM_RISK"
+                        if out["risk_score"] > 30
+                        else "LOW_RISK"
+                    )
+                    out["source"] = "sanctions_adapter+chainalysis_sim"
+            except Exception as exc:  # noqa: BLE001
+                self.logger.warn(f"sanctions screen skipped: {exc}")
+                out["sanctions_error"] = str(exc)
+        return out
 
     # 1.4
     def geofencing_enforcer(self, country_code: str, ip: str = "") -> dict:
@@ -372,9 +394,10 @@ class SwarmDetectionRadar:
       2.9 RadarOrchestrator — Alarm an Agent 3
     """
 
-    def __init__(self, logger: JSONLogger):
+    def __init__(self, logger: JSONLogger, threat_store=None):
         self.logger = logger
         self._signature_db: Dict[str, dict] = {}
+        self.threat_store = threat_store  # RadarThreatStoreAdapter | None (DI)
 
     # 2.1
     def temporal_correlation_analyzer(self, requests: List[dict], window_s: int = None) -> dict:
@@ -506,11 +529,34 @@ class SwarmDetectionRadar:
 
     # 2.8
     def swarm_signature_database(self, signature: dict, store: bool = False) -> dict:
-        sig_hash = hashlib.sha256(json.dumps(signature, sort_keys=True).encode()).hexdigest()[:16]
+        sig_hash = hashlib.sha256(json.dumps(signature, sort_keys=True, default=str).encode()).hexdigest()[:16]
         if store:
             self._signature_db[sig_hash] = {"signature": signature, "added": datetime.now(timezone.utc).isoformat()}
         known = sig_hash in self._signature_db
-        return {"signature_hash": sig_hash, "known": known, "database_size": len(self._signature_db)}
+        out = {"signature_hash": sig_hash, "known": known, "database_size": len(self._signature_db)}
+        # Optional persistence via injected RadarThreatStoreAdapter (mock-able)
+        if store and self.threat_store is not None and signature.get("eoa_address"):
+            try:
+                persisted = self.threat_store.record_signature(
+                    eoa_address_or_pseudonym=signature["eoa_address"],
+                    chain=signature.get("chain", "ethereum"),
+                    window_start=signature.get("window_start")
+                    or datetime.now(timezone.utc),
+                    window_end=signature.get("window_end")
+                    or datetime.now(timezone.utc),
+                    interaction_type=signature.get("interaction_type", "other_allowlisted"),
+                    tx_count=int(signature.get("tx_count", 0)),
+                    peer_cluster_size=int(signature.get("peer_cluster_size", 1)),
+                    pattern_label=signature.get("pattern_label"),
+                    observed_by_user_id=signature.get("observed_by_user_id"),
+                )
+                if persisted.get("status") == "completed":
+                    out["persisted_signature_id"] = persisted["artifacts"][0]["signature_id"]
+                    out["eoa_pseudonym"] = persisted["artifacts"][0]["eoa_pseudonym"]
+            except Exception as exc:  # noqa: BLE001
+                self.logger.warn(f"threat_store persist skipped: {exc}")
+                out["persist_error"] = str(exc)
+        return out
 
     # 2.9
     def radar_orchestrator(self, requests: List[dict], baseline_avg: float = 10.0) -> dict:
@@ -529,8 +575,23 @@ class SwarmDetectionRadar:
         swarm_detected = swarm_signals >= 2  # At least 2 signals
         confidence = round(swarm_signals / 5, 2)
 
+        signature_meta: dict = {}
         if swarm_detected:
             self.logger.alert("Swarm detected!", signals=swarm_signals, confidence=confidence)
+            # Fingerprint into in-memory DB; optional store adapter for persistence
+            sig_payload = {
+                "eoa_address": requests[0].get("wallet_address") or requests[0].get("eoa_address"),
+                "chain": requests[0].get("chain", "ethereum"),
+                "interaction_type": requests[0].get("interaction_type", "other_allowlisted"),
+                "tx_count": len(requests),
+                "peer_cluster_size": max(graph.get("clusters", 1), 1),
+                "pattern_label": "swarm_multi_signal",
+                "observed_by_user_id": requests[0].get("user_id"),
+                "window_start": datetime.now(timezone.utc),
+                "window_end": datetime.now(timezone.utc),
+            }
+            if sig_payload["eoa_address"] and str(sig_payload["eoa_address"]).startswith("0x"):
+                signature_meta = self.swarm_signature_database(sig_payload, store=True)
 
         return _ok("radar", artifacts=[{
             "swarm_detected": swarm_detected,
@@ -541,6 +602,7 @@ class SwarmDetectionRadar:
             "behavioral": behavioral,
             "graph": graph,
             "volume_spike": spike,
+            "signature": signature_meta,
         }])
 
 
@@ -564,8 +626,9 @@ class ThreatClassifierEngine:
       3.9 ClassifierOrchestrator
     """
 
-    def __init__(self, logger: JSONLogger):
+    def __init__(self, logger: JSONLogger, incident_adapter=None):
         self.logger = logger
+        self.incident_adapter = incident_adapter  # ClassifierIncidentAdapter | None (DI)
 
     # 3.1
     def mev_arbitrage_classifier(self, txs: List[dict]) -> dict:
@@ -637,15 +700,44 @@ class ThreatClassifierEngine:
                 "sequential_scanning": sequential}
 
     # 3.8
-    def confidence_scorer(self, classifications: List[dict]) -> dict:
+    def confidence_scorer(self, classifications: List[dict], *, gate_ctx: dict = None) -> dict:
         if not classifications:
             return {"top_threat": None, "max_confidence": 0.0}
         scored = [(c, c.get("confidence", 0)) for c in classifications]
         scored.sort(key=lambda x: -x[1])
-        return {"top_threat": scored[0][0], "max_confidence": scored[0][1], "all_scores": scored}
+        out = {"top_threat": scored[0][0], "max_confidence": scored[0][1], "all_scores": scored}
+        # Optional Gatekeeper coupling — rules stay in SQL / Memory backend
+        if self.incident_adapter is not None and gate_ctx:
+            s_tau = gate_ctx.get("s_tau")
+            status = "BLOCKED" if (s_tau is not None and s_tau <= 0) else "RELEASED"
+            action = "GATE_BLOCKED" if status == "BLOCKED" else "GATE_RELEASED"
+            try:
+                couple = self.incident_adapter.record_gate_coupling(
+                    signature_id=gate_ctx.get("signature_id"),
+                    eoa_pseudonym=gate_ctx["eoa_pseudonym"],
+                    action_type=action,
+                    agent_x_signal_status=status,
+                    block_cause=gate_ctx.get("block_cause") if status == "BLOCKED" else None,
+                    s_tau=s_tau,
+                    kfold_sensitivity=gate_ctx.get("kfold_sensitivity"),
+                    gatekeeper_job_id=gate_ctx.get("gatekeeper_job_id"),
+                    notes=gate_ctx.get("notes"),
+                    observed_by_user_id=gate_ctx.get("observed_by_user_id"),
+                )
+                out["gate_coupling"] = couple.get("artifacts", [{}])[0] if couple.get("status") == "completed" else couple
+            except Exception as exc:  # noqa: BLE001
+                self.logger.warn(f"gate_coupling skipped: {exc}")
+                out["gate_coupling_error"] = str(exc)
+        return out
 
     # 3.9
-    def classifier_orchestrator(self, requests: List[dict], request_type: str = "general") -> dict:
+    def classifier_orchestrator(
+        self,
+        requests: List[dict],
+        request_type: str = "general",
+        *,
+        gate_ctx: dict = None,
+    ) -> dict:
         self.logger.info("Classifier: Classifying threat", count=len(requests), type=request_type)
         classifications = {}
 
@@ -667,7 +759,7 @@ class ThreatClassifierEngine:
             recon = self.reconnaissance_classifier(requests)
             classifications["reconnaissance"] = recon
 
-        scored = self.confidence_scorer(list(classifications.values()))
+        scored = self.confidence_scorer(list(classifications.values()), gate_ctx=gate_ctx)
         any_threat = any(c.get("is_cartel") or c.get("is_mev") or c.get("is_sybil") or
                         c.get("is_ddos_pre") or c.get("is_reconnaissance") or c.get("is_yield_vacuum")
                         for c in classifications.values())
@@ -677,6 +769,7 @@ class ThreatClassifierEngine:
             "classifications": classifications,
             "top_threat": scored["top_threat"],
             "max_confidence": scored["max_confidence"],
+            "gate_coupling": scored.get("gate_coupling"),
         }])
 
 
@@ -695,14 +788,16 @@ class ActiveResponseCoordinator:
       4.4 RateLimitEnforcer — Temporärer Block
       4.5 IPBanEnforcer — Dauerhafter Bann
       4.6 LegalEvidenceCollector — Beweissicherung
-      4.7 CounterSwarmDeployer — Gegen-Agenten
+      4.7 CensorshipBypassRouter — Zensur-resistente Routing-Fallbacks
+         (ex CounterSwarmDeployer; Alias counter_swarm_deployer bleibt)
       4.8 EscalationTrigger — Menschlicher Eingriff
       4.9 ResponseOrchestrator — Protokollierte Entscheidung
     """
 
-    def __init__(self, logger: JSONLogger, blacklist: IPBlacklist):
+    def __init__(self, logger: JSONLogger, blacklist: IPBlacklist, censorship_adapter=None):
         self.logger = logger
         self.blacklist = blacklist
+        self.censorship_adapter = censorship_adapter  # CensorshipBypassAdapter | None
 
     # 4.1
     def throttling_enforcer(self, source_ip: str, delay_ms: int = None) -> dict:
@@ -745,11 +840,49 @@ class ActiveResponseCoordinator:
         }
         return {"action": "EVIDENCE_COLLECTED", "evidence": evidence, "legal_ready": True}
 
-    # 4.7
+    # 4.7 — CensorshipBypassRouter (×9 slot; replaces CounterSwarmDeployer)
+    def censorship_bypass_router(self, threat: dict) -> dict:
+        censorship_type = (
+            threat.get("censorship_type")
+            or threat.get("top_threat", {}).get("censorship_type")
+            or "BUILDER_FILTER"
+        )
+        asset = threat.get("asset_symbol") or threat.get("top_threat", {}).get("asset_symbol")
+        route = {
+            "action": "CENSORSHIP_BYPASS",
+            "censorship_type": censorship_type,
+            "deployment_id": str(uuid.uuid4())[:8],
+            "defensive_only": True,
+        }
+        if self.censorship_adapter is not None:
+            try:
+                rec = self.censorship_adapter.recommend_route(
+                    censorship_type=censorship_type,
+                    asset_symbol=asset,
+                )
+                if rec.get("status") == "completed":
+                    route.update(rec["artifacts"][0])
+                inc = self.censorship_adapter.record_incident(
+                    censorship_type=censorship_type,
+                    agent_x_signal_status="BLOCKED",
+                    block_cause="CENSORSHIP_DETECTED",
+                    route_fallback=str(route.get("asset_fallback") or route.get("rpc_fallback") or ""),
+                    gatekeeper_job_id=route["deployment_id"],
+                )
+                if inc.get("status") == "completed":
+                    route["incident"] = inc["artifacts"][0]
+            except Exception as exc:  # noqa: BLE001
+                self.logger.warn(f"censorship bypass skipped: {exc}")
+                route["adapter_error"] = str(exc)
+        else:
+            # Offline fallback heuristics (no DB)
+            route["rpc_fallback"] = "private_or_self_hosted"
+            route["asset_fallback"] = "ETH_NATIVE" if censorship_type == "STABLECOIN_FREEZE" else None
+        return route
+
     def counter_swarm_deployer(self, threat: dict) -> dict:
-        counter_agents = min(len(threat.get("source_ips", ["unknown"])), 5)
-        return {"action": "COUNTER_SWARM_DEPLOYED", "counter_agents": counter_agents,
-                "mission": "Irritate and waste attacker resources", "deployment_id": str(uuid.uuid4())[:8]}
+        """Deprecated alias → censorship_bypass_router (API compat)."""
+        return self.censorship_bypass_router(threat)
 
     # 4.8
     def escalation_trigger(self, threat: dict, amount_eur: float = 0) -> dict:
@@ -780,7 +913,7 @@ class ActiveResponseCoordinator:
             actions.append(self.ip_ban_enforcer(source_ip))
             actions.append(self.legal_evidence_collector(threat))
             if confidence >= 0.95:
-                actions.append(self.counter_swarm_deployer(threat))
+                actions.append(self.censorship_bypass_router(threat))
         elif confidence >= 0.7:
             actions.append(self.rate_limit_enforcer(source_ip, 3600))
             actions.append(self.throttling_enforcer(source_ip))
@@ -935,16 +1068,33 @@ class SwarmLearningAdapter:
       6.9 LearningOrchestrator
     """
 
-    def __init__(self, logger: JSONLogger):
+    def __init__(self, logger: JSONLogger, embedding_adapter=None, relayer_adapter=None):
         self.logger = logger
         self._attack_db: List[dict] = []
         self._model_version = 1
         self._detection_rate_history: List[float] = []
+        self.embedding_adapter = embedding_adapter  # LearningEmbeddingAdapter | None (DI)
+        self.relayer_adapter = relayer_adapter  # RelayerHealthAdapter | None (DI)
 
     # 6.1
     def attack_vector_database(self, attack: dict, store: bool = True) -> dict:
+        atype = attack.get("type", "UNKNOWN")
+        # Censorship exposure vectors (Spec WAVE28_CENSORSHIP_RESILIENCE)
+        if atype in (
+            "CENSORSHIP_STABLECOIN",
+            "CENSORSHIP_BUILDER",
+            "CENSORSHIP_RPC",
+            "CENSORSHIP_RELAYER",
+        ):
+            attack = {
+                **attack,
+                "features": {
+                    **(attack.get("features") or {}),
+                    "asset_fallback": attack.get("asset_fallback") or "ETH_NATIVE",
+                },
+            }
         entry = {"id": str(uuid.uuid4())[:8], "stored_at": datetime.now(timezone.utc).isoformat(),
-                 "type": attack.get("type", "UNKNOWN"), "features": attack.get("features", {}),
+                 "type": atype, "features": attack.get("features", {}),
                  "outcome": attack.get("outcome", "UNKNOWN")}
         if store:
             self._attack_db.append(entry)
@@ -994,7 +1144,7 @@ class SwarmLearningAdapter:
                 "training_rounds": 10, "improvement_pct": round(random_like(2.0, 8.0), 1)}
 
     # 6.6
-    def feature_extractor(self, request: dict) -> dict:
+    def feature_extractor(self, request: dict, *, persist_embedding: dict = None) -> dict:
         features = {
             "ip_prefix": request.get("source_ip", "0.0.0.0").rsplit(".", 1)[0],
             "country": request.get("country", "XX"),
@@ -1004,14 +1154,49 @@ class SwarmLearningAdapter:
             "request_hour": datetime.now(timezone.utc).hour,
             "endpoint_depth": len(request.get("endpoint", "/").split("/")),
         }
-        return {"features": features, "feature_count": len(features), "feature_hash": hashlib.sha256(str(features).encode()).hexdigest()[:12]}
+        out = {
+            "features": features,
+            "feature_count": len(features),
+            "feature_hash": hashlib.sha256(str(features).encode()).hexdigest()[:12],
+        }
+        if self.embedding_adapter is not None and persist_embedding:
+            try:
+                stored = self.embedding_adapter.store_embedding(**persist_embedding)
+                out["embedding"] = stored.get("artifacts", [{}])[0] if stored.get("status") == "completed" else stored
+            except Exception as exc:  # noqa: BLE001
+                self.logger.warn(f"embedding store skipped: {exc}")
+                out["embedding_error"] = str(exc)
+        # Relayer health metrics (optional)
+        if self.relayer_adapter is not None and request.get("relayer_name"):
+            try:
+                health = self.relayer_adapter.record_health(
+                    relayer_name=request["relayer_name"],
+                    chain_id=int(request.get("chain_id", 1)),
+                    asset_symbol=request.get("asset_symbol", "ETH"),
+                    throughput_rate=float(request.get("throughput_rate", 0)),
+                    drop_rate=float(request.get("drop_rate", 0)),
+                    observed_by_user_id=request.get("user_id"),
+                )
+                if health.get("status") == "completed":
+                    out["relayer_health"] = health["artifacts"][0]
+            except Exception as exc:  # noqa: BLE001
+                self.logger.warn(f"relayer health skipped: {exc}")
+                out["relayer_error"] = str(exc)
+        return out
 
     # 6.7
     def model_version_manager(self, action: str = "check") -> dict:
         if action == "increment":
             self._model_version += 1
-        return {"model_version": self._model_version, "action": action,
-                "last_updated": datetime.now(timezone.utc).isoformat()}
+        out = {
+            "model_version": self._model_version,
+            "action": action,
+            "last_updated": datetime.now(timezone.utc).isoformat(),
+        }
+        if self.embedding_adapter is not None:
+            out["embedding_model"] = getattr(self.embedding_adapter, "default_model", None)
+            out["embedding_dim"] = getattr(self.embedding_adapter, "default_dim", None)
+        return out
 
     # 6.8
     def human_feedback_integrator(self, feedback: dict) -> dict:
@@ -1285,18 +1470,65 @@ class DefenseOrchestrator:
       Perimeter → Radar → Classifier → Response → Honeypot → Learning → Intel → Dashboard
     """
 
-    def __init__(self, user_id: str = "default"):
+    def __init__(self, user_id: str = "default", threat_session=None):
         self.user_id = user_id
         self.logger = JSONLogger("DefenseOrchestrator", user_id)
         self.blacklist = IPBlacklist()
+        self.threat_session = threat_session
+        self.sensitivity = None
+        self.radar_store = None
+        self.embedding_adapter = None
+        self.incident_adapter = None
+        self.sanctions_adapter = None
+        self.relayer_adapter = None
+        self.censorship_adapter = None
 
-        # 9 Agenten
-        self.perimeter = PerimeterGatewayDefender(self.logger, self.blacklist)
-        self.radar = SwarmDetectionRadar(self.logger)
-        self.classifier = ThreatClassifierEngine(self.logger)
-        self.response = ActiveResponseCoordinator(self.logger, self.blacklist)
+        if threat_session is not None:
+            from agents_b2g.defense.threat_engine.censorship_adapters import (
+                CensorshipBypassAdapter,
+                RelayerHealthAdapter,
+                SanctionsScreeningAdapter,
+            )
+            from agents_b2g.defense.threat_engine.classifier_adapter import (
+                ClassifierIncidentAdapter,
+            )
+            from agents_b2g.defense.threat_engine.learning_adapter import (
+                LearningEmbeddingAdapter,
+            )
+            from agents_b2g.defense.threat_engine.radar_adapter import (
+                RadarThreatStoreAdapter,
+            )
+            from agents_b2g.defense.threat_engine.sensitivity_lifecycle import (
+                SensitivityLifecycle,
+            )
+
+            self.radar_store = RadarThreatStoreAdapter(threat_session, self.logger)
+            self.embedding_adapter = LearningEmbeddingAdapter(threat_session, self.logger)
+            self.incident_adapter = ClassifierIncidentAdapter(threat_session, self.logger)
+            self.sanctions_adapter = SanctionsScreeningAdapter(threat_session, self.logger)
+            self.relayer_adapter = RelayerHealthAdapter(threat_session, self.logger)
+            self.censorship_adapter = CensorshipBypassAdapter(threat_session, self.logger)
+            self.sensitivity = SensitivityLifecycle(
+                self.radar_store, observed_by_user_id=user_id
+            )
+
+        # 9 Agenten (adapters injected at subagent-host level)
+        self.perimeter = PerimeterGatewayDefender(
+            self.logger, self.blacklist, sanctions_adapter=self.sanctions_adapter
+        )
+        self.radar = SwarmDetectionRadar(self.logger, threat_store=self.radar_store)
+        self.classifier = ThreatClassifierEngine(
+            self.logger, incident_adapter=self.incident_adapter
+        )
+        self.response = ActiveResponseCoordinator(
+            self.logger, self.blacklist, censorship_adapter=self.censorship_adapter
+        )
         self.honeypot = DeceptionAndHoneypotFactory(self.logger)
-        self.learning = SwarmLearningAdapter(self.logger)
+        self.learning = SwarmLearningAdapter(
+            self.logger,
+            embedding_adapter=self.embedding_adapter,
+            relayer_adapter=self.relayer_adapter,
+        )
         self.intel = ExternalIntelAggregator(self.logger)
         self.dashboard = DefenseMetricsDashboard(self.logger, user_id)
 
@@ -1309,11 +1541,18 @@ class DefenseOrchestrator:
         except Exception:
             self.event_bus = None
 
+    @staticmethod
+    def estimate_s_tau(max_confidence: float) -> float:
+        """Operational S(τ) proxy until Wave-38 CTE is hooked: high conf → ≤0."""
+        return round(0.5 - float(max_confidence), 6)
+
     def process_external_request(self, request: dict, request_type: str = "general") -> dict:
         """Haupt-Pipeline: Verarbeitet eine externe Anfrage durch alle 8 Abwehr-Stufen."""
         pipeline_start = time.monotonic()
         source_ip = request.get("source_ip", "0.0.0.0")
         self._request_count += 1
+        # Tag provenance for threat-engine path
+        request = {**request, "user_id": request.get("user_id", self.user_id)}
         self._recent_requests.append(request)
 
         # Update baseline
@@ -1329,16 +1568,76 @@ class DefenseOrchestrator:
         # Step 2: Swarm Detection Radar
         recent = list(self._recent_requests)
         radar_result = _safe_call(self.logger, "2_Radar", self.radar.radar_orchestrator, recent, self._baseline_avg)
-        swarm_detected = radar_result.get("artifacts", [{}])[0].get("swarm_detected", False)
+        radar_art = (radar_result.get("artifacts") or [{}])[0] or {}
+        swarm_detected = radar_art.get("swarm_detected", False)
 
         if not swarm_detected:
             duration_ms = round((time.monotonic() - pipeline_start) * 1000, 1)
             return _ok("root", artifacts=[{"action": "ALLOWED", "reason": "NO_THREAT_DETECTED",
                                             "source_ip": source_ip, "duration_ms": duration_ms}])
 
+        # Threat-engine lifecycle: RAISED → classify/K-Fold proxy → gate → CLEARED
+        threat_engine_meta: dict = {}
+        sig_meta = radar_art.get("signature") or {}
+        signature_id = sig_meta.get("persisted_signature_id")
+        eoa_pseudo = sig_meta.get("eoa_pseudonym")
+
+        if self.sensitivity is not None and signature_id and eoa_pseudo:
+            raised = self.sensitivity.raise_sensitivity(
+                signature_id=int(signature_id),
+                eoa_pseudonym=eoa_pseudo,
+                kfold_sensitivity=2.0,
+                notes="orchestrator:swarm_detected",
+            )
+            threat_engine_meta["sensitivity_raised"] = raised.get("artifacts", [{}])[0]
+
         # Step 3: Threat Classification
-        class_result = _safe_call(self.logger, "3_Classifier", self.classifier.classifier_orchestrator, recent, request_type)
+        class_result = _safe_call(
+            self.logger,
+            "3_Classifier",
+            self.classifier.classifier_orchestrator,
+            recent,
+            request_type,
+        )
         threat = class_result.get("artifacts", [{}])[0]
+        s_tau = self.estimate_s_tau(float(threat.get("max_confidence") or 0))
+        threat_engine_meta["s_tau"] = s_tau
+
+        # K-Fold proxy → Gatekeeper coupling (SQL discipline), then CLEARED
+        if self.incident_adapter is not None and signature_id and eoa_pseudo:
+            status = "BLOCKED" if s_tau <= 0 else "RELEASED"
+            action = "GATE_BLOCKED" if status == "BLOCKED" else "GATE_RELEASED"
+            couple = self.incident_adapter.record_gate_coupling(
+                signature_id=int(signature_id),
+                eoa_pseudonym=eoa_pseudo,
+                action_type=action,
+                agent_x_signal_status=status,
+                block_cause="SWARM_S_TAU" if status == "BLOCKED" else None,
+                s_tau=s_tau,
+                kfold_sensitivity=2.0,
+                gatekeeper_job_id=f"w28-{self._request_count}",
+                observed_by_user_id=self.user_id,
+                notes="orchestrator:kfold_proxy",
+            )
+            threat_engine_meta["gate_coupling"] = (
+                couple.get("artifacts", [{}])[0]
+                if couple.get("status") == "completed"
+                else couple
+            )
+            threat["gate_coupling"] = threat_engine_meta["gate_coupling"]
+
+        if self.sensitivity is not None and signature_id and signature_id in {
+            o.signature_id for o in self.sensitivity.open_raises()
+        }:
+            cleared = self.sensitivity.clear_sensitivity(
+                signature_id=int(signature_id),
+                notes="orchestrator:post_gate",
+            )
+            threat_engine_meta["sensitivity_cleared"] = cleared.get("artifacts", [{}])[0]
+            try:
+                self.sensitivity.assert_all_cleared()
+            except AssertionError as exc:
+                self.logger.warn(str(exc))
 
         # Step 4: Active Response
         amount = float(request.get("amount_eur", 0))
@@ -1378,6 +1677,7 @@ class DefenseOrchestrator:
             "threat": threat,
             "response": resp_result.get("artifacts", [{}])[0],
             "duration_ms": duration_ms,
+            "threat_engine": threat_engine_meta,
             "pipeline_steps": {
                 "1_perimeter": gw_result["status"],
                 "2_radar": radar_result["status"],
