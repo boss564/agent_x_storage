@@ -1,0 +1,305 @@
+{
+  "schema": "kanten_ledger_v1",
+  "draft": "docs/KANTEN_LEDGER_v1_DRAFT.md",
+  "status": "ARCH_BINDEND",
+  "not_a_study_sweep": true,
+  "harking_guard": "PASS candidates must not be κ-tested on this dataset. Follow-up = new Pre-Reg + new seeds. Sealed E_ij / partnerselect artifacts remain locked.",
+  "params": {
+    "seeds": [
+      20261201,
+      20261202,
+      20261203
+    ],
+    "warmup": 32,
+    "cycles": 512,
+    "kappa": 0.0,
+    "gamma": 0.05,
+    "majority": 2,
+    "mae_min": 0.05,
+    "rho_max": 0.9
+  },
+  "aggregation": {
+    "majority_threshold": 2,
+    "candidate_seed_counts": {
+      "interaction_count": 3,
+      "avg_latency": 3
+    },
+    "near_miss_seed_counts": {},
+    "candidates_majority": [
+      "avg_latency",
+      "interaction_count"
+    ],
+    "near_miss_majority": [],
+    "outcome": "LEDGER_SCREEN_PASS"
+  },
+  "outcome": "LEDGER_SCREEN_PASS",
+  "candidates": [
+    "avg_latency",
+    "interaction_count"
+  ],
+  "near_miss": [],
+  "per_seed": [
+    {
+      "run_seed": 20261201,
+      "warmup": 32,
+      "cycles": 512,
+      "kappa": 0.0,
+      "n_edges": 99,
+      "n_sticky": 64,
+      "components": [
+        {
+          "component": "interaction_count",
+          "mae": 1.404971,
+          "median_abs_rho": 0.155926,
+          "n_sticky": 64,
+          "n_corr": 64,
+          "flags": {
+            "S_S": true,
+            "S_G": true,
+            "candidate": true,
+            "near_miss": false
+          },
+          "pass": true
+        },
+        {
+          "component": "bilateral_balance",
+          "mae": 89524.280285,
+          "median_abs_rho": null,
+          "n_sticky": 64,
+          "n_corr": 9,
+          "flags": {
+            "S_S": true,
+            "S_G": false,
+            "candidate": false,
+            "near_miss": false
+          },
+          "pass": false
+        },
+        {
+          "component": "trust_score",
+          "mae": 0.2927,
+          "median_abs_rho": 0.952968,
+          "n_sticky": 64,
+          "n_corr": 64,
+          "flags": {
+            "S_S": true,
+            "S_G": false,
+            "candidate": false,
+            "near_miss": false
+          },
+          "pass": false
+        },
+        {
+          "component": "avg_latency",
+          "mae": 0.248201,
+          "median_abs_rho": 0.348407,
+          "n_sticky": 64,
+          "n_corr": 64,
+          "flags": {
+            "S_S": true,
+            "S_G": true,
+            "candidate": true,
+            "near_miss": false
+          },
+          "pass": true
+        },
+        {
+          "component": "edge_risk",
+          "mae": 0.004053,
+          "median_abs_rho": null,
+          "n_sticky": 64,
+          "n_corr": 7,
+          "flags": {
+            "S_S": false,
+            "S_G": false,
+            "candidate": false,
+            "near_miss": false
+          },
+          "pass": false
+        }
+      ],
+      "candidates": [
+        "interaction_count",
+        "avg_latency"
+      ],
+      "near_miss": [],
+      "seed_pass": true,
+      "elapsed_s": 5.97
+    },
+    {
+      "run_seed": 20261202,
+      "warmup": 32,
+      "cycles": 512,
+      "kappa": 0.0,
+      "n_edges": 99,
+      "n_sticky": 64,
+      "components": [
+        {
+          "component": "interaction_count",
+          "mae": 1.428034,
+          "median_abs_rho": 0.155926,
+          "n_sticky": 64,
+          "n_corr": 64,
+          "flags": {
+            "S_S": true,
+            "S_G": true,
+            "candidate": true,
+            "near_miss": false
+          },
+          "pass": true
+        },
+        {
+          "component": "bilateral_balance",
+          "mae": 100247.333044,
+          "median_abs_rho": null,
+          "n_sticky": 64,
+          "n_corr": 9,
+          "flags": {
+            "S_S": true,
+            "S_G": false,
+            "candidate": false,
+            "near_miss": false
+          },
+          "pass": false
+        },
+        {
+          "component": "trust_score",
+          "mae": 0.287904,
+          "median_abs_rho": 0.952968,
+          "n_sticky": 64,
+          "n_corr": 64,
+          "flags": {
+            "S_S": true,
+            "S_G": false,
+            "candidate": false,
+            "near_miss": false
+          },
+          "pass": false
+        },
+        {
+          "component": "avg_latency",
+          "mae": 0.255074,
+          "median_abs_rho": 0.348407,
+          "n_sticky": 64,
+          "n_corr": 64,
+          "flags": {
+            "S_S": true,
+            "S_G": true,
+            "candidate": true,
+            "near_miss": false
+          },
+          "pass": true
+        },
+        {
+          "component": "edge_risk",
+          "mae": 0.004053,
+          "median_abs_rho": null,
+          "n_sticky": 64,
+          "n_corr": 7,
+          "flags": {
+            "S_S": false,
+            "S_G": false,
+            "candidate": false,
+            "near_miss": false
+          },
+          "pass": false
+        }
+      ],
+      "candidates": [
+        "interaction_count",
+        "avg_latency"
+      ],
+      "near_miss": [],
+      "seed_pass": true,
+      "elapsed_s": 5.14
+    },
+    {
+      "run_seed": 20261203,
+      "warmup": 32,
+      "cycles": 512,
+      "kappa": 0.0,
+      "n_edges": 99,
+      "n_sticky": 64,
+      "components": [
+        {
+          "component": "interaction_count",
+          "mae": 1.488594,
+          "median_abs_rho": 0.155926,
+          "n_sticky": 64,
+          "n_corr": 64,
+          "flags": {
+            "S_S": true,
+            "S_G": true,
+            "candidate": true,
+            "near_miss": false
+          },
+          "pass": true
+        },
+        {
+          "component": "bilateral_balance",
+          "mae": 100247.333044,
+          "median_abs_rho": null,
+          "n_sticky": 64,
+          "n_corr": 9,
+          "flags": {
+            "S_S": true,
+            "S_G": false,
+            "candidate": false,
+            "near_miss": false
+          },
+          "pass": false
+        },
+        {
+          "component": "trust_score",
+          "mae": 0.317803,
+          "median_abs_rho": 0.952968,
+          "n_sticky": 64,
+          "n_corr": 64,
+          "flags": {
+            "S_S": true,
+            "S_G": false,
+            "candidate": false,
+            "near_miss": false
+          },
+          "pass": false
+        },
+        {
+          "component": "avg_latency",
+          "mae": 0.267189,
+          "median_abs_rho": 0.348407,
+          "n_sticky": 64,
+          "n_corr": 64,
+          "flags": {
+            "S_S": true,
+            "S_G": true,
+            "candidate": true,
+            "near_miss": false
+          },
+          "pass": true
+        },
+        {
+          "component": "edge_risk",
+          "mae": 0.004053,
+          "median_abs_rho": null,
+          "n_sticky": 64,
+          "n_corr": 7,
+          "flags": {
+            "S_S": false,
+            "S_G": false,
+            "candidate": false,
+            "near_miss": false
+          },
+          "pass": false
+        }
+      ],
+      "candidates": [
+        "interaction_count",
+        "avg_latency"
+      ],
+      "near_miss": [],
+      "seed_pass": true,
+      "elapsed_s": 5.12
+    }
+  ],
+  "elapsed_s_total": 16.23
+}
