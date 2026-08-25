@@ -26,14 +26,16 @@ GoBD-WORM. Ableitung von Gegenmaßnahmen — **keine** neue Emergenzfrage.
 
 | Vektor | Quantenspezifisch überlegen? | Begründung |
 |--------|------------------------------|------------|
-| **Shor** | **Ja** | Bricht RSA / ECC / DH asymmetrisch |
+| **Shor** (inkl. kurvenbasierte SNARK-Soundness) | **Ja** | Bricht RSA / ECC / DH; trifft auch pairing-basierte Beweise |
+| Inverse Rekonstruktion | **Nein** | Zeitreihen / ML — klassisch |
+| Timing-Poisoning (Delay Attacks auf \(\ell_{ij}\)) | **Nein** | Aktiver Side-Channel in verteilten Systemen |
+| Sybil über `interaction_count` | **Nein** | Spam ohne Volumenbezug |
 | Quantensensorik | Nein (operativ) | Physische Nähe / klassische Sensorik |
 | Grover auf Graph-Cut | **Nein** | Narrative Ausschmückung; Min-Cut / Betweenness klassisch polynomial |
-| Inverse Rekonstruktion | **Nein** | Zeitreihen / ML — klassisch |
 
-Nur Shor ist nachweislich quantenspezifisch. Alles andere als „Quantenbedrohung“ zu
-verkaufen, wäre dieselbe Falle wie der Eingangstext: Quantencomputer als Mythos statt
-als Krypto-Brecher.
+Nur Shor (und damit verwandte kurvenbasierte Annahmen) ist nachweislich
+quantenspezifisch. Alles andere als „Quantenbedrohung“ zu verkaufen, wäre dieselbe
+Falle wie der Eingangstext: Quantencomputer als Mythos statt als Krypto-Brecher.
 
 ---
 
@@ -67,9 +69,13 @@ Vektor 1 (Inverse Rekonstruktion) stehen.
 | Prio | Vektor | Schwere | Quantenspez. | Kernaussage |
 |-----:|--------|---------|:------------:|-------------|
 | **1** | Inverse Rekonstruktion | **Hoch** | nein | Ledger-Historie → Verhaltensvorhersage |
-| **2** | Shor + Harvest-now-decrypt-later | **Mittel** | **ja** | Heute sammeln, später brechen / langfristige Sensibilität |
+| **1** | Timing-Poisoning (Delay Attacks) | **Hoch** | nein | Manipuliertes \(\ell_{ij}\) steuert abgeleitete Schwellen / \(\theta\) |
+| **2** | Shor + HN-DL (+ SNARK-Soundness) | **Mittel** | **ja** | Harvest now; ab 2030+ Asymmetrie + pairing-SNARKs |
+| **2** | Sybil über Interaktionszählung | **Mittel** | nein | `interaction_count` ohne Volumenbezug spam-bar |
 | **3** | Graph-Cut / Mesh-Lahmlegung | Mittel | nein | Klassische Optimierung, nicht Grover |
 | **4** | Physische OPSEC / Sensorik | Niedrig–mittel | nein | Überwachung, nicht „Quantenasphalt“ |
+
+Entmythologisiert (kein eigener Schweregrad): Grover, Quantensensorik.
 
 ---
 
@@ -89,9 +95,9 @@ Komponenten laut `KANTEN_LEDGER_v1` (`COMPONENT_NAMES`):
 
 | Feld | Identifizierend? | Rauschbar? | Retention / WORM | Gegenmaßnahme (konkret) |
 |------|:----------------:|:----------:|------------------|-------------------------|
-| **`avg_latency`** | **Hoch** (partnerselektiv, Timing) | Ja (additives / multiplikatives Rauschen, EWMA-Jitter) | Betriebsmetrik — nicht GoBD-pflichtig wie Buchung | Differential Privacy / Laplace auf Export; Aggregation (Bins); kein Roh-Export an Dritte |
-| **`interaction_count`** | **Hoch** (Frequenz, Sticky) | Ja (Rounding, Top-k Truncation) | Betriebsmetrik | K-Anonymität über Zeitfenster; Cap + Noise |
-| `trust_score` (α,β) | Mittel | Ja | Intern | Nur abgeleitete Buckets exportieren |
+| **`avg_latency`** | **Hoch** (partnerselektiv, Timing) | Ja (Export: Noise; **Intake:** Trimmed Mean / Median — M7) | Betriebsmetrik — nicht GoBD-pflichtig wie Buchung | DP auf Export; **kein** Roh-EWMA allein gegen Delay Attacks (→ §3.5 / M7) |
+| **`interaction_count`** | **Hoch** (Frequenz, Sticky) | Ja (Rounding, Top-k Truncation) | Betriebsmetrik | Cap + Noise; **nicht** allein Trust steuern (→ §3.6 / M9) |
+| `trust_score` (α,β) | Mittel | Ja | Intern | An BHO-Volumen koppeln (M9); Buckets im Export |
 | `bilateral_balance` | **Hoch** (Wertfluss) | Eingeschränkt (BHO-Invariante!) | **GoBD / BHO** — WORM, Δ=0 | **Nicht** wegrauschen; Pseudonymisierung der Party-IDs; getrennte Audit- vs. Ops-Sichten |
 | `edge_risk` | Mittel | Ja | Intern | Abgeleiteter Score, kurze TTL |
 | Party-IDs \(i,j\) | **Hoch** | Nein (Identität) | GoBD-Bezug möglich | Pseudonyme / DIDs; getrennte Mapping-Tabelle mit strikter ACL |
@@ -118,6 +124,36 @@ Selbst mit DP bleibt Graphstruktur (wer mit wem jemals interagierte) schwer zu
 verbergen. Mesh-Redundanz und Rollenrotation mindern Nutzen der Vorhersage, löschen
 sie nicht.
 
+### 3.5 Timing-Poisoning — aktiver Side-Channel auf \(\ell_{ij}\) (Prio 1)
+
+**Angriff:** Verzögerte oder künstlich gestreckte Antworten verzerren
+`avg_latency` (EWMA in `LedgerBook.update`). Weil \(\ell_{ij}\) abgeleitete
+Reaktions-/Schwellengrößen speist (u. a. \(\theta\)-Skalierung in \(R_{ij}\),
+Intervallmodulation), ist das **kein** bloßes Leak, sondern ein **aktiver**
+Steuerkanal.
+
+**Gegenmaßnahme M7:** Intake-Robustheit statt nur Export-Noise:
+
+- Latenzproben pro Kante als Fenster speichern (nicht nur EWMA-Punkt).  
+- **Trimmed Mean** oder **Median** über das Fenster für das kanonische
+  \(\ell_{ij}\); EWMA höchstens als sekundärer Trend.  
+- Ausreißer (z. B. > k·MAD) verwerfen oder in `edge_risk` eskalieren, nicht in
+  \(\ell\) übernehmen.  
+- Anker: `agents_b2g/emergence/kanten_ledger.py` (`LATENCY_EWMA` heute = 0.3).
+
+### 3.6 Sybil über `interaction_count` (Prio 2)
+
+**Angriff:** Viele billige Interaktionen ohne Wertfluss blähen
+`interaction_count` und damit indirekt Trust/Sticky auf.
+
+**Gegenmaßnahme M9:** `trust_score` an **BHO-Volumen** koppeln:
+
+- Trust-Update nur (oder dominant), wenn die Kante einen Settlement-Bezug mit
+  \(\Delta \neq 0\) (echte Buchungsbewegung) hat — Spam ohne Volumen bleibt teuer
+  bzw. wirkungslos.  
+- `interaction_count` bleibt Ops-Metrik; steuert Trust nicht allein.  
+- Anker: Ledger `trust_score` (α/β) + BHO-Invariante (Treasury / Clearing).
+
 ---
 
 ## 4. Sekundär — Shor und Harvest-now-decrypt-later
@@ -140,20 +176,42 @@ heute und warten. Das ist **nicht** dasselbe wie „Shor ist morgen da“.
 | Session-Tokens, kurzlebige Ops | Niedrig | Klassisch akzeptabel bis Migrationsfenster |
 | HSM-Signaturen (NitroKey / SoftHSM) | Hoch (Integrität) | ML-DSA / Dilithium-Pfad (Wave 33 bereits spezifiziert) |
 | Z3-Proof-Artefakte | Mittel (Integrität > Geheimhaltung) | Signatur-PQC; Inhalt oft ohnehin verifizierbar |
+| ZK-Settlement (Groth16/PLONK) | **Hoch (Soundness)** | **M8:** Migration Richtung STARK / hash-basiert |
 
-### 4.3 Bestehende Module
+### 4.3 SNARK-Soundness unter Shor (M8, Prio 2)
+
+Kurvenbasierte SNARKs (Groth16, PLONK auf pairing-freundlichen Kurven) verlieren
+unter Shor nicht nur Vertraulichkeit von Setup-Material, sondern **Soundness**:
+gefälschte Beweise werden möglich. Das ist strengere Schadenklasse als
+„Ciphertext später lesen“.
+
+| Heute in Agent X | Risiko | Zielbild |
+|------------------|--------|----------|
+| Settlement / Protocol: `Groth16_BN254` | Soundness-Bruch ab Shor-Kipppunkt | Hash-basierte STARKs (FRI) |
+| Wave 33: `zk_compression` (STARK/FRI, SHA3) | bereits PQ-freundlich spezifiziert | Produktionspfad ausbauen |
+| Valhalla / Privacy Groth16 (Wave 25) | gleiches Kurvenrisiko | STARK- oder hash-basierte Alternative planen |
+
+**Zeithorizont:** Kipppunkt typ. **2030+** — architektonisch **jetzt** planen
+(Beweisformat, Verifier on-chain/off-chain, Gas/Größe), Migration gestaffelt.
+Kein Grund, morgen alle Groth16-Demos zu löschen; Grund, keine neuen
+Langzeit-Invarianten ausschließlich an pairing-SNARKs zu binden.
+
+### 4.4 Bestehende Module
 
 - Wave 33: `PQCSignerAgent` — ML-DSA-87 (Dilithium-5), ML-KEM-1024 (Kyber),
   SLH-DSA (SPHINCS+); Backend liboqs oder SHA3-Simulation  
+- Wave 33: ZK-STARK-Kompression (`zk_compression.py`) — Anknüpfungspunkt M8  
 - Bunker HSM: ECDSA heute — **Gap:** PQC-Signing im HSM-Adapter noch nicht
   Produktionsstandard  
 - Modus `POST_QUANTUM` im Survival-Orchestrator: Umschaltung spezifiziert  
+- Settlement/Protocol: noch `Groth16_BN254` — **Gap:** M8  
 
-### 4.4 Gap (ehrlich)
+### 4.5 Gap (ehrlich)
 
 Spezifikation und Demo/Simulation ≠ flächendeckende PQC in allen Kanälen
 (Bridge, SEPA-Meta, Dashboard-TLS, Submodul-Ökosystem). HN-DL verlangt eine
 **Kanal-Inventur**: welche Ciphertexte landen dauerhaft im WORM?
+Zusätzlich: welche **Beweisformate** müssen nach 2030 noch sound sein?
 
 ---
 
@@ -183,14 +241,17 @@ Relevant für Off-Grid (Wave 33), nicht für Ledger-κ.
 ## 7. Kombinierter Angreifer (realistischstes Szenario)
 
 ```text
-Heute:   Ledger-/Telemetry-Leak  →  ML-Vorhersage (Vektor 1)
-         + Mitschnitt ciphertexts →  HN-DL-Archiv (Vektor 2)
-2030+:   Shor auf geharvestete Asymmetrie  →  Langzeitgeheimnisse offen
-parallel: Graph-Cut auf bekannter Topologie →  gezielte Disruption (Vektor 3)
+Heute:   Delay Attack auf ℓ_ij     →  Timing-Poisoning (M7-Fläche)
+         + Ledger-Leak             →  ML-Vorhersage (Rekonstruktion)
+         + Spam-Interaktionen      →  Sybil ohne Volumen (M9-Fläche)
+         + Mitschnitt ciphertexts  →  HN-DL-Archiv
+2030+:   Shor auf Asymmetrie       →  Langzeitgeheimnisse offen
+         + Shor auf pairing-SNARK  →  Soundness-Bruch (M8-Fläche)
+parallel: Graph-Cut auf Topologie  →  Disruption (klassisch)
 ```
 
-Die gefährliche Kombination ist **Krypto-Brechen (zeitverzögert) + Verhaltensanalyse
-(jetzt)** — nicht Quantensensorik + Grover.
+Die gefährliche Kombination ist **aktives Timing + Verhaltensanalyse +
+zeitverzögertes Krypto-/Beweisbrechen** — nicht Quantensensorik + Grover.
 
 ---
 
@@ -201,8 +262,11 @@ Die gefährliche Kombination ist **Krypto-Brechen (zeitverzögert) + Verhaltensa
 | M1 | Export-Policy: `avg_latency` / `interaction_count` nur aggregiert + Noise | 1 | Ledger / Ops-API |
 | M2 | Trennung Audit-WORM (Balance) vs. Ops-Timing (räuschbar) | 1 | GoBD / BHO |
 | M3 | Party-ID-Pseudonymisierung in allen Nicht-Audit-Exports | 1 | DSGVO / DID |
+| **M7** | **Trimmed Mean / Median-Filter für Intake-`ℓ_ij`** (Delay Attacks) | **1** | `kanten_ledger.py` |
 | M4 | Kanal-Inventur HN-DL (was liegt 10–15 J. verschlüsselt im Archiv?) | 2 | Bridge / GoBD / Backup |
 | M5 | Hybride KEM für Langzeitarchive; HSM-Pfad Richtung ML-DSA | 2 | Wave 33 / Bunker |
+| **M8** | **SNARK → STARK** (Soundness unter Shor; Wave-33-Pfad ausbauen) | **2** | Settlement / ZK / Survival |
+| **M9** | **Trust-Score an BHO-Volumen** (\(\Delta \neq 0\)); kein Spam-Trust | **2** | Ledger Trust + BHO |
 | M6 | Mesh-/Clearing-Redundanz gegen klassische Cuts | 3 | Survival / Clearing |
 
 Keine dieser Maßnahmen ist eine Emergenz-Studie. Umsetzung = Engineering / Compliance.
@@ -216,7 +280,9 @@ Keine dieser Maßnahmen ist eine Emergenz-Studie. Umsetzung = Engineering / Comp
 | `docs/KOPPLUNG_SERIE_ABSCHLUSS.md` | Surface-Kartographie (partnerselektive Kanten) |
 | `agents_b2g/emergence/kanten_ledger.py` | \(E_{ij}\) 5-Komponenten |
 | `agents_b2g/survival/subagents/pqc_signer.py` | NIST PQC (Dilithium / Kyber / SPHINCS+) |
+| `agents_b2g/survival/subagents/zk_compression.py` | STARK/FRI — Anker M8 |
 | `agents_b2g/bunker/hsm_adapter.py` | HSM heute (ECDSA) — PQC-Gap |
+| `agents_b2g/settlement/` · `protocol.py` | Groth16 heute — Gap M8 |
 | Tag `v1.0-kopplung-serie-closed` | Serie versiegelt |
 
 ---
@@ -227,6 +293,8 @@ Keine dieser Maßnahmen ist eine Emergenz-Studie. Umsetzung = Engineering / Comp
 Dokument: docs/THREAT_MODEL_POST_QUANTUM_v0.md
 Typ:      Threat-Surface-Landkarte (Analyse)
 Nicht:    DRAFT / Pre-Reg / Sweep
-Fokus:    Primär Rekonstruktion (Feldmapping) · Sekundär Shor/HN-DL (Zeithorizonte)
-Disziplin: Quantenspezifisch nur Shor
+Vektoren: Rekonstruktion · Timing-Poisoning · Shor/HN-DL(+SNARK) · Sybil
+Roadmap:  M1–M9 (M7 Prio1 · M8/M9 Prio2)
+Entmythologisiert: Grover · Quantensensorik
+Disziplin: Quantenspezifisch nur Shor (+ pairing-SNARK-Soundness)
 ```
