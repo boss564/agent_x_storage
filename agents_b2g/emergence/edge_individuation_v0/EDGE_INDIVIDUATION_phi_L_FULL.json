@@ -1,0 +1,134 @@
+{
+  "schema": "edge_individuation_v0",
+  "mode": "phi_L",
+  "draft": "docs/EDGE_INDIVIDUATION_v0_DRAFT.md",
+  "not_a_pre_reg": true,
+  "no_rho_target": true,
+  "noise_is_positive_control_only": true,
+  "preferred_production": "phi_L",
+  "S_ij_production": "avg_latency_ij(t)",
+  "schicht_a_definition": "median |rho| vs swarm mean (not pairwise)",
+  "battery_required_later": "A && B && C",
+  "params": {
+    "seeds": [
+      20261401,
+      20261402,
+      20261403
+    ],
+    "warmup": 32,
+    "cycles": 512
+  },
+  "elapsed_s": 16.1,
+  "per_seed": [
+    {
+      "sigma_ell": 0.16786654555922026,
+      "n_sticky": 64,
+      "T": 512,
+      "tau_ticks_median": 11.0,
+      "tau_ticks_span": 63,
+      "sticky_S_raw_median_abs_rho": 0.964169,
+      "sticky_S_phi0_scale_median_abs_rho": 0.884521,
+      "sticky_S_phi1_delay_median_abs_rho": 0.966691,
+      "sticky_S_noise_ctrl_median_abs_rho": 0.672367,
+      "sticky_ell_median_abs_rho": 0.348407,
+      "sticky_S_phi_L_median_abs_rho": 0.348407,
+      "phi_L_below_0_90": true,
+      "n_corr": {
+        "raw": 64,
+        "phi0": 64,
+        "phi1": 64,
+        "noise": 64,
+        "ell": 64
+      },
+      "positive_control": {
+        "label": "SCREEN_SEES_NOISE",
+        "pass": true,
+        "note": "noise is control only \u2014 not a production path"
+      },
+      "preferred_production": "phi_L",
+      "production_note": "phi_L: S_ij(t)=avg_latency_ij(t) \u2014 ledger IS signal, not modulator; phi0/phi1 = failed Broadcast+Transform class",
+      "run_seed": 20261401,
+      "elapsed_s": 6.09,
+      "mode": "phi_L",
+      "production_signal": "avg_latency",
+      "S_ij_definition": "ell_ij(t)  # phi_L"
+    },
+    {
+      "sigma_ell": 0.16786654555922026,
+      "n_sticky": 64,
+      "T": 512,
+      "tau_ticks_median": 11.0,
+      "tau_ticks_span": 63,
+      "sticky_S_raw_median_abs_rho": 0.964169,
+      "sticky_S_phi0_scale_median_abs_rho": 0.884521,
+      "sticky_S_phi1_delay_median_abs_rho": 0.966691,
+      "sticky_S_noise_ctrl_median_abs_rho": 0.492382,
+      "sticky_ell_median_abs_rho": 0.348407,
+      "sticky_S_phi_L_median_abs_rho": 0.348407,
+      "phi_L_below_0_90": true,
+      "n_corr": {
+        "raw": 64,
+        "phi0": 64,
+        "phi1": 64,
+        "noise": 64,
+        "ell": 64
+      },
+      "positive_control": {
+        "label": "SCREEN_SEES_NOISE",
+        "pass": true,
+        "note": "noise is control only \u2014 not a production path"
+      },
+      "preferred_production": "phi_L",
+      "production_note": "phi_L: S_ij(t)=avg_latency_ij(t) \u2014 ledger IS signal, not modulator; phi0/phi1 = failed Broadcast+Transform class",
+      "run_seed": 20261402,
+      "elapsed_s": 5.0,
+      "mode": "phi_L",
+      "production_signal": "avg_latency",
+      "S_ij_definition": "ell_ij(t)  # phi_L"
+    },
+    {
+      "sigma_ell": 0.16786654555922026,
+      "n_sticky": 64,
+      "T": 512,
+      "tau_ticks_median": 11.0,
+      "tau_ticks_span": 63,
+      "sticky_S_raw_median_abs_rho": 0.964169,
+      "sticky_S_phi0_scale_median_abs_rho": 0.884521,
+      "sticky_S_phi1_delay_median_abs_rho": 0.966691,
+      "sticky_S_noise_ctrl_median_abs_rho": 0.715237,
+      "sticky_ell_median_abs_rho": 0.348407,
+      "sticky_S_phi_L_median_abs_rho": 0.348407,
+      "phi_L_below_0_90": true,
+      "n_corr": {
+        "raw": 64,
+        "phi0": 64,
+        "phi1": 64,
+        "noise": 64,
+        "ell": 64
+      },
+      "positive_control": {
+        "label": "SCREEN_SEES_NOISE",
+        "pass": true,
+        "note": "noise is control only \u2014 not a production path"
+      },
+      "preferred_production": "phi_L",
+      "production_note": "phi_L: S_ij(t)=avg_latency_ij(t) \u2014 ledger IS signal, not modulator; phi0/phi1 = failed Broadcast+Transform class",
+      "run_seed": 20261403,
+      "elapsed_s": 5.02,
+      "mode": "phi_L",
+      "production_signal": "avg_latency",
+      "S_ij_definition": "ell_ij(t)  # phi_L"
+    }
+  ],
+  "majority": {
+    "positive_control_pass_seeds": 3,
+    "screen_instrument_ok": true,
+    "instrument_label": "SCREEN_SEES_NOISE",
+    "phi_L_pass_seeds": 3,
+    "phi_L_mean_abs_rho": 0.348407,
+    "phi_L_all_below_0_90": true,
+    "step1_label": "PHI_L_SOURCE_PASS",
+    "step1_blocked": false,
+    "step2_blocked": true
+  }
+}

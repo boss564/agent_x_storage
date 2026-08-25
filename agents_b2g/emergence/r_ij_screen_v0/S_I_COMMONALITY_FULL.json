@@ -1,0 +1,70 @@
+{
+  "schema": "s_i_commonality_probe",
+  "draft": "docs/R_IJ_SCREEN_v0_DRAFT.md",
+  "not_a_pre_reg": true,
+  "params": {
+    "seeds": [
+      20261401,
+      20261402,
+      20261403
+    ],
+    "warmup": 32,
+    "cycles": 512
+  },
+  "elapsed_s": 15.9,
+  "per_seed": [
+    {
+      "n_agents": 27,
+      "n_sticky": 64,
+      "T": 512,
+      "median_abs_rho_S_vs_Sbar": 0.163874,
+      "median_abs_rho_S_pairwise": 0.049932,
+      "median_abs_rho_sticky_S_vs_ebar": 0.964169,
+      "median_abs_rho_sticky_ell_vs_ebar": 0.348407,
+      "n_corr_S": 27,
+      "n_corr_pair": 351,
+      "n_corr_sticky_S": 64,
+      "n_corr_ell": 64,
+      "common_input": true,
+      "label": "S_COMMON",
+      "run_seed": 20261401,
+      "elapsed_s": 5.83
+    },
+    {
+      "n_agents": 27,
+      "n_sticky": 64,
+      "T": 512,
+      "median_abs_rho_S_vs_Sbar": 0.163874,
+      "median_abs_rho_S_pairwise": 0.049932,
+      "median_abs_rho_sticky_S_vs_ebar": 0.964169,
+      "median_abs_rho_sticky_ell_vs_ebar": 0.348407,
+      "n_corr_S": 27,
+      "n_corr_pair": 351,
+      "n_corr_sticky_S": 64,
+      "n_corr_ell": 64,
+      "common_input": true,
+      "label": "S_COMMON",
+      "run_seed": 20261402,
+      "elapsed_s": 5.1
+    },
+    {
+      "n_agents": 27,
+      "n_sticky": 64,
+      "T": 512,
+      "median_abs_rho_S_vs_Sbar": 0.163874,
+      "median_abs_rho_S_pairwise": 0.049932,
+      "median_abs_rho_sticky_S_vs_ebar": 0.964169,
+      "median_abs_rho_sticky_ell_vs_ebar": 0.348407,
+      "n_corr_S": 27,
+      "n_corr_pair": 351,
+      "n_corr_sticky_S": 64,
+      "n_corr_ell": 64,
+      "common_input": true,
+      "label": "S_COMMON",
+      "run_seed": 20261403,
+      "elapsed_s": 4.95
+    }
+  ],
+  "majority_label": "S_COMMON",
+  "implication": "If S_COMMON: bottleneck = shared input / star fan-out; no reaction f_i can pass Schicht A. Next strand = topology, not another R-screen."
+}

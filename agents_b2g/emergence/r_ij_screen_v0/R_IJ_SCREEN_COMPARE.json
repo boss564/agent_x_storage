@@ -1,0 +1,16 @@
+{
+  "threshold_gamma_v01": {
+    "majority_label": "OFFSET_ONLY",
+    "pre_reg_allowed": false,
+    "A": 3,
+    "B": 3,
+    "C": 0
+  },
+  "sensitivity_gamma_v02": {
+    "majority_label": "RESPONSE_SCREEN_FAIL",
+    "pre_reg_allowed": false,
+    "A": 0,
+    "B": 3,
+    "C": 3
+  }
+}

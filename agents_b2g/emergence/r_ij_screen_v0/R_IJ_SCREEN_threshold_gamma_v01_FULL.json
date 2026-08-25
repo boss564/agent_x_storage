@@ -1,0 +1,2114 @@
+{
+  "schema": "r_ij_screen_v0",
+  "formula": "threshold_gamma_v01",
+  "draft": "docs/R_IJ_SCREEN_v0_DRAFT.md",
+  "not_a_pre_reg": true,
+  "no_kappa_sweep": true,
+  "harking_guard": "Sealed kopplung_* locked. Pre-Reg only if RESPONSE_HETEROGENEOUS (A\u2227B\u2227C).",
+  "params": {
+    "seeds": [
+      20261401,
+      20261402,
+      20261403
+    ],
+    "warmup": 32,
+    "cycles": 512,
+    "fast": false,
+    "ell_component": "avg_latency"
+  },
+  "elapsed_s": 16.2,
+  "per_seed": [
+    {
+      "run_seed": 20261401,
+      "warmup": 32,
+      "cycles": 512,
+      "kappa": 0.0,
+      "formula": "threshold_gamma_v01",
+      "component_ell": "avg_latency",
+      "gamma_source": "ledger:avg_latency",
+      "sigma_ell": 0.1666988103885077,
+      "n_edges": 99,
+      "n_sticky": 64,
+      "P_assignment": {
+        "C01-settlement": {
+          "P_index": 1,
+          "g": 0.009221,
+          "theta": 0.666667,
+          "sat": 0.05,
+          "a": 0.009221
+        },
+        "C02-staking": {
+          "P_index": 2,
+          "g": 0.046107,
+          "theta": 0.769231,
+          "sat": 0.03,
+          "a": 0.046107
+        },
+        "C03-burn-executor": {
+          "P_index": 3,
+          "g": 0.092213,
+          "theta": 0.833333,
+          "sat": 0.02,
+          "a": 0.092213
+        },
+        "C04-liquidity": {
+          "P_index": 4,
+          "g": 0.461066,
+          "theta": 0.166667,
+          "sat": 0.5,
+          "a": 0.461066
+        },
+        "C05-fee-distributor": {
+          "P_index": 5,
+          "g": 0.092213,
+          "theta": 0.5,
+          "sat": 0.1,
+          "a": 0.092213
+        },
+        "C06-gas-paymaster": {
+          "P_index": 6,
+          "g": 0.922131,
+          "theta": 0.285714,
+          "sat": 0.25,
+          "a": 0.922131
+        },
+        "C07-retention": {
+          "P_index": 7,
+          "g": 0.922131,
+          "theta": 0.333333,
+          "sat": 0.2,
+          "a": 0.922131
+        },
+        "C08-treasury": {
+          "P_index": 8,
+          "g": 1.844262,
+          "theta": 0.25,
+          "sat": 0.3,
+          "a": 1.844262
+        },
+        "C09-token-minter": {
+          "P_index": 9,
+          "g": 4.610655,
+          "theta": 0.090909,
+          "sat": 1.0,
+          "a": 4.610655
+        },
+        "E01-bho-checker": {
+          "P_index": 1,
+          "g": 0.009221,
+          "theta": 0.666667,
+          "sat": 0.05,
+          "a": 0.009221
+        },
+        "E02-z3-prover": {
+          "P_index": 2,
+          "g": 0.046107,
+          "theta": 0.769231,
+          "sat": 0.03,
+          "a": 0.046107
+        },
+        "E03-gobd-auditor": {
+          "P_index": 3,
+          "g": 0.092213,
+          "theta": 0.833333,
+          "sat": 0.02,
+          "a": 0.092213
+        },
+        "E04-compliance": {
+          "P_index": 4,
+          "g": 0.461066,
+          "theta": 0.166667,
+          "sat": 0.5,
+          "a": 0.461066
+        },
+        "E05-iot-verifier": {
+          "P_index": 5,
+          "g": 0.092213,
+          "theta": 0.5,
+          "sat": 0.1,
+          "a": 0.092213
+        },
+        "E06-qes-validator": {
+          "P_index": 6,
+          "g": 0.922131,
+          "theta": 0.285714,
+          "sat": 0.25,
+          "a": 0.922131
+        },
+        "E07-geofence": {
+          "P_index": 7,
+          "g": 0.922131,
+          "theta": 0.333333,
+          "sat": 0.2,
+          "a": 0.922131
+        },
+        "E08-fraud-detector": {
+          "P_index": 8,
+          "g": 1.844262,
+          "theta": 0.25,
+          "sat": 0.3,
+          "a": 1.844262
+        },
+        "E09-tax-auditor": {
+          "P_index": 9,
+          "g": 4.610655,
+          "theta": 0.090909,
+          "sat": 1.0,
+          "a": 4.610655
+        },
+        "P01-constructor": {
+          "P_index": 1,
+          "g": 0.009221,
+          "theta": 0.666667,
+          "sat": 0.05,
+          "a": 0.009221
+        },
+        "P02-roofing": {
+          "P_index": 2,
+          "g": 0.046107,
+          "theta": 0.769231,
+          "sat": 0.03,
+          "a": 0.046107
+        },
+        "P03-electrical": {
+          "P_index": 3,
+          "g": 0.092213,
+          "theta": 0.833333,
+          "sat": 0.02,
+          "a": 0.092213
+        },
+        "P04-solar": {
+          "P_index": 4,
+          "g": 0.461066,
+          "theta": 0.166667,
+          "sat": 0.5,
+          "a": 0.461066
+        },
+        "P05-water": {
+          "P_index": 5,
+          "g": 0.092213,
+          "theta": 0.5,
+          "sat": 0.1,
+          "a": 0.092213
+        },
+        "P06-hydrogen": {
+          "P_index": 6,
+          "g": 0.922131,
+          "theta": 0.285714,
+          "sat": 0.25,
+          "a": 0.922131
+        },
+        "P07-grain": {
+          "P_index": 7,
+          "g": 0.922131,
+          "theta": 0.333333,
+          "sat": 0.2,
+          "a": 0.922131
+        },
+        "P08-diesel": {
+          "P_index": 8,
+          "g": 1.844262,
+          "theta": 0.25,
+          "sat": 0.3,
+          "a": 1.844262
+        },
+        "P09-logistics": {
+          "P_index": 9,
+          "g": 4.610655,
+          "theta": 0.090909,
+          "sat": 1.0,
+          "a": 4.610655
+        }
+      },
+      "layer_a": {
+        "layer": "A",
+        "formula": "threshold_gamma_v01",
+        "mae_raw": 1.389771,
+        "mae_norm": 8.337018,
+        "median_abs_rho": 0.336665,
+        "n_corr": 64,
+        "flags": {
+          "S_S_norm": true,
+          "S_G": true
+        },
+        "pass": true,
+        "screen_raw": {
+          "component": "R_ij",
+          "mae": 1.389771,
+          "median_abs_rho": 0.336665,
+          "n_sticky": 64,
+          "n_corr": 64,
+          "flags": {
+            "S_S": true,
+            "S_G": true,
+            "candidate": true,
+            "near_miss": false
+          },
+          "pass": true
+        }
+      },
+      "layer_b": {
+        "layer": "B",
+        "formula": "threshold_gamma_v01",
+        "mean_delta_r": 0.956119,
+        "delta_min": 0.05,
+        "n_agents": 27,
+        "pass": true,
+        "per_agent": [
+          {
+            "agent_id": "P04-solar",
+            "P_index": 4,
+            "S_i": 0.670711,
+            "n_gamma": 2,
+            "gamma_span": 4.023488,
+            "delta_r": 0.670581
+          },
+          {
+            "agent_id": "P05-water",
+            "P_index": 5,
+            "S_i": 0.674479,
+            "n_gamma": 2,
+            "gamma_span": 4.046095,
+            "delta_r": 2.023048
+          },
+          {
+            "agent_id": "P01-constructor",
+            "P_index": 1,
+            "S_i": 0.596807,
+            "n_gamma": 2,
+            "gamma_span": 3.58015,
+            "delta_r": 2.386766
+          },
+          {
+            "agent_id": "P07-grain",
+            "P_index": 7,
+            "S_i": 0.653201,
+            "n_gamma": 2,
+            "gamma_span": 3.918453,
+            "delta_r": 1.306151
+          },
+          {
+            "agent_id": "E05-iot-verifier",
+            "P_index": 5,
+            "S_i": 0.15342,
+            "n_gamma": 14,
+            "gamma_span": 0.683049,
+            "delta_r": 0.148447
+          },
+          {
+            "agent_id": "E09-tax-auditor",
+            "P_index": 9,
+            "S_i": 0.154716,
+            "n_gamma": 14,
+            "gamma_span": 1.024912,
+            "delta_r": 0.023575
+          },
+          {
+            "agent_id": "P02-roofing",
+            "P_index": 2,
+            "S_i": 0.561826,
+            "n_gamma": 2,
+            "gamma_span": 3.370304,
+            "delta_r": 2.592541
+          },
+          {
+            "agent_id": "P08-diesel",
+            "P_index": 8,
+            "S_i": 0.614392,
+            "n_gamma": 2,
+            "gamma_span": 3.68564,
+            "delta_r": 0.92141
+          },
+          {
+            "agent_id": "E03-gobd-auditor",
+            "P_index": 3,
+            "S_i": 0.127458,
+            "n_gamma": 12,
+            "gamma_span": 0.804426,
+            "delta_r": 0.252712
+          },
+          {
+            "agent_id": "E08-fraud-detector",
+            "P_index": 8,
+            "S_i": 0.126254,
+            "n_gamma": 12,
+            "gamma_span": 0.965568,
+            "delta_r": 0.085488
+          },
+          {
+            "agent_id": "C05-fee-distributor",
+            "P_index": 5,
+            "S_i": 0.567331,
+            "n_gamma": 2,
+            "gamma_span": 3.403333,
+            "delta_r": 1.701666
+          },
+          {
+            "agent_id": "C06-gas-paymaster",
+            "P_index": 6,
+            "S_i": 0.567153,
+            "n_gamma": 2,
+            "gamma_span": 3.402261,
+            "delta_r": 0.972075
+          },
+          {
+            "agent_id": "P09-logistics",
+            "P_index": 9,
+            "S_i": 0.623916,
+            "n_gamma": 2,
+            "gamma_span": 3.742775,
+            "delta_r": 0.340252
+          },
+          {
+            "agent_id": "E02-z3-prover",
+            "P_index": 2,
+            "S_i": 0.107857,
+            "n_gamma": 10,
+            "gamma_span": 0.349506,
+            "delta_r": 0.094318
+          },
+          {
+            "agent_id": "E07-geofence",
+            "P_index": 7,
+            "S_i": 0.112032,
+            "n_gamma": 10,
+            "gamma_span": 0.519985,
+            "delta_r": 0.080694
+          },
+          {
+            "agent_id": "C03-burn-executor",
+            "P_index": 3,
+            "S_i": 0.567419,
+            "n_gamma": 2,
+            "gamma_span": 3.403857,
+            "delta_r": 2.836547
+          },
+          {
+            "agent_id": "C07-retention",
+            "P_index": 7,
+            "S_i": 0.570716,
+            "n_gamma": 2,
+            "gamma_span": 3.423634,
+            "delta_r": 1.141211
+          },
+          {
+            "agent_id": "P03-electrical",
+            "P_index": 3,
+            "S_i": 0.594155,
+            "n_gamma": 2,
+            "gamma_span": 3.564243,
+            "delta_r": 2.970203
+          },
+          {
+            "agent_id": "P06-hydrogen",
+            "P_index": 6,
+            "S_i": 0.594155,
+            "n_gamma": 2,
+            "gamma_span": 3.564243,
+            "delta_r": 1.018355
+          },
+          {
+            "agent_id": "E01-bho-checker",
+            "P_index": 1,
+            "S_i": 0.0964,
+            "n_gamma": 8,
+            "gamma_span": 0.552886,
+            "delta_r": 0.168031
+          },
+          {
+            "agent_id": "C02-staking",
+            "P_index": 2,
+            "S_i": 0.568193,
+            "n_gamma": 2,
+            "gamma_span": 0.0,
+            "delta_r": 0.0
+          },
+          {
+            "agent_id": "C08-treasury",
+            "P_index": 8,
+            "S_i": 0.567807,
+            "n_gamma": 2,
+            "gamma_span": 3.406183,
+            "delta_r": 0.851546
+          },
+          {
+            "agent_id": "E04-compliance",
+            "P_index": 4,
+            "S_i": 0.090086,
+            "n_gamma": 6,
+            "gamma_span": 0.695688,
+            "delta_r": 0.045632
+          },
+          {
+            "agent_id": "C09-token-minter",
+            "P_index": 9,
+            "S_i": 0.568317,
+            "n_gamma": 2,
+            "gamma_span": 3.409242,
+            "delta_r": 0.309931
+          },
+          {
+            "agent_id": "C01-settlement",
+            "P_index": 1,
+            "S_i": 0.566853,
+            "n_gamma": 2,
+            "gamma_span": 3.400465,
+            "delta_r": 2.266977
+          },
+          {
+            "agent_id": "C04-liquidity",
+            "P_index": 4,
+            "S_i": 0.568143,
+            "n_gamma": 2,
+            "gamma_span": 3.408198,
+            "delta_r": 0.568033
+          },
+          {
+            "agent_id": "E06-qes-validator",
+            "P_index": 6,
+            "S_i": 0.085193,
+            "n_gamma": 6,
+            "gamma_span": 0.228933,
+            "delta_r": 0.039012
+          }
+        ]
+      },
+      "layer_c": {
+        "layer": "C",
+        "formula": "threshold_gamma_v01",
+        "S1": 0.153695,
+        "S2": 0.617172,
+        "mean_abs_diff": 0.0,
+        "delta_min": 0.05,
+        "n_agents": 27,
+        "pass": false,
+        "per_agent": [
+          {
+            "agent_id": "P04-solar",
+            "P_index": 4,
+            "delta_r_S1": 0.670581,
+            "delta_r_S2": 0.670581,
+            "abs_diff": 0.0,
+            "b_i": 0.027783
+          },
+          {
+            "agent_id": "P05-water",
+            "P_index": 5,
+            "delta_r_S1": 2.023048,
+            "delta_r_S2": 2.023048,
+            "abs_diff": 0.0,
+            "b_i": 0.083349
+          },
+          {
+            "agent_id": "P01-constructor",
+            "P_index": 1,
+            "delta_r_S1": 2.386766,
+            "delta_r_S2": 2.386766,
+            "abs_diff": 0.0,
+            "b_i": 0.111133
+          },
+          {
+            "agent_id": "P07-grain",
+            "P_index": 7,
+            "delta_r_S1": 1.306151,
+            "delta_r_S2": 1.306151,
+            "abs_diff": 0.0,
+            "b_i": 0.055566
+          },
+          {
+            "agent_id": "E05-iot-verifier",
+            "P_index": 5,
+            "delta_r_S1": 0.148447,
+            "delta_r_S2": 0.148447,
+            "abs_diff": 0.0,
+            "b_i": 0.083349
+          },
+          {
+            "agent_id": "E09-tax-auditor",
+            "P_index": 9,
+            "delta_r_S1": 0.023575,
+            "delta_r_S2": 0.023575,
+            "abs_diff": 0.0,
+            "b_i": 0.015154
+          },
+          {
+            "agent_id": "P02-roofing",
+            "P_index": 2,
+            "delta_r_S1": 2.592541,
+            "delta_r_S2": 2.592541,
+            "abs_diff": 0.0,
+            "b_i": 0.12823
+          },
+          {
+            "agent_id": "P08-diesel",
+            "P_index": 8,
+            "delta_r_S1": 0.92141,
+            "delta_r_S2": 0.92141,
+            "abs_diff": 0.0,
+            "b_i": 0.041675
+          },
+          {
+            "agent_id": "E03-gobd-auditor",
+            "P_index": 3,
+            "delta_r_S1": 0.252712,
+            "delta_r_S2": 0.252712,
+            "abs_diff": 0.0,
+            "b_i": 0.138916
+          },
+          {
+            "agent_id": "E08-fraud-detector",
+            "P_index": 8,
+            "delta_r_S1": 0.085488,
+            "delta_r_S2": 0.085488,
+            "abs_diff": 0.0,
+            "b_i": 0.041675
+          },
+          {
+            "agent_id": "C05-fee-distributor",
+            "P_index": 5,
+            "delta_r_S1": 1.701666,
+            "delta_r_S2": 1.701666,
+            "abs_diff": 0.0,
+            "b_i": 0.083349
+          },
+          {
+            "agent_id": "C06-gas-paymaster",
+            "P_index": 6,
+            "delta_r_S1": 0.972075,
+            "delta_r_S2": 0.972075,
+            "abs_diff": 0.0,
+            "b_i": 0.047628
+          },
+          {
+            "agent_id": "P09-logistics",
+            "P_index": 9,
+            "delta_r_S1": 0.340252,
+            "delta_r_S2": 0.340252,
+            "abs_diff": 0.0,
+            "b_i": 0.015154
+          },
+          {
+            "agent_id": "E02-z3-prover",
+            "P_index": 2,
+            "delta_r_S1": 0.094318,
+            "delta_r_S2": 0.094318,
+            "abs_diff": 0.0,
+            "b_i": 0.12823
+          },
+          {
+            "agent_id": "E07-geofence",
+            "P_index": 7,
+            "delta_r_S1": 0.080694,
+            "delta_r_S2": 0.080694,
+            "abs_diff": 0.0,
+            "b_i": 0.055566
+          },
+          {
+            "agent_id": "C03-burn-executor",
+            "P_index": 3,
+            "delta_r_S1": 2.836547,
+            "delta_r_S2": 2.836547,
+            "abs_diff": 0.0,
+            "b_i": 0.138916
+          },
+          {
+            "agent_id": "C07-retention",
+            "P_index": 7,
+            "delta_r_S1": 1.141211,
+            "delta_r_S2": 1.141211,
+            "abs_diff": 0.0,
+            "b_i": 0.055566
+          },
+          {
+            "agent_id": "P03-electrical",
+            "P_index": 3,
+            "delta_r_S1": 2.970203,
+            "delta_r_S2": 2.970203,
+            "abs_diff": 0.0,
+            "b_i": 0.138916
+          },
+          {
+            "agent_id": "P06-hydrogen",
+            "P_index": 6,
+            "delta_r_S1": 1.018355,
+            "delta_r_S2": 1.018355,
+            "abs_diff": 0.0,
+            "b_i": 0.047628
+          },
+          {
+            "agent_id": "E01-bho-checker",
+            "P_index": 1,
+            "delta_r_S1": 0.168031,
+            "delta_r_S2": 0.168031,
+            "abs_diff": 0.0,
+            "b_i": 0.111133
+          },
+          {
+            "agent_id": "C02-staking",
+            "P_index": 2,
+            "delta_r_S1": 0.0,
+            "delta_r_S2": 0.0,
+            "abs_diff": 0.0,
+            "b_i": 0.12823
+          },
+          {
+            "agent_id": "C08-treasury",
+            "P_index": 8,
+            "delta_r_S1": 0.851546,
+            "delta_r_S2": 0.851546,
+            "abs_diff": 0.0,
+            "b_i": 0.041675
+          },
+          {
+            "agent_id": "E04-compliance",
+            "P_index": 4,
+            "delta_r_S1": 0.045632,
+            "delta_r_S2": 0.045632,
+            "abs_diff": 0.0,
+            "b_i": 0.027783
+          },
+          {
+            "agent_id": "C09-token-minter",
+            "P_index": 9,
+            "delta_r_S1": 0.309931,
+            "delta_r_S2": 0.309931,
+            "abs_diff": 0.0,
+            "b_i": 0.015154
+          },
+          {
+            "agent_id": "C01-settlement",
+            "P_index": 1,
+            "delta_r_S1": 2.266977,
+            "delta_r_S2": 2.266977,
+            "abs_diff": 0.0,
+            "b_i": 0.111133
+          },
+          {
+            "agent_id": "C04-liquidity",
+            "P_index": 4,
+            "delta_r_S1": 0.568033,
+            "delta_r_S2": 0.568033,
+            "abs_diff": 0.0,
+            "b_i": 0.027783
+          },
+          {
+            "agent_id": "E06-qes-validator",
+            "P_index": 6,
+            "delta_r_S1": 0.039012,
+            "delta_r_S2": 0.039012,
+            "abs_diff": 0.0,
+            "b_i": 0.047628
+          }
+        ],
+        "note": "v0.1: expect \u22480 (offset); v0.2: expect >0 (sensitivity)"
+      },
+      "verdict": {
+        "label": "OFFSET_ONLY",
+        "formula": "threshold_gamma_v01",
+        "layer_a_pass": true,
+        "layer_b_pass": true,
+        "layer_c_pass": false,
+        "pre_reg_allowed": false
+      },
+      "elapsed_s": 5.93
+    },
+    {
+      "run_seed": 20261402,
+      "warmup": 32,
+      "cycles": 512,
+      "kappa": 0.0,
+      "formula": "threshold_gamma_v01",
+      "component_ell": "avg_latency",
+      "gamma_source": "ledger:avg_latency",
+      "sigma_ell": 0.1666988103885077,
+      "n_edges": 99,
+      "n_sticky": 64,
+      "P_assignment": {
+        "C01-settlement": {
+          "P_index": 1,
+          "g": 0.009221,
+          "theta": 0.666667,
+          "sat": 0.05,
+          "a": 0.009221
+        },
+        "C02-staking": {
+          "P_index": 2,
+          "g": 0.046107,
+          "theta": 0.769231,
+          "sat": 0.03,
+          "a": 0.046107
+        },
+        "C03-burn-executor": {
+          "P_index": 3,
+          "g": 0.092213,
+          "theta": 0.833333,
+          "sat": 0.02,
+          "a": 0.092213
+        },
+        "C04-liquidity": {
+          "P_index": 4,
+          "g": 0.461066,
+          "theta": 0.166667,
+          "sat": 0.5,
+          "a": 0.461066
+        },
+        "C05-fee-distributor": {
+          "P_index": 5,
+          "g": 0.092213,
+          "theta": 0.5,
+          "sat": 0.1,
+          "a": 0.092213
+        },
+        "C06-gas-paymaster": {
+          "P_index": 6,
+          "g": 0.922131,
+          "theta": 0.285714,
+          "sat": 0.25,
+          "a": 0.922131
+        },
+        "C07-retention": {
+          "P_index": 7,
+          "g": 0.922131,
+          "theta": 0.333333,
+          "sat": 0.2,
+          "a": 0.922131
+        },
+        "C08-treasury": {
+          "P_index": 8,
+          "g": 1.844262,
+          "theta": 0.25,
+          "sat": 0.3,
+          "a": 1.844262
+        },
+        "C09-token-minter": {
+          "P_index": 9,
+          "g": 4.610655,
+          "theta": 0.090909,
+          "sat": 1.0,
+          "a": 4.610655
+        },
+        "E01-bho-checker": {
+          "P_index": 1,
+          "g": 0.009221,
+          "theta": 0.666667,
+          "sat": 0.05,
+          "a": 0.009221
+        },
+        "E02-z3-prover": {
+          "P_index": 2,
+          "g": 0.046107,
+          "theta": 0.769231,
+          "sat": 0.03,
+          "a": 0.046107
+        },
+        "E03-gobd-auditor": {
+          "P_index": 3,
+          "g": 0.092213,
+          "theta": 0.833333,
+          "sat": 0.02,
+          "a": 0.092213
+        },
+        "E04-compliance": {
+          "P_index": 4,
+          "g": 0.461066,
+          "theta": 0.166667,
+          "sat": 0.5,
+          "a": 0.461066
+        },
+        "E05-iot-verifier": {
+          "P_index": 5,
+          "g": 0.092213,
+          "theta": 0.5,
+          "sat": 0.1,
+          "a": 0.092213
+        },
+        "E06-qes-validator": {
+          "P_index": 6,
+          "g": 0.922131,
+          "theta": 0.285714,
+          "sat": 0.25,
+          "a": 0.922131
+        },
+        "E07-geofence": {
+          "P_index": 7,
+          "g": 0.922131,
+          "theta": 0.333333,
+          "sat": 0.2,
+          "a": 0.922131
+        },
+        "E08-fraud-detector": {
+          "P_index": 8,
+          "g": 1.844262,
+          "theta": 0.25,
+          "sat": 0.3,
+          "a": 1.844262
+        },
+        "E09-tax-auditor": {
+          "P_index": 9,
+          "g": 4.610655,
+          "theta": 0.090909,
+          "sat": 1.0,
+          "a": 4.610655
+        },
+        "P01-constructor": {
+          "P_index": 1,
+          "g": 0.009221,
+          "theta": 0.666667,
+          "sat": 0.05,
+          "a": 0.009221
+        },
+        "P02-roofing": {
+          "P_index": 2,
+          "g": 0.046107,
+          "theta": 0.769231,
+          "sat": 0.03,
+          "a": 0.046107
+        },
+        "P03-electrical": {
+          "P_index": 3,
+          "g": 0.092213,
+          "theta": 0.833333,
+          "sat": 0.02,
+          "a": 0.092213
+        },
+        "P04-solar": {
+          "P_index": 4,
+          "g": 0.461066,
+          "theta": 0.166667,
+          "sat": 0.5,
+          "a": 0.461066
+        },
+        "P05-water": {
+          "P_index": 5,
+          "g": 0.092213,
+          "theta": 0.5,
+          "sat": 0.1,
+          "a": 0.092213
+        },
+        "P06-hydrogen": {
+          "P_index": 6,
+          "g": 0.922131,
+          "theta": 0.285714,
+          "sat": 0.25,
+          "a": 0.922131
+        },
+        "P07-grain": {
+          "P_index": 7,
+          "g": 0.922131,
+          "theta": 0.333333,
+          "sat": 0.2,
+          "a": 0.922131
+        },
+        "P08-diesel": {
+          "P_index": 8,
+          "g": 1.844262,
+          "theta": 0.25,
+          "sat": 0.3,
+          "a": 1.844262
+        },
+        "P09-logistics": {
+          "P_index": 9,
+          "g": 4.610655,
+          "theta": 0.090909,
+          "sat": 1.0,
+          "a": 4.610655
+        }
+      },
+      "layer_a": {
+        "layer": "A",
+        "formula": "threshold_gamma_v01",
+        "mae_raw": 1.460318,
+        "mae_norm": 8.760218,
+        "median_abs_rho": 0.336665,
+        "n_corr": 64,
+        "flags": {
+          "S_S_norm": true,
+          "S_G": true
+        },
+        "pass": true,
+        "screen_raw": {
+          "component": "R_ij",
+          "mae": 1.460318,
+          "median_abs_rho": 0.336665,
+          "n_sticky": 64,
+          "n_corr": 64,
+          "flags": {
+            "S_S": true,
+            "S_G": true,
+            "candidate": true,
+            "near_miss": false
+          },
+          "pass": true
+        }
+      },
+      "layer_b": {
+        "layer": "B",
+        "formula": "threshold_gamma_v01",
+        "mean_delta_r": 1.053255,
+        "delta_min": 0.05,
+        "n_agents": 27,
+        "pass": true,
+        "per_agent": [
+          {
+            "agent_id": "P04-solar",
+            "P_index": 4,
+            "S_i": 0.670711,
+            "n_gamma": 2,
+            "gamma_span": 4.023488,
+            "delta_r": 0.670581
+          },
+          {
+            "agent_id": "P05-water",
+            "P_index": 5,
+            "S_i": 0.674479,
+            "n_gamma": 2,
+            "gamma_span": 4.046095,
+            "delta_r": 2.023048
+          },
+          {
+            "agent_id": "P01-constructor",
+            "P_index": 1,
+            "S_i": 0.596807,
+            "n_gamma": 2,
+            "gamma_span": 3.58015,
+            "delta_r": 2.386766
+          },
+          {
+            "agent_id": "P07-grain",
+            "P_index": 7,
+            "S_i": 0.653201,
+            "n_gamma": 2,
+            "gamma_span": 3.918453,
+            "delta_r": 1.306151
+          },
+          {
+            "agent_id": "E05-iot-verifier",
+            "P_index": 5,
+            "S_i": 0.15342,
+            "n_gamma": 14,
+            "gamma_span": 0.683049,
+            "delta_r": 0.159938
+          },
+          {
+            "agent_id": "E09-tax-auditor",
+            "P_index": 9,
+            "S_i": 0.154716,
+            "n_gamma": 14,
+            "gamma_span": 1.024912,
+            "delta_r": 0.030656
+          },
+          {
+            "agent_id": "P02-roofing",
+            "P_index": 2,
+            "S_i": 0.561826,
+            "n_gamma": 2,
+            "gamma_span": 3.370304,
+            "delta_r": 2.592541
+          },
+          {
+            "agent_id": "P08-diesel",
+            "P_index": 8,
+            "S_i": 0.614392,
+            "n_gamma": 2,
+            "gamma_span": 3.68564,
+            "delta_r": 0.92141
+          },
+          {
+            "agent_id": "E03-gobd-auditor",
+            "P_index": 3,
+            "S_i": 0.127458,
+            "n_gamma": 12,
+            "gamma_span": 0.840201,
+            "delta_r": 0.26321
+          },
+          {
+            "agent_id": "E08-fraud-detector",
+            "P_index": 8,
+            "S_i": 0.126254,
+            "n_gamma": 12,
+            "gamma_span": 0.965568,
+            "delta_r": 0.099067
+          },
+          {
+            "agent_id": "C05-fee-distributor",
+            "P_index": 5,
+            "S_i": 0.567331,
+            "n_gamma": 2,
+            "gamma_span": 3.403333,
+            "delta_r": 1.701666
+          },
+          {
+            "agent_id": "C06-gas-paymaster",
+            "P_index": 6,
+            "S_i": 0.567153,
+            "n_gamma": 2,
+            "gamma_span": 3.402261,
+            "delta_r": 0.972075
+          },
+          {
+            "agent_id": "P09-logistics",
+            "P_index": 9,
+            "S_i": 0.623916,
+            "n_gamma": 2,
+            "gamma_span": 3.742775,
+            "delta_r": 0.340252
+          },
+          {
+            "agent_id": "E02-z3-prover",
+            "P_index": 2,
+            "S_i": 0.107857,
+            "n_gamma": 10,
+            "gamma_span": 0.300733,
+            "delta_r": 0.098949
+          },
+          {
+            "agent_id": "E07-geofence",
+            "P_index": 7,
+            "S_i": 0.112032,
+            "n_gamma": 10,
+            "gamma_span": 0.519985,
+            "delta_r": 0.064744
+          },
+          {
+            "agent_id": "C03-burn-executor",
+            "P_index": 3,
+            "S_i": 0.567419,
+            "n_gamma": 2,
+            "gamma_span": 3.403857,
+            "delta_r": 2.836547
+          },
+          {
+            "agent_id": "C07-retention",
+            "P_index": 7,
+            "S_i": 0.570716,
+            "n_gamma": 2,
+            "gamma_span": 3.423634,
+            "delta_r": 1.141211
+          },
+          {
+            "agent_id": "P03-electrical",
+            "P_index": 3,
+            "S_i": 0.594155,
+            "n_gamma": 2,
+            "gamma_span": 3.564243,
+            "delta_r": 2.970203
+          },
+          {
+            "agent_id": "P06-hydrogen",
+            "P_index": 6,
+            "S_i": 0.594155,
+            "n_gamma": 2,
+            "gamma_span": 3.564243,
+            "delta_r": 1.018355
+          },
+          {
+            "agent_id": "E01-bho-checker",
+            "P_index": 1,
+            "S_i": 0.0964,
+            "n_gamma": 8,
+            "gamma_span": 0.440487,
+            "delta_r": 0.118937
+          },
+          {
+            "agent_id": "C02-staking",
+            "P_index": 2,
+            "S_i": 0.568193,
+            "n_gamma": 2,
+            "gamma_span": 3.408501,
+            "delta_r": 2.621924
+          },
+          {
+            "agent_id": "C08-treasury",
+            "P_index": 8,
+            "S_i": 0.567807,
+            "n_gamma": 2,
+            "gamma_span": 3.406183,
+            "delta_r": 0.851546
+          },
+          {
+            "agent_id": "E04-compliance",
+            "P_index": 4,
+            "S_i": 0.090086,
+            "n_gamma": 6,
+            "gamma_span": 0.735046,
+            "delta_r": 0.056254
+          },
+          {
+            "agent_id": "C09-token-minter",
+            "P_index": 9,
+            "S_i": 0.568317,
+            "n_gamma": 2,
+            "gamma_span": 3.409242,
+            "delta_r": 0.309931
+          },
+          {
+            "agent_id": "C01-settlement",
+            "P_index": 1,
+            "S_i": 0.566853,
+            "n_gamma": 2,
+            "gamma_span": 3.400465,
+            "delta_r": 2.266977
+          },
+          {
+            "agent_id": "C04-liquidity",
+            "P_index": 4,
+            "S_i": 0.568143,
+            "n_gamma": 2,
+            "gamma_span": 3.408198,
+            "delta_r": 0.568033
+          },
+          {
+            "agent_id": "E06-qes-validator",
+            "P_index": 6,
+            "S_i": 0.085193,
+            "n_gamma": 6,
+            "gamma_span": 0.311876,
+            "delta_r": 0.046911
+          }
+        ]
+      },
+      "layer_c": {
+        "layer": "C",
+        "formula": "threshold_gamma_v01",
+        "S1": 0.153695,
+        "S2": 0.617172,
+        "mean_abs_diff": 0.0,
+        "delta_min": 0.05,
+        "n_agents": 27,
+        "pass": false,
+        "per_agent": [
+          {
+            "agent_id": "P04-solar",
+            "P_index": 4,
+            "delta_r_S1": 0.670581,
+            "delta_r_S2": 0.670581,
+            "abs_diff": 0.0,
+            "b_i": 0.027783
+          },
+          {
+            "agent_id": "P05-water",
+            "P_index": 5,
+            "delta_r_S1": 2.023048,
+            "delta_r_S2": 2.023048,
+            "abs_diff": 0.0,
+            "b_i": 0.083349
+          },
+          {
+            "agent_id": "P01-constructor",
+            "P_index": 1,
+            "delta_r_S1": 2.386766,
+            "delta_r_S2": 2.386766,
+            "abs_diff": 0.0,
+            "b_i": 0.111133
+          },
+          {
+            "agent_id": "P07-grain",
+            "P_index": 7,
+            "delta_r_S1": 1.306151,
+            "delta_r_S2": 1.306151,
+            "abs_diff": 0.0,
+            "b_i": 0.055566
+          },
+          {
+            "agent_id": "E05-iot-verifier",
+            "P_index": 5,
+            "delta_r_S1": 0.159938,
+            "delta_r_S2": 0.159938,
+            "abs_diff": 0.0,
+            "b_i": 0.083349
+          },
+          {
+            "agent_id": "E09-tax-auditor",
+            "P_index": 9,
+            "delta_r_S1": 0.030656,
+            "delta_r_S2": 0.030656,
+            "abs_diff": 0.0,
+            "b_i": 0.015154
+          },
+          {
+            "agent_id": "P02-roofing",
+            "P_index": 2,
+            "delta_r_S1": 2.592541,
+            "delta_r_S2": 2.592541,
+            "abs_diff": 0.0,
+            "b_i": 0.12823
+          },
+          {
+            "agent_id": "P08-diesel",
+            "P_index": 8,
+            "delta_r_S1": 0.92141,
+            "delta_r_S2": 0.92141,
+            "abs_diff": 0.0,
+            "b_i": 0.041675
+          },
+          {
+            "agent_id": "E03-gobd-auditor",
+            "P_index": 3,
+            "delta_r_S1": 0.26321,
+            "delta_r_S2": 0.26321,
+            "abs_diff": 0.0,
+            "b_i": 0.138916
+          },
+          {
+            "agent_id": "E08-fraud-detector",
+            "P_index": 8,
+            "delta_r_S1": 0.099067,
+            "delta_r_S2": 0.099067,
+            "abs_diff": 0.0,
+            "b_i": 0.041675
+          },
+          {
+            "agent_id": "C05-fee-distributor",
+            "P_index": 5,
+            "delta_r_S1": 1.701666,
+            "delta_r_S2": 1.701666,
+            "abs_diff": 0.0,
+            "b_i": 0.083349
+          },
+          {
+            "agent_id": "C06-gas-paymaster",
+            "P_index": 6,
+            "delta_r_S1": 0.972075,
+            "delta_r_S2": 0.972075,
+            "abs_diff": 0.0,
+            "b_i": 0.047628
+          },
+          {
+            "agent_id": "P09-logistics",
+            "P_index": 9,
+            "delta_r_S1": 0.340252,
+            "delta_r_S2": 0.340252,
+            "abs_diff": 0.0,
+            "b_i": 0.015154
+          },
+          {
+            "agent_id": "E02-z3-prover",
+            "P_index": 2,
+            "delta_r_S1": 0.098949,
+            "delta_r_S2": 0.098949,
+            "abs_diff": 0.0,
+            "b_i": 0.12823
+          },
+          {
+            "agent_id": "E07-geofence",
+            "P_index": 7,
+            "delta_r_S1": 0.064744,
+            "delta_r_S2": 0.064744,
+            "abs_diff": 0.0,
+            "b_i": 0.055566
+          },
+          {
+            "agent_id": "C03-burn-executor",
+            "P_index": 3,
+            "delta_r_S1": 2.836547,
+            "delta_r_S2": 2.836547,
+            "abs_diff": 0.0,
+            "b_i": 0.138916
+          },
+          {
+            "agent_id": "C07-retention",
+            "P_index": 7,
+            "delta_r_S1": 1.141211,
+            "delta_r_S2": 1.141211,
+            "abs_diff": 0.0,
+            "b_i": 0.055566
+          },
+          {
+            "agent_id": "P03-electrical",
+            "P_index": 3,
+            "delta_r_S1": 2.970203,
+            "delta_r_S2": 2.970203,
+            "abs_diff": 0.0,
+            "b_i": 0.138916
+          },
+          {
+            "agent_id": "P06-hydrogen",
+            "P_index": 6,
+            "delta_r_S1": 1.018355,
+            "delta_r_S2": 1.018355,
+            "abs_diff": 0.0,
+            "b_i": 0.047628
+          },
+          {
+            "agent_id": "E01-bho-checker",
+            "P_index": 1,
+            "delta_r_S1": 0.118937,
+            "delta_r_S2": 0.118937,
+            "abs_diff": 0.0,
+            "b_i": 0.111133
+          },
+          {
+            "agent_id": "C02-staking",
+            "P_index": 2,
+            "delta_r_S1": 2.621924,
+            "delta_r_S2": 2.621924,
+            "abs_diff": 0.0,
+            "b_i": 0.12823
+          },
+          {
+            "agent_id": "C08-treasury",
+            "P_index": 8,
+            "delta_r_S1": 0.851546,
+            "delta_r_S2": 0.851546,
+            "abs_diff": 0.0,
+            "b_i": 0.041675
+          },
+          {
+            "agent_id": "E04-compliance",
+            "P_index": 4,
+            "delta_r_S1": 0.056254,
+            "delta_r_S2": 0.056254,
+            "abs_diff": 0.0,
+            "b_i": 0.027783
+          },
+          {
+            "agent_id": "C09-token-minter",
+            "P_index": 9,
+            "delta_r_S1": 0.309931,
+            "delta_r_S2": 0.309931,
+            "abs_diff": 0.0,
+            "b_i": 0.015154
+          },
+          {
+            "agent_id": "C01-settlement",
+            "P_index": 1,
+            "delta_r_S1": 2.266977,
+            "delta_r_S2": 2.266977,
+            "abs_diff": 0.0,
+            "b_i": 0.111133
+          },
+          {
+            "agent_id": "C04-liquidity",
+            "P_index": 4,
+            "delta_r_S1": 0.568033,
+            "delta_r_S2": 0.568033,
+            "abs_diff": 0.0,
+            "b_i": 0.027783
+          },
+          {
+            "agent_id": "E06-qes-validator",
+            "P_index": 6,
+            "delta_r_S1": 0.046911,
+            "delta_r_S2": 0.046911,
+            "abs_diff": 0.0,
+            "b_i": 0.047628
+          }
+        ],
+        "note": "v0.1: expect \u22480 (offset); v0.2: expect >0 (sensitivity)"
+      },
+      "verdict": {
+        "label": "OFFSET_ONLY",
+        "formula": "threshold_gamma_v01",
+        "layer_a_pass": true,
+        "layer_b_pass": true,
+        "layer_c_pass": false,
+        "pre_reg_allowed": false
+      },
+      "elapsed_s": 5.2
+    },
+    {
+      "run_seed": 20261403,
+      "warmup": 32,
+      "cycles": 512,
+      "kappa": 0.0,
+      "formula": "threshold_gamma_v01",
+      "component_ell": "avg_latency",
+      "gamma_source": "ledger:avg_latency",
+      "sigma_ell": 0.1666988103885077,
+      "n_edges": 99,
+      "n_sticky": 64,
+      "P_assignment": {
+        "C01-settlement": {
+          "P_index": 1,
+          "g": 0.009221,
+          "theta": 0.666667,
+          "sat": 0.05,
+          "a": 0.009221
+        },
+        "C02-staking": {
+          "P_index": 2,
+          "g": 0.046107,
+          "theta": 0.769231,
+          "sat": 0.03,
+          "a": 0.046107
+        },
+        "C03-burn-executor": {
+          "P_index": 3,
+          "g": 0.092213,
+          "theta": 0.833333,
+          "sat": 0.02,
+          "a": 0.092213
+        },
+        "C04-liquidity": {
+          "P_index": 4,
+          "g": 0.461066,
+          "theta": 0.166667,
+          "sat": 0.5,
+          "a": 0.461066
+        },
+        "C05-fee-distributor": {
+          "P_index": 5,
+          "g": 0.092213,
+          "theta": 0.5,
+          "sat": 0.1,
+          "a": 0.092213
+        },
+        "C06-gas-paymaster": {
+          "P_index": 6,
+          "g": 0.922131,
+          "theta": 0.285714,
+          "sat": 0.25,
+          "a": 0.922131
+        },
+        "C07-retention": {
+          "P_index": 7,
+          "g": 0.922131,
+          "theta": 0.333333,
+          "sat": 0.2,
+          "a": 0.922131
+        },
+        "C08-treasury": {
+          "P_index": 8,
+          "g": 1.844262,
+          "theta": 0.25,
+          "sat": 0.3,
+          "a": 1.844262
+        },
+        "C09-token-minter": {
+          "P_index": 9,
+          "g": 4.610655,
+          "theta": 0.090909,
+          "sat": 1.0,
+          "a": 4.610655
+        },
+        "E01-bho-checker": {
+          "P_index": 1,
+          "g": 0.009221,
+          "theta": 0.666667,
+          "sat": 0.05,
+          "a": 0.009221
+        },
+        "E02-z3-prover": {
+          "P_index": 2,
+          "g": 0.046107,
+          "theta": 0.769231,
+          "sat": 0.03,
+          "a": 0.046107
+        },
+        "E03-gobd-auditor": {
+          "P_index": 3,
+          "g": 0.092213,
+          "theta": 0.833333,
+          "sat": 0.02,
+          "a": 0.092213
+        },
+        "E04-compliance": {
+          "P_index": 4,
+          "g": 0.461066,
+          "theta": 0.166667,
+          "sat": 0.5,
+          "a": 0.461066
+        },
+        "E05-iot-verifier": {
+          "P_index": 5,
+          "g": 0.092213,
+          "theta": 0.5,
+          "sat": 0.1,
+          "a": 0.092213
+        },
+        "E06-qes-validator": {
+          "P_index": 6,
+          "g": 0.922131,
+          "theta": 0.285714,
+          "sat": 0.25,
+          "a": 0.922131
+        },
+        "E07-geofence": {
+          "P_index": 7,
+          "g": 0.922131,
+          "theta": 0.333333,
+          "sat": 0.2,
+          "a": 0.922131
+        },
+        "E08-fraud-detector": {
+          "P_index": 8,
+          "g": 1.844262,
+          "theta": 0.25,
+          "sat": 0.3,
+          "a": 1.844262
+        },
+        "E09-tax-auditor": {
+          "P_index": 9,
+          "g": 4.610655,
+          "theta": 0.090909,
+          "sat": 1.0,
+          "a": 4.610655
+        },
+        "P01-constructor": {
+          "P_index": 1,
+          "g": 0.009221,
+          "theta": 0.666667,
+          "sat": 0.05,
+          "a": 0.009221
+        },
+        "P02-roofing": {
+          "P_index": 2,
+          "g": 0.046107,
+          "theta": 0.769231,
+          "sat": 0.03,
+          "a": 0.046107
+        },
+        "P03-electrical": {
+          "P_index": 3,
+          "g": 0.092213,
+          "theta": 0.833333,
+          "sat": 0.02,
+          "a": 0.092213
+        },
+        "P04-solar": {
+          "P_index": 4,
+          "g": 0.461066,
+          "theta": 0.166667,
+          "sat": 0.5,
+          "a": 0.461066
+        },
+        "P05-water": {
+          "P_index": 5,
+          "g": 0.092213,
+          "theta": 0.5,
+          "sat": 0.1,
+          "a": 0.092213
+        },
+        "P06-hydrogen": {
+          "P_index": 6,
+          "g": 0.922131,
+          "theta": 0.285714,
+          "sat": 0.25,
+          "a": 0.922131
+        },
+        "P07-grain": {
+          "P_index": 7,
+          "g": 0.922131,
+          "theta": 0.333333,
+          "sat": 0.2,
+          "a": 0.922131
+        },
+        "P08-diesel": {
+          "P_index": 8,
+          "g": 1.844262,
+          "theta": 0.25,
+          "sat": 0.3,
+          "a": 1.844262
+        },
+        "P09-logistics": {
+          "P_index": 9,
+          "g": 4.610655,
+          "theta": 0.090909,
+          "sat": 1.0,
+          "a": 4.610655
+        }
+      },
+      "layer_a": {
+        "layer": "A",
+        "formula": "threshold_gamma_v01",
+        "mae_raw": 1.405122,
+        "mae_norm": 8.429106,
+        "median_abs_rho": 0.336665,
+        "n_corr": 64,
+        "flags": {
+          "S_S_norm": true,
+          "S_G": true
+        },
+        "pass": true,
+        "screen_raw": {
+          "component": "R_ij",
+          "mae": 1.405122,
+          "median_abs_rho": 0.336665,
+          "n_sticky": 64,
+          "n_corr": 64,
+          "flags": {
+            "S_S": true,
+            "S_G": true,
+            "candidate": true,
+            "near_miss": false
+          },
+          "pass": true
+        }
+      },
+      "layer_b": {
+        "layer": "B",
+        "formula": "threshold_gamma_v01",
+        "mean_delta_r": 0.965886,
+        "delta_min": 0.05,
+        "n_agents": 27,
+        "pass": true,
+        "per_agent": [
+          {
+            "agent_id": "P04-solar",
+            "P_index": 4,
+            "S_i": 0.670711,
+            "n_gamma": 2,
+            "gamma_span": 4.023488,
+            "delta_r": 0.670581
+          },
+          {
+            "agent_id": "P05-water",
+            "P_index": 5,
+            "S_i": 0.674479,
+            "n_gamma": 2,
+            "gamma_span": 4.046095,
+            "delta_r": 2.023048
+          },
+          {
+            "agent_id": "P01-constructor",
+            "P_index": 1,
+            "S_i": 0.596807,
+            "n_gamma": 2,
+            "gamma_span": 0.0,
+            "delta_r": 0.0
+          },
+          {
+            "agent_id": "P07-grain",
+            "P_index": 7,
+            "S_i": 0.653201,
+            "n_gamma": 2,
+            "gamma_span": 3.918453,
+            "delta_r": 1.306151
+          },
+          {
+            "agent_id": "E05-iot-verifier",
+            "P_index": 5,
+            "S_i": 0.15342,
+            "n_gamma": 14,
+            "gamma_span": 0.683049,
+            "delta_r": 0.139412
+          },
+          {
+            "agent_id": "E09-tax-auditor",
+            "P_index": 9,
+            "S_i": 0.154716,
+            "n_gamma": 14,
+            "gamma_span": 1.024912,
+            "delta_r": 0.041991
+          },
+          {
+            "agent_id": "P02-roofing",
+            "P_index": 2,
+            "S_i": 0.561826,
+            "n_gamma": 2,
+            "gamma_span": 3.370304,
+            "delta_r": 2.592541
+          },
+          {
+            "agent_id": "P08-diesel",
+            "P_index": 8,
+            "S_i": 0.614392,
+            "n_gamma": 2,
+            "gamma_span": 3.68564,
+            "delta_r": 0.92141
+          },
+          {
+            "agent_id": "E03-gobd-auditor",
+            "P_index": 3,
+            "S_i": 0.127458,
+            "n_gamma": 12,
+            "gamma_span": 0.840201,
+            "delta_r": 0.273352
+          },
+          {
+            "agent_id": "E08-fraud-detector",
+            "P_index": 8,
+            "S_i": 0.126254,
+            "n_gamma": 12,
+            "gamma_span": 0.965568,
+            "delta_r": 0.092749
+          },
+          {
+            "agent_id": "C05-fee-distributor",
+            "P_index": 5,
+            "S_i": 0.567331,
+            "n_gamma": 2,
+            "gamma_span": 3.403333,
+            "delta_r": 1.701666
+          },
+          {
+            "agent_id": "C06-gas-paymaster",
+            "P_index": 6,
+            "S_i": 0.567153,
+            "n_gamma": 2,
+            "gamma_span": 3.402261,
+            "delta_r": 0.972075
+          },
+          {
+            "agent_id": "P09-logistics",
+            "P_index": 9,
+            "S_i": 0.623916,
+            "n_gamma": 2,
+            "gamma_span": 3.742775,
+            "delta_r": 0.340252
+          },
+          {
+            "agent_id": "E02-z3-prover",
+            "P_index": 2,
+            "S_i": 0.107857,
+            "n_gamma": 10,
+            "gamma_span": 0.456679,
+            "delta_r": 0.127172
+          },
+          {
+            "agent_id": "E07-geofence",
+            "P_index": 7,
+            "S_i": 0.112032,
+            "n_gamma": 10,
+            "gamma_span": 0.519985,
+            "delta_r": 0.076417
+          },
+          {
+            "agent_id": "C03-burn-executor",
+            "P_index": 3,
+            "S_i": 0.567419,
+            "n_gamma": 2,
+            "gamma_span": 3.403857,
+            "delta_r": 2.836547
+          },
+          {
+            "agent_id": "C07-retention",
+            "P_index": 7,
+            "S_i": 0.570716,
+            "n_gamma": 2,
+            "gamma_span": 3.423634,
+            "delta_r": 1.141211
+          },
+          {
+            "agent_id": "P03-electrical",
+            "P_index": 3,
+            "S_i": 0.594155,
+            "n_gamma": 2,
+            "gamma_span": 3.564243,
+            "delta_r": 2.970203
+          },
+          {
+            "agent_id": "P06-hydrogen",
+            "P_index": 6,
+            "S_i": 0.594155,
+            "n_gamma": 2,
+            "gamma_span": 3.564243,
+            "delta_r": 1.018355
+          },
+          {
+            "agent_id": "E01-bho-checker",
+            "P_index": 1,
+            "S_i": 0.0964,
+            "n_gamma": 8,
+            "gamma_span": 0.440487,
+            "delta_r": 0.122765
+          },
+          {
+            "agent_id": "C02-staking",
+            "P_index": 2,
+            "S_i": 0.568193,
+            "n_gamma": 2,
+            "gamma_span": 3.408501,
+            "delta_r": 2.621924
+          },
+          {
+            "agent_id": "C08-treasury",
+            "P_index": 8,
+            "S_i": 0.567807,
+            "n_gamma": 2,
+            "gamma_span": 3.406183,
+            "delta_r": 0.851546
+          },
+          {
+            "agent_id": "E04-compliance",
+            "P_index": 4,
+            "S_i": 0.090086,
+            "n_gamma": 6,
+            "gamma_span": 0.735046,
+            "delta_r": 0.048521
+          },
+          {
+            "agent_id": "C09-token-minter",
+            "P_index": 9,
+            "S_i": 0.568317,
+            "n_gamma": 2,
+            "gamma_span": 3.409242,
+            "delta_r": 0.309931
+          },
+          {
+            "agent_id": "C01-settlement",
+            "P_index": 1,
+            "S_i": 0.566853,
+            "n_gamma": 2,
+            "gamma_span": 3.400465,
+            "delta_r": 2.266977
+          },
+          {
+            "agent_id": "C04-liquidity",
+            "P_index": 4,
+            "S_i": 0.568143,
+            "n_gamma": 2,
+            "gamma_span": 3.408198,
+            "delta_r": 0.568033
+          },
+          {
+            "agent_id": "E06-qes-validator",
+            "P_index": 6,
+            "S_i": 0.085193,
+            "n_gamma": 6,
+            "gamma_span": 0.305114,
+            "delta_r": 0.044083
+          }
+        ]
+      },
+      "layer_c": {
+        "layer": "C",
+        "formula": "threshold_gamma_v01",
+        "S1": 0.153695,
+        "S2": 0.617172,
+        "mean_abs_diff": 0.0,
+        "delta_min": 0.05,
+        "n_agents": 27,
+        "pass": false,
+        "per_agent": [
+          {
+            "agent_id": "P04-solar",
+            "P_index": 4,
+            "delta_r_S1": 0.670581,
+            "delta_r_S2": 0.670581,
+            "abs_diff": 0.0,
+            "b_i": 0.027783
+          },
+          {
+            "agent_id": "P05-water",
+            "P_index": 5,
+            "delta_r_S1": 2.023048,
+            "delta_r_S2": 2.023048,
+            "abs_diff": 0.0,
+            "b_i": 0.083349
+          },
+          {
+            "agent_id": "P01-constructor",
+            "P_index": 1,
+            "delta_r_S1": 0.0,
+            "delta_r_S2": 0.0,
+            "abs_diff": 0.0,
+            "b_i": 0.111133
+          },
+          {
+            "agent_id": "P07-grain",
+            "P_index": 7,
+            "delta_r_S1": 1.306151,
+            "delta_r_S2": 1.306151,
+            "abs_diff": 0.0,
+            "b_i": 0.055566
+          },
+          {
+            "agent_id": "E05-iot-verifier",
+            "P_index": 5,
+            "delta_r_S1": 0.139412,
+            "delta_r_S2": 0.139412,
+            "abs_diff": 0.0,
+            "b_i": 0.083349
+          },
+          {
+            "agent_id": "E09-tax-auditor",
+            "P_index": 9,
+            "delta_r_S1": 0.041991,
+            "delta_r_S2": 0.041991,
+            "abs_diff": 0.0,
+            "b_i": 0.015154
+          },
+          {
+            "agent_id": "P02-roofing",
+            "P_index": 2,
+            "delta_r_S1": 2.592541,
+            "delta_r_S2": 2.592541,
+            "abs_diff": 0.0,
+            "b_i": 0.12823
+          },
+          {
+            "agent_id": "P08-diesel",
+            "P_index": 8,
+            "delta_r_S1": 0.92141,
+            "delta_r_S2": 0.92141,
+            "abs_diff": 0.0,
+            "b_i": 0.041675
+          },
+          {
+            "agent_id": "E03-gobd-auditor",
+            "P_index": 3,
+            "delta_r_S1": 0.273352,
+            "delta_r_S2": 0.273352,
+            "abs_diff": 0.0,
+            "b_i": 0.138916
+          },
+          {
+            "agent_id": "E08-fraud-detector",
+            "P_index": 8,
+            "delta_r_S1": 0.092749,
+            "delta_r_S2": 0.092749,
+            "abs_diff": 0.0,
+            "b_i": 0.041675
+          },
+          {
+            "agent_id": "C05-fee-distributor",
+            "P_index": 5,
+            "delta_r_S1": 1.701666,
+            "delta_r_S2": 1.701666,
+            "abs_diff": 0.0,
+            "b_i": 0.083349
+          },
+          {
+            "agent_id": "C06-gas-paymaster",
+            "P_index": 6,
+            "delta_r_S1": 0.972075,
+            "delta_r_S2": 0.972075,
+            "abs_diff": 0.0,
+            "b_i": 0.047628
+          },
+          {
+            "agent_id": "P09-logistics",
+            "P_index": 9,
+            "delta_r_S1": 0.340252,
+            "delta_r_S2": 0.340252,
+            "abs_diff": 0.0,
+            "b_i": 0.015154
+          },
+          {
+            "agent_id": "E02-z3-prover",
+            "P_index": 2,
+            "delta_r_S1": 0.127172,
+            "delta_r_S2": 0.127172,
+            "abs_diff": 0.0,
+            "b_i": 0.12823
+          },
+          {
+            "agent_id": "E07-geofence",
+            "P_index": 7,
+            "delta_r_S1": 0.076417,
+            "delta_r_S2": 0.076417,
+            "abs_diff": 0.0,
+            "b_i": 0.055566
+          },
+          {
+            "agent_id": "C03-burn-executor",
+            "P_index": 3,
+            "delta_r_S1": 2.836547,
+            "delta_r_S2": 2.836547,
+            "abs_diff": 0.0,
+            "b_i": 0.138916
+          },
+          {
+            "agent_id": "C07-retention",
+            "P_index": 7,
+            "delta_r_S1": 1.141211,
+            "delta_r_S2": 1.141211,
+            "abs_diff": 0.0,
+            "b_i": 0.055566
+          },
+          {
+            "agent_id": "P03-electrical",
+            "P_index": 3,
+            "delta_r_S1": 2.970203,
+            "delta_r_S2": 2.970203,
+            "abs_diff": 0.0,
+            "b_i": 0.138916
+          },
+          {
+            "agent_id": "P06-hydrogen",
+            "P_index": 6,
+            "delta_r_S1": 1.018355,
+            "delta_r_S2": 1.018355,
+            "abs_diff": 0.0,
+            "b_i": 0.047628
+          },
+          {
+            "agent_id": "E01-bho-checker",
+            "P_index": 1,
+            "delta_r_S1": 0.122765,
+            "delta_r_S2": 0.122765,
+            "abs_diff": 0.0,
+            "b_i": 0.111133
+          },
+          {
+            "agent_id": "C02-staking",
+            "P_index": 2,
+            "delta_r_S1": 2.621924,
+            "delta_r_S2": 2.621924,
+            "abs_diff": 0.0,
+            "b_i": 0.12823
+          },
+          {
+            "agent_id": "C08-treasury",
+            "P_index": 8,
+            "delta_r_S1": 0.851546,
+            "delta_r_S2": 0.851546,
+            "abs_diff": 0.0,
+            "b_i": 0.041675
+          },
+          {
+            "agent_id": "E04-compliance",
+            "P_index": 4,
+            "delta_r_S1": 0.048521,
+            "delta_r_S2": 0.048521,
+            "abs_diff": 0.0,
+            "b_i": 0.027783
+          },
+          {
+            "agent_id": "C09-token-minter",
+            "P_index": 9,
+            "delta_r_S1": 0.309931,
+            "delta_r_S2": 0.309931,
+            "abs_diff": 0.0,
+            "b_i": 0.015154
+          },
+          {
+            "agent_id": "C01-settlement",
+            "P_index": 1,
+            "delta_r_S1": 2.266977,
+            "delta_r_S2": 2.266977,
+            "abs_diff": 0.0,
+            "b_i": 0.111133
+          },
+          {
+            "agent_id": "C04-liquidity",
+            "P_index": 4,
+            "delta_r_S1": 0.568033,
+            "delta_r_S2": 0.568033,
+            "abs_diff": 0.0,
+            "b_i": 0.027783
+          },
+          {
+            "agent_id": "E06-qes-validator",
+            "P_index": 6,
+            "delta_r_S1": 0.044083,
+            "delta_r_S2": 0.044083,
+            "abs_diff": 0.0,
+            "b_i": 0.047628
+          }
+        ],
+        "note": "v0.1: expect \u22480 (offset); v0.2: expect >0 (sensitivity)"
+      },
+      "verdict": {
+        "label": "OFFSET_ONLY",
+        "formula": "threshold_gamma_v01",
+        "layer_a_pass": true,
+        "layer_b_pass": true,
+        "layer_c_pass": false,
+        "pre_reg_allowed": false
+      },
+      "elapsed_s": 5.08
+    }
+  ],
+  "majority": {
+    "layer_a_pass_seeds": 3,
+    "layer_b_pass_seeds": 3,
+    "layer_c_pass_seeds": 0,
+    "label_counts": {
+      "OFFSET_ONLY": 3
+    },
+    "majority_label": "OFFSET_ONLY",
+    "pre_reg_allowed": false
+  }
+}

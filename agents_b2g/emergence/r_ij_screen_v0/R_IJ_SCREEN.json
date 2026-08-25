@@ -1,0 +1,1329 @@
+{
+  "schema": "r_ij_screen_v0",
+  "draft": "docs/R_IJ_SCREEN_v0_DRAFT.md",
+  "not_a_pre_reg": true,
+  "no_kappa_sweep": true,
+  "harking_guard": "Sealed kopplung_ledger_v1 / kanten_ledger_v1 / eij_* locked. This screen does not authorize a coupling Pre-Reg unless RESPONSE_HETEROGENEOUS.",
+  "params": {
+    "seeds": [
+      20261401,
+      20261402,
+      20261403
+    ],
+    "warmup": 32,
+    "cycles": 512,
+    "fast": false,
+    "ell_component": "avg_latency"
+  },
+  "elapsed_s": 15.7,
+  "per_seed": [
+    {
+      "run_seed": 20261401,
+      "warmup": 32,
+      "cycles": 512,
+      "kappa": 0.0,
+      "component_ell": "avg_latency",
+      "sigma_ell": 0.1666988103885077,
+      "n_edges": 99,
+      "n_sticky": 64,
+      "P_assignment": {
+        "C01-settlement": {
+          "P_index": 1,
+          "g": 0.009221,
+          "theta": 0.666667,
+          "sat": 0.05
+        },
+        "C02-staking": {
+          "P_index": 2,
+          "g": 0.046107,
+          "theta": 0.769231,
+          "sat": 0.03
+        },
+        "C03-burn-executor": {
+          "P_index": 3,
+          "g": 0.092213,
+          "theta": 0.833333,
+          "sat": 0.02
+        },
+        "C04-liquidity": {
+          "P_index": 4,
+          "g": 0.461066,
+          "theta": 0.166667,
+          "sat": 0.5
+        },
+        "C05-fee-distributor": {
+          "P_index": 5,
+          "g": 0.092213,
+          "theta": 0.5,
+          "sat": 0.1
+        },
+        "C06-gas-paymaster": {
+          "P_index": 6,
+          "g": 0.922131,
+          "theta": 0.285714,
+          "sat": 0.25
+        },
+        "C07-retention": {
+          "P_index": 7,
+          "g": 0.922131,
+          "theta": 0.333333,
+          "sat": 0.2
+        },
+        "C08-treasury": {
+          "P_index": 8,
+          "g": 1.844262,
+          "theta": 0.25,
+          "sat": 0.3
+        },
+        "C09-token-minter": {
+          "P_index": 9,
+          "g": 4.610655,
+          "theta": 0.090909,
+          "sat": 1.0
+        },
+        "E01-bho-checker": {
+          "P_index": 1,
+          "g": 0.009221,
+          "theta": 0.666667,
+          "sat": 0.05
+        },
+        "E02-z3-prover": {
+          "P_index": 2,
+          "g": 0.046107,
+          "theta": 0.769231,
+          "sat": 0.03
+        },
+        "E03-gobd-auditor": {
+          "P_index": 3,
+          "g": 0.092213,
+          "theta": 0.833333,
+          "sat": 0.02
+        },
+        "E04-compliance": {
+          "P_index": 4,
+          "g": 0.461066,
+          "theta": 0.166667,
+          "sat": 0.5
+        },
+        "E05-iot-verifier": {
+          "P_index": 5,
+          "g": 0.092213,
+          "theta": 0.5,
+          "sat": 0.1
+        },
+        "E06-qes-validator": {
+          "P_index": 6,
+          "g": 0.922131,
+          "theta": 0.285714,
+          "sat": 0.25
+        },
+        "E07-geofence": {
+          "P_index": 7,
+          "g": 0.922131,
+          "theta": 0.333333,
+          "sat": 0.2
+        },
+        "E08-fraud-detector": {
+          "P_index": 8,
+          "g": 1.844262,
+          "theta": 0.25,
+          "sat": 0.3
+        },
+        "E09-tax-auditor": {
+          "P_index": 9,
+          "g": 4.610655,
+          "theta": 0.090909,
+          "sat": 1.0
+        },
+        "P01-constructor": {
+          "P_index": 1,
+          "g": 0.009221,
+          "theta": 0.666667,
+          "sat": 0.05
+        },
+        "P02-roofing": {
+          "P_index": 2,
+          "g": 0.046107,
+          "theta": 0.769231,
+          "sat": 0.03
+        },
+        "P03-electrical": {
+          "P_index": 3,
+          "g": 0.092213,
+          "theta": 0.833333,
+          "sat": 0.02
+        },
+        "P04-solar": {
+          "P_index": 4,
+          "g": 0.461066,
+          "theta": 0.166667,
+          "sat": 0.5
+        },
+        "P05-water": {
+          "P_index": 5,
+          "g": 0.092213,
+          "theta": 0.5,
+          "sat": 0.1
+        },
+        "P06-hydrogen": {
+          "P_index": 6,
+          "g": 0.922131,
+          "theta": 0.285714,
+          "sat": 0.25
+        },
+        "P07-grain": {
+          "P_index": 7,
+          "g": 0.922131,
+          "theta": 0.333333,
+          "sat": 0.2
+        },
+        "P08-diesel": {
+          "P_index": 8,
+          "g": 1.844262,
+          "theta": 0.25,
+          "sat": 0.3
+        },
+        "P09-logistics": {
+          "P_index": 9,
+          "g": 4.610655,
+          "theta": 0.090909,
+          "sat": 1.0
+        }
+      },
+      "layer_a": {
+        "layer": "A",
+        "mae_raw": 0.113808,
+        "mae_norm": 0.682716,
+        "median_abs_rho": 0.214488,
+        "n_corr": 24,
+        "flags": {
+          "S_S_norm": true,
+          "S_G": true
+        },
+        "pass": true,
+        "screen_raw": {
+          "component": "R_ij",
+          "mae": 0.113808,
+          "median_abs_rho": 0.214488,
+          "n_sticky": 64,
+          "n_corr": 24,
+          "flags": {
+            "S_S": true,
+            "S_G": true,
+            "candidate": true,
+            "near_miss": false
+          },
+          "pass": true
+        }
+      },
+      "layer_b": {
+        "layer": "B",
+        "mean_delta_r": 0.0,
+        "delta_min": 0.05,
+        "n_agents": 27,
+        "pass": false,
+        "per_agent": [
+          {
+            "agent_id": "P04-solar",
+            "P_index": 4,
+            "n_sticky_slots": 1,
+            "S_i": 0.670711,
+            "delta_r": 0.0,
+            "R_blind": 0.5
+          },
+          {
+            "agent_id": "P05-water",
+            "P_index": 5,
+            "n_sticky_slots": 1,
+            "S_i": 0.674479,
+            "delta_r": 0.0,
+            "R_blind": 0.0
+          },
+          {
+            "agent_id": "P01-constructor",
+            "P_index": 1,
+            "n_sticky_slots": 1,
+            "S_i": 0.596807,
+            "delta_r": 0.0,
+            "R_blind": 0.0
+          },
+          {
+            "agent_id": "P07-grain",
+            "P_index": 7,
+            "n_sticky_slots": 1,
+            "S_i": 0.653201,
+            "delta_r": 0.0,
+            "R_blind": 0.2
+          },
+          {
+            "agent_id": "E05-iot-verifier",
+            "P_index": 5,
+            "n_sticky_slots": 7,
+            "S_i": 0.084789,
+            "delta_r": 0.0,
+            "R_blind": 0.0
+          },
+          {
+            "agent_id": "E09-tax-auditor",
+            "P_index": 9,
+            "n_sticky_slots": 7,
+            "S_i": 0.076313,
+            "delta_r": 0.0,
+            "R_blind": 1.0
+          },
+          {
+            "agent_id": "P02-roofing",
+            "P_index": 2,
+            "n_sticky_slots": 1,
+            "S_i": 0.561826,
+            "delta_r": 0.0,
+            "R_blind": 0.0
+          },
+          {
+            "agent_id": "P08-diesel",
+            "P_index": 8,
+            "n_sticky_slots": 1,
+            "S_i": 0.614392,
+            "delta_r": 0.0,
+            "R_blind": 0.3
+          },
+          {
+            "agent_id": "E03-gobd-auditor",
+            "P_index": 3,
+            "n_sticky_slots": 6,
+            "S_i": 0.105389,
+            "delta_r": 0.0,
+            "R_blind": 0.0
+          },
+          {
+            "agent_id": "E08-fraud-detector",
+            "P_index": 8,
+            "n_sticky_slots": 6,
+            "S_i": 0.0767,
+            "delta_r": 0.0,
+            "R_blind": 0.3
+          },
+          {
+            "agent_id": "C05-fee-distributor",
+            "P_index": 5,
+            "n_sticky_slots": 1,
+            "S_i": 0.567331,
+            "delta_r": 0.0,
+            "R_blind": 0.0
+          },
+          {
+            "agent_id": "C06-gas-paymaster",
+            "P_index": 6,
+            "n_sticky_slots": 1,
+            "S_i": 0.567153,
+            "delta_r": 0.0,
+            "R_blind": 0.25
+          },
+          {
+            "agent_id": "P09-logistics",
+            "P_index": 9,
+            "n_sticky_slots": 1,
+            "S_i": 0.623916,
+            "delta_r": 0.0,
+            "R_blind": 1.0
+          },
+          {
+            "agent_id": "E02-z3-prover",
+            "P_index": 2,
+            "n_sticky_slots": 5,
+            "S_i": 0.088697,
+            "delta_r": 0.0,
+            "R_blind": 0.0
+          },
+          {
+            "agent_id": "E07-geofence",
+            "P_index": 7,
+            "n_sticky_slots": 5,
+            "S_i": 0.011655,
+            "delta_r": 0.0,
+            "R_blind": 0.0
+          },
+          {
+            "agent_id": "C03-burn-executor",
+            "P_index": 3,
+            "n_sticky_slots": 1,
+            "S_i": 0.567419,
+            "delta_r": 0.0,
+            "R_blind": 0.0
+          },
+          {
+            "agent_id": "C07-retention",
+            "P_index": 7,
+            "n_sticky_slots": 1,
+            "S_i": 0.570716,
+            "delta_r": 0.0,
+            "R_blind": 0.2
+          },
+          {
+            "agent_id": "P03-electrical",
+            "P_index": 3,
+            "n_sticky_slots": 1,
+            "S_i": 0.594155,
+            "delta_r": 0.0,
+            "R_blind": 0.0
+          },
+          {
+            "agent_id": "P06-hydrogen",
+            "P_index": 6,
+            "n_sticky_slots": 1,
+            "S_i": 0.594155,
+            "delta_r": 0.0,
+            "R_blind": 0.25
+          },
+          {
+            "agent_id": "E01-bho-checker",
+            "P_index": 1,
+            "n_sticky_slots": 4,
+            "S_i": 0.028796,
+            "delta_r": 0.0,
+            "R_blind": 0.0
+          },
+          {
+            "agent_id": "C02-staking",
+            "P_index": 2,
+            "n_sticky_slots": 1,
+            "S_i": 0.568193,
+            "delta_r": 0.0,
+            "R_blind": 0.0
+          },
+          {
+            "agent_id": "C08-treasury",
+            "P_index": 8,
+            "n_sticky_slots": 1,
+            "S_i": 0.567807,
+            "delta_r": 0.0,
+            "R_blind": 0.3
+          },
+          {
+            "agent_id": "E04-compliance",
+            "P_index": 4,
+            "n_sticky_slots": 3,
+            "S_i": 0.006561,
+            "delta_r": 0.0,
+            "R_blind": 0.0
+          },
+          {
+            "agent_id": "C09-token-minter",
+            "P_index": 9,
+            "n_sticky_slots": 1,
+            "S_i": 0.568317,
+            "delta_r": 0.0,
+            "R_blind": 1.0
+          },
+          {
+            "agent_id": "C01-settlement",
+            "P_index": 1,
+            "n_sticky_slots": 1,
+            "S_i": 0.566853,
+            "delta_r": 0.0,
+            "R_blind": 0.0
+          },
+          {
+            "agent_id": "C04-liquidity",
+            "P_index": 4,
+            "n_sticky_slots": 1,
+            "S_i": 0.568143,
+            "delta_r": 0.0,
+            "R_blind": 0.5
+          },
+          {
+            "agent_id": "E06-qes-validator",
+            "P_index": 6,
+            "n_sticky_slots": 3,
+            "S_i": 0.050862,
+            "delta_r": 0.0,
+            "R_blind": 0.0
+          }
+        ],
+        "note": "partnerblind f: R(S) ignores j \u2192 \u0394R=0 expected under status quo"
+      },
+      "verdict": {
+        "label": "TRANSFER_PARTNERBLIND",
+        "layer_a_pass": true,
+        "layer_b_pass": false,
+        "pre_reg_allowed": false
+      },
+      "elapsed_s": 5.73
+    },
+    {
+      "run_seed": 20261402,
+      "warmup": 32,
+      "cycles": 512,
+      "kappa": 0.0,
+      "component_ell": "avg_latency",
+      "sigma_ell": 0.1666988103885077,
+      "n_edges": 99,
+      "n_sticky": 64,
+      "P_assignment": {
+        "C01-settlement": {
+          "P_index": 1,
+          "g": 0.009221,
+          "theta": 0.666667,
+          "sat": 0.05
+        },
+        "C02-staking": {
+          "P_index": 2,
+          "g": 0.046107,
+          "theta": 0.769231,
+          "sat": 0.03
+        },
+        "C03-burn-executor": {
+          "P_index": 3,
+          "g": 0.092213,
+          "theta": 0.833333,
+          "sat": 0.02
+        },
+        "C04-liquidity": {
+          "P_index": 4,
+          "g": 0.461066,
+          "theta": 0.166667,
+          "sat": 0.5
+        },
+        "C05-fee-distributor": {
+          "P_index": 5,
+          "g": 0.092213,
+          "theta": 0.5,
+          "sat": 0.1
+        },
+        "C06-gas-paymaster": {
+          "P_index": 6,
+          "g": 0.922131,
+          "theta": 0.285714,
+          "sat": 0.25
+        },
+        "C07-retention": {
+          "P_index": 7,
+          "g": 0.922131,
+          "theta": 0.333333,
+          "sat": 0.2
+        },
+        "C08-treasury": {
+          "P_index": 8,
+          "g": 1.844262,
+          "theta": 0.25,
+          "sat": 0.3
+        },
+        "C09-token-minter": {
+          "P_index": 9,
+          "g": 4.610655,
+          "theta": 0.090909,
+          "sat": 1.0
+        },
+        "E01-bho-checker": {
+          "P_index": 1,
+          "g": 0.009221,
+          "theta": 0.666667,
+          "sat": 0.05
+        },
+        "E02-z3-prover": {
+          "P_index": 2,
+          "g": 0.046107,
+          "theta": 0.769231,
+          "sat": 0.03
+        },
+        "E03-gobd-auditor": {
+          "P_index": 3,
+          "g": 0.092213,
+          "theta": 0.833333,
+          "sat": 0.02
+        },
+        "E04-compliance": {
+          "P_index": 4,
+          "g": 0.461066,
+          "theta": 0.166667,
+          "sat": 0.5
+        },
+        "E05-iot-verifier": {
+          "P_index": 5,
+          "g": 0.092213,
+          "theta": 0.5,
+          "sat": 0.1
+        },
+        "E06-qes-validator": {
+          "P_index": 6,
+          "g": 0.922131,
+          "theta": 0.285714,
+          "sat": 0.25
+        },
+        "E07-geofence": {
+          "P_index": 7,
+          "g": 0.922131,
+          "theta": 0.333333,
+          "sat": 0.2
+        },
+        "E08-fraud-detector": {
+          "P_index": 8,
+          "g": 1.844262,
+          "theta": 0.25,
+          "sat": 0.3
+        },
+        "E09-tax-auditor": {
+          "P_index": 9,
+          "g": 4.610655,
+          "theta": 0.090909,
+          "sat": 1.0
+        },
+        "P01-constructor": {
+          "P_index": 1,
+          "g": 0.009221,
+          "theta": 0.666667,
+          "sat": 0.05
+        },
+        "P02-roofing": {
+          "P_index": 2,
+          "g": 0.046107,
+          "theta": 0.769231,
+          "sat": 0.03
+        },
+        "P03-electrical": {
+          "P_index": 3,
+          "g": 0.092213,
+          "theta": 0.833333,
+          "sat": 0.02
+        },
+        "P04-solar": {
+          "P_index": 4,
+          "g": 0.461066,
+          "theta": 0.166667,
+          "sat": 0.5
+        },
+        "P05-water": {
+          "P_index": 5,
+          "g": 0.092213,
+          "theta": 0.5,
+          "sat": 0.1
+        },
+        "P06-hydrogen": {
+          "P_index": 6,
+          "g": 0.922131,
+          "theta": 0.285714,
+          "sat": 0.25
+        },
+        "P07-grain": {
+          "P_index": 7,
+          "g": 0.922131,
+          "theta": 0.333333,
+          "sat": 0.2
+        },
+        "P08-diesel": {
+          "P_index": 8,
+          "g": 1.844262,
+          "theta": 0.25,
+          "sat": 0.3
+        },
+        "P09-logistics": {
+          "P_index": 9,
+          "g": 4.610655,
+          "theta": 0.090909,
+          "sat": 1.0
+        }
+      },
+      "layer_a": {
+        "layer": "A",
+        "mae_raw": 0.128124,
+        "mae_norm": 0.768596,
+        "median_abs_rho": 0.214488,
+        "n_corr": 24,
+        "flags": {
+          "S_S_norm": true,
+          "S_G": true
+        },
+        "pass": true,
+        "screen_raw": {
+          "component": "R_ij",
+          "mae": 0.128124,
+          "median_abs_rho": 0.214488,
+          "n_sticky": 64,
+          "n_corr": 24,
+          "flags": {
+            "S_S": true,
+            "S_G": true,
+            "candidate": true,
+            "near_miss": false
+          },
+          "pass": true
+        }
+      },
+      "layer_b": {
+        "layer": "B",
+        "mean_delta_r": 0.0,
+        "delta_min": 0.05,
+        "n_agents": 27,
+        "pass": false,
+        "per_agent": [
+          {
+            "agent_id": "P04-solar",
+            "P_index": 4,
+            "n_sticky_slots": 1,
+            "S_i": 0.670711,
+            "delta_r": 0.0,
+            "R_blind": 0.5
+          },
+          {
+            "agent_id": "P05-water",
+            "P_index": 5,
+            "n_sticky_slots": 1,
+            "S_i": 0.674479,
+            "delta_r": 0.0,
+            "R_blind": 0.0
+          },
+          {
+            "agent_id": "P01-constructor",
+            "P_index": 1,
+            "n_sticky_slots": 1,
+            "S_i": 0.596807,
+            "delta_r": 0.0,
+            "R_blind": 0.0
+          },
+          {
+            "agent_id": "P07-grain",
+            "P_index": 7,
+            "n_sticky_slots": 1,
+            "S_i": 0.653201,
+            "delta_r": 0.0,
+            "R_blind": 0.2
+          },
+          {
+            "agent_id": "E05-iot-verifier",
+            "P_index": 5,
+            "n_sticky_slots": 7,
+            "S_i": 0.084789,
+            "delta_r": 0.0,
+            "R_blind": 0.0
+          },
+          {
+            "agent_id": "E09-tax-auditor",
+            "P_index": 9,
+            "n_sticky_slots": 7,
+            "S_i": 0.076313,
+            "delta_r": 0.0,
+            "R_blind": 1.0
+          },
+          {
+            "agent_id": "P02-roofing",
+            "P_index": 2,
+            "n_sticky_slots": 1,
+            "S_i": 0.561826,
+            "delta_r": 0.0,
+            "R_blind": 0.0
+          },
+          {
+            "agent_id": "P08-diesel",
+            "P_index": 8,
+            "n_sticky_slots": 1,
+            "S_i": 0.614392,
+            "delta_r": 0.0,
+            "R_blind": 0.3
+          },
+          {
+            "agent_id": "E03-gobd-auditor",
+            "P_index": 3,
+            "n_sticky_slots": 6,
+            "S_i": 0.105389,
+            "delta_r": 0.0,
+            "R_blind": 0.0
+          },
+          {
+            "agent_id": "E08-fraud-detector",
+            "P_index": 8,
+            "n_sticky_slots": 6,
+            "S_i": 0.0767,
+            "delta_r": 0.0,
+            "R_blind": 0.3
+          },
+          {
+            "agent_id": "C05-fee-distributor",
+            "P_index": 5,
+            "n_sticky_slots": 1,
+            "S_i": 0.567331,
+            "delta_r": 0.0,
+            "R_blind": 0.0
+          },
+          {
+            "agent_id": "C06-gas-paymaster",
+            "P_index": 6,
+            "n_sticky_slots": 1,
+            "S_i": 0.567153,
+            "delta_r": 0.0,
+            "R_blind": 0.25
+          },
+          {
+            "agent_id": "P09-logistics",
+            "P_index": 9,
+            "n_sticky_slots": 1,
+            "S_i": 0.623916,
+            "delta_r": 0.0,
+            "R_blind": 1.0
+          },
+          {
+            "agent_id": "E02-z3-prover",
+            "P_index": 2,
+            "n_sticky_slots": 5,
+            "S_i": 0.088697,
+            "delta_r": 0.0,
+            "R_blind": 0.0
+          },
+          {
+            "agent_id": "E07-geofence",
+            "P_index": 7,
+            "n_sticky_slots": 5,
+            "S_i": 0.011655,
+            "delta_r": 0.0,
+            "R_blind": 0.0
+          },
+          {
+            "agent_id": "C03-burn-executor",
+            "P_index": 3,
+            "n_sticky_slots": 1,
+            "S_i": 0.567419,
+            "delta_r": 0.0,
+            "R_blind": 0.0
+          },
+          {
+            "agent_id": "C07-retention",
+            "P_index": 7,
+            "n_sticky_slots": 1,
+            "S_i": 0.570716,
+            "delta_r": 0.0,
+            "R_blind": 0.2
+          },
+          {
+            "agent_id": "P03-electrical",
+            "P_index": 3,
+            "n_sticky_slots": 1,
+            "S_i": 0.594155,
+            "delta_r": 0.0,
+            "R_blind": 0.0
+          },
+          {
+            "agent_id": "P06-hydrogen",
+            "P_index": 6,
+            "n_sticky_slots": 1,
+            "S_i": 0.594155,
+            "delta_r": 0.0,
+            "R_blind": 0.25
+          },
+          {
+            "agent_id": "E01-bho-checker",
+            "P_index": 1,
+            "n_sticky_slots": 4,
+            "S_i": 0.028796,
+            "delta_r": 0.0,
+            "R_blind": 0.0
+          },
+          {
+            "agent_id": "C02-staking",
+            "P_index": 2,
+            "n_sticky_slots": 1,
+            "S_i": 0.568193,
+            "delta_r": 0.0,
+            "R_blind": 0.0
+          },
+          {
+            "agent_id": "C08-treasury",
+            "P_index": 8,
+            "n_sticky_slots": 1,
+            "S_i": 0.567807,
+            "delta_r": 0.0,
+            "R_blind": 0.3
+          },
+          {
+            "agent_id": "E04-compliance",
+            "P_index": 4,
+            "n_sticky_slots": 3,
+            "S_i": 0.006561,
+            "delta_r": 0.0,
+            "R_blind": 0.0
+          },
+          {
+            "agent_id": "C09-token-minter",
+            "P_index": 9,
+            "n_sticky_slots": 1,
+            "S_i": 0.568317,
+            "delta_r": 0.0,
+            "R_blind": 1.0
+          },
+          {
+            "agent_id": "C01-settlement",
+            "P_index": 1,
+            "n_sticky_slots": 1,
+            "S_i": 0.566853,
+            "delta_r": 0.0,
+            "R_blind": 0.0
+          },
+          {
+            "agent_id": "C04-liquidity",
+            "P_index": 4,
+            "n_sticky_slots": 1,
+            "S_i": 0.568143,
+            "delta_r": 0.0,
+            "R_blind": 0.5
+          },
+          {
+            "agent_id": "E06-qes-validator",
+            "P_index": 6,
+            "n_sticky_slots": 3,
+            "S_i": 0.050862,
+            "delta_r": 0.0,
+            "R_blind": 0.0
+          }
+        ],
+        "note": "partnerblind f: R(S) ignores j \u2192 \u0394R=0 expected under status quo"
+      },
+      "verdict": {
+        "label": "TRANSFER_PARTNERBLIND",
+        "layer_a_pass": true,
+        "layer_b_pass": false,
+        "pre_reg_allowed": false
+      },
+      "elapsed_s": 4.95
+    },
+    {
+      "run_seed": 20261403,
+      "warmup": 32,
+      "cycles": 512,
+      "kappa": 0.0,
+      "component_ell": "avg_latency",
+      "sigma_ell": 0.1666988103885077,
+      "n_edges": 99,
+      "n_sticky": 64,
+      "P_assignment": {
+        "C01-settlement": {
+          "P_index": 1,
+          "g": 0.009221,
+          "theta": 0.666667,
+          "sat": 0.05
+        },
+        "C02-staking": {
+          "P_index": 2,
+          "g": 0.046107,
+          "theta": 0.769231,
+          "sat": 0.03
+        },
+        "C03-burn-executor": {
+          "P_index": 3,
+          "g": 0.092213,
+          "theta": 0.833333,
+          "sat": 0.02
+        },
+        "C04-liquidity": {
+          "P_index": 4,
+          "g": 0.461066,
+          "theta": 0.166667,
+          "sat": 0.5
+        },
+        "C05-fee-distributor": {
+          "P_index": 5,
+          "g": 0.092213,
+          "theta": 0.5,
+          "sat": 0.1
+        },
+        "C06-gas-paymaster": {
+          "P_index": 6,
+          "g": 0.922131,
+          "theta": 0.285714,
+          "sat": 0.25
+        },
+        "C07-retention": {
+          "P_index": 7,
+          "g": 0.922131,
+          "theta": 0.333333,
+          "sat": 0.2
+        },
+        "C08-treasury": {
+          "P_index": 8,
+          "g": 1.844262,
+          "theta": 0.25,
+          "sat": 0.3
+        },
+        "C09-token-minter": {
+          "P_index": 9,
+          "g": 4.610655,
+          "theta": 0.090909,
+          "sat": 1.0
+        },
+        "E01-bho-checker": {
+          "P_index": 1,
+          "g": 0.009221,
+          "theta": 0.666667,
+          "sat": 0.05
+        },
+        "E02-z3-prover": {
+          "P_index": 2,
+          "g": 0.046107,
+          "theta": 0.769231,
+          "sat": 0.03
+        },
+        "E03-gobd-auditor": {
+          "P_index": 3,
+          "g": 0.092213,
+          "theta": 0.833333,
+          "sat": 0.02
+        },
+        "E04-compliance": {
+          "P_index": 4,
+          "g": 0.461066,
+          "theta": 0.166667,
+          "sat": 0.5
+        },
+        "E05-iot-verifier": {
+          "P_index": 5,
+          "g": 0.092213,
+          "theta": 0.5,
+          "sat": 0.1
+        },
+        "E06-qes-validator": {
+          "P_index": 6,
+          "g": 0.922131,
+          "theta": 0.285714,
+          "sat": 0.25
+        },
+        "E07-geofence": {
+          "P_index": 7,
+          "g": 0.922131,
+          "theta": 0.333333,
+          "sat": 0.2
+        },
+        "E08-fraud-detector": {
+          "P_index": 8,
+          "g": 1.844262,
+          "theta": 0.25,
+          "sat": 0.3
+        },
+        "E09-tax-auditor": {
+          "P_index": 9,
+          "g": 4.610655,
+          "theta": 0.090909,
+          "sat": 1.0
+        },
+        "P01-constructor": {
+          "P_index": 1,
+          "g": 0.009221,
+          "theta": 0.666667,
+          "sat": 0.05
+        },
+        "P02-roofing": {
+          "P_index": 2,
+          "g": 0.046107,
+          "theta": 0.769231,
+          "sat": 0.03
+        },
+        "P03-electrical": {
+          "P_index": 3,
+          "g": 0.092213,
+          "theta": 0.833333,
+          "sat": 0.02
+        },
+        "P04-solar": {
+          "P_index": 4,
+          "g": 0.461066,
+          "theta": 0.166667,
+          "sat": 0.5
+        },
+        "P05-water": {
+          "P_index": 5,
+          "g": 0.092213,
+          "theta": 0.5,
+          "sat": 0.1
+        },
+        "P06-hydrogen": {
+          "P_index": 6,
+          "g": 0.922131,
+          "theta": 0.285714,
+          "sat": 0.25
+        },
+        "P07-grain": {
+          "P_index": 7,
+          "g": 0.922131,
+          "theta": 0.333333,
+          "sat": 0.2
+        },
+        "P08-diesel": {
+          "P_index": 8,
+          "g": 1.844262,
+          "theta": 0.25,
+          "sat": 0.3
+        },
+        "P09-logistics": {
+          "P_index": 9,
+          "g": 4.610655,
+          "theta": 0.090909,
+          "sat": 1.0
+        }
+      },
+      "layer_a": {
+        "layer": "A",
+        "mae_raw": 0.126132,
+        "mae_norm": 0.756646,
+        "median_abs_rho": 0.214488,
+        "n_corr": 24,
+        "flags": {
+          "S_S_norm": true,
+          "S_G": true
+        },
+        "pass": true,
+        "screen_raw": {
+          "component": "R_ij",
+          "mae": 0.126132,
+          "median_abs_rho": 0.214488,
+          "n_sticky": 64,
+          "n_corr": 24,
+          "flags": {
+            "S_S": true,
+            "S_G": true,
+            "candidate": true,
+            "near_miss": false
+          },
+          "pass": true
+        }
+      },
+      "layer_b": {
+        "layer": "B",
+        "mean_delta_r": 0.0,
+        "delta_min": 0.05,
+        "n_agents": 27,
+        "pass": false,
+        "per_agent": [
+          {
+            "agent_id": "P04-solar",
+            "P_index": 4,
+            "n_sticky_slots": 1,
+            "S_i": 0.670711,
+            "delta_r": 0.0,
+            "R_blind": 0.5
+          },
+          {
+            "agent_id": "P05-water",
+            "P_index": 5,
+            "n_sticky_slots": 1,
+            "S_i": 0.674479,
+            "delta_r": 0.0,
+            "R_blind": 0.0
+          },
+          {
+            "agent_id": "P01-constructor",
+            "P_index": 1,
+            "n_sticky_slots": 1,
+            "S_i": 0.596807,
+            "delta_r": 0.0,
+            "R_blind": 0.0
+          },
+          {
+            "agent_id": "P07-grain",
+            "P_index": 7,
+            "n_sticky_slots": 1,
+            "S_i": 0.653201,
+            "delta_r": 0.0,
+            "R_blind": 0.2
+          },
+          {
+            "agent_id": "E05-iot-verifier",
+            "P_index": 5,
+            "n_sticky_slots": 7,
+            "S_i": 0.084789,
+            "delta_r": 0.0,
+            "R_blind": 0.0
+          },
+          {
+            "agent_id": "E09-tax-auditor",
+            "P_index": 9,
+            "n_sticky_slots": 7,
+            "S_i": 0.076313,
+            "delta_r": 0.0,
+            "R_blind": 1.0
+          },
+          {
+            "agent_id": "P02-roofing",
+            "P_index": 2,
+            "n_sticky_slots": 1,
+            "S_i": 0.561826,
+            "delta_r": 0.0,
+            "R_blind": 0.0
+          },
+          {
+            "agent_id": "P08-diesel",
+            "P_index": 8,
+            "n_sticky_slots": 1,
+            "S_i": 0.614392,
+            "delta_r": 0.0,
+            "R_blind": 0.3
+          },
+          {
+            "agent_id": "E03-gobd-auditor",
+            "P_index": 3,
+            "n_sticky_slots": 6,
+            "S_i": 0.105389,
+            "delta_r": 0.0,
+            "R_blind": 0.0
+          },
+          {
+            "agent_id": "E08-fraud-detector",
+            "P_index": 8,
+            "n_sticky_slots": 6,
+            "S_i": 0.0767,
+            "delta_r": 0.0,
+            "R_blind": 0.3
+          },
+          {
+            "agent_id": "C05-fee-distributor",
+            "P_index": 5,
+            "n_sticky_slots": 1,
+            "S_i": 0.567331,
+            "delta_r": 0.0,
+            "R_blind": 0.0
+          },
+          {
+            "agent_id": "C06-gas-paymaster",
+            "P_index": 6,
+            "n_sticky_slots": 1,
+            "S_i": 0.567153,
+            "delta_r": 0.0,
+            "R_blind": 0.25
+          },
+          {
+            "agent_id": "P09-logistics",
+            "P_index": 9,
+            "n_sticky_slots": 1,
+            "S_i": 0.623916,
+            "delta_r": 0.0,
+            "R_blind": 1.0
+          },
+          {
+            "agent_id": "E02-z3-prover",
+            "P_index": 2,
+            "n_sticky_slots": 5,
+            "S_i": 0.088697,
+            "delta_r": 0.0,
+            "R_blind": 0.0
+          },
+          {
+            "agent_id": "E07-geofence",
+            "P_index": 7,
+            "n_sticky_slots": 5,
+            "S_i": 0.011655,
+            "delta_r": 0.0,
+            "R_blind": 0.0
+          },
+          {
+            "agent_id": "C03-burn-executor",
+            "P_index": 3,
+            "n_sticky_slots": 1,
+            "S_i": 0.567419,
+            "delta_r": 0.0,
+            "R_blind": 0.0
+          },
+          {
+            "agent_id": "C07-retention",
+            "P_index": 7,
+            "n_sticky_slots": 1,
+            "S_i": 0.570716,
+            "delta_r": 0.0,
+            "R_blind": 0.2
+          },
+          {
+            "agent_id": "P03-electrical",
+            "P_index": 3,
+            "n_sticky_slots": 1,
+            "S_i": 0.594155,
+            "delta_r": 0.0,
+            "R_blind": 0.0
+          },
+          {
+            "agent_id": "P06-hydrogen",
+            "P_index": 6,
+            "n_sticky_slots": 1,
+            "S_i": 0.594155,
+            "delta_r": 0.0,
+            "R_blind": 0.25
+          },
+          {
+            "agent_id": "E01-bho-checker",
+            "P_index": 1,
+            "n_sticky_slots": 4,
+            "S_i": 0.028796,
+            "delta_r": 0.0,
+            "R_blind": 0.0
+          },
+          {
+            "agent_id": "C02-staking",
+            "P_index": 2,
+            "n_sticky_slots": 1,
+            "S_i": 0.568193,
+            "delta_r": 0.0,
+            "R_blind": 0.0
+          },
+          {
+            "agent_id": "C08-treasury",
+            "P_index": 8,
+            "n_sticky_slots": 1,
+            "S_i": 0.567807,
+            "delta_r": 0.0,
+            "R_blind": 0.3
+          },
+          {
+            "agent_id": "E04-compliance",
+            "P_index": 4,
+            "n_sticky_slots": 3,
+            "S_i": 0.006561,
+            "delta_r": 0.0,
+            "R_blind": 0.0
+          },
+          {
+            "agent_id": "C09-token-minter",
+            "P_index": 9,
+            "n_sticky_slots": 1,
+            "S_i": 0.568317,
+            "delta_r": 0.0,
+            "R_blind": 1.0
+          },
+          {
+            "agent_id": "C01-settlement",
+            "P_index": 1,
+            "n_sticky_slots": 1,
+            "S_i": 0.566853,
+            "delta_r": 0.0,
+            "R_blind": 0.0
+          },
+          {
+            "agent_id": "C04-liquidity",
+            "P_index": 4,
+            "n_sticky_slots": 1,
+            "S_i": 0.568143,
+            "delta_r": 0.0,
+            "R_blind": 0.5
+          },
+          {
+            "agent_id": "E06-qes-validator",
+            "P_index": 6,
+            "n_sticky_slots": 3,
+            "S_i": 0.050862,
+            "delta_r": 0.0,
+            "R_blind": 0.0
+          }
+        ],
+        "note": "partnerblind f: R(S) ignores j \u2192 \u0394R=0 expected under status quo"
+      },
+      "verdict": {
+        "label": "TRANSFER_PARTNERBLIND",
+        "layer_a_pass": true,
+        "layer_b_pass": false,
+        "pre_reg_allowed": false
+      },
+      "elapsed_s": 4.99
+    }
+  ],
+  "majority": {
+    "layer_a_pass_seeds": 3,
+    "layer_b_pass_seeds": 0,
+    "label_counts": {
+      "TRANSFER_PARTNERBLIND": 3
+    },
+    "majority_label": "TRANSFER_PARTNERBLIND",
+    "pre_reg_allowed": false
+  }
+}

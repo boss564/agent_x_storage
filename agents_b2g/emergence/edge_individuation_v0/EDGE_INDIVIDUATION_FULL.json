@@ -1,0 +1,113 @@
+{
+  "schema": "edge_individuation_v0",
+  "draft": "docs/EDGE_INDIVIDUATION_v0_DRAFT.md",
+  "not_a_pre_reg": true,
+  "no_rho_target": true,
+  "noise_is_positive_control_only": true,
+  "preferred_production": "phi1_delay",
+  "schicht_a_definition": "median |rho| vs swarm mean (not pairwise)",
+  "battery_required_later": "A && B && C",
+  "params": {
+    "seeds": [
+      20261401,
+      20261402,
+      20261403
+    ],
+    "warmup": 32,
+    "cycles": 512
+  },
+  "elapsed_s": 16.0,
+  "per_seed": [
+    {
+      "sigma_ell": 0.16786654555922026,
+      "n_sticky": 64,
+      "T": 512,
+      "tau_ticks_median": 11.0,
+      "tau_ticks_span": 63,
+      "sticky_S_raw_median_abs_rho": 0.964169,
+      "sticky_S_phi0_scale_median_abs_rho": 0.884521,
+      "sticky_S_phi1_delay_median_abs_rho": 0.966691,
+      "sticky_S_noise_ctrl_median_abs_rho": 0.672367,
+      "sticky_ell_median_abs_rho": 0.348407,
+      "n_corr": {
+        "raw": 64,
+        "phi0": 64,
+        "phi1": 64,
+        "noise": 64,
+        "ell": 64
+      },
+      "positive_control": {
+        "label": "SCREEN_SEES_NOISE",
+        "pass": true,
+        "note": "noise is control only \u2014 not a production path"
+      },
+      "preferred_production": "phi1_delay",
+      "production_note": "phi0=S_i*(1+gamma) scale-invariant class; phi1=S_i(t-tau_ij) tau from avg_latency \u2014 preferred candidate",
+      "run_seed": 20261401,
+      "elapsed_s": 6.01
+    },
+    {
+      "sigma_ell": 0.16786654555922026,
+      "n_sticky": 64,
+      "T": 512,
+      "tau_ticks_median": 11.0,
+      "tau_ticks_span": 63,
+      "sticky_S_raw_median_abs_rho": 0.964169,
+      "sticky_S_phi0_scale_median_abs_rho": 0.884521,
+      "sticky_S_phi1_delay_median_abs_rho": 0.966691,
+      "sticky_S_noise_ctrl_median_abs_rho": 0.492382,
+      "sticky_ell_median_abs_rho": 0.348407,
+      "n_corr": {
+        "raw": 64,
+        "phi0": 64,
+        "phi1": 64,
+        "noise": 64,
+        "ell": 64
+      },
+      "positive_control": {
+        "label": "SCREEN_SEES_NOISE",
+        "pass": true,
+        "note": "noise is control only \u2014 not a production path"
+      },
+      "preferred_production": "phi1_delay",
+      "production_note": "phi0=S_i*(1+gamma) scale-invariant class; phi1=S_i(t-tau_ij) tau from avg_latency \u2014 preferred candidate",
+      "run_seed": 20261402,
+      "elapsed_s": 4.99
+    },
+    {
+      "sigma_ell": 0.16786654555922026,
+      "n_sticky": 64,
+      "T": 512,
+      "tau_ticks_median": 11.0,
+      "tau_ticks_span": 63,
+      "sticky_S_raw_median_abs_rho": 0.964169,
+      "sticky_S_phi0_scale_median_abs_rho": 0.884521,
+      "sticky_S_phi1_delay_median_abs_rho": 0.966691,
+      "sticky_S_noise_ctrl_median_abs_rho": 0.715237,
+      "sticky_ell_median_abs_rho": 0.348407,
+      "n_corr": {
+        "raw": 64,
+        "phi0": 64,
+        "phi1": 64,
+        "noise": 64,
+        "ell": 64
+      },
+      "positive_control": {
+        "label": "SCREEN_SEES_NOISE",
+        "pass": true,
+        "note": "noise is control only \u2014 not a production path"
+      },
+      "preferred_production": "phi1_delay",
+      "production_note": "phi0=S_i*(1+gamma) scale-invariant class; phi1=S_i(t-tau_ij) tau from avg_latency \u2014 preferred candidate",
+      "run_seed": 20261403,
+      "elapsed_s": 4.99
+    }
+  ],
+  "majority": {
+    "positive_control_pass_seeds": 3,
+    "screen_instrument_ok": true,
+    "label": "SCREEN_SEES_NOISE",
+    "phi1_below_0_90": false,
+    "phi1_clearly_below": false
+  }
+}
