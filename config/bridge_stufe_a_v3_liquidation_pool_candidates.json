@@ -1,0 +1,54 @@
+{
+  "status": "binding_candidates",
+  "note": "Pool proxies only. LiquidationCall is emitted by the proxy. Pre-Reg §3.0.2.",
+  "verification_policy": {
+    "docs_verified_default": false,
+    "rule": "Only a reviewer with real docs/registry access may set docs_verified=true."
+  },
+  "window": {
+    "start_utc": "2026-05-20T00:00:00Z",
+    "end_utc": "2026-08-17T23:59:59Z"
+  },
+  "pools": [
+    {
+      "protocol": "aave_v3",
+      "chain": "ethereum",
+      "pool": "0x87870bca3f3fd6335c3f4ce8392d69350b4fa4e2",
+      "verification_status": "verified",
+      "docs_verified": true,
+      "docs_verified_at": "2026-08-20",
+      "docs_source": "https://github.com/bgd-labs/aave-address-book/blob/main/src/AaveV3Ethereum.sol (POOL); Aave docs point to Address Book",
+      "status": "verified"
+    },
+    {
+      "protocol": "aave_v3",
+      "chain": "gnosis",
+      "pool": "0xb50201558b00496a145fe76f7424749556e326d8",
+      "verification_status": "verified",
+      "docs_verified": true,
+      "docs_verified_at": "2026-08-20",
+      "docs_source": "https://github.com/bgd-labs/aave-address-book/blob/main/src/AaveV3Gnosis.sol (POOL)",
+      "status": "verified"
+    },
+    {
+      "protocol": "spark",
+      "chain": "ethereum",
+      "pool": "0xc13e21b648a5ee794902342038ff3adab66be987",
+      "verification_status": "verified",
+      "docs_verified": true,
+      "docs_verified_at": "2026-08-20",
+      "docs_source": "https://docs.spark.fi/dev/deployments/ → https://github.com/sparkdotfi/spark-address-registry/blob/master/src/SparkLend.sol (POOL)",
+      "status": "verified"
+    },
+    {
+      "protocol": "spark",
+      "chain": "gnosis",
+      "pool": "0x2dae5307c5e3fd1cf5a72cb6f698f915860607e0",
+      "verification_status": "verified",
+      "docs_verified": true,
+      "docs_verified_at": "2026-08-20",
+      "docs_source": "https://docs.spark.fi/dev/deployments/ → https://github.com/sparkdotfi/spark-address-registry/blob/master/src/Gnosis.sol (POOL)",
+      "status": "verified"
+    }
+  ]
+}

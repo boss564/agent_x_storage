@@ -1,0 +1,111 @@
+{
+  "status": "binding_candidates",
+  "note": "Stablecoin mint/burn ETH-only (PSM + CCTP). Pre-Reg §3.0.4. Gnosis excluded. FiatToken excluded.",
+  "verification_policy": {
+    "docs_verified_default": false,
+    "rule": "Only a reviewer with real docs/registry access may set docs_verified=true."
+  },
+  "window": {
+    "start_utc": "2026-05-20T00:00:00Z",
+    "end_utc": "2026-08-17T23:59:59Z"
+  },
+  "join": "or_minute_occupancy",
+  "events": {
+    "psm_buy_gem": "BuyGem(address,uint256,uint256)",
+    "psm_sell_gem": "SellGem(address,uint256,uint256)",
+    "cctp_v1_deposit_for_burn": "DepositForBurn(uint64,address,uint256,address,bytes32,uint32,bytes32,bytes32)",
+    "cctp_v1_mint_and_withdraw": "MintAndWithdraw(address,uint256,address)",
+    "cctp_v2_deposit_for_burn": "DepositForBurn(address,uint256,address,bytes32,uint32,bytes32,bytes32,uint256,uint32,bytes)",
+    "cctp_v2_mint_and_withdraw": "MintAndWithdraw(address,uint256,address,uint256)"
+  },
+  "contracts": [
+    {
+      "protocol": "lite_psm",
+      "chain": "ethereum",
+      "role": "psm",
+      "address": "0xf6e72db5454dd049d0788e411b06cfaf16853042",
+      "events": ["psm_buy_gem", "psm_sell_gem"],
+      "layer_b": "gem()",
+      "verification_status": "verified",
+      "docs_verified": true,
+      "docs_verified_at": "2026-08-20",
+      "docs_source": "https://docs.spark.fi/dev/integration-guides/litepsm ; github.com/sky-ecosystem/dss-lite-psm",
+      "status": "verified"
+    },
+    {
+      "protocol": "classic_psm",
+      "chain": "ethereum",
+      "role": "psm",
+      "address": "0x89b78cfa322f6c5de0abceecab66aee45393cc5a",
+      "events": ["psm_buy_gem", "psm_sell_gem"],
+      "layer_b": "gemJoin()",
+      "verification_status": "verified",
+      "docs_verified": true,
+      "docs_verified_at": "2026-08-20",
+      "docs_source": "https://github.com/makerdao/dss-psm README MCD_PSM_USDC_A",
+      "status": "verified"
+    },
+    {
+      "protocol": "cctp_v1",
+      "chain": "ethereum",
+      "role": "token_messenger",
+      "address": "0xbd3fa81b58ba92a82136038b25adec7066af3155",
+      "events": ["cctp_v1_deposit_for_burn", "cctp_v1_mint_and_withdraw"],
+      "layer_b": "localMessageTransmitter()",
+      "verification_status": "verified",
+      "docs_verified": true,
+      "docs_verified_at": "2026-08-20",
+      "docs_source": "https://developers.circle.com/cctp/v1/evm-smart-contracts TokenMessenger Ethereum",
+      "status": "verified"
+    },
+    {
+      "protocol": "cctp_v2",
+      "chain": "ethereum",
+      "role": "token_messenger",
+      "address": "0x28b5a0e9c621a5badaa536219b3a228c8168cf5d",
+      "events": ["cctp_v2_deposit_for_burn", "cctp_v2_mint_and_withdraw"],
+      "layer_b": "localMessageTransmitter()",
+      "verification_status": "verified",
+      "docs_verified": true,
+      "docs_verified_at": "2026-08-20",
+      "docs_source": "https://developers.circle.com/cctp/references/contract-addresses TokenMessengerV2 Ethereum",
+      "status": "verified"
+    },
+    {
+      "protocol": "psm",
+      "chain": "gnosis",
+      "role": "psm",
+      "address": null,
+      "verification_status": "excluded",
+      "docs_verified": false,
+      "docs_verified_at": "2026-08-20",
+      "docs_source": "docs/BRIDGE_STUFE_A_V3_PREREG.md §3.0.4",
+      "adaptation_reason": "Keine Maker/Spark PSM-Deployment auf Gnosis in autoritativen Docs. Exclusion gemäß Pre-Reg §3.0.4.",
+      "status": "excluded"
+    },
+    {
+      "protocol": "cctp",
+      "chain": "gnosis",
+      "role": "token_messenger",
+      "address": null,
+      "verification_status": "excluded",
+      "docs_verified": false,
+      "docs_verified_at": "2026-08-20",
+      "docs_source": "docs/BRIDGE_STUFE_A_V3_PREREG.md §3.0.4",
+      "adaptation_reason": "Gnosis fehlt in Circle CCTP Supported Domains. Exclusion gemäß Pre-Reg §3.0.4.",
+      "status": "excluded"
+    },
+    {
+      "protocol": "fiat_token",
+      "chain": "ethereum",
+      "role": "issuer_mint_burn",
+      "address": null,
+      "verification_status": "excluded",
+      "docs_verified": false,
+      "docs_verified_at": "2026-08-20",
+      "docs_source": "docs/BRIDGE_STUFE_A_V3_PREREG.md §3.0.4",
+      "adaptation_reason": "FiatToken-Mint/Burn (Emittent) ist institutionell und nicht Pre-Reg-Primärprotokoll. Exclusion gemäß Pre-Reg §3.0.4.",
+      "status": "excluded"
+    }
+  ]
+}

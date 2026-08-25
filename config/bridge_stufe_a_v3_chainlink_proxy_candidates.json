@@ -1,0 +1,146 @@
+{
+  "status": "non_binding_candidates",
+  "note": "Candidate list only. Must be verified against authoritative Chainlink feed address source before binding.",
+  "verification_policy": {
+    "docs_verified_default": false,
+    "docs_verified_at_default": null,
+    "docs_source_default": null,
+    "rule": "Only a reviewer with real docs access may set docs_verified=true."
+  },
+  "window": {
+    "start_utc": "2026-05-20T00:00:00Z",
+    "end_utc": "2026-08-17T23:59:59Z"
+  },
+  "chains": {
+    "ethereum": {
+      "feeds": [
+        {
+          "name": "ETH/USD",
+          "proxy_candidate": "0x5f4ec3df9cbd43714fe2740f5e3616155c5b8419",
+          "confidence": "high",
+          "verification_status": "verified",
+          "docs_verified": true,
+          "docs_verified_at": "2026-08-19",
+          "docs_source": "https://docs.chain.link/data-feeds/price-feeds/addresses?network=ethereum",
+          "status": "verified"
+        },
+        {
+          "name": "USDC/USD",
+          "proxy_candidate": "0x8fffffd4afb6115b954bd326cbe7b4ba576818f6",
+          "confidence": "high",
+          "verification_status": "verified",
+          "docs_verified": true,
+          "docs_verified_at": "2026-08-19",
+          "docs_source": "https://docs.chain.link/data-feeds/price-feeds/addresses?network=ethereum",
+          "status": "verified"
+        },
+        {
+          "name": "USDT/USD",
+          "proxy_candidate": "0x3e7d1eab13ad0104d2750b8863b489d65364e32d",
+          "confidence": "medium_high",
+          "verification_status": "excluded",
+          "docs_verified": true,
+          "docs_verified_at": "2026-08-20",
+          "docs_source": "docs/BRIDGE_STUFE_A_V3_PREREG.md §3.0.1",
+          "adaptation_reason": "N=90 Events im 90-Tage-Fenster, unter der präregistrierten N≥100-Schwelle pro Feed. Tages-Coverage 1.0 (90/90). Feed-strikt-Exclusion gemäß Pre-Reg §3.0.1; Kandidatenklasse Chainlink bleibt TESTBAR.",
+          "status": "excluded",
+          "note": "Proxy previously docs-verified; captured 90 events retained in JSONL but excluded from Z_neu occupancy."
+        },
+        {
+          "name": "BTC/USD",
+          "proxy_candidate": "0xf4030086522a5beea4988f8ca5b36dbc97bee88c",
+          "confidence": "high",
+          "verification_status": "verified",
+          "docs_verified": true,
+          "docs_verified_at": "2026-08-19",
+          "docs_source": "https://docs.chain.link/data-feeds/price-feeds/addresses?network=ethereum",
+          "status": "verified",
+          "note": "Official Ethereum mainnet BTC/USD proxy; shared with WBTC/USD substitution."
+        },
+        {
+          "name": "WBTC/USD",
+          "proxy_candidate": "0xf4030086522a5beea4988f8ca5b36dbc97bee88c",
+          "confidence": "unknown",
+          "verification_status": "verified",
+          "docs_verified": true,
+          "docs_verified_at": "2026-08-19",
+          "docs_source": "https://docs.chain.link/data-feeds/price-feeds/addresses?network=ethereum",
+          "status": "verified",
+          "note": "Official Ethereum mainnet proxy per manual docs verification."
+        },
+        {
+          "name": "GNO/USD",
+          "proxy_candidate": null,
+          "confidence": "unknown",
+          "verification_status": "excluded",
+          "docs_verified": false,
+          "docs_verified_at": "2026-08-19",
+          "docs_source": "https://docs.chain.link/data-feeds/price-feeds/addresses?network=ethereum",
+          "adaptation_reason": "Kein öffentlicher Standard-Chainlink-Aggregator für GNO/USD auf Ethereum Mainnet verfügbar. Ausschluss gemäß Pre-Reg §3.0.1, da Orakel-Ticking primär nativ auf Gnosis Chain stattfindet.",
+          "status": "excluded"
+        }
+      ]
+    },
+    "gnosis": {
+      "feeds": [
+        {
+          "name": "ETH/USD",
+          "proxy_candidate": "0xa767f745331d267c7751297d982b050c93985627",
+          "confidence": "high",
+          "verification_status": "verified",
+          "docs_verified": true,
+          "docs_verified_at": "2026-08-19",
+          "docs_source": "https://docs.chain.link/data-feeds/price-feeds/addresses?network=gnosis",
+          "status": "verified"
+        },
+        {
+          "name": "WBTC/USD",
+          "proxy_candidate": "0x00288135be38b83249f380e9b6b9a04c90ec39ee",
+          "confidence": "high",
+          "verification_status": "verified",
+          "docs_verified": true,
+          "docs_verified_at": "2026-08-19",
+          "docs_source": "https://docs.chain.link/data-feeds/price-feeds/addresses?network=gnosis",
+          "status": "verified"
+        },
+        {
+          "name": "USDC/USD",
+          "proxy_candidate": "0x26c31ac71010af62e6b486d1132e266d6298857d",
+          "confidence": "high",
+          "verification_status": "verified",
+          "docs_verified": true,
+          "docs_verified_at": "2026-08-19",
+          "docs_source": "https://docs.chain.link/data-feeds/price-feeds/addresses?network=gnosis",
+          "status": "verified"
+        },
+        {
+          "name": "USDT/USD",
+          "proxy_candidate": null,
+          "confidence": "unknown",
+          "verification_status": "excluded",
+          "docs_verified": false,
+          "docs_verified_at": "2026-08-19",
+          "docs_source": "https://docs.chain.link/data-feeds/price-feeds/addresses?network=gnosis",
+          "adaptation_reason": "Kein öffentlicher Standard-Chainlink-Feed für USDT/USD auf Gnosis Chain verfügbar. Exkludiert gemäß Pre-Reg §3.0.1.",
+          "status": "excluded"
+        },
+        {
+          "name": "GNO/USD",
+          "proxy_candidate": "0x22441d81416430a54336ab28765abd31a792ad37",
+          "confidence": "high",
+          "verification_status": "verified",
+          "docs_verified": true,
+          "docs_verified_at": "2026-08-19",
+          "docs_source": "https://data.chain.link/feeds/gnosis/mainnet/gno-usd",
+          "status": "verified"
+        }
+      ]
+    }
+  },
+  "binding_gate": [
+    "Resolve missing candidates from authoritative feed source",
+    "Verify each candidate against source for exact chain/feed pair",
+    "Run proxy->aggregator resolver over verified proxies",
+    "Run latestRoundData plausibility check for semantic feed match"
+  ]
+}

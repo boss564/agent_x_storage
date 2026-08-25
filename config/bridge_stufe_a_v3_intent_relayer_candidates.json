@@ -1,0 +1,83 @@
+{
+  "status": "binding_candidates",
+  "note": "Intent-relayer contracts for ETH+Gnosis only. Pre-Reg §3.0.3. LayerZero excluded. Across Gnosis excluded (no official SpokePool).",
+  "verification_policy": {
+    "docs_verified_default": false,
+    "rule": "Only a reviewer with real docs/registry access may set docs_verified=true."
+  },
+  "window": {
+    "start_utc": "2026-05-20T00:00:00Z",
+    "end_utc": "2026-08-17T23:59:59Z"
+  },
+  "join": "or_minute_occupancy",
+  "events": {
+    "across_filled_relay": "FilledRelay(bytes32,bytes32,uint256,uint256,uint256,uint256,uint256,uint32,uint32,bytes32,bytes32,bytes32,bytes32,bytes32,(bytes32,bytes32,uint256,uint8))",
+    "across_filled_v3_relay": "FilledV3Relay(address,address,uint256,uint256,uint256,uint256,uint32,uint32,uint32,address,address,address,address,bytes,(address,bytes,uint256,uint8))",
+    "cow_trade": "Trade(address,address,address,uint256,uint256,uint256,bytes)"
+  },
+  "contracts": [
+    {
+      "protocol": "across",
+      "chain": "ethereum",
+      "role": "spoke_pool",
+      "address": "0x5c7bcd6e7de5423a257d81b442095a1a6ced35c5",
+      "events": ["across_filled_relay", "across_filled_v3_relay"],
+      "layer_b": "numberOfDeposits()",
+      "verification_status": "verified",
+      "docs_verified": true,
+      "docs_verified_at": "2026-08-20",
+      "docs_source": "https://github.com/across-protocol/contracts/blob/master/broadcast/deployed-addresses.json chain 1 SpokePool; docs.across.to/chains-and-contracts",
+      "status": "verified"
+    },
+    {
+      "protocol": "across",
+      "chain": "gnosis",
+      "role": "spoke_pool",
+      "address": null,
+      "verification_status": "excluded",
+      "docs_verified": false,
+      "docs_verified_at": "2026-08-20",
+      "docs_source": "docs/BRIDGE_STUFE_A_V3_PREREG.md §3.0.3",
+      "adaptation_reason": "Keine SpokePool-Adresse für Gnosis (chainId 100) in Across deployed-addresses.json / legacy-addresses.json. Exclusion gemäß Pre-Reg §3.0.3.",
+      "status": "excluded"
+    },
+    {
+      "protocol": "cow",
+      "chain": "ethereum",
+      "role": "gpv2_settlement",
+      "address": "0x9008d19f58aabd9ed0d60971565aa8510560ab41",
+      "events": ["cow_trade"],
+      "layer_b": "vaultRelayer()",
+      "verification_status": "verified",
+      "docs_verified": true,
+      "docs_verified_at": "2026-08-20",
+      "docs_source": "https://docs.cow.fi/cow-protocol/reference/contracts/core ; GPv2Settlement CREATE2 0x9008D19f58AAbD9eD0D60971565AA8510560ab41",
+      "status": "verified"
+    },
+    {
+      "protocol": "cow",
+      "chain": "gnosis",
+      "role": "gpv2_settlement",
+      "address": "0x9008d19f58aabd9ed0d60971565aa8510560ab41",
+      "events": ["cow_trade"],
+      "layer_b": "vaultRelayer()",
+      "verification_status": "verified",
+      "docs_verified": true,
+      "docs_verified_at": "2026-08-20",
+      "docs_source": "https://docs.cow.fi/cow-protocol/reference/contracts/core (same CREATE2 address on Gnosis)",
+      "status": "verified"
+    },
+    {
+      "protocol": "layerzero",
+      "chain": "ethereum",
+      "role": "messaging",
+      "address": null,
+      "verification_status": "excluded",
+      "docs_verified": false,
+      "docs_verified_at": "2026-08-20",
+      "docs_source": "docs/BRIDGE_STUFE_A_V3_PREREG.md §3.0.3",
+      "adaptation_reason": "LayerZero ist ein generisches Messaging-Protokoll ohne protokollspezifisches Intent-Fill-Event. PayloadDelivered erfasst beliebige Nachrichten, nicht Intent-Fills. Exclusion gemäß Pre-Reg §3.0.3.",
+      "status": "excluded"
+    }
+  ]
+}

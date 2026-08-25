@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
 """Prueft das Bridge-Siegel (Stufe A v3 + Filter-Diagnose).
 
-Verifiziert Gate- und Ergebnis-JSONs sowie die vier grossen JSONL-Captures
+Verifiziert Gate- und Ergebnis-JSONs sowie die JSONL-Captures
 gegen ``bridge_manifest.json``. Die JSONs gehoeren unter Versionskontrolle;
 die JSONLs bleiben lokal und werden nur per SHA-256 fixiert.
+
+Captures: 4 Kern-JSONLs (bridge/drivers/mev) + 4 V3-Kandidaten-JSONLs
+(``chainlink``, ``intent_relayers``, ``liquidations``, ``stablecoin_mint_burn``)
+laut Dossier §9.
 
     python3 scripts/check_bridge_seal.py              # verify (Exit 0/1)
     python3 scripts/check_bridge_seal.py --write      # Manifest neu schreiben
@@ -36,10 +40,16 @@ COMMITTED_JSON = (
 )
 
 CAPTURE_JSONL = (
+    # Kern (Stufe A / Diagnose)
     "bridge_eth.jsonl",
     "bridge_gnosis.jsonl",
     "drivers_90d.jsonl",
     "bridge_stufe_a_v3_mev_cluster.jsonl",
+    # V3-Kandidaten (§9) — lokal, nur SHA-256 im Manifest
+    "bridge_stufe_a_v3_chainlink.jsonl",
+    "bridge_stufe_a_v3_intent_relayers.jsonl",
+    "bridge_stufe_a_v3_liquidations.jsonl",
+    "bridge_stufe_a_v3_stablecoin_mint_burn.jsonl",
 )
 
 

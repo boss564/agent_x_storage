@@ -252,7 +252,7 @@ python3 scripts/bridge_diagnostic_pipeline.py --skip-ex-post
 | `bridge_diagnostic_ergebnis.json` | Aggregat, `final_verdict` |
 | `bridge_stufe_a_v3_ergebnis.json` | V3-Deskriptiva, read-only eingebettet |
 | `bridge_stufe_a_v3_coverage_gate.json` | V3-Vorlauf (Upstream; siehe Hinweis unten) |
-| `bridge_manifest.json` | SHA-256 aller 12 Siegel-Artefakte (4 JSONL + 8 JSON) |
+| `bridge_manifest.json` | SHA-256 aller 16 Siegel-Artefakte (8 JSONL + 8 JSON; V3-Kandidaten inkl.) |
 | `scripts/check_bridge_seal.py` | Verify (Exit 1 bei Abweichung) |
 
 **Integritäts-Hinweis (2026-08-23):** `coverage_gate.json` nach Erstversiegelung

@@ -1,0 +1,57 @@
+{
+  "status": "binding_candidates",
+  "note": "MEV-cluster address-based candidate (ETH+Gnosis). Pre-Reg §3.0.5. No protocol contracts to resolve — exclusion list + RPC capability gate.",
+  "verification_policy": {
+    "docs_verified_default": false,
+    "rule": "Only a reviewer with real docs/registry access may set docs_verified=true."
+  },
+  "window": {
+    "start_utc": "2026-05-20T00:00:00Z",
+    "end_utc": "2026-08-17T23:59:59Z"
+  },
+  "join": "same_utc_minute_cross_chain_eoa",
+  "operationalization": {
+    "tx_status": "success_only",
+    "tx_types": "all",
+    "actor_field": "tx.from",
+    "internal_traces": false,
+    "address_normalization": "lowercase",
+    "delta_t": "same_utc_minute",
+    "delta_t_note": "t // 60 equality; approximation of |Δt|≤60s with known boundary artifact",
+    "occupancy": "minute_occupied_if_ge1_cross_chain_eoa",
+    "eoa_filter": "eth_getCode_empty_only_for_cross_chain_candidates",
+    "n_gate_unit": "occupied_minutes"
+  },
+  "exclusion_list": "config/bridge_stufe_a_v3_mev_cluster_exclusion_list.json",
+  "chains": [
+    {
+      "chain": "ethereum",
+      "role": "treatment",
+      "verification_status": "verified",
+      "docs_verified": true,
+      "docs_verified_at": "2026-08-21",
+      "docs_source": "docs/BRIDGE_STUFE_A_V3_PREREG.md §3.0.5",
+      "status": "verified"
+    },
+    {
+      "chain": "gnosis",
+      "role": "treatment",
+      "verification_status": "verified",
+      "docs_verified": true,
+      "docs_verified_at": "2026-08-21",
+      "docs_source": "docs/BRIDGE_STUFE_A_V3_PREREG.md §3.0.5",
+      "status": "verified"
+    },
+    {
+      "chain": "arbitrum",
+      "role": "control",
+      "address": null,
+      "verification_status": "excluded",
+      "docs_verified": false,
+      "docs_verified_at": "2026-08-21",
+      "docs_source": "docs/BRIDGE_STUFE_A_V3_PREREG.md §3.0.5",
+      "adaptation_reason": "Arbitrum ist Kontrolle und wird nicht konditioniert. Exclusion gemäß Pre-Reg §3.0.5.",
+      "status": "excluded"
+    }
+  ]
+}

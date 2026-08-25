@@ -1,6 +1,6 @@
 {
   "schema": "bridge_seal_v1",
-  "sealed_at": "2026-08-23T10:20:00.087050+00:00",
+  "sealed_at": "2026-08-25T11:21:06.423558+00:00",
   "studies": [
     "bridge_stufe_a_v3",
     "bridge_diagnostic"
@@ -71,6 +71,26 @@
       "sha256": "0b341378423b6758a19fb0cf0b02fa21e35cd5c1675f12609dd7ba58e1f341dc",
       "bytes": 16041440,
       "mtime_utc": "2026-08-22T10:19:40Z"
+    },
+    "bridge_stufe_a_v3_chainlink.jsonl": {
+      "sha256": "ff3456c6919b3c63bc4a8c18c655d465571d63482f965f288e935036d4cb1809",
+      "bytes": 4034559,
+      "mtime_utc": "2026-08-19T19:18:24Z"
+    },
+    "bridge_stufe_a_v3_intent_relayers.jsonl": {
+      "sha256": "5f49adb4278f53c55ef262031766d86f81eb634343983382d4e4233093951807",
+      "bytes": 402581017,
+      "mtime_utc": "2026-08-20T15:45:05Z"
+    },
+    "bridge_stufe_a_v3_liquidations.jsonl": {
+      "sha256": "03bbe14ab8be8e22ce6f9618eaa7dbca473ba4321c4af4c957805d7c8014c045",
+      "bytes": 1713429,
+      "mtime_utc": "2026-08-20T04:12:17Z"
+    },
+    "bridge_stufe_a_v3_stablecoin_mint_burn.jsonl": {
+      "sha256": "be7906a55499082d026ec86ac8056f1b9d8e57571e74f2e8d23ca2d10c4dc8a9",
+      "bytes": 179476915,
+      "mtime_utc": "2026-08-20T23:05:21Z"
     }
   }
 }

@@ -1,0 +1,388 @@
+{
+  "status": "binding_exclusion_list",
+  "prereg_section": "\u00a73.0.5",
+  "docs_verified_at": "2026-08-21",
+  "note": "Addresses excluded from MEV-cluster occupancy. Infrastructure/protocol contracts that can appear as tx.from on both chains but are not MEV searchers. Lowercase only.",
+  "entries": [
+    {
+      "address": "0x88ad09518695c6c3712ac10a214be5109a655671",
+      "label": "omnibridge_mediator_eth",
+      "chain_hint": "ethereum",
+      "docs_source": "https://docs.gnosischain.com/bridges/About%20Token%20Bridges/omnibridge"
+    },
+    {
+      "address": "0xf6a78083ca3e2a662d6dd1703c939c8ace2e268d",
+      "label": "omnibridge_mediator_gnosis",
+      "chain_hint": "gnosis",
+      "docs_source": "https://docs.gnosischain.com/developers/Usefulcontracts"
+    },
+    {
+      "address": "0x4c36d2919e407f0cc2ee3c993ccf8ac26d9ce64e",
+      "label": "amb_foreign_eth",
+      "chain_hint": "ethereum",
+      "docs_source": "https://docs.gnosischain.com/bridges/About%20Token%20Bridges/amb-bridge"
+    },
+    {
+      "address": "0x75df5af045d91108662d8080fd1fefad6aa0bb59",
+      "label": "amb_home_gnosis",
+      "chain_hint": "gnosis",
+      "docs_source": "https://docs.gnosischain.com/developers/Usefulcontracts"
+    },
+    {
+      "address": "0x4aa42145aa6ebf72e164c9bbc74fbd3788045016",
+      "label": "xdai_bridge_eth",
+      "chain_hint": "ethereum",
+      "docs_source": "https://docs.gnosischain.com/developers/Usefulcontracts"
+    },
+    {
+      "address": "0x7301cfa0e1756b71869e93d4e4dca5c7d0eb0aa6",
+      "label": "xdai_bridge_gnosis",
+      "chain_hint": "gnosis",
+      "docs_source": "https://docs.gnosischain.com/developers/Usefulcontracts"
+    },
+    {
+      "address": "0xa6439ca0fcba1d0f80df0be6a17220fed9c9038a",
+      "label": "omnibridge_weth_router_eth",
+      "chain_hint": "ethereum",
+      "docs_source": "https://docs.gnosischain.com/bridges/About%20Token%20Bridges/amb-bridge"
+    },
+    {
+      "address": "0x5c7bcd6e7de5423a257d81b442095a1a6ced35c5",
+      "label": "across_spokepool_eth",
+      "chain_hint": "ethereum",
+      "docs_source": "docs/BRIDGE_STUFE_A_V3_PREREG.md \u00a73.0.3"
+    },
+    {
+      "address": "0x9008d19f58aabd9ed0d60971565aa8510560ab41",
+      "label": "cow_gpv2_settlement",
+      "chain_hint": "both",
+      "docs_source": "docs/BRIDGE_STUFE_A_V3_PREREG.md \u00a73.0.3"
+    },
+    {
+      "address": "0xc92e8bdf79f0507f65a392b0ab4667716bfe0110",
+      "label": "cow_vault_relayer",
+      "chain_hint": "both",
+      "docs_source": "bridge_stufe_a_v3_intent_relayer_resolved.json"
+    },
+    {
+      "address": "0xbd3fa81b58ba92a82136038b25adec7066af3155",
+      "label": "cctp_v1_token_messenger_eth",
+      "chain_hint": "ethereum",
+      "docs_source": "docs/BRIDGE_STUFE_A_V3_PREREG.md \u00a73.0.4"
+    },
+    {
+      "address": "0x28b5a0e9c621a5badaa536219b3a228c8168cf5d",
+      "label": "cctp_v2_token_messenger_eth",
+      "chain_hint": "ethereum",
+      "docs_source": "docs/BRIDGE_STUFE_A_V3_PREREG.md \u00a73.0.4"
+    },
+    {
+      "address": "0x0a992d191deec32afe36203ad87d7d289a738f81",
+      "label": "cctp_v1_message_transmitter_eth",
+      "chain_hint": "ethereum",
+      "docs_source": "bridge_stufe_a_v3_stablecoin_mint_burn_resolved.json"
+    },
+    {
+      "address": "0x81d40f21f12a8f0e3252bccb954d722d4c464b64",
+      "label": "cctp_v2_message_transmitter_eth",
+      "chain_hint": "ethereum",
+      "docs_source": "bridge_stufe_a_v3_stablecoin_mint_burn_resolved.json"
+    },
+    {
+      "address": "0xf6e72db5454dd049d0788e411b06cfaf16853042",
+      "label": "lite_psm_eth",
+      "chain_hint": "ethereum",
+      "docs_source": "docs/BRIDGE_STUFE_A_V3_PREREG.md \u00a73.0.4"
+    },
+    {
+      "address": "0x89b78cfa322f6c5de0abceecab66aee45393cc5a",
+      "label": "classic_psm_eth",
+      "chain_hint": "ethereum",
+      "docs_source": "docs/BRIDGE_STUFE_A_V3_PREREG.md \u00a73.0.4"
+    },
+    {
+      "address": "0x0a59649758aa4d66e25f08dd01271e891fe52199",
+      "label": "classic_psm_gem_join_eth",
+      "chain_hint": "ethereum",
+      "docs_source": "bridge_stufe_a_v3_stablecoin_mint_burn_resolved.json"
+    },
+    {
+      "address": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "label": "usdc_eth",
+      "chain_hint": "ethereum",
+      "docs_source": "bridge_stufe_a_v3_stablecoin_mint_burn_resolved.json"
+    },
+    {
+      "address": "0x87870bca3f3fd6335c3f4ce8392d69350b4fa4e2",
+      "label": "aave_v3_pool_eth",
+      "chain_hint": "ethereum",
+      "docs_source": "docs/BRIDGE_STUFE_A_V3_PREREG.md \u00a73.0.2"
+    },
+    {
+      "address": "0xb50201558b00496a145fe76f7424749556e326d8",
+      "label": "aave_v3_pool_gnosis",
+      "chain_hint": "gnosis",
+      "docs_source": "docs/BRIDGE_STUFE_A_V3_PREREG.md \u00a73.0.2"
+    },
+    {
+      "address": "0xc13e21b648a5ee794902342038ff3adab66be987",
+      "label": "spark_pool_eth",
+      "chain_hint": "ethereum",
+      "docs_source": "docs/BRIDGE_STUFE_A_V3_PREREG.md \u00a73.0.2"
+    },
+    {
+      "address": "0x2dae5307c5e3fd1cf5a72cb6f698f915860607e0",
+      "label": "spark_pool_gnosis",
+      "chain_hint": "gnosis",
+      "docs_source": "docs/BRIDGE_STUFE_A_V3_PREREG.md \u00a73.0.2"
+    },
+    {
+      "address": "0x0000000000000000000000000000000000000000",
+      "label": "zero_address",
+      "chain_hint": "both",
+      "docs_source": "docs/BRIDGE_STUFE_A_V3_PREREG.md \u00a73.0.5"
+    },
+    {
+      "address": "0x5f4ec3df9cbd43714fe2740f5e3616155c5b8419",
+      "label": "chainlink_ethereum_ETH/USD_proxy",
+      "chain_hint": "ethereum",
+      "docs_source": "bridge_stufe_a_v3_chainlink_resolved.json"
+    },
+    {
+      "address": "0x7d4e742018fb52e48b08be73d041c18b21de6fb5",
+      "label": "chainlink_ethereum_ETH/USD_current_aggregator",
+      "chain_hint": "ethereum",
+      "docs_source": "bridge_stufe_a_v3_chainlink_resolved.json"
+    },
+    {
+      "address": "0x00c7a37b03690fb9f41b5c5af8131735c7275446",
+      "label": "chainlink_ethereum_ETH/USD_active_agg",
+      "chain_hint": "ethereum",
+      "docs_source": "bridge_stufe_a_v3_chainlink_resolved.json"
+    },
+    {
+      "address": "0x37bc7498f4ff12c19678ee8fe19d713b87f6a9e6",
+      "label": "chainlink_ethereum_ETH/USD_active_agg",
+      "chain_hint": "ethereum",
+      "docs_source": "bridge_stufe_a_v3_chainlink_resolved.json"
+    },
+    {
+      "address": "0xb103ede8acd6f0c106b7a5772e9d24e34f5ebc2c",
+      "label": "chainlink_ethereum_ETH/USD_active_agg",
+      "chain_hint": "ethereum",
+      "docs_source": "bridge_stufe_a_v3_chainlink_resolved.json"
+    },
+    {
+      "address": "0xd3fcd40153e56110e6eeae13e12530e26c9cb4fd",
+      "label": "chainlink_ethereum_ETH/USD_active_agg",
+      "chain_hint": "ethereum",
+      "docs_source": "bridge_stufe_a_v3_chainlink_resolved.json"
+    },
+    {
+      "address": "0xe62b71cf983019bff55bc83b48601ce8419650cc",
+      "label": "chainlink_ethereum_ETH/USD_active_agg",
+      "chain_hint": "ethereum",
+      "docs_source": "bridge_stufe_a_v3_chainlink_resolved.json"
+    },
+    {
+      "address": "0xf79d6afbb6da890132f9d7c355e3015f15f3406f",
+      "label": "chainlink_ethereum_ETH/USD_active_agg",
+      "chain_hint": "ethereum",
+      "docs_source": "bridge_stufe_a_v3_chainlink_resolved.json"
+    },
+    {
+      "address": "0x8fffffd4afb6115b954bd326cbe7b4ba576818f6",
+      "label": "chainlink_ethereum_USDC/USD_proxy",
+      "chain_hint": "ethereum",
+      "docs_source": "bridge_stufe_a_v3_chainlink_resolved.json"
+    },
+    {
+      "address": "0xc9e1a09622afdb659913fefe800feae5dbbfe9d7",
+      "label": "chainlink_ethereum_USDC/USD_current_aggregator",
+      "chain_hint": "ethereum",
+      "docs_source": "bridge_stufe_a_v3_chainlink_resolved.json"
+    },
+    {
+      "address": "0x3b15a92872435c01c27201aae0968839fb45217d",
+      "label": "chainlink_ethereum_USDC/USD_active_agg",
+      "chain_hint": "ethereum",
+      "docs_source": "bridge_stufe_a_v3_chainlink_resolved.json"
+    },
+    {
+      "address": "0x789190466e21a8b78b8027866cbbdc151542a26c",
+      "label": "chainlink_ethereum_USDC/USD_active_agg",
+      "chain_hint": "ethereum",
+      "docs_source": "bridge_stufe_a_v3_chainlink_resolved.json"
+    },
+    {
+      "address": "0x3e7d1eab13ad0104d2750b8863b489d65364e32d",
+      "label": "chainlink_ethereum_USDT/USD_proxy",
+      "chain_hint": "ethereum",
+      "docs_source": "bridge_stufe_a_v3_chainlink_resolved.json"
+    },
+    {
+      "address": "0x0d5f4aadf3fde31bbb55db5f42c080f18ad54df5",
+      "label": "chainlink_ethereum_USDT/USD_current_aggregator",
+      "chain_hint": "ethereum",
+      "docs_source": "bridge_stufe_a_v3_chainlink_resolved.json"
+    },
+    {
+      "address": "0x4e58ab12d2051ea2068e78e4fcee7ddee6785848",
+      "label": "chainlink_ethereum_USDT/USD_active_agg",
+      "chain_hint": "ethereum",
+      "docs_source": "bridge_stufe_a_v3_chainlink_resolved.json"
+    },
+    {
+      "address": "0xa964273552c1dba201f5f000215f5bd5576e8f93",
+      "label": "chainlink_ethereum_USDT/USD_active_agg",
+      "chain_hint": "ethereum",
+      "docs_source": "bridge_stufe_a_v3_chainlink_resolved.json"
+    },
+    {
+      "address": "0xf4030086522a5beea4988f8ca5b36dbc97bee88c",
+      "label": "chainlink_ethereum_BTC/USD_proxy",
+      "chain_hint": "ethereum",
+      "docs_source": "bridge_stufe_a_v3_chainlink_resolved.json"
+    },
+    {
+      "address": "0x4a3411ac2948b33c69666b35cc6d055b27ea84f1",
+      "label": "chainlink_ethereum_BTC/USD_current_aggregator",
+      "chain_hint": "ethereum",
+      "docs_source": "bridge_stufe_a_v3_chainlink_resolved.json"
+    },
+    {
+      "address": "0x276de5c241071b4728697f4e11a377484a2dd6cb",
+      "label": "chainlink_ethereum_BTC/USD_active_agg",
+      "chain_hint": "ethereum",
+      "docs_source": "bridge_stufe_a_v3_chainlink_resolved.json"
+    },
+    {
+      "address": "0x7104ac4abcecf1680f933b04c214b0c491d43ecc",
+      "label": "chainlink_ethereum_BTC/USD_active_agg",
+      "chain_hint": "ethereum",
+      "docs_source": "bridge_stufe_a_v3_chainlink_resolved.json"
+    },
+    {
+      "address": "0xae74faa92cb67a95ebcab07358bc222e33a34da7",
+      "label": "chainlink_ethereum_BTC/USD_active_agg",
+      "chain_hint": "ethereum",
+      "docs_source": "bridge_stufe_a_v3_chainlink_resolved.json"
+    },
+    {
+      "address": "0xdbe1941bfbe4410d6865b9b7078e0b49af144d2d",
+      "label": "chainlink_ethereum_BTC/USD_active_agg",
+      "chain_hint": "ethereum",
+      "docs_source": "bridge_stufe_a_v3_chainlink_resolved.json"
+    },
+    {
+      "address": "0xf570deefff684d964dc3e15e1f9414283e3f7419",
+      "label": "chainlink_ethereum_BTC/USD_active_agg",
+      "chain_hint": "ethereum",
+      "docs_source": "bridge_stufe_a_v3_chainlink_resolved.json"
+    },
+    {
+      "address": "0xf5fff180082d6017036b771ba883025c654bc935",
+      "label": "chainlink_ethereum_BTC/USD_active_agg",
+      "chain_hint": "ethereum",
+      "docs_source": "bridge_stufe_a_v3_chainlink_resolved.json"
+    },
+    {
+      "address": "0xa767f745331d267c7751297d982b050c93985627",
+      "label": "chainlink_gnosis_ETH/USD_proxy",
+      "chain_hint": "gnosis",
+      "docs_source": "bridge_stufe_a_v3_chainlink_resolved.json"
+    },
+    {
+      "address": "0x89baf01d6e78b1f76922096f711430db2defbba2",
+      "label": "chainlink_gnosis_ETH/USD_current_aggregator",
+      "chain_hint": "gnosis",
+      "docs_source": "bridge_stufe_a_v3_chainlink_resolved.json"
+    },
+    {
+      "address": "0x059e7bd8157e0d302df3626e162b6c835340b311",
+      "label": "chainlink_gnosis_ETH/USD_active_agg",
+      "chain_hint": "gnosis",
+      "docs_source": "bridge_stufe_a_v3_chainlink_resolved.json"
+    },
+    {
+      "address": "0x44513922bf52cec40a0557797b040805ded50140",
+      "label": "chainlink_gnosis_ETH/USD_active_agg",
+      "chain_hint": "gnosis",
+      "docs_source": "bridge_stufe_a_v3_chainlink_resolved.json"
+    },
+    {
+      "address": "0x00288135be38b83249f380e9b6b9a04c90ec39ee",
+      "label": "chainlink_gnosis_WBTC/USD_proxy",
+      "chain_hint": "gnosis",
+      "docs_source": "bridge_stufe_a_v3_chainlink_resolved.json"
+    },
+    {
+      "address": "0x03fc3b121dcd823170f2badd1a4cce3db589f9e2",
+      "label": "chainlink_gnosis_WBTC/USD_current_aggregator",
+      "chain_hint": "gnosis",
+      "docs_source": "bridge_stufe_a_v3_chainlink_resolved.json"
+    },
+    {
+      "address": "0x5ed6a59735297bc5d6cb4942913ae7098e0cd703",
+      "label": "chainlink_gnosis_WBTC/USD_active_agg",
+      "chain_hint": "gnosis",
+      "docs_source": "bridge_stufe_a_v3_chainlink_resolved.json"
+    },
+    {
+      "address": "0x26c31ac71010af62e6b486d1132e266d6298857d",
+      "label": "chainlink_gnosis_USDC/USD_proxy",
+      "chain_hint": "gnosis",
+      "docs_source": "bridge_stufe_a_v3_chainlink_resolved.json"
+    },
+    {
+      "address": "0xd24b7ab13ae7cd8871806f0a1b1ae66c0a225ac2",
+      "label": "chainlink_gnosis_USDC/USD_current_aggregator",
+      "chain_hint": "gnosis",
+      "docs_source": "bridge_stufe_a_v3_chainlink_resolved.json"
+    },
+    {
+      "address": "0x30ba871ee7a08dbd255cdd8e7e035dad72014e27",
+      "label": "chainlink_gnosis_USDC/USD_active_agg",
+      "chain_hint": "gnosis",
+      "docs_source": "bridge_stufe_a_v3_chainlink_resolved.json"
+    },
+    {
+      "address": "0x62fc2784d1a47bbdf2d852a6bc03e8ceb2175901",
+      "label": "chainlink_gnosis_USDC/USD_active_agg",
+      "chain_hint": "gnosis",
+      "docs_source": "bridge_stufe_a_v3_chainlink_resolved.json"
+    },
+    {
+      "address": "0xc15288bc7e921dc462d9c4ce151318d5aa428a53",
+      "label": "chainlink_gnosis_USDC/USD_active_agg",
+      "chain_hint": "gnosis",
+      "docs_source": "bridge_stufe_a_v3_chainlink_resolved.json"
+    },
+    {
+      "address": "0x22441d81416430a54336ab28765abd31a792ad37",
+      "label": "chainlink_gnosis_GNO/USD_proxy",
+      "chain_hint": "gnosis",
+      "docs_source": "bridge_stufe_a_v3_chainlink_resolved.json"
+    },
+    {
+      "address": "0xe2cd6230a5168932a7908a97e0a84a5e76ac6854",
+      "label": "chainlink_gnosis_GNO/USD_current_aggregator",
+      "chain_hint": "gnosis",
+      "docs_source": "bridge_stufe_a_v3_chainlink_resolved.json"
+    },
+    {
+      "address": "0x016a45f646bbd35b61fe7a496a75d9ea69bd243e",
+      "label": "chainlink_gnosis_GNO/USD_active_agg",
+      "chain_hint": "gnosis",
+      "docs_source": "bridge_stufe_a_v3_chainlink_resolved.json"
+    },
+    {
+      "address": "0xca16ed36a7d1ae2dc68873d62bce4f9bdcc2d378",
+      "label": "chainlink_gnosis_GNO/USD_active_agg",
+      "chain_hint": "gnosis",
+      "docs_source": "bridge_stufe_a_v3_chainlink_resolved.json"
+    }
+  ],
+  "chainlink_from_resolved": "embedded",
+  "n_entries": 63
+}

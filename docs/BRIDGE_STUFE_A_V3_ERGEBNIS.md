@@ -337,7 +337,7 @@ python3 scripts/bridge_stufe_a_v3_pipeline.py \
 | `bridge_stufe_a_v3_ergebnis.json` | Konfirmatorisches Ergebnis (310 + Baseline + Sensitivität) |
 | `bridge_stufe_a_v3_{candidate}.jsonl` | Roh-Captures je Kandidat |
 | `docs/BRIDGE_STUFE_A_V3_PREREG.md` | Bindende Regeln |
-| `bridge_manifest.json` | SHA-256 der 4 JSONL-Captures + 8 Gate/Ergebnis-JSONs |
+| `bridge_manifest.json` | SHA-256 der 8 JSONL-Captures (4 Kern + 4 V3-Kandidaten) + 8 Gate/Ergebnis-JSONs |
 | `scripts/check_bridge_seal.py` | Verify (Exit 1 bei Abweichung) |
 
 **Determinismus:** Seed `20260819`, gleiche Inputs → reproduzierbare Outputs
@@ -346,6 +346,12 @@ python3 scripts/bridge_stufe_a_v3_pipeline.py \
 **Siegel:** Gate- und Ergebnis-JSONs unter Git; JSONL-Captures nur per Manifest.
 `coverage_gate.json` wurde nach Erstversiegelung neu erzeugt (§3.1) — Ausloeser
 fuer `bridge_manifest.json` + `check_bridge_seal.py`.
+
+**Siegel-Erweiterung (2026-08-25, append-only):** Manifest um die vier
+V3-Kandidaten-Captures (`chainlink`, `intent_relayers`, `liquidations`,
+`stablecoin_mint_burn`) ergaenzt — zuvor nur im Dossier §9 referenziert, nicht
+gehasht. Zwischenprodukte `*_activity*.sqlite` entfernt (aus JSONL
+rekonstruierbar). Verify: `python3 scripts/check_bridge_seal.py`.
 
 ---
 
