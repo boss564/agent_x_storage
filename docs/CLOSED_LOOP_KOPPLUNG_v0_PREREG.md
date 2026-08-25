@@ -1,18 +1,19 @@
-# Emergenz — Geschlossener Kreis (φ_L + R_ij): Pre-Registration
+# Emergenz — Geschlossener Kreis (φ_L + R_ij): Pre-Registration (BINDEND)
 
 **Arbeitstitel:** `CLOSED_LOOP_KOPPLUNG_v0`  
-**Status:** **DRAFT** — Freeze F1–F3 geschlossen · Bindung `DRAFT → BINDEND` ausstehend · **kein Sweep vor BINDEND**  
+**Status:** **BINDEND → KOPPLUNG_INVALID** — 2026-08-25 · Sweep ausgeführt · §1.1 widerlegt  
 **Charakter:** Interventionsstudie (Dreiarm A/B/C) auf **Reaktions-Heterogenität**  
 **Vorläufer:** `docs/CLOSED_LOOP_RESPONSE_v0_DRAFT.md` (SCHRITT2_PASS) · Serie-Schluss `docs/KOPPLUNG_SERIE_ABSCHLUSS.md`  
-**Capture:** `agents_b2g/emergence/closed_loop_capture.py`  
-**Geplante Artefakte:** `agents_b2g/emergence/closed_loop_kopplung_v0/`
+**Capture:** `agents_b2g/emergence/closed_loop_kopplung_capture.py`  
+**Runner:** `scripts/run_closed_loop_kopplung_v0_sweep.py`  
+**Artefakte:** `agents_b2g/emergence/closed_loop_kopplung_v0/` · `CLOSED_LOOP_KOPPLUNG_ERGEBNIS.md`
 
-### Bindungs-Vermerk (bei Freigabe ausfüllen)
+### Bindungs-Vermerk
 
 ```text
-Status: DRAFT  →  (BINDEND ausstehend)
+Status: DRAFT → BINDEND
 Dokument: docs/CLOSED_LOOP_KOPPLUNG_v0_PREREG.md
-Datum: —
+Datum: 2026-08-25
 Freeze: F1 η=1.0 · F2 LedgerBook.update only · F3 A∧B∧C-Schwellen Schritt 2
 Arme: A/B/C
 Seeds: 20261601…06 (Screening 20261501–03 gesperrt)
@@ -136,7 +137,7 @@ wobei `h_ij*` je Arm aus echter bzw. permutierter Partnerzuordnung kommt.
 | `cycles` | 512 |
 | η | **1.0** (F1) |
 
-Optional vor Sweep: κ=0-Spot-Check Seed `20261601` (Batterie A∧B∧C) — Scheitern → `SIGNAL_BLIND`, Sweep gesperrt.
+Vor Sweep: κ=0-Spot-Check Seed `20261601` (Batterie A∧B∧C) — Scheitern → `SIGNAL_BLIND`, Sweep gesperrt.
 
 ### 2.4 Per-κ-Vorbedingung
 
@@ -146,7 +147,7 @@ Siehe §0.3. Auswertung nur auf **intakten** κ.
 
 ## 3. Schwellen und Gate
 
-Kontinuität zu `KOPPLUNG_EIJ_v1` / `KOPPLUNG_LEDGER_v1` §3 (Zahlen bei BINDEND bestätigen, nicht nach Daten senken):
+Kontinuität zu `KOPPLUNG_EIJ_v1` / `KOPPLUNG_LEDGER_v1` §3 (Zahlen nicht nach Daten senken):
 
 | Regel | Wert |
 |-------|------|
@@ -181,26 +182,26 @@ Anteil `PRECONDITION_LOST` wird explizit berichtet (kein Kopplungsbeleg).
 
 ## 5. Ablauf
 
-1. Freigabe `DRAFT → BINDEND` (dieses Dokument)  
-2. Optional: κ=0 Spot-Check Seed `20261601`  
-3. Sweep A/B/C × κ × Seeds → `closed_loop_kopplung_v0/`  
-4. Freeze Artefakte + Verdict  
+1. ~~Freigabe `DRAFT → BINDEND`~~ **erledigt 2026-08-25**  
+2. ~~κ=0 Spot-Check Seed `20261601`~~ **PASS** (Batterie A∧B∧C)  
+3. ~~Sweep A/B/C × κ × Seeds~~ **`KOPPLUNG_INVALID`** (§1.1 Arm C ab κ=0.2)  
+4. ~~Freeze Artefakte + Verdict~~ siehe `closed_loop_kopplung_v0/CLOSED_LOOP_KOPPLUNG_ERGEBNIS.md`  
 5. Keine Nachjustierung von η / Schwellen / Labels nach Datenblick  
 
 ## 6. Freigabe
 
 | Stufe | Bedeutung |
 |-------|-----------|
-| **DRAFT** | Protokoll + Freeze F1–F3 geschlossen · HARKing-Sperre · Per-κ-Batterie |
-| **BINDEND** | ausstehend — ein Wort genügt |
-| **Sweep** | erst nach BINDEND |
+| **DRAFT** | erreicht |
+| **BINDEND** | **erreicht 2026-08-25** |
+| **Sweep** | **abgeschlossen** · Verdict `KOPPLUNG_INVALID` |
 
-**Geplanter Runner:** `scripts/run_closed_loop_kopplung_v0_sweep.py` (nach BINDEND)  
+**Runner:** `scripts/run_closed_loop_kopplung_v0_sweep.py`  
 **Artefakte:** `agents_b2g/emergence/closed_loop_kopplung_v0/`
 
 ---
 
-## 7. Checkliste DRAFT
+## 7. Checkliste BINDEND
 
 | Anforderung | Status |
 |-------------|--------|
@@ -214,4 +215,4 @@ Anteil `PRECONDITION_LOST` wird explizit berichtet (kein Kopplungsbeleg).
 | Arme A/B/C | ✅ §2.2 |
 | Neue Seeds, Screening gesperrt | ✅ §2.3 / HARKing |
 | §1.1 / κ* nur intakte κ | ✅ §1.1 |
-| Kein Sweep vor BINDEND | ✅ §5–§6 |
+| BINDEND | ✅ 2026-08-25 |
