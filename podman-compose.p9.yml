@@ -24,12 +24,13 @@ x-p-agent: &p-agent
     PYTHONUNBUFFERED: "1"
     REDIS_URL: redis://infra-state:6379/0
     Z3_BASE_URL: http://infra-z3:8000
+    GATE_BASE_URL: http://infra-gate:8010
   networks:
     - agent_x_p9
   restart: "no"
 
 services:
-  # ── Infra (Map §4) ──────────────────────────────────────────────────
+  # ── Infra (Map §4 + §10 Option A) ───────────────────────────────────
   infra-z3:
     build:
       context: .
@@ -82,11 +83,32 @@ services:
       timeout: 3s
       retries: 5
 
+  # Fail-closed capital gate (Map §10 Option A) — no live orders
+  infra-gate:
+    build:
+      context: .
+      dockerfile: services/fail_closed_gate/Dockerfile.gate
+    image: agentx-gate:p9
+    ports:
+      - "8010:8010"
+    environment:
+      HUMAN_GATE_OPEN: "false"
+      # Set HUMAN_GATE_TOKEN in .env / shell to allow POST /v1/human_gate
+      HUMAN_GATE_TOKEN: "${HUMAN_GATE_TOKEN:-}"
+      Z3_BASE_URL: http://infra-z3:8000
+      SCOPE: DEFENSIVE_CAUSAL_GROUNDING
+    depends_on:
+      - infra-z3
+      - infra-state
+    networks:
+      - agent_x_p9
+
   # ── P1…P9 (Map §4 Entry-Points, §7 depends_on) ──────────────────────
   p1-ingestion:
     <<: *p-agent
     depends_on:
       - infra-state
+      - infra-gate
     command:
       [
         "sh",
@@ -110,6 +132,7 @@ services:
     <<: *p-agent
     depends_on:
       - infra-state
+      - infra-gate
     command:
       [
         "sh",
@@ -121,6 +144,7 @@ services:
     <<: *p-agent
     depends_on:
       - infra-state
+      - infra-gate
     command:
       [
         "sh",
@@ -132,6 +156,7 @@ services:
     <<: *p-agent
     depends_on:
       - infra-state
+      - infra-gate
     command:
       [
         "sh",
@@ -144,6 +169,7 @@ services:
     depends_on:
       - infra-z3
       - infra-state
+      - infra-gate
     volumes:
       - z3-data:/data:ro
     environment:
@@ -159,6 +185,7 @@ services:
     <<: *p-agent
     depends_on:
       - infra-state
+      - infra-gate
     command:
       [
         "sh",
@@ -170,6 +197,7 @@ services:
     <<: *p-agent
     depends_on:
       - infra-state
+      - infra-gate
     command:
       [
         "sh",

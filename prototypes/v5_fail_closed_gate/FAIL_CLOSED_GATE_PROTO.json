@@ -2,6 +2,7 @@
   "screen": "fail_closed_gate_v0",
   "scope": "DEFENSIVE_CAUSAL_GROUNDING",
   "map_ref": "docs/AGENT_SWARM_P9_MAP_v0.md \u00a710",
+  "core": "services/fail_closed_gate/gate_core.py",
   "elapsed_s": 0.001,
   "budget_ok": true,
   "n_pass": 21,
@@ -12,13 +13,6 @@
     "default_closed_blocks": true,
     "human_open_can_release": true
   },
-  "abort_conditions": [
-    "M7",
-    "Z3_CASCADE",
-    "BHO",
-    "P3_P8",
-    "HUMAN_GATE_CLOSED"
-  ],
   "results": [
     {
       "seed": 20270701,

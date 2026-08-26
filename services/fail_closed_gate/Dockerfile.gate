@@ -1,0 +1,30 @@
+# Fail-Closed Gate (Option A — isolated infra-gate)
+# Build: docker build -f services/fail_closed_gate/Dockerfile.gate -t agentx-gate:p9 .
+
+FROM python:3.11-slim
+
+WORKDIR /app
+
+COPY services/fail_closed_gate/requirements.txt /app/requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY services/fail_closed_gate/gate_core.py /app/gate_core.py
+COPY services/fail_closed_gate/main.py /app/main.py
+
+# Minimal package path for M7 (avoid heavy agents_b2g.emergence.__init__)
+RUN mkdir -p /app/agents_b2g/emergence \
+    && printf '# gate image stub\n' > /app/agents_b2g/__init__.py \
+    && printf '# gate image stub\n' > /app/agents_b2g/emergence/__init__.py
+COPY agents_b2g/emergence/kanten_ledger.py /app/agents_b2g/emergence/kanten_ledger.py
+
+ENV PYTHONPATH=/app
+ENV PYTHONUNBUFFERED=1
+ENV HUMAN_GATE_OPEN=false
+ENV SCOPE=DEFENSIVE_CAUSAL_GROUNDING
+
+EXPOSE 8010
+
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
+    CMD python3 -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8010/health')" || exit 1
+
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8010"]

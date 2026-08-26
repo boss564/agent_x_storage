@@ -100,6 +100,7 @@ Begleitmodule ohne `__main__` sind **Import-Only** (nicht eigener Service).
 | **infra-z3** | Build `services/z3_solver/Dockerfile.z3` → Tag lokal `agentx-z3:p9` | `uvicorn main:app --host 0.0.0.0 --port 8000` · Volume `z3-data:/data` |
 | **infra-hsm** | Build `Dockerfile.bunker` → Tag lokal `agentx-bunker:p9` | SoftHSM/Mock · Volume `hsm-keys:/keys` (+ SoftHSM-Token-Pfad) |
 | **infra-state** | `redis:7.4-alpine` | Persistenz hinter `core/state_store.py` · Volume `state-data:/data` |
+| **infra-gate** | Build `services/fail_closed_gate/Dockerfile.gate` → `agentx-gate:p9` | Fail-Closed Gate HTTP `:8010` · Default `HUMAN_GATE_OPEN=false` |
 
 Hinweis: `core/state_store.py` ist Schnittstelle (kein Daemon). Persistenz = Redis + Volume, nicht `python3 core/state_store.py`.
 
@@ -152,6 +153,8 @@ Compose-Netzwerk: `agent_x_p9` (bridge). DNS-Namen = Service-Namen.
 | `p1`…`p5`, `p7`, `p8` | `infra-state` | StateStore / gemeinsame Persistenz |
 | `p6-risk` | `infra-z3`, `infra-state` | Z3-Audit + State |
 | `p9-storage` | `infra-hsm`, `infra-state` | Anchor/Guardian + Keys + State |
+| `infra-gate` | `infra-z3`, `infra-state` | Map §10 Option A |
+| `p3`–`p8` | `infra-state`, `infra-gate` | Signal/Risk/Gate-Clients |
 
 Keine künstliche `depends_on`-Kette P₁→P₂→… — Kopplung läuft über Ledger, nicht über Compose-Startreihenfolge.
 
@@ -276,3 +279,27 @@ P1 Intake → P5 Oracles / P4 Stress / P7 Szenario
 - Keine Aufweichung von §9 / Charter Negativklausel
 - E2E mit „simulierten Trades“ = **Simulation der Gate-Logik** (BLOCKED/RELEASED),
   nicht Live-Execution
+
+### 10.6 Podman — Option A (`infra-gate`)
+
+Isolierter Service (nicht in P3/P8 eingebettet):
+
+| Fakt | Wert |
+|------|------|
+| Compose | `infra-gate` in `podman-compose.p9.yml` |
+| Image | `Dockerfile.gate` → `agentx-gate:p9` |
+| Port | `8010` (`GATE_BASE_URL=http://infra-gate:8010`) |
+| Core | `services/fail_closed_gate/gate_core.py` (M7 echt, Z3/BHO Score-Gates) |
+| Human | Default CLOSED · `POST /v1/human_gate` mit Header `X-Human-Gate-Token` + Body `{open, confirm}` (`OPEN_GATE`/`CLOSE_GATE`) |
+| Evaluate | `POST /v1/evaluate` → `BLOCKED`\|`RELEASED` · `live_execution=false` immer |
+| Auth | `HUMAN_GATE_TOKEN` muss gesetzt sein; ohne Token → 403 (kein Remote-Open) |
+
+```bash
+export HUMAN_GATE_TOKEN='…'   # required to open
+podman compose -f podman-compose.p9.yml up --build infra-gate
+curl -s http://127.0.0.1:8010/health
+# Manual open (fail-closed until this):
+curl -s -X POST http://127.0.0.1:8010/v1/human_gate \
+  -H "Content-Type: application/json" -H "X-Human-Gate-Token: $HUMAN_GATE_TOKEN" \
+  -d '{"open":true,"confirm":"OPEN_GATE"}'
+```
