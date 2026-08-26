@@ -1,0 +1,273 @@
+{
+  "screen": "failover_loadtrap_v0",
+  "elapsed_s": 1.106,
+  "budget_ok": true,
+  "structural": {
+    "hop_path_p1_p9": false,
+    "totlock_via_path_length": "NOT_APPLICABLE",
+    "reroute_layer": "StickySelector+Least-Loaded (1-of-9)",
+    "load_of": "recv_load + len(inbox); recv_load never decays"
+  },
+  "hypothesis_h1": "Dead E5 (zombie, still candidate, empty inbox) attracts more sticky traffic once live partners carry backlog \u2014 load_of reads idleness as capacity.",
+  "scenario_note": "Post-kill: live inboxes stressed to 12 + no drain; zombie blackhole keeps empty inbox.",
+  "h1": {
+    "verdict": "H1_CONFIRMED",
+    "mean_delta_share": 0.096296,
+    "n_positive": 3,
+    "n": 3,
+    "deltas": [
+      0.096296,
+      0.096296,
+      0.096296
+    ]
+  },
+  "h0_control": {
+    "verdict": "H0_REMOVAL_OK",
+    "share_posts": [
+      0.0,
+      0.0,
+      0.0
+    ]
+  },
+  "baseline": [
+    {
+      "seed": 20270501,
+      "kill_mode": "none",
+      "victim": "E5",
+      "share_pre": 0.111111,
+      "share_post": 0.111111,
+      "delta_share": 0.0,
+      "deliveries_pre": 120,
+      "deliveries_post": 120,
+      "load_pre_victim": 120,
+      "load_post_victim": 240,
+      "load_post": {
+        "E1": 240,
+        "E2": 240,
+        "E3": 240,
+        "E4": 240,
+        "E5": 240,
+        "E6": 240,
+        "E7": 240,
+        "E8": 240,
+        "E9": 240
+      },
+      "n_pre": 1080,
+      "n_post": 1080
+    },
+    {
+      "seed": 20270502,
+      "kill_mode": "none",
+      "victim": "E5",
+      "share_pre": 0.111111,
+      "share_post": 0.111111,
+      "delta_share": 0.0,
+      "deliveries_pre": 120,
+      "deliveries_post": 120,
+      "load_pre_victim": 120,
+      "load_post_victim": 240,
+      "load_post": {
+        "E1": 240,
+        "E2": 240,
+        "E3": 240,
+        "E4": 240,
+        "E5": 240,
+        "E6": 240,
+        "E7": 240,
+        "E8": 240,
+        "E9": 240
+      },
+      "n_pre": 1080,
+      "n_post": 1080
+    },
+    {
+      "seed": 20270503,
+      "kill_mode": "none",
+      "victim": "E5",
+      "share_pre": 0.111111,
+      "share_post": 0.111111,
+      "delta_share": 0.0,
+      "deliveries_pre": 120,
+      "deliveries_post": 120,
+      "load_pre_victim": 120,
+      "load_post_victim": 240,
+      "load_post": {
+        "E1": 240,
+        "E2": 240,
+        "E3": 240,
+        "E4": 240,
+        "E5": 240,
+        "E6": 240,
+        "E7": 240,
+        "E8": 240,
+        "E9": 240
+      },
+      "n_pre": 1080,
+      "n_post": 1080
+    }
+  ],
+  "zombie": [
+    {
+      "seed": 20270501,
+      "kill_mode": "zombie",
+      "victim": "E5",
+      "share_pre": 0.111111,
+      "share_post": 0.207407,
+      "delta_share": 0.096296,
+      "deliveries_pre": 120,
+      "deliveries_post": 224,
+      "load_pre_victim": 120,
+      "load_post_victim": 344,
+      "load_post": {
+        "E1": 346,
+        "E2": 346,
+        "E3": 350,
+        "E4": 344,
+        "E5": 344,
+        "E6": 344,
+        "E7": 348,
+        "E8": 344,
+        "E9": 346
+      },
+      "n_pre": 1080,
+      "n_post": 1080
+    },
+    {
+      "seed": 20270502,
+      "kill_mode": "zombie",
+      "victim": "E5",
+      "share_pre": 0.111111,
+      "share_post": 0.207407,
+      "delta_share": 0.096296,
+      "deliveries_pre": 120,
+      "deliveries_post": 224,
+      "load_pre_victim": 120,
+      "load_post_victim": 344,
+      "load_post": {
+        "E1": 346,
+        "E2": 346,
+        "E3": 350,
+        "E4": 344,
+        "E5": 344,
+        "E6": 344,
+        "E7": 348,
+        "E8": 344,
+        "E9": 346
+      },
+      "n_pre": 1080,
+      "n_post": 1080
+    },
+    {
+      "seed": 20270503,
+      "kill_mode": "zombie",
+      "victim": "E5",
+      "share_pre": 0.111111,
+      "share_post": 0.207407,
+      "delta_share": 0.096296,
+      "deliveries_pre": 120,
+      "deliveries_post": 224,
+      "load_pre_victim": 120,
+      "load_post_victim": 344,
+      "load_post": {
+        "E1": 346,
+        "E2": 346,
+        "E3": 350,
+        "E4": 344,
+        "E5": 344,
+        "E6": 344,
+        "E7": 348,
+        "E8": 344,
+        "E9": 346
+      },
+      "n_pre": 1080,
+      "n_post": 1080
+    }
+  ],
+  "removed": [
+    {
+      "seed": 20270501,
+      "kill_mode": "removed",
+      "victim": "E5",
+      "share_pre": 0.111111,
+      "share_post": 0.0,
+      "delta_share": -0.111111,
+      "deliveries_pre": 120,
+      "deliveries_post": 0,
+      "load_pre_victim": 120,
+      "load_post_victim": 120,
+      "load_post": {
+        "E1": 392,
+        "E2": 392,
+        "E3": 392,
+        "E4": 392,
+        "E5": 120,
+        "E6": 386,
+        "E7": 382,
+        "E8": 392,
+        "E9": 392
+      },
+      "n_pre": 1080,
+      "n_post": 1080
+    },
+    {
+      "seed": 20270502,
+      "kill_mode": "removed",
+      "victim": "E5",
+      "share_pre": 0.111111,
+      "share_post": 0.0,
+      "delta_share": -0.111111,
+      "deliveries_pre": 120,
+      "deliveries_post": 0,
+      "load_pre_victim": 120,
+      "load_post_victim": 120,
+      "load_post": {
+        "E1": 392,
+        "E2": 392,
+        "E3": 392,
+        "E4": 392,
+        "E5": 120,
+        "E6": 386,
+        "E7": 382,
+        "E8": 392,
+        "E9": 392
+      },
+      "n_pre": 1080,
+      "n_post": 1080
+    },
+    {
+      "seed": 20270503,
+      "kill_mode": "removed",
+      "victim": "E5",
+      "share_pre": 0.111111,
+      "share_post": 0.0,
+      "delta_share": -0.111111,
+      "deliveries_pre": 120,
+      "deliveries_post": 0,
+      "load_pre_victim": 120,
+      "load_post_victim": 120,
+      "load_post": {
+        "E1": 392,
+        "E2": 392,
+        "E3": 392,
+        "E4": 392,
+        "E5": 120,
+        "E6": 386,
+        "E7": 382,
+        "E8": 392,
+        "E9": 392
+      },
+      "n_pre": 1080,
+      "n_post": 1080
+    }
+  ],
+  "verdict": "H1_CONFIRMED",
+  "next": "If H1_CONFIRMED: bind liveness to non-zero processing/\u0394 (same class as M7/M9). If FALSIFIED: document why.",
+  "interpretation": {
+    "winner_take_all": "Hard argmin on near-tied load_of concentrates traffic; zombie share roughly doubles despite <2% load margin.",
+    "attack_surfaces": [
+      "Bind liveness to processing/completion proof (recv_load alone insufficient)",
+      "Soften argmin via power-of-two-choices under near-ties"
+    ],
+    "h0_implies": "Candidate removal works; failure mode is detection (idle vs dead)."
+  }
+}
