@@ -13,9 +13,13 @@ Die Sticky-Kanten sind **gerichtet und rollen-pipeline-förmig**. Es entstehen
 Dreiecks-Zyklen über Rollen, aber **keine** wechselseitigen Paare \((i,j)\) und
 \((j,i)\). Deshalb ist `frac_sticky_via_ledger = 0.0` erwartbar, nicht anomal.
 
+**Kern:** Zyklus ≠ Reziprozität. `P→E→C→P` ist geschlossen, aber einseitig.
+
 ---
 
 ## 2. Nachrichtenfluss (`demo_producer_cluster` + Capture)
+
+### Vorher (Diagnose)
 
 ```text
 Provider  --OFFER-->  Evaluator  --BHO_PROOF-->  Economic  --SETTLEMENT/broadcast-->  Provider
@@ -27,27 +31,30 @@ Provider  --OFFER-->  Evaluator  --BHO_PROOF-->  Economic  --SETTLEMENT/broadcas
 | Evaluator → Economic | \((E,C)\) | nein — Economic broadcastet an Provider |
 | Economic → Provider | \((C,P)\) | nein — Provider schreibt an Evaluator |
 
-Es gibt einen **3-Zyklus über Rollen** \(P\to E\to C\to P\), aber Reziprozität
-im Sinne der Edge-Local-Frage verlangt **dieselbe Kante in beide Richtungen**:
-\(i\) reagiert auf \(\ell_{ij}\) **und** \(j\) auf \(\ell_{ji}\).
+### Nachher (Option A — ACK/Receipt)
 
-Arm C (Partner-Permutation) zerstört dann Paar-Schleifen — bei Reziprozität 0
-gibt es keine solchen Paare.
+```text
+Request:  P → E (OFFER)     Receipt: E → P
+Request:  E → C (BHO_PROOF) Receipt: C → E
+Request:  C → P (SETTLEMENT) Receipt: P → C
+```
+
+Sticky-Rolle für Rückkanten: `receipt:<partner_id>` (kein gemeinsamer Key — sonst
+Freeze-Kollision bei einem Sender → viele Empfänger).
+
+Verifikation: `scripts/run_reciprocity_ack_check.py` → `reciprocity_ack_v0/`  
+**Gate PASS** · Median `frac_sticky_via_ledger` = **1.0** (3/3 Seeds ≥ 0.3).
 
 ---
 
-## 3. Konsequenz für Option A
+## 3. Konsequenz
 
-| Diagnose | Maßnahme |
-|----------|----------|
-| Generator-Artefakt (Pipeline) | Traffic so erweitern, dass **Antworten** die Rückkante schreiben (z. B. Evaluator→Provider ACK / Economic→Evaluator Receipt) **oder** Settlement beidseitig im Ledger verbuchen |
-| Architektur (bewusst einseitig) | Edge-Local-Frage umformulieren (z. B. Zyklus-Kopplung statt Paar-Reziprozität) — anderes Design |
-
-Empfehlung: **Generator erweitern** (Antwort-Kanten), nicht die Sticky-Permutation
-umdefinieren. Sonst misst Arm C weiterhin nur Parameter-Umverteilung.
-
-Zielmetrik vor Pre-Reg: Median `frac_sticky_via_ledger` **≫ 0** (Vorschlag:
-mindestens ≥ 0.3 auf ≥2/3 Seeds), gemessen mit demselben Screen wie der M7-Spike.
+| Schritt | Status |
+|---------|--------|
+| 1. Traffic ACK/Receipt | erledigt |
+| 2. Reziprozität ≥ 0.3 | PASS (1.0) |
+| 3. M7-Filter (sekundär) | offen |
+| 4. Edge-Local Pre-Reg mit Wechselseitigkeit | gesperrt bis Schritt 3 |
 
 ---
 
@@ -61,7 +68,7 @@ Filter justieren (Trimmed Mean / EWMA+Gate).
 ## 5. Status
 
 ```text
-Engpass 1: Reziprozität = 0.0  → Pipeline-Traffic (Artefakt) — primär
-Engpass 2: M7_LOSES_ELL_SELECTIVITY → Filter — sekundär
-Pre-Reg:   gesperrt bis Engpass 1 adressiert
+Engpass 1: Reziprozität — behoben (ACK/Receipt, Median via_led = 1.0)
+Engpass 2: M7_LOSES_ELL_SELECTIVITY → Filter — sekundär (nächster Schritt)
+Pre-Reg:   gesperrt bis Engpass 2 adressiert
 ```

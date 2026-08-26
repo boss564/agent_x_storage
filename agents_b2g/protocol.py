@@ -41,6 +41,7 @@ class PayloadType(str, Enum):
     BHO_VIOLATION   = "BHO_VIOLATION"   # Orchestrator → Dashboard: BHO verletzt
     AUDIT_ENTRY     = "AUDIT_ENTRY"     # Orchestrator → AuditTrail: Eintrag erstellen
     CERTIFICATE     = "CERTIFICATE"     # Orchestrator → Extern: Zertifikat ausstellen
+    RECEIPT         = "RECEIPT"         # Empfänger → Absender: ACK (Reziprozität)
 
     # Zustand & Steuerung
     STATE_CHANGE    = "STATE_CHANGE"    # Agent → Agent: Zustandswechsel melden

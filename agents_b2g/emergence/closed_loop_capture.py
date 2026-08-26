@@ -64,7 +64,7 @@ def _setup_swarm(run_seed: int, dpc, orch):
 def _signed_net(content) -> float:
     if not isinstance(content, dict):
         return 0.0
-    for key in ("net_amount", "gross_amount", "amount"):
+    for key in ("signed_net", "net_amount", "gross_amount", "amount", "volume"):
         if key in content:
             try:
                 return float(content[key])
@@ -181,6 +181,11 @@ def capture_closed_loop(
         else:
             for ag in agents:
                 if ag.id == msg.receiver:
+                    # ACK/Receipt → sticky reverse edge (one key per partner)
+                    if msg.payload_type == PayloadType.RECEIPT:
+                        sticky.select(
+                            msg.sender, f"receipt:{ag.id}", [ag], _load,
+                        )
                     coupling_edge[msg.sender] = ag.id
                     ag.receive(msg)
                     recv_load[ag.id] = recv_load.get(ag.id, 0) + 1

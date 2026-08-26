@@ -62,6 +62,17 @@ class ProviderAgent(BaseAgent):
 
     def decide(self) -> str:
         cycle = self.perception.get("cycle", 0)
+        # Terminal RECEIPTs: drain (kein Folge-Traffic)
+        self.inbox = [
+            m for m in self.inbox
+            if getattr(m, "payload_type", None) != PayloadType.RECEIPT
+        ]
+        # ACK settlement broadcasts (reziproke Kante Economic ↔ Provider)
+        if any(
+            getattr(m, "payload_type", None) == PayloadType.SETTLEMENT
+            for m in self.inbox
+        ):
+            return "ack_settlement"
         # Melde-Entscheidung basierend auf decision_bias (pro Tick)
         threshold = int(1.0 / max(self.decision_bias, 0.01))
         if cycle % threshold == 0 and self.sm.can_transition(AgentState.NEGOTIATING):
@@ -77,6 +88,26 @@ class ProviderAgent(BaseAgent):
         decision = self.decision_log[-1]["decision"] if self.decision_log else "idle"
         cycle = self.perception.get("cycle", 0)
         msgs = []
+
+        if decision == "ack_settlement":
+            kept = []
+            while self.inbox:
+                msg = self.inbox.pop(0)
+                if msg.payload_type != PayloadType.SETTLEMENT:
+                    kept.append(msg)
+                    continue
+                msgs.append(AgentMessage(
+                    sender=self.id,
+                    receiver=msg.sender,
+                    payload_type=PayloadType.RECEIPT,
+                    content={
+                        "ack_of": "SETTLEMENT",
+                        "contract_id": msg.content.get("contract_id", "?"),
+                        "signed_net": float(msg.content.get("volume", 0) or 0),
+                    },
+                ))
+            self.inbox.extend(kept)
+            return msgs
 
         if decision in ("report_milestone", "report_inflated"):
             self.sm.transition(AgentState.NEGOTIATING, triggered_by=f"cycle_{cycle}")
@@ -183,7 +214,20 @@ class EvaluatorAgent(BaseAgent):
                     payload_type=PayloadType.BHO_PROOF,
                     content={"contract_id": content["contract_id"],
                              "delta_eur": delta, "holds": True,
-                             "inflated": content.get("inflated", False)},
+                             "inflated": content.get("inflated", False),
+                             "gross_amount": gross, "net_amount": net},
+                ))
+                # Reziproke Kante: Evaluator → Provider (ACK auf OFFER)
+                msgs.append(AgentMessage(
+                    sender=self.id,
+                    receiver=msg.sender,
+                    payload_type=PayloadType.RECEIPT,
+                    content={
+                        "ack_of": "OFFER",
+                        "contract_id": content["contract_id"],
+                        "holds": True,
+                        "signed_net": float(net),
+                    },
                 ))
             else:
                 self.checks_failed += 1
@@ -192,6 +236,18 @@ class EvaluatorAgent(BaseAgent):
                 msgs.append(alert("CRITICAL", "bho",
                     f"BHO-Verletzung! {content['contract_id']}: Δ = {delta:.2f} € "
                     f"(inflated={content.get('inflated', False)})"))
+                # Auch bei Reject: kurze Quittung (Rückkante), signed_net=0
+                msgs.append(AgentMessage(
+                    sender=self.id,
+                    receiver=msg.sender,
+                    payload_type=PayloadType.RECEIPT,
+                    content={
+                        "ack_of": "OFFER",
+                        "contract_id": content["contract_id"],
+                        "holds": False,
+                        "signed_net": 0.0,
+                    },
+                ))
 
             self.sm.reset()
 
@@ -268,6 +324,17 @@ class EconomicAgent(BaseAgent):
                     "contract_id": content.get("contract_id", "?"),
                     "volume": volume, "fee": round(fee, 2),
                     "burn": round(burn, 2), "settlements": self.settlements,
+                },
+            ))
+            # Reziproke Kante: Economic → Evaluator (ACK auf BHO_PROOF)
+            msgs.append(AgentMessage(
+                sender=self.id,
+                receiver=msg.sender,
+                payload_type=PayloadType.RECEIPT,
+                content={
+                    "ack_of": "BHO_PROOF",
+                    "contract_id": content.get("contract_id", "?"),
+                    "signed_net": float(volume),
                 },
             ))
 
