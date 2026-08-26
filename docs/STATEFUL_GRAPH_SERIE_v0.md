@@ -1,6 +1,6 @@
 # Stateful Graph — Serie v0 (Konsolidierung)
 
-**Status:** Studie 1 · Gegenprobe · \|Q\|-Varianz · \|Q\|=2-Grenze · completion_proof · wall_clock_verify · 2026-08-26  
+**Status:** Studie 1 · Gegenprobe · \|Q\|-Varianz · \|Q\|=2 · completion_proof · wall_clock · topology · 2026-08-26  
 **Charakter:** Neue Architekturfamilie — **nicht** Studie 11 der φ/ρ-Kopplung  
 **Sandbox diskret:** `prototypes/v2_stateful_graph/`  
 **Sandbox Dissensus:** `prototypes/v3_continuous_dissensus/` · **kein** Runner-Transfer
@@ -13,6 +13,7 @@ Dissens-Gegenprobe:   PROTO_PASS (kontinuierlich, matched gate) — kein Pre-Reg
 |Q|=2 Grenzfall:      STRUCTURE_BREAKS — 0/6 · untere Leistungsgrenze |Q|=4
 completion_proof:     STRUCTURE_RELATIONAL unter Receipt-Gate — 18/18 (baseline/always/lossy)
 wall_clock_verify:    HYPOTHESIS_CONFIRMED — Struktur stabil · ms↑ mit |Q| · tps↓
+topology:             HYPOTHESIS_FALSIFIED — nur sparse (Ring) relational; complete/hub break
 ```
 
 ---
@@ -121,6 +122,7 @@ Artefakte: `q2_boundary_screen.py` · `q2_boundary_results.json`.
 | \|Q\|=2 Grenzfall | dieselbe Mechanik · \|Q\|=2 | `STRUCTURE_BREAKS` 0/6 Screen |
 | completion_proof | Übergangs-Receipt (Mock-Z3/BHO) · \|Q\|=4 | `STRUCTURE_RELATIONAL` 18/18 Screen |
 | wall_clock_verify | Verifikations-Wandzeit · \|Q\| ∈ {4…32} | `HYPOTHESIS_CONFIRMED` Screen |
+| topology | Signalgraph complete/sparse/hub · \|Q\|=4 | `HYPOTHESIS_FALSIFIED` Screen |
 
 ---
 
@@ -167,6 +169,30 @@ Artefakte: `wall_clock_verify_screen.py` · `wall_clock_verify_results.json`.
 
 ---
 
+## Antwort (topology — Screen only)
+
+**Frage:** Bleibt `STRUCTURE_RELATIONAL`, wenn die **Signal-Topologie** wechselt
+(vollständig / spärlich / Hub-Spoke), bei fixem \|Q\|=4?
+
+**Freeze:** Seeds `20270801–06` · Metrik-Partner = Ring (sticky M) · Topologie steuert nur σ ·
+Arm C = π(Peer_B) · Gate wie Varianz-Screen.
+
+| Topologie | ⟨k⟩ | Passes | Avg Margin | Verdict |
+|-----------|-----|--------|------------|---------|
+| complete | 8,0 | **0/6** | ≈0,00 | `STRUCTURE_BREAKS` |
+| sparse (Ring) | 1,0 | **6/6** | 0,52 | `STRUCTURE_RELATIONAL` |
+| hub (G01) | 1,8 | **0/6** | ≈−0,11 | `STRUCTURE_BREAKS` |
+
+**Hypothese: falsifiziert** (`HYPOTHESIS_FALSIFIED`).  
+Relationale Trennung ist **kein** Topologie-Invariants: sie hängt am **spärlichen
+1:1-Signal** (Ring = Studie-1). Vollständige Mischung und Hub-Broadcast machen B≈C
+(Margin≈0). Onset-Proxy differenzierte hier nicht (alle früh ≥ Schwelle) — sekundär.  
+**Lehre:** Sticky-Partner-Metrik allein reicht nicht — die Signalgraph-Form ist
+Vorbedingung für Arm-C-Bruch. **Wahrheit vor Optik.**  
+Artefakte: `topology_screen.py` · `topology_results.json`.
+
+---
+
 ## Studie 1 — Freeze (kurz)
 
 | ID | Inhalt |
@@ -200,9 +226,9 @@ dieselbe Definition wie in Studie 1. **Wahrheit vor Optik.**
 
 ## Status & offene Türen
 
-**Jetzt:** Studie 1 · Dissensus · \|Q\|-Varianz · \|Q\|=2-Grenze · completion_proof (18/18) · wall_clock_verify (CONFIRMED).
+**Jetzt:** Studie 1 · Dissensus · \|Q\|-Varianz · \|Q\|=2 · completion_proof · wall_clock · **topology (FALSIFIED)**.
 
-**Optional später:** Dissensus DRAFT/Pre-Reg/Sweep · Topologie · Failover `completion_load` / `two-choice tie-break` · Live-Z3-Wandzeit gegen `infra-z3`.
+**Optional später:** Dissensus DRAFT/Pre-Reg/Sweep · Failover `completion_load` / `two-choice tie-break` · Live-Z3-Wandzeit · Topologie-Nachfolge (nur wenn neue Hypothese, nicht Gate-Nachziehen).
 
 **Nicht erlaubt:** Studie 11 φ/ρ · Hybrid · Schwellen-Nachjustierung an versiegelten Artefakten · Strang-Negativ aus globaler Metrik.
 

@@ -1,0 +1,209 @@
+{
+  "screen": "topology_v0",
+  "hypothesis": "STRUCTURE_RELATIONAL for complete/sparse/hub at |Q|=4; topology may change onset/spread, not relational margin gate",
+  "hypothesis_result": "HYPOTHESIS_FALSIFIED",
+  "hypothesis_parts": {
+    "structure_all_topologies": false,
+    "spread_onset_range": 0.0,
+    "spread_differs_descriptive": false
+  },
+  "Q_size": 4,
+  "seeds": [
+    20270801,
+    20270802,
+    20270803,
+    20270804,
+    20270805,
+    20270806
+  ],
+  "topologies": [
+    "complete",
+    "sparse",
+    "hub"
+  ],
+  "gate": {
+    "delta_q": 0.5,
+    "h_edge": 2.0,
+    "margin": 0.1
+  },
+  "note": "Metric partner = ring sticky M; signal topology varies. Arm C = \u03c0(peer_B). Hub = G01 / feed G02.",
+  "summary": {
+    "complete": {
+      "n_pass": 0,
+      "n": 6,
+      "avg_margin": -0.001852,
+      "avg_onset_proxy": 16.0,
+      "mean_degree": 8.0,
+      "verdict": "STRUCTURE_BREAKS"
+    },
+    "sparse": {
+      "n_pass": 6,
+      "n": 6,
+      "avg_margin": 0.518982,
+      "avg_onset_proxy": 16.0,
+      "mean_degree": 1.0,
+      "verdict": "STRUCTURE_RELATIONAL"
+    },
+    "hub": {
+      "n_pass": 0,
+      "n": 6,
+      "avg_margin": -0.107408,
+      "avg_onset_proxy": 16.0,
+      "mean_degree": 1.7777777777777777,
+      "verdict": "STRUCTURE_BREAKS"
+    }
+  },
+  "elapsed_s": 0.075,
+  "results": {
+    "complete": [
+      {
+        "seed": 20270801,
+        "pass": false,
+        "delta_q": 1.296528,
+        "h_edge": 3.988136,
+        "anti_margin": -0.033334,
+        "onset_b": 16
+      },
+      {
+        "seed": 20270802,
+        "pass": false,
+        "delta_q": 1.229861,
+        "h_edge": 3.953457,
+        "anti_margin": -0.056945,
+        "onset_b": 16
+      },
+      {
+        "seed": 20270803,
+        "pass": false,
+        "delta_q": 1.261111,
+        "h_edge": 3.979834,
+        "anti_margin": 0.030556,
+        "onset_b": 16
+      },
+      {
+        "seed": 20270804,
+        "pass": false,
+        "delta_q": 1.253472,
+        "h_edge": 3.969572,
+        "anti_margin": -0.001389,
+        "onset_b": 16
+      },
+      {
+        "seed": 20270805,
+        "pass": false,
+        "delta_q": 1.263194,
+        "h_edge": 3.977493,
+        "anti_margin": 0.015278,
+        "onset_b": 16
+      },
+      {
+        "seed": 20270806,
+        "pass": false,
+        "delta_q": 1.251389,
+        "h_edge": 3.972873,
+        "anti_margin": 0.034722,
+        "onset_b": 16
+      }
+    ],
+    "sparse": [
+      {
+        "seed": 20270801,
+        "pass": true,
+        "delta_q": 1.25,
+        "h_edge": 2.996699,
+        "anti_margin": 0.495833,
+        "onset_b": 16
+      },
+      {
+        "seed": 20270802,
+        "pass": true,
+        "delta_q": 1.286111,
+        "h_edge": 2.996659,
+        "anti_margin": 0.538889,
+        "onset_b": 16
+      },
+      {
+        "seed": 20270803,
+        "pass": true,
+        "delta_q": 1.233333,
+        "h_edge": 2.992405,
+        "anti_margin": 0.540278,
+        "onset_b": 16
+      },
+      {
+        "seed": 20270804,
+        "pass": true,
+        "delta_q": 1.277083,
+        "h_edge": 2.992658,
+        "anti_margin": 0.504167,
+        "onset_b": 16
+      },
+      {
+        "seed": 20270805,
+        "pass": true,
+        "delta_q": 1.25625,
+        "h_edge": 2.997707,
+        "anti_margin": 0.529167,
+        "onset_b": 16
+      },
+      {
+        "seed": 20270806,
+        "pass": true,
+        "delta_q": 1.241667,
+        "h_edge": 2.985942,
+        "anti_margin": 0.505556,
+        "onset_b": 16
+      }
+    ],
+    "hub": [
+      {
+        "seed": 20270801,
+        "pass": false,
+        "delta_q": 1.152778,
+        "h_edge": 3.948804,
+        "anti_margin": -0.091667,
+        "onset_b": 16
+      },
+      {
+        "seed": 20270802,
+        "pass": false,
+        "delta_q": 1.240972,
+        "h_edge": 3.945738,
+        "anti_margin": 0.016666,
+        "onset_b": 16
+      },
+      {
+        "seed": 20270803,
+        "pass": false,
+        "delta_q": 0.722222,
+        "h_edge": 1.879965,
+        "anti_margin": -0.248611,
+        "onset_b": 16
+      },
+      {
+        "seed": 20270804,
+        "pass": false,
+        "delta_q": 0.722222,
+        "h_edge": 1.879965,
+        "anti_margin": -0.208334,
+        "onset_b": 16
+      },
+      {
+        "seed": 20270805,
+        "pass": false,
+        "delta_q": 1.261111,
+        "h_edge": 3.959296,
+        "anti_margin": -0.113889,
+        "onset_b": 16
+      },
+      {
+        "seed": 20270806,
+        "pass": false,
+        "delta_q": 1.190278,
+        "h_edge": 3.954461,
+        "anti_margin": 0.001389,
+        "onset_b": 16
+      }
+    ]
+  }
+}
