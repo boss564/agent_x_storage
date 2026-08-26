@@ -1,0 +1,27 @@
+# P1…P9 Agent image — code baked in (no host bind mount).
+# Needed on macOS Podman: VM cannot bind-mount /Volumes/... (mkdir /Volumes: EPERM).
+# Build streams context to the engine; runtime only uses named volumes (Map §5).
+
+FROM python:3.11-slim
+
+WORKDIR /app
+
+COPY requirements.txt /app/requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt \
+    && pip install --no-cache-dir redis>=5.0.0
+
+# Selective tree — enough for Map §4 entry-points + companions
+COPY agent_x_*.py /app/
+COPY api_agents/ /app/api_agents/
+COPY agents_b2g/ /app/agents_b2g/
+COPY core/ /app/core/
+COPY contracts/ /app/contracts/
+COPY services/ /app/services/
+COPY tests/ /app/tests/
+# optional companion artifacts (ResourceTrader etc.); empty dir OK
+COPY out/ /app/out/
+
+ENV PYTHONPATH=/app
+ENV PYTHONUNBUFFERED=1
+
+CMD ["python3", "-c", "print('p9-agent image ready'); import time; time.sleep(10**9)"]

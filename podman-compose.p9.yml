@@ -1,11 +1,12 @@
-# Agent X — P1…P9 Podman/Compose (abgeleitet aus docs/AGENT_SWARM_P9_MAP_v0.md §4–§7)
+# Agent X — P1…P9 Podman/Compose (abgeleitet aus docs/AGENT_SWARM_P9_MAP_v0.md §4–§8)
 #
 # Wahrheit vor Optik:
 #   - Keine erfundenen Tags agent_x/pN-*:latest
-#   - Entry-Points = python3 <Modul> (Repo-Bind /app)
+#   - Entry-Points = python3 <Modul> (Code im Image via Dockerfile.p9)
+#   - Kein Bind-Mount des Repo-Roots (macOS Podman-VM: /Volumes → EPERM)
 #   - Steuergröße = Kanten-Ledger S_ij=ℓ_ij — kein NATS-Broadcast als Swarm-Control
 #
-# Start:
+# Start (im Repo-Root):
 #   podman compose -f podman-compose.p9.yml up --build
 #   docker  compose -f podman-compose.p9.yml up --build
 #
@@ -13,10 +14,11 @@
 # mit sleep infinity, damit der Stack (Infra + DNS) prüfbar bleibt.
 
 x-p-agent: &p-agent
-  image: python:3.11-slim
+  build:
+    context: .
+    dockerfile: Dockerfile.p9
+  image: agentx-p9-agent:latest
   working_dir: /app
-  volumes:
-    - .:/app:ro
   environment: &p-env
     PYTHONPATH: /app
     PYTHONUNBUFFERED: "1"
@@ -60,7 +62,6 @@ services:
       - hsm-keys:/keys
     networks:
       - agent_x_p9
-    # SoftHSM-Token bleiben im Image-Default; Key-Bindung laut Map unter /keys
     command:
       [
         "sh",
@@ -144,7 +145,6 @@ services:
       - infra-z3
       - infra-state
     volumes:
-      - .:/app:ro
       - z3-data:/data:ro
     environment:
       <<: *p-env
@@ -183,7 +183,6 @@ services:
       - infra-hsm
       - infra-state
     volumes:
-      - .:/app:ro
       - hsm-keys:/keys:ro
     environment:
       <<: *p-env

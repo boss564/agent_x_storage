@@ -72,7 +72,7 @@ Compose: podman-compose.p9.yml  (Intent aus §4–§7; kein Image-Tag-Inventar)
 ## 4. Podman-Intent — Entry-Points (Wahrheit vor Optik)
 
 **Regel:** Keine erfundenen Image-Tags (`agent_x/p1-ingestion:latest` existiert nicht).  
-Jeder P-Container startet mit **`python3 <Modul>`** (Repo-Mount unter `/app`).  
+Jeder P-Container startet mit **`python3 <Modul>`** (Code unter `/app` via `Dockerfile.p9`, kein Host-Bind).  
 Begleitmodule ohne `__main__` sind **Import-Only** (nicht eigener Service).
 
 | Service | Primärer Entry-Point | Begleiter (Import / Co-Mount) | `__main__`? |
@@ -108,9 +108,13 @@ Hinweis: `core/state_store.py` ist Schnittstelle (kein Daemon). Persistenz = Red
 | **z3-data** | `/data` | `infra-z3`, lesend `p6-risk` | Z3-Artefakte / Compliance-Caches |
 | **hsm-keys** | `/keys` | `infra-hsm`, lesend `p9-storage` (Signatur-Pfad) | Schlüsselmaterial / SoftHSM-Bindung |
 | **state-data** | `/data` | `infra-state` | Redis AOF/RDB |
-| **(bind)** Repo | `/app:ro` | alle `p1`…`p9` | Quellcode; WorkingDir `/app` |
+| **Image** `Dockerfile.p9` | `/app` (im Image) | alle `p1`…`p9` | Quellcode gebacken; WorkingDir `/app` |
 
 Compose-Namen: `z3-data`, `hsm-keys`, `state-data` (named volumes).
+
+**macOS / Podman-Maschine:** Host-Bind `.:/app` auf Pfade unter `/Volumes/…` schlägt fehl
+(`mkdir /Volumes: operation not permitted`). Deshalb **kein Repo-Bind** — Code kommt
+über Build-Context → `Dockerfile.p9`. Named volumes bleiben VM-intern und funktionieren.
 
 ---
 
@@ -151,10 +155,14 @@ Keine künstliche `depends_on`-Kette P₁→P₂→… — Kopplung läuft über
 
 ## 8. Compose-Ableitung
 
-Datei: **`podman-compose.p9.yml`** (Repo-Root).  
-Ableitung ausschließlich aus §4–§7. Startbeispiel:
+Datei: **`podman-compose.p9.yml`** + **`Dockerfile.p9`** (Repo-Root).  
+Ableitung ausschließlich aus §4–§7. Startbeispiel (cwd = Repo-Root):
 
 ```bash
 podman compose -f podman-compose.p9.yml up --build
 # oder: docker compose -f podman-compose.p9.yml up --build
 ```
+
+Optional (Live-Edit ohne Rebuild): Volume in die Podman-Maschine share’n, z. B.
+`podman machine set -v "/Volumes/THX_OS_ULTRA - Data:/Volumes/THX_OS_ULTRA - Data"`,
+dann erst wieder Bind-Mount — Default bleibt Image-Bake.
