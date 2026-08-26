@@ -3,7 +3,7 @@
 **Status:** TICK-STRANG GESCHLOSSEN · 2026-08-26 (`EDGE_LOCAL_KOPPLUNG_v0`)  
 **Charakter:** Keine neue Pre-Reg in **diesem** (Tick-)Strang. Die iterative Frage ist beantwortet.  
 **Letzte Tick-Studie:** `EDGE_LOCAL_KOPPLUNG_v0` · Artefakte `agents_b2g/emergence/edge_local_kopplung_v0/`  
-**Ereignis-Strang (offen):** `EVENT_DRIVEN` → `RECIPROCAL_EVENT` — beide `NO_COUPLING`, §1.1 gehalten; siehe § Ereignis-Strang.  
+**Ereignis-Strang:** `EVENT_DRIVEN` / `RECIPROCAL_EVENT` (`NO_COUPLING`) → `RECIPROCITY_AMP` (`P1_ONLY`); siehe § Ereignis-Strang.  
 **Vorgänger-Schluss:** 2026-08-25 nach `CLOSED_LOOP_KOPPLUNG_v0` — Edge-Local war der explizit freigehaltene Folgestrang der Tick-Serie und ist jetzt ebenfalls geschlossen.
 
 ---
@@ -138,12 +138,37 @@ kein Wiring-Fail. Sockel `r(κ=0)≈0.29` = Zufallsboden `1/√9` (Shuffle-Test)
 kein Zustellungsattraktor. **Vorab-Korrektur nächster DRAFT:** `N` in Konstanten;
 `r_floor = 1/√N + 0.15` (bei N=9 → 0.483) — diese Studie unberührt.
 
-Offene Frage des Ereignis-Strangs bleibt:
+Offene Frage nach Reciprocal-Event war: Gate-fähige Kohärenz auf B ohne §1.1-Verlust.
 
-> Wie erzeugt man Gate-fähige Kohärenz auf Arm B, ohne §1.1 zu verlieren?
+### Folgestudie: `RECIPROCITY_AMP_KOPPLUNG_v0` (Vierarm)
 
-Hybrid Tick-für-B / Event-für-C ist ein Rückfall in die versiegelte Tick-Serie
-und **nicht** zulässig.
+**Pre-Reg:** `docs/RECIPROCITY_AMP_KOPPLUNG_v0_PREREG.md` (BINDEND)  
+**Artefakte:** `agents_b2g/emergence/reciprocity_amp_kopplung_v0/`  
+**Verdict:** **`P1_ONLY`** · Spot `20262401` Batterie PASS · Match D=κ̄_B · §1.1d **gehalten**
+
+```text
+Spot α=0 Seed 20262401:  A∧B∧C PASS
+P1 (κ̄_B ≫ κ̄_C):         YES 6/6 ab α=0.1
+P2 (Gate B↔D):           0/6 auf allen α
+§1.1d (Arm D COUPLED):   gehalten (0–1/6; Mehrheit nie)
+r_floor:                 0.483 (N=9, 1/√N+0.15)
+```
+
+**Lesart (zurechenbar, kein Konfund):** Reziprozität verstärkt κ relational (P1).
+Bei **matched κ** (Arm D) entsteht daraus **keine** Phasenkohärenz (P2).
+Kohärenz hängt nicht an der Partnerzuordnung.
+
+**Drei Architektur-Sätze (Stand 10 Studien):**
+
+```text
+Tick-Basis:    erzeugt Kohärenz, aber nicht relational (Arm C koppelt auch)
+Event-Basis:   erzeugt keine Kohärenz, auch nicht relational
+Reziprozität:  verstärkt κ relational, erzeugt aber keine Kohärenz
+```
+
+Hybrid Tick/Event bleibt **verboten**. Ob relationale Kohärenz in dieser Familie
+grundsätzlich unerreichbar ist, ist die offene Entscheidungsfrage — kein neuer
+Strang ohne eigenen 16s-Proto.
 
 ---
 
@@ -162,7 +187,9 @@ und **nicht** zulässig.
 | `docs/EDGE_LOCAL_KOPPLUNG_v0_PREREG.md` | Edge-Local · BINDEND · INVALID · Tick-Serie letzte |
 | `docs/EVENT_DRIVEN_KOPPLUNG_v0_PREREG.md` | Ereignis-Strang · BINDEND · `NO_COUPLING` |
 | `docs/RECIPROCAL_EVENT_KOPPLUNG_v0_PREREG.md` | Reziprozitäts-Event · BINDEND · `NO_COUPLING` · §1.1 JA |
+| `docs/RECIPROCITY_AMP_KOPPLUNG_v0_PREREG.md` | Reziprozitäts-Amp · BINDEND · Vierarm · `P1_ONLY` |
 | `agents_b2g/emergence/closed_loop_kopplung_v0/` | Studie 6 |
 | `agents_b2g/emergence/edge_local_kopplung_v0/` | Studie 7 (letzte Tick-Studie) |
 | `agents_b2g/emergence/event_driven_kopplung_v0/` | Ereignis-Strang Studie 1 |
 | `agents_b2g/emergence/reciprocal_event_kopplung_v0/` | Ereignis-Strang Studie 2 |
+| `agents_b2g/emergence/reciprocity_amp_kopplung_v0/` | Ereignis-Strang Studie 3 (`P1_ONLY`) |
