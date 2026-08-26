@@ -125,6 +125,10 @@ Vierarm A/B/C/D · Gate B↔D (matched κ) · P1 YES 6/6 · P2 0/6.
 **Neuer Strang** (Dissensus & Niche · Stateful Graph Automata): erlaubt nur mit
 eigenem 16s-Proto, eigener Pre-Reg, eigenen Seeds — **Serie 1**, nicht Studie 11.
 
+**Stand 2026-08-26:** Stateful Graph Studie 1 → `STRUCTURE_RELATIONAL`
+(`docs/STATEFUL_GRAPH_SERIE_v0.md` · Commit `91265e8e`). Kopplungsfamilie bleibt
+geschlossen; Dissens-Gegenprobe optional, Pause valid.
+
 ---
 
 ## Verweise
@@ -144,3 +148,5 @@ eigenem 16s-Proto, eigener Pre-Reg, eigenen Seeds — **Serie 1**, nicht Studie 
 | `docs/RECIPROCAL_EVENT_KOPPLUNG_v0_PREREG.md` | Reciprocal-Event · `NO_COUPLING` |
 | `docs/RECIPROCITY_AMP_KOPPLUNG_v0_PREREG.md` | Amp · Vierarm · `P1_ONLY` |
 | `agents_b2g/emergence/reciprocity_amp_kopplung_v0/` | Studie 10 · Familien-Siegel |
+| `docs/STATEFUL_GRAPH_SERIE_v0.md` | Stateful Graph Serie · `STRUCTURE_RELATIONAL` |
+| `docs/STATEFUL_GRAPH_v0_PREREG.md` | Stateful Graph Studie 1 · BINDEND |
