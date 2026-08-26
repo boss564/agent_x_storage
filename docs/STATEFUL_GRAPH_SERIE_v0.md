@@ -1,6 +1,6 @@
 # Stateful Graph — Serie v0 (Konsolidierung)
 
-**Status:** Studie 1 · … · topology · async_verify · agent_scale · 2026-08-26  
+**Status:** Studie 1 · … · topology · async · agent_scale · failover_ring · 2026-08-26  
 **Charakter:** Neue Architekturfamilie — **nicht** Studie 11 der φ/ρ-Kopplung  
 **Sandbox diskret:** `prototypes/v2_stateful_graph/`  
 **Sandbox Dissensus:** `prototypes/v3_continuous_dissensus/` · **kein** Runner-Transfer
@@ -16,6 +16,7 @@ wall_clock_verify:    HYPOTHESIS_CONFIRMED — ms↑ mit |Q| · tps↓
 topology:             HYPOTHESIS_FALSIFIED — nur sparse Ring relational
 async_verify:         HYPOTHESIS_CONFIRMED — async D=4 ≈4× tps · Margin_Δ=0
 agent_scale:          HYPOTHESIS_CONFIRMED — N≤36 relational · Makespan∝N · tps flach (async)
+failover_ring:        STRUCTURE_RECOVERS 6/6 — Kill-1 + Ring-Reform hält Margin
 Korrektur:            Topologie = Zentrum · ⟨k⟩=1 randständig · H-Gate nicht normiert · Option 1 Charter
 ```
 
@@ -128,6 +129,7 @@ Artefakte: `q2_boundary_screen.py` · `q2_boundary_results.json`.
 | topology | Signalgraph complete/sparse/hub · \|Q\|=4 | `HYPOTHESIS_FALSIFIED` Screen |
 | async_verify | sync D=1 vs async D=4 · sparse Ring | `HYPOTHESIS_CONFIRMED` Screen |
 | agent_scale | N∈{9,18,27,36} · sparse Ring · async D=4 | `HYPOTHESIS_CONFIRMED` Screen |
+| failover_ring | Kill-1 · Ring-Reform · \|Q\|=4 | `STRUCTURE_RECOVERS` 6/6 Screen |
 
 ---
 
@@ -243,6 +245,28 @@ Artefakte: `agent_scale_screen.py` · `agent_scale_results.json`.
 
 ---
 
+## Antwort (failover_ring — Screen only)
+
+**Frage (offen):** Fällt ein Agent im sparse Ring aus und formieren die Überlebenden
+den Ring neu — erholt sich die relationale Trennung, oder bricht sie dauerhaft?
+
+**Freeze:** Seeds `20271101–06` · \|Q\|=4 · N=9 · Warmup=32 · Pre=40 · Post=80 ·
+Victim seed-bestimmt · Reform = Cycle auf Survivors · Gate pre & post.
+
+| Seed | Victim | Margin pre | Margin post | Outcome |
+|------|--------|------------|-------------|---------|
+| 01–06 | G01–G04 | 0,42–0,57 | 0,36–0,54 | **RECOVERS** 6/6 |
+
+**Verdict: `STRUCTURE_RECOVERS`** (`HYPOTHESIS_RESOLVED`).  
+Avg Margin pre≈0,48 · post≈0,45 · Recovery-Onset-Proxy ≈16 Post-Events.  
+**Lesart mit Serien-Korrektur:** Die Reform stellt wieder ⟨k⟩=1 her — dieselbe
+Vorbedingung wie Studie 1. Erholung heißt nicht „Topologie egal“, sondern
+„1:1-Ring unter Survivors reicht erneut“. Ohne Reform wäre Bruch erwartbar
+(nicht Gegenstand dieses Screens).  
+Artefakte: `failover_ring_screen.py` · `failover_ring_results.json`.
+
+---
+
 ## Studie 1 — Freeze (kurz)
 
 | ID | Inhalt |
@@ -336,11 +360,11 @@ Bereits bindend in Map §9 / Charter: **Option 1 — Analyse/Simulation**, Scope
 
 ## Status & offene Türen
 
-**Jetzt:** Serie methodisch **korrigiert** (Topologie-Zentrum · H-Normierungsschuld ·
-Charter Option 1 festgehalten). Keine neuen Screens ohne neue, nicht-tautologische Hypothese.
+**Jetzt:** Serie methodisch korrigiert · **failover_ring: `STRUCTURE_RECOVERS` 6/6**
+(Reform stellt ⟨k⟩=1 wieder her).
 
 **Optional später (nur mit neuer Hypothese):** Grad-Kontinuum ⟨k⟩∈{2…} · normiertes
-H-Gate als *neuer* Screen · Dissensus Pre-Reg · Failover `completion_load` /
+H-Gate · Failover **ohne** Reform (Kontrolle) · Dissensus Pre-Reg · `completion_load` /
 `two-choice` · Live-Z3 · async lossy/Stale.
 
 **Nicht erlaubt:** Studie 11 φ/ρ · Hybrid · Schwellen-Nachjustierung an versiegelten
