@@ -57,4 +57,19 @@ Bei κ=0 steht r bereits ≈ 0.29 (kein Sprung wie in der Tick-Serie).
 2. **Kein Verdrahtungsfehler:** Observablen differieren zwischen κ=0 und κ=1.2 (siehe oben).
 3. **Echtes Negativ:** Wechselseitige kanten-lokale Inter-Arrival-Modulation (F7) verändert Timing/Zustand, erzeugt aber **keine** Gate-fähige Phasenkohärenz B↔C.
 
+## Zahl für später (kein Strang) — Sockel bei κ=0
+
+**Hypothese „Zustellungsattraktor“:** widerlegt.  
+Shuffle (Phase zeitlich gemischt, pro Agent): `r ≈ 0.344` gegen beobachtet `0.385` — beide am Zufallsboden **`1/√9 ≈ 0.333`**. Kein ℓ-Schub-Attraktor; Grundkohärenz = erwarteter Wert für neun zufällige Phasen. Kontrast zu Intervall-Studien (`r≈0.09`) = Messbasis, nicht Zustellung.
+
+### Vorab-Korrektur für den nächsten DRAFT (diese Studie unberührt)
+
+| Größe | Ist (diese Studie) | Soll (nächster DRAFT) |
+|-------|--------------------|------------------------|
+| `N` | implizit 9 | **explizit in Konstanten** |
+| `r_floor` | absolut `0.34` (kalibriert als `1/√27 + 0.15`) | **`r_floor = 1/√N + 0.15`** |
+
+Bei N=9 wäre der Floor dann `0.333+0.15 = 0.483` (nicht 0.34 ≈ Zufall+0.007).  
+Hier folgenlos: Gate nirgends erreicht → kein Falsch-Positiv; Verdict `NO_COUPLING` steht.
+
 Tick-Serie versiegelt · Hybrid Tick/Event verboten · keine Schwellen-Nachjustierung.

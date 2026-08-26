@@ -132,9 +132,13 @@ r_B:                     flach (≈0.28–0.31; Span≈0.028 < sd_pool≈0.045)
 Verdrahtung:             κ ANGESCHLOSSEN (T_mean Δ≈−0.33; States/Messages ≠)
 ```
 
-**Befund:** Design funktioniert (Kontrollarm unten → interpretierbar). Modulation
+**Lesart:** Design funktioniert (Kontrollarm unten → interpretierbar). Modulation
 ändert Timing/Zustand, erzeugt aber keine Phasenkohärenz — **echtes Negativ**,
-kein Wiring-Fail. Offene Frage des Ereignis-Strangs bleibt:
+kein Wiring-Fail. Sockel `r(κ=0)≈0.29` = Zufallsboden `1/√9` (Shuffle-Test),
+kein Zustellungsattraktor. **Vorab-Korrektur nächster DRAFT:** `N` in Konstanten;
+`r_floor = 1/√N + 0.15` (bei N=9 → 0.483) — diese Studie unberührt.
+
+Offene Frage des Ereignis-Strangs bleibt:
 
 > Wie erzeugt man Gate-fähige Kohärenz auf Arm B, ohne §1.1 zu verlieren?
 
