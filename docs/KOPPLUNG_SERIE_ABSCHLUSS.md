@@ -1,9 +1,10 @@
 # Kopplungs-Serie — Strang-Abschluss (final)
 
-**Status:** STRANG GESCHLOSSEN · 2026-08-26 (Nachzug `EDGE_LOCAL_KOPPLUNG_v0`)  
-**Charakter:** Keine neue Pre-Reg in diesem Strang. Die Serie hat ihre Frage beantwortet.  
-**Letzte Studie:** `EDGE_LOCAL_KOPPLUNG_v0` · Artefakte `agents_b2g/emergence/edge_local_kopplung_v0/`  
-**Vorgänger-Schluss:** 2026-08-25 nach `CLOSED_LOOP_KOPPLUNG_v0` — Edge-Local war der explizit freigehaltene Folgestrang und ist jetzt ebenfalls geschlossen.
+**Status:** TICK-STRANG GESCHLOSSEN · 2026-08-26 (`EDGE_LOCAL_KOPPLUNG_v0`)  
+**Charakter:** Keine neue Pre-Reg in **diesem** (Tick-)Strang. Die iterative Frage ist beantwortet.  
+**Letzte Tick-Studie:** `EDGE_LOCAL_KOPPLUNG_v0` · Artefakte `agents_b2g/emergence/edge_local_kopplung_v0/`  
+**Neuer Strang (offen):** `EVENT_DRIVEN_KOPPLUNG_v0` — siehe unten § Ereignis-Strang.  
+**Vorgänger-Schluss:** 2026-08-25 nach `CLOSED_LOOP_KOPPLUNG_v0` — Edge-Local war der explizit freigehaltene Folgestrang der Tick-Serie und ist jetzt ebenfalls geschlossen.
 
 ---
 
@@ -88,17 +89,42 @@ sauberes Positivergebnis — mehrfach falsch. **Arm C bleibt die Regel.**
 
 ## Was dieser Strang nicht öffnet
 
-Keine neue Pre-Reg in **dieser** Serie. Keine Schwellen-Nachjustierung.
+Keine neue Pre-Reg in **dieser Tick-Serie**. Keine Schwellen-Nachjustierung.
 Keine Re-Analyse versiegelter Datensätze. Keine Nachinterpretation von κ=1.2
 als „Edge-Local greift“.
 
-Eine Fortsetzung wäre nur als **neuer Strang** mit **fundamental anderer
-Dynamik** zulässig, z. B.:
+Eine Fortsetzung der **Tick-Architektur** ist unzulässig. Der Ereignis-Strang
+ist ein **anderer Strang** (siehe unten) — nicht Studie 8 der Tick-Serie.
 
-> Ereignisbasierte statt iterative Modulation; differenzverstärkend statt
-> kohärenzerzeugend — so dass Arm C keine netzwerk-weite Kohärenz mehr erzwingt.
+---
 
-Das ist eine bewusste Architekturentscheidung — nicht die Fortsetzung dieser Serie.
+## Ereignis-Strang (offen, 2026-08-26)
+
+**Studie:** `EVENT_DRIVEN_KOPPLUNG_v0`  
+**Pre-Reg:** `docs/EVENT_DRIVEN_KOPPLUNG_v0_PREREG.md` (BINDEND)  
+**Artefakte:** `agents_b2g/emergence/event_driven_kopplung_v0/`  
+**Verdict:** `NO_COUPLING` · Spot `20262001` Batterie PASS · §1.1 **gehalten**
+
+```text
+Spot κ=0 Seed 20262001:  A∧B∧C PASS (kein SIGNAL_BLIND)
+intact_kappas:           alle κ · 6/6
+§1.1:                    gehalten (Arm C 0–1/6 COUPLED; Mehrheit nie)
+Gate B↔C ≥4/6:           nirgends (0/6 auf allen κ)
+Arm B:                   ebenfalls NO_COUPLING (fast überall)
+```
+
+**Meilenstein:** Erstes Mal in der Kopplungs-Forschung, dass Arm C den Konsens-Attraktor
+**nicht** mehrheitlich erzwingt. Die Nullhypothese bleibt über **fehlendes Gate**,
+nicht über §1.1-Fail.
+
+**Wendepunkt (nicht Abschluss):** Die Ereignisbasis bricht falsche und echte
+Kohärenz zugleich. Offene Frage des Ereignis-Strangs (eigene Pre-Reg, wenn
+weitergearbeitet wird):
+
+> Wie bricht man Arm C, ohne Arm B zu brechen?
+
+Hybrid Tick-für-B / Event-für-C ist ein Rückfall in die versiegelte Tick-Serie
+und **nicht** zulässig.
 
 ---
 
@@ -114,6 +140,8 @@ Das ist eine bewusste Architekturentscheidung — nicht die Fortsetzung dieser S
 | `docs/KOPPLUNG_LEDGER_v1_PREREG.md` | Ledger-Sweep · INVALID |
 | `docs/CLOSED_LOOP_RESPONSE_v0_DRAFT.md` | Schritt-2 Batterie · PASS |
 | `docs/CLOSED_LOOP_KOPPLUNG_v0_PREREG.md` | Closed-Loop Sweep · INVALID |
-| `docs/EDGE_LOCAL_KOPPLUNG_v0_PREREG.md` | Edge-Local · BINDEND · INVALID |
+| `docs/EDGE_LOCAL_KOPPLUNG_v0_PREREG.md` | Edge-Local · BINDEND · INVALID · Tick-Serie letzte |
+| `docs/EVENT_DRIVEN_KOPPLUNG_v0_PREREG.md` | Ereignis-Strang · BINDEND · `NO_COUPLING` · offen |
 | `agents_b2g/emergence/closed_loop_kopplung_v0/` | Studie 6 |
-| `agents_b2g/emergence/edge_local_kopplung_v0/` | Studie 7 (letzte) |
+| `agents_b2g/emergence/edge_local_kopplung_v0/` | Studie 7 (letzte Tick-Studie) |
+| `agents_b2g/emergence/event_driven_kopplung_v0/` | Ereignis-Strang Studie 1 |

@@ -1,0 +1,68 @@
+{
+  "schema": "event_driven_proto_v0",
+  "not_a_pre_reg": true,
+  "strand": "1_event_driven",
+  "gate_rule": "delta_R_i > 0 AND median_|rho| < 0.90",
+  "seeds": [
+    20261901,
+    20261902,
+    20261903
+  ],
+  "elapsed_s": 0.009,
+  "budget_s": 16.0,
+  "budget_ok": true,
+  "majority_pass": true,
+  "n_pass": 3,
+  "gate": "PROTO_PASS",
+  "per_seed": [
+    {
+      "run_seed": 20261901,
+      "strand": "event_driven",
+      "n_agents": 9,
+      "n_events_per_agent": 64,
+      "median_abs_rho": 0.625383,
+      "n_corr": 9,
+      "mean_delta_r": 1.95754,
+      "min_delta_r": 0.010958,
+      "layer_a_pass": true,
+      "layer_b_pass": true,
+      "pass": true,
+      "sigma_s": 0.78123,
+      "formula": "sensitivity_gamma_v02",
+      "note": "discrete impulses only; no continuous \u2113(t) / shared tick EWMA"
+    },
+    {
+      "run_seed": 20261902,
+      "strand": "event_driven",
+      "n_agents": 9,
+      "n_events_per_agent": 64,
+      "median_abs_rho": 0.173587,
+      "n_corr": 9,
+      "mean_delta_r": 1.661559,
+      "min_delta_r": 0.015974,
+      "layer_a_pass": true,
+      "layer_b_pass": true,
+      "pass": true,
+      "sigma_s": 0.774341,
+      "formula": "sensitivity_gamma_v02",
+      "note": "discrete impulses only; no continuous \u2113(t) / shared tick EWMA"
+    },
+    {
+      "run_seed": 20261903,
+      "strand": "event_driven",
+      "n_agents": 9,
+      "n_events_per_agent": 64,
+      "median_abs_rho": 0.688507,
+      "n_corr": 9,
+      "mean_delta_r": 1.949035,
+      "min_delta_r": 0.010589,
+      "layer_a_pass": true,
+      "layer_b_pass": true,
+      "pass": true,
+      "sigma_s": 0.778417,
+      "formula": "sensitivity_gamma_v02",
+      "note": "discrete impulses only; no continuous \u2113(t) / shared tick EWMA"
+    }
+  ],
+  "next": "DRAFT allowed only if PROTO_PASS"
+}
