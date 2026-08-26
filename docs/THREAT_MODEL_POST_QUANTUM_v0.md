@@ -360,6 +360,9 @@ Typ:      Threat-Surface-Landkarte (Analyse)
 Nicht:    DRAFT / Pre-Reg / Sweep
 Vektoren: Rekonstruktion · Timing-Poisoning · Shor/HN-DL(+SNARK) · Sybil
 Roadmap:  M1–M9 (M7∪M9: Einfluss ∝ Buchungsbewegung · n_min für MAD)
+M7-Status: PRODUCTION — default `trimmed_m7` · MAD-Reject vor Append · Poison-Log
+           (`kanten_ledger.py` · `scripts/test_m7_latency_poison.py`)
+           Vorher-Zustand: `latency_mode=ewma` / env `AGENT_X_LATENCY_MODE=ewma`
 Serie:    sticky-ℓ |ρ|≈0.348 / 0.156 = Vorher-Zustand — nicht übertragbar nach M7/M9
 Entmythologisiert: Grover · Quantensensorik
 Disziplin: Quantenspezifisch nur Shor (+ pairing-SNARK-Soundness)

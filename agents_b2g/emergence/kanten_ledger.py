@@ -4,12 +4,17 @@
 ARCH_BINDEND: docs/KANTEN_LEDGER_v1_DRAFT.md
 Update only on interaction (i,j). Decay γ=0.05/tick.
 Not the sealed KOPPLUNG_EIJ_v1 EdgeBook.
+
+M7 (docs/THREAT_MODEL_POST_QUANTUM_v0.md §3.5): production default is
+`trimmed_m7` — MAD-Gate reject (>k·MAD) before window append + upper 10% trim.
+Override via latency_mode=… or env AGENT_X_LATENCY_MODE (ewma = Vorher-Zustand).
 """
 from __future__ import annotations
 
 import math
+import os
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 
 GAMMA = 0.05
 K = 5
@@ -23,10 +28,10 @@ COMPONENT_NAMES: Tuple[str, ...] = (
 LATENCY_EWMA = 0.3
 RISK_UP = 0.10
 RISK_DOWN = 0.05
-# M7 spike (docs/THREAT_MODEL_POST_QUANTUM_v0.md §3.5): engineering, not Pre-Reg
+# M7 (docs/THREAT_MODEL_POST_QUANTUM_v0.md §3.5): engineering, not Pre-Reg
 LATENCY_MODE_EWMA = "ewma"
 LATENCY_MODE_M7 = "median_m7"          # aggressive — loses sticky-ℓ selectivity
-LATENCY_MODE_M7_TRIM = "trimmed_m7"    # MAD + upper-tail trim (canonical candidate)
+LATENCY_MODE_M7_TRIM = "trimmed_m7"    # MAD + upper-tail trim (canonical / production)
 LATENCY_MODE_EWMA_GATE = "ewma_gate"    # EWMA intake, reject extreme spikes via MAD
 LATENCY_N_MIN = 14
 LATENCY_WINDOW_CAP = 64
@@ -40,6 +45,11 @@ _LATENCY_MODES = {
     LATENCY_MODE_M7_TRIM,
     LATENCY_MODE_EWMA_GATE,
 }
+
+
+def _default_latency_mode() -> str:
+    raw = os.environ.get("AGENT_X_LATENCY_MODE", LATENCY_MODE_M7_TRIM).strip().lower()
+    return raw if raw in _LATENCY_MODES else LATENCY_MODE_M7_TRIM
 
 EdgeKey = Tuple[str, str]
 
@@ -86,6 +96,32 @@ def _upper_trimmed_mean(
         return _median(ys)
     core = ys[: n - k] if k > 0 else ys
     return sum(core) / len(core)
+
+
+def mad_outlier(
+    samples: Sequence[float],
+    candidate: float,
+    *,
+    n_min: int = LATENCY_N_MIN,
+    k: float = LATENCY_MAD_K,
+) -> Tuple[bool, float, float]:
+    """Return (is_outlier, median, mad). No reject when n < n_min (§3.5.2).
+
+    If MAD≈0 (constant window), any material deviation from the median is an
+    outlier — otherwise a delay attack on a flat ℓ history would never trip.
+    """
+    vals = [float(x) for x in samples if x is not None]
+    n = len(vals)
+    if n < n_min:
+        return False, 0.0, 0.0
+    med = _median(vals)
+    mad = _mad(vals, med)
+    delta = abs(float(candidate) - med)
+    if mad <= 1e-12:
+        # Floor: treat as outlier if spike is > 50% of median or absolute > 1.0
+        floor = max(1.0, 0.5 * abs(med))
+        return bool(delta > floor), med, mad
+    return bool(delta > k * mad), med, mad
 
 
 def robust_latency_from_window(
@@ -163,13 +199,16 @@ class LedgerBook:
         self,
         *,
         gamma: float = GAMMA,
-        latency_mode: str = LATENCY_MODE_EWMA,
+        latency_mode: Optional[str] = None,
         latency_n_min: int = LATENCY_N_MIN,
         use_trimmed_mean: bool = False,
         m7_settlement_only: bool = False,
+        on_latency_poison: Optional[Callable[[Dict[str, Any]], None]] = None,
     ):
         self.gamma = float(gamma)
-        mode = str(latency_mode).lower()
+        mode = str(
+            latency_mode if latency_mode is not None else _default_latency_mode()
+        ).lower()
         if mode not in _LATENCY_MODES:
             raise ValueError(f"latency_mode={latency_mode}")
         self.latency_mode = mode
@@ -178,8 +217,11 @@ class LedgerBook:
         self.use_trimmed_mean = bool(use_trimmed_mean)
         # False = engineering spike (all samples); True = §3.7 strict
         self.m7_settlement_only = bool(m7_settlement_only)
+        self.on_latency_poison = on_latency_poison
         self._edges: Dict[EdgeKey, LedgerEdge] = {}
         self._updated_in_window: Dict[EdgeKey, bool] = {}
+        # M7 poison audit (in-memory; not GoBD — ops signal only)
+        self.latency_poison_events: List[Dict[str, Any]] = []
 
     def _m7_estimator(self) -> str:
         if self.latency_mode == LATENCY_MODE_M7_TRIM:
@@ -187,6 +229,36 @@ class LedgerBook:
         if self.latency_mode == LATENCY_MODE_M7 and self.use_trimmed_mean:
             return "trimmed"
         return "median"
+
+    def _log_latency_poison(
+        self,
+        *,
+        i: str,
+        j: str,
+        tick: int,
+        latency: float,
+        median: float,
+        mad: float,
+        mode: str,
+    ) -> None:
+        evt = {
+            "edge": (i, j),
+            "tick": int(tick),
+            "latency": float(latency),
+            "median": float(median),
+            "mad": float(mad),
+            "k": LATENCY_MAD_K,
+            "mode": mode,
+            "reason": "mad_gate_reject",
+        }
+        self.latency_poison_events.append(evt)
+        if len(self.latency_poison_events) > 256:
+            self.latency_poison_events = self.latency_poison_events[-256:]
+        if self.on_latency_poison is not None:
+            try:
+                self.on_latency_poison(evt)
+            except Exception:
+                pass
 
     def ensure(self, i: str, j: str, tick: int = 0) -> LedgerEdge:
         key = (i, j)
@@ -258,21 +330,30 @@ class LedgerBook:
             e.latency_evaluable = True
             e.latency_status = "ewma"
         elif self.latency_mode == LATENCY_MODE_EWMA_GATE:
-            # Keep window for MAD gate; EWMA only accepts non-extreme samples
-            # once n ≥ n_min (thin windows stay provisional, not "robust").
+            # MAD reject BEFORE append once n ≥ n_min (§3.5.2 / M7 logging).
             accept = settlement_touch or (not self.m7_settlement_only)
-            if accept:
+            take = True
+            if accept and len(e.latency_samples) >= self.latency_n_min:
+                is_out, med, mad = mad_outlier(
+                    e.latency_samples, lat, n_min=self.latency_n_min
+                )
+                if is_out:
+                    take = False
+                    e.edge_risk = max(0.0, min(1.0, e.edge_risk + RISK_UP))
+                    self._log_latency_poison(
+                        i=i,
+                        j=j,
+                        tick=tick,
+                        latency=lat,
+                        median=med,
+                        mad=mad,
+                        mode=self.latency_mode,
+                    )
+            if accept and take:
                 e.latency_samples.append(lat)
                 if len(e.latency_samples) > LATENCY_WINDOW_CAP:
                     e.latency_samples = e.latency_samples[-LATENCY_WINDOW_CAP:]
             n = len(e.latency_samples)
-            take = True
-            if n >= self.latency_n_min:
-                med = _median(e.latency_samples)
-                mad = _mad(e.latency_samples, med)
-                if mad > 1e-12 and abs(lat - med) > LATENCY_MAD_K * mad:
-                    take = False
-                    e.edge_risk = max(0.0, min(1.0, e.edge_risk + RISK_UP))
             if take:
                 if e.updates == 0 and not e.ever_updated:
                     e.avg_latency = lat
@@ -287,9 +368,27 @@ class LedgerBook:
             if not settlement_touch:
                 e.edge_risk = max(0.0, min(1.0, e.edge_risk + 0.5 * RISK_UP))
         else:
-            # M7 window: settlement-only when m7_settlement_only (§3.7);
-            # spike default accepts all samples so ℓ remains measurable.
+            # M7 window (median_m7 / trimmed_m7): reject extreme spikes before
+            # they enter the window; then MAD+estimator on clean samples.
             accept = settlement_touch or (not self.m7_settlement_only)
+            rejected = False
+            if accept and len(e.latency_samples) >= self.latency_n_min:
+                is_out, med, mad = mad_outlier(
+                    e.latency_samples, lat, n_min=self.latency_n_min
+                )
+                if is_out:
+                    rejected = True
+                    accept = False
+                    e.edge_risk = max(0.0, min(1.0, e.edge_risk + RISK_UP))
+                    self._log_latency_poison(
+                        i=i,
+                        j=j,
+                        tick=tick,
+                        latency=lat,
+                        median=med,
+                        mad=mad,
+                        mode=self.latency_mode,
+                    )
             if accept:
                 e.latency_samples.append(lat)
                 if len(e.latency_samples) > LATENCY_WINDOW_CAP:
@@ -302,7 +401,7 @@ class LedgerBook:
                 n_min=self.latency_n_min,
                 estimator=self._m7_estimator(),
             )
-            e.latency_status = status
+            e.latency_status = status if not rejected else "ok"
             if status == "ok" and ell is not None:
                 e.avg_latency = float(ell)
                 e.latency_evaluable = True

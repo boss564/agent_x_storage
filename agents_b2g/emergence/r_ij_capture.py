@@ -98,7 +98,7 @@ def capture_r_ij(
     p_of = assign_p([a.id for a in agents])
     recv_load = {a.id: 0 for a in agents}
     sticky = StickySelector(threshold=8)
-    ledger = LedgerBook(gamma=0.05)
+    ledger = LedgerBook(gamma=0.05, latency_mode="ewma")  # Vorher-Zustand (pre-M7)
     pending_eval: Dict[str, list] = {a.id: [] for a in evaluators}
     pending_econ: Dict[str, list] = {a.id: [] for a in economics}
     rule_default = dpc.rule_default
