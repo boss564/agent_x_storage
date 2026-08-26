@@ -1,0 +1,176 @@
+{
+  "screen": "async_verify_v0",
+  "hypothesis": "sparse-ring STRUCTURE_RELATIONAL under sync and async; async D=4 tps > sync D=1",
+  "hypothesis_result": "HYPOTHESIS_CONFIRMED",
+  "hypothesis_parts": {
+    "structure_both_modes": true,
+    "async_tps_gt_sync": true,
+    "tps_speedup": 3.9883,
+    "avg_margin_abs_delta": 0.0
+  },
+  "freeze": {
+    "Q_size": 4,
+    "topology": "sparse_ring",
+    "INNER": 64,
+    "async_depth": 4,
+    "seeds": [
+      20270901,
+      20270902,
+      20270903,
+      20270904,
+      20270905,
+      20270906
+    ],
+    "tps_model": "accounted pipeline makespan over measured per-txn verify ms"
+  },
+  "gate": {
+    "delta_q": 0.5,
+    "h_edge": 2.0,
+    "margin": 0.1
+  },
+  "summary": {
+    "sync": {
+      "pipeline_depth": 1,
+      "n_pass": 6,
+      "n": 6,
+      "avg_margin": 0.479861,
+      "avg_tps": 3431.827,
+      "verdict": "STRUCTURE_RELATIONAL"
+    },
+    "async": {
+      "pipeline_depth": 4,
+      "n_pass": 6,
+      "n": 6,
+      "avg_margin": 0.479861,
+      "avg_tps": 13687.113,
+      "verdict": "STRUCTURE_RELATIONAL"
+    }
+  },
+  "elapsed_s": 7.116,
+  "results": {
+    "sync": [
+      {
+        "seed": 20270901,
+        "pass": true,
+        "delta_q": 1.282639,
+        "h_edge": 2.983651,
+        "anti_margin": 0.379167,
+        "tps": 3450.579,
+        "makespan_ms": 292.125,
+        "mean_verify_ms": 0.289806
+      },
+      {
+        "seed": 20270902,
+        "pass": true,
+        "delta_q": 1.236806,
+        "h_edge": 2.986446,
+        "anti_margin": 0.559722,
+        "tps": 3464.888,
+        "makespan_ms": 290.918,
+        "mean_verify_ms": 0.28861
+      },
+      {
+        "seed": 20270903,
+        "pass": true,
+        "delta_q": 1.327083,
+        "h_edge": 2.955756,
+        "anti_margin": 0.443056,
+        "tps": 3437.718,
+        "makespan_ms": 293.218,
+        "mean_verify_ms": 0.290891
+      },
+      {
+        "seed": 20270904,
+        "pass": true,
+        "delta_q": 1.290278,
+        "h_edge": 2.989936,
+        "anti_margin": 0.475,
+        "tps": 3485.665,
+        "makespan_ms": 289.184,
+        "mean_verify_ms": 0.286889
+      },
+      {
+        "seed": 20270905,
+        "pass": true,
+        "delta_q": 1.236111,
+        "h_edge": 2.996677,
+        "anti_margin": 0.451389,
+        "tps": 3321.905,
+        "makespan_ms": 303.44,
+        "mean_verify_ms": 0.301032
+      },
+      {
+        "seed": 20270906,
+        "pass": true,
+        "delta_q": 1.226389,
+        "h_edge": 2.995152,
+        "anti_margin": 0.570833,
+        "tps": 3430.207,
+        "makespan_ms": 293.86,
+        "mean_verify_ms": 0.291528
+      }
+    ],
+    "async": [
+      {
+        "seed": 20270901,
+        "pass": true,
+        "delta_q": 1.282639,
+        "h_edge": 2.983651,
+        "anti_margin": 0.379167,
+        "tps": 13695.545,
+        "makespan_ms": 73.601,
+        "mean_verify_ms": 0.291534
+      },
+      {
+        "seed": 20270902,
+        "pass": true,
+        "delta_q": 1.236806,
+        "h_edge": 2.986446,
+        "anti_margin": 0.559722,
+        "tps": 13589.144,
+        "makespan_ms": 74.177,
+        "mean_verify_ms": 0.294103
+      },
+      {
+        "seed": 20270903,
+        "pass": true,
+        "delta_q": 1.327083,
+        "h_edge": 2.955756,
+        "anti_margin": 0.443056,
+        "tps": 13686.31,
+        "makespan_ms": 73.65,
+        "mean_verify_ms": 0.291823
+      },
+      {
+        "seed": 20270904,
+        "pass": true,
+        "delta_q": 1.290278,
+        "h_edge": 2.989936,
+        "anti_margin": 0.475,
+        "tps": 13642.747,
+        "makespan_ms": 73.885,
+        "mean_verify_ms": 0.292925
+      },
+      {
+        "seed": 20270905,
+        "pass": true,
+        "delta_q": 1.236111,
+        "h_edge": 2.996677,
+        "anti_margin": 0.451389,
+        "tps": 13723.37,
+        "makespan_ms": 73.451,
+        "mean_verify_ms": 0.291341
+      },
+      {
+        "seed": 20270906,
+        "pass": true,
+        "delta_q": 1.226389,
+        "h_edge": 2.995152,
+        "anti_margin": 0.570833,
+        "tps": 13785.559,
+        "makespan_ms": 73.12,
+        "mean_verify_ms": 0.289515
+      }
+    ]
+  }
+}

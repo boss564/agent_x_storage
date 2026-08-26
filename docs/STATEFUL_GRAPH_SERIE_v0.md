@@ -1,6 +1,6 @@
 # Stateful Graph — Serie v0 (Konsolidierung)
 
-**Status:** Studie 1 · Gegenprobe · \|Q\|-Varianz · \|Q\|=2 · completion_proof · wall_clock · topology · 2026-08-26  
+**Status:** Studie 1 · Gegenprobe · \|Q\| · completion · wall_clock · topology · async_verify · 2026-08-26  
 **Charakter:** Neue Architekturfamilie — **nicht** Studie 11 der φ/ρ-Kopplung  
 **Sandbox diskret:** `prototypes/v2_stateful_graph/`  
 **Sandbox Dissensus:** `prototypes/v3_continuous_dissensus/` · **kein** Runner-Transfer
@@ -14,6 +14,7 @@ Dissens-Gegenprobe:   PROTO_PASS (kontinuierlich, matched gate) — kein Pre-Reg
 completion_proof:     STRUCTURE_RELATIONAL unter Receipt-Gate — 18/18 (baseline/always/lossy)
 wall_clock_verify:    HYPOTHESIS_CONFIRMED — Struktur stabil · ms↑ mit |Q| · tps↓
 topology:             HYPOTHESIS_FALSIFIED — nur sparse (Ring) relational; complete/hub break
+async_verify:         HYPOTHESIS_CONFIRMED — sparse Ring stabil · async D=4 ≈4× tps
 ```
 
 ---
@@ -123,6 +124,7 @@ Artefakte: `q2_boundary_screen.py` · `q2_boundary_results.json`.
 | completion_proof | Übergangs-Receipt (Mock-Z3/BHO) · \|Q\|=4 | `STRUCTURE_RELATIONAL` 18/18 Screen |
 | wall_clock_verify | Verifikations-Wandzeit · \|Q\| ∈ {4…32} | `HYPOTHESIS_CONFIRMED` Screen |
 | topology | Signalgraph complete/sparse/hub · \|Q\|=4 | `HYPOTHESIS_FALSIFIED` Screen |
+| async_verify | sync D=1 vs async D=4 · sparse Ring | `HYPOTHESIS_CONFIRMED` Screen |
 
 ---
 
@@ -193,6 +195,27 @@ Artefakte: `topology_screen.py` · `topology_results.json`.
 
 ---
 
+## Antwort (async_verify — Screen only)
+
+**Frage:** Erhöht Pipeline-Verifikation (async) den Durchsatz, ohne sparse-Ring
+`STRUCTURE_RELATIONAL` zu brechen?
+
+**Freeze:** Seeds `20270901–06` · \|Q\|=4 · Topologie = sparse Ring · Mock-Z3/BHO
+\(O(|Q|^2\times 64)\) · sync D=1 vs async D=4 · tps = accounted Makespan
+(Parallel-Worker-Modell über gemessene per-Txn-ms; Event-Order identisch).
+
+| Mode | D | Passes | Avg Margin | Avg tps | Verdict |
+|------|---|--------|------------|---------|---------|
+| sync | 1 | 6/6 | 0,48 | ≈3432 | `STRUCTURE_RELATIONAL` |
+| async | 4 | 6/6 | 0,48 | ≈13687 | `STRUCTURE_RELATIONAL` |
+
+**Hypothese: bestätigt** (`HYPOTHESIS_CONFIRMED`):
+Struktur beide Modi relational · Margin_Δ=0 · **Speedup ≈ 3,99×** (≈D).  
+Vorbedingung: Topologie bleibt Ring (topology-Screen). Async ersetzt nicht denselben.  
+Artefakte: `async_verify_screen.py` · `async_verify_results.json`.
+
+---
+
 ## Studie 1 — Freeze (kurz)
 
 | ID | Inhalt |
@@ -226,9 +249,9 @@ dieselbe Definition wie in Studie 1. **Wahrheit vor Optik.**
 
 ## Status & offene Türen
 
-**Jetzt:** Studie 1 · Dissensus · \|Q\|-Varianz · \|Q\|=2 · completion_proof · wall_clock · **topology (FALSIFIED)**.
+**Jetzt:** Studie 1 · Dissensus · \|Q\| · completion · wall_clock · topology (FALSIFIED) · **async_verify (CONFIRMED, ≈4×)**.
 
-**Optional später:** Dissensus DRAFT/Pre-Reg/Sweep · Failover `completion_load` / `two-choice tie-break` · Live-Z3-Wandzeit · Topologie-Nachfolge (nur wenn neue Hypothese, nicht Gate-Nachziehen).
+**Optional später:** Dissensus DRAFT/Pre-Reg/Sweep · Failover `completion_load` / `two-choice tie-break` · Live-Z3-Wandzeit · async mit lossy/Rollback (Stale-Risk).
 
 **Nicht erlaubt:** Studie 11 φ/ρ · Hybrid · Schwellen-Nachjustierung an versiegelten Artefakten · Strang-Negativ aus globaler Metrik.
 
