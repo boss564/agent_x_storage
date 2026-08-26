@@ -1,0 +1,204 @@
+# Agent X — P1…P9 Podman/Compose (abgeleitet aus docs/AGENT_SWARM_P9_MAP_v0.md §4–§7)
+#
+# Wahrheit vor Optik:
+#   - Keine erfundenen Tags agent_x/pN-*:latest
+#   - Entry-Points = python3 <Modul> (Repo-Bind /app)
+#   - Steuergröße = Kanten-Ledger S_ij=ℓ_ij — kein NATS-Broadcast als Swarm-Control
+#
+# Start:
+#   podman compose -f podman-compose.p9.yml up --build
+#   docker  compose -f podman-compose.p9.yml up --build
+#
+# Hinweis: Viele Agent-CLIs sind One-Shot; nach dem Lauf bleibt der Container
+# mit sleep infinity, damit der Stack (Infra + DNS) prüfbar bleibt.
+
+x-p-agent: &p-agent
+  image: python:3.11-slim
+  working_dir: /app
+  volumes:
+    - .:/app:ro
+  environment: &p-env
+    PYTHONPATH: /app
+    PYTHONUNBUFFERED: "1"
+    REDIS_URL: redis://infra-state:6379/0
+    Z3_BASE_URL: http://infra-z3:8000
+  networks:
+    - agent_x_p9
+  restart: "no"
+
+services:
+  # ── Infra (Map §4) ──────────────────────────────────────────────────
+  infra-z3:
+    build:
+      context: .
+      dockerfile: services/z3_solver/Dockerfile.z3
+    image: agentx-z3:p9
+    volumes:
+      - z3-data:/data
+    ports:
+      - "8000:8000"
+    networks:
+      - agent_x_p9
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python3",
+          "-c",
+          "import z3; s=z3.Solver(); x=z3.Int('x'); s.add(x>0); assert s.check()==z3.sat",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  infra-hsm:
+    build:
+      context: .
+      dockerfile: Dockerfile.bunker
+    image: agentx-bunker:p9
+    volumes:
+      - hsm-keys:/keys
+    networks:
+      - agent_x_p9
+    # SoftHSM-Token bleiben im Image-Default; Key-Bindung laut Map unter /keys
+    command:
+      [
+        "sh",
+        "-c",
+        "mkdir -p /keys && python3 -c \"from tests.mock_hsm import MockHSM; MockHSM().init_token('p9'); print('hsm-ready')\" && exec sleep infinity",
+      ]
+
+  infra-state:
+    image: redis:7.4-alpine
+    volumes:
+      - state-data:/data
+    command: ["redis-server", "--appendonly", "yes", "--dir", "/data"]
+    networks:
+      - agent_x_p9
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # ── P1…P9 (Map §4 Entry-Points, §7 depends_on) ──────────────────────
+  p1-ingestion:
+    <<: *p-agent
+    depends_on:
+      - infra-state
+    command:
+      [
+        "sh",
+        "-c",
+        "python3 agent_x_klasse_a_1_ingestion.py status; exec sleep infinity",
+      ]
+
+  p2-telematic:
+    <<: *p-agent
+    depends_on:
+      - infra-state
+    # Map: api_agents/… — nicht Root agent_9_telemetry.py
+    command:
+      [
+        "sh",
+        "-c",
+        "python3 api_agents/agent_9_telemetry.py; exec sleep infinity",
+      ]
+
+  p3-pressure:
+    <<: *p-agent
+    depends_on:
+      - infra-state
+    command:
+      [
+        "sh",
+        "-c",
+        "python3 agent_x_klasse_b_pressure_b1_ingestion.py; exec sleep infinity",
+      ]
+
+  p4-arbitrage:
+    <<: *p-agent
+    depends_on:
+      - infra-state
+    command:
+      [
+        "sh",
+        "-c",
+        "python3 agent_x_klasse_c_3_arbitrage.py; exec sleep infinity",
+      ]
+
+  p5-analytics:
+    <<: *p-agent
+    depends_on:
+      - infra-state
+    command:
+      [
+        "sh",
+        "-c",
+        "python3 agent_x_klasse_d_2_analytics.py; exec sleep infinity",
+      ]
+
+  p6-risk:
+    <<: *p-agent
+    depends_on:
+      - infra-z3
+      - infra-state
+    volumes:
+      - .:/app:ro
+      - z3-data:/data:ro
+    environment:
+      <<: *p-env
+    command:
+      [
+        "sh",
+        "-c",
+        "python3 agent_x_lending_b2_risk.py; exec sleep infinity",
+      ]
+
+  p7-strategy:
+    <<: *p-agent
+    depends_on:
+      - infra-state
+    command:
+      [
+        "sh",
+        "-c",
+        "python3 agent_x_klasse_a_3_strategie.py; exec sleep infinity",
+      ]
+
+  p8-force:
+    <<: *p-agent
+    depends_on:
+      - infra-state
+    command:
+      [
+        "sh",
+        "-c",
+        "python3 agent_x_klasse_c_2_flashloans.py; exec sleep infinity",
+      ]
+
+  p9-storage:
+    <<: *p-agent
+    depends_on:
+      - infra-hsm
+      - infra-state
+    volumes:
+      - .:/app:ro
+      - hsm-keys:/keys:ro
+    environment:
+      <<: *p-env
+    command:
+      [
+        "sh",
+        "-c",
+        "python3 agent_x_storage_guardian.py; exec sleep infinity",
+      ]
+
+networks:
+  agent_x_p9:
+    driver: bridge
+
+volumes:
+  z3-data:
+  hsm-keys:
+  state-data:
