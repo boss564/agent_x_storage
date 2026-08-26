@@ -1,6 +1,6 @@
 # Stateful Graph — Serie v0 (Konsolidierung)
 
-**Status:** Studie 1 BINDEND · Gegenprobe Screen · \|Q\|-Varianz + Grenzfall \|Q\|=2 · 2026-08-26  
+**Status:** Studie 1 · Gegenprobe · \|Q\|-Varianz · \|Q\|=2-Grenze · completion_proof · 2026-08-26  
 **Charakter:** Neue Architekturfamilie — **nicht** Studie 11 der φ/ρ-Kopplung  
 **Sandbox diskret:** `prototypes/v2_stateful_graph/`  
 **Sandbox Dissensus:** `prototypes/v3_continuous_dissensus/` · **kein** Runner-Transfer
@@ -11,6 +11,7 @@ Stateful Graph v0:    STRUCTURE_RELATIONAL (diskret, |Q|=4) — Sweep 6/6
 Dissens-Gegenprobe:   PROTO_PASS (kontinuierlich, matched gate) — kein Pre-Reg
 |Q|-Varianz-Screen:   STRUCTURE_RELATIONAL für |Q| ∈ {4, 8, 16, 32} — 24/24
 |Q|=2 Grenzfall:      STRUCTURE_BREAKS — 0/6 · untere Leistungsgrenze |Q|=4
+completion_proof:     STRUCTURE_RELATIONAL unter Receipt-Gate — 18/18 (baseline/always/lossy)
 ```
 
 ---
@@ -117,6 +118,28 @@ Artefakte: `q2_boundary_screen.py` · `q2_boundary_results.json`.
 | Dissensus-Gegenprobe | kontinuierliche Repulsion · anti true | `PROTO_PASS` Screen |
 | \|Q\|-Varianz | dieselbe Mechanik · \|Q\| ∈ {4…32} | `STRUCTURE_RELATIONAL` 24/24 Screen |
 | \|Q\|=2 Grenzfall | dieselbe Mechanik · \|Q\|=2 | `STRUCTURE_BREAKS` 0/6 Screen |
+| completion_proof | Übergangs-Receipt (Mock-Z3/BHO) · \|Q\|=4 | `STRUCTURE_RELATIONAL` 18/18 Screen |
+
+---
+
+## Antwort (completion_proof — Screen only)
+
+**Frage:** Bleibt die relationale Trennung, wenn \(q\to q'\) einen deterministisch
+verifizierbaren Nachweis braucht (`completion_proof` — **kein** kryptographisches PoW)?
+
+**Seeds:** `20270601–06` · Gate wie Varianz-Screen · \|Q\|=4.
+
+| Mode | Passes | Avg Margin | Brake | Verdict |
+|------|--------|------------|-------|---------|
+| baseline | 6/6 | 0,495 | 0 | `STRUCTURE_RELATIONAL` |
+| always | 6/6 | 0,495 | 0 | `STRUCTURE_RELATIONAL` |
+| lossy (~28%) | 6/6 | 0,431 | ≈0,28 | `STRUCTURE_RELATIONAL` |
+
+**Hypothese: bestätigt.**  
+`always ≡ baseline` bei den **Zustandsmetriken** — der always-Receipt lehnt nie ab
+(kein Zustands-Bremsen); Wandzeit-Overhead der Verifikation ist **nicht** die Messgröße.
+`lossy` bremst ~28% der Übergänge, Margin bleibt >0,4.  
+Artefakte: `completion_proof_screen.py` · `completion_proof_results.json` · `COMPLETION_PROOF_PROTO.md`.
 
 ---
 
@@ -153,9 +176,9 @@ dieselbe Definition wie in Studie 1. **Wahrheit vor Optik.**
 
 ## Status & offene Türen
 
-**Jetzt:** Studie 1 · Dissensus-Screen · \|Q\|-Varianz (≥4) · Grenzfall \|Q\|=2 (`STRUCTURE_BREAKS`).
+**Jetzt:** Studie 1 · Dissensus · \|Q\|-Varianz · \|Q\|=2-Grenze · completion_proof (18/18).
 
-**Optional später:** Dissensus DRAFT/Pre-Reg/Sweep · Topologie · `completion_load` / `two-choice tie-break` (Failover-Folge).
+**Optional später:** Dissensus DRAFT/Pre-Reg/Sweep · Topologie · Failover `completion_load` / `two-choice tie-break`.
 
 **Nicht erlaubt:** Studie 11 φ/ρ · Hybrid · Schwellen-Nachjustierung an versiegelten Artefakten · Strang-Negativ aus globaler Metrik.
 

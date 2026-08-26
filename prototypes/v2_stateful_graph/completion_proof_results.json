@@ -1,0 +1,197 @@
+{
+  "screen": "completion_proof_v0",
+  "terminology": "completion_proof \u2014 verifiable transition receipt (mock Z3/BHO); not cryptographic Proof-of-Work",
+  "Q_size": 4,
+  "seeds": [
+    20270601,
+    20270602,
+    20270603,
+    20270604,
+    20270605,
+    20270606
+  ],
+  "gate": {
+    "delta_q": 0.5,
+    "h_edge": 2.0,
+    "margin": 0.1
+  },
+  "hypothesis": "Relational margin stays >0.1 when q\u2192q' requires a deterministic verifiable completion_proof (always or lossy~25%).",
+  "hypothesis_result": "HYPOTHESIS_CONFIRMED",
+  "summary": {
+    "baseline": {
+      "n_pass": 6,
+      "n": 6,
+      "avg_margin": 0.494676,
+      "avg_brake_rate": 0.0,
+      "verdict": "STRUCTURE_RELATIONAL"
+    },
+    "always": {
+      "n_pass": 6,
+      "n": 6,
+      "avg_margin": 0.494676,
+      "avg_brake_rate": 0.0,
+      "verdict": "STRUCTURE_RELATIONAL"
+    },
+    "lossy": {
+      "n_pass": 6,
+      "n": 6,
+      "avg_margin": 0.430556,
+      "avg_brake_rate": 0.27662,
+      "verdict": "STRUCTURE_RELATIONAL"
+    }
+  },
+  "elapsed_s": 0.089,
+  "budget_ok": true,
+  "results": {
+    "baseline": [
+      {
+        "seed": 20270601,
+        "pass": true,
+        "delta_q": 1.229167,
+        "h_edge": 2.986013,
+        "anti_margin": 0.520833,
+        "brake_rate": 0.0
+      },
+      {
+        "seed": 20270602,
+        "pass": true,
+        "delta_q": 1.227083,
+        "h_edge": 2.992256,
+        "anti_margin": 0.479167,
+        "brake_rate": 0.0
+      },
+      {
+        "seed": 20270603,
+        "pass": true,
+        "delta_q": 1.265278,
+        "h_edge": 2.98463,
+        "anti_margin": 0.506944,
+        "brake_rate": 0.0
+      },
+      {
+        "seed": 20270604,
+        "pass": true,
+        "delta_q": 1.244444,
+        "h_edge": 2.996377,
+        "anti_margin": 0.4625,
+        "brake_rate": 0.0
+      },
+      {
+        "seed": 20270605,
+        "pass": true,
+        "delta_q": 1.225,
+        "h_edge": 2.960643,
+        "anti_margin": 0.506944,
+        "brake_rate": 0.0
+      },
+      {
+        "seed": 20270606,
+        "pass": true,
+        "delta_q": 1.259028,
+        "h_edge": 2.995376,
+        "anti_margin": 0.491667,
+        "brake_rate": 0.0
+      }
+    ],
+    "always": [
+      {
+        "seed": 20270601,
+        "pass": true,
+        "delta_q": 1.229167,
+        "h_edge": 2.986013,
+        "anti_margin": 0.520833,
+        "brake_rate": 0.0
+      },
+      {
+        "seed": 20270602,
+        "pass": true,
+        "delta_q": 1.227083,
+        "h_edge": 2.992256,
+        "anti_margin": 0.479167,
+        "brake_rate": 0.0
+      },
+      {
+        "seed": 20270603,
+        "pass": true,
+        "delta_q": 1.265278,
+        "h_edge": 2.98463,
+        "anti_margin": 0.506944,
+        "brake_rate": 0.0
+      },
+      {
+        "seed": 20270604,
+        "pass": true,
+        "delta_q": 1.244444,
+        "h_edge": 2.996377,
+        "anti_margin": 0.4625,
+        "brake_rate": 0.0
+      },
+      {
+        "seed": 20270605,
+        "pass": true,
+        "delta_q": 1.225,
+        "h_edge": 2.960643,
+        "anti_margin": 0.506944,
+        "brake_rate": 0.0
+      },
+      {
+        "seed": 20270606,
+        "pass": true,
+        "delta_q": 1.259028,
+        "h_edge": 2.995376,
+        "anti_margin": 0.491667,
+        "brake_rate": 0.0
+      }
+    ],
+    "lossy": [
+      {
+        "seed": 20270601,
+        "pass": true,
+        "delta_q": 1.243056,
+        "h_edge": 3.408884,
+        "anti_margin": 0.436111,
+        "brake_rate": 0.285714
+      },
+      {
+        "seed": 20270602,
+        "pass": true,
+        "delta_q": 1.253472,
+        "h_edge": 3.371919,
+        "anti_margin": 0.404167,
+        "brake_rate": 0.279762
+      },
+      {
+        "seed": 20270603,
+        "pass": true,
+        "delta_q": 1.238889,
+        "h_edge": 3.352059,
+        "anti_margin": 0.430556,
+        "brake_rate": 0.294643
+      },
+      {
+        "seed": 20270604,
+        "pass": true,
+        "delta_q": 1.279167,
+        "h_edge": 3.349673,
+        "anti_margin": 0.484722,
+        "brake_rate": 0.269841
+      },
+      {
+        "seed": 20270605,
+        "pass": true,
+        "delta_q": 1.223611,
+        "h_edge": 3.30097,
+        "anti_margin": 0.426389,
+        "brake_rate": 0.27381
+      },
+      {
+        "seed": 20270606,
+        "pass": true,
+        "delta_q": 1.260417,
+        "h_edge": 3.402641,
+        "anti_margin": 0.401389,
+        "brake_rate": 0.255952
+      }
+    ]
+  }
+}
