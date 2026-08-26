@@ -1,0 +1,151 @@
+{
+  "test": "P9_E2E_INTEGRATION",
+  "timestamp": "2026-08-26T14:28:45Z",
+  "phases": {
+    "startup": {
+      "returncode": 0
+    },
+    "health": {
+      "all_services_up": true,
+      "z3_health": true
+    },
+    "pipeline": {
+      "messages": 50,
+      "all_passed": true,
+      "failed_at": []
+    },
+    "m7": {
+      "messages": 10,
+      "normal_latency": [
+        95.74000000000001,
+        95.24777777777778,
+        94.95666666666666,
+        95.54555555555555,
+        100.58333333333333,
+        91.07777777777778,
+        94.57111111111111,
+        89.00444444444445,
+        97.0788888888889,
+        96.87555555555555
+      ],
+      "spike_latency": [
+        301.75,
+        290.62666666666667
+      ],
+      "m7_rejections": 2,
+      "mode": "synthetic_marker"
+    },
+    "logs": {
+      "errors": [
+        "[p2-telematic] p2-telematic-1  |     \"total_errors\": 0,",
+        "[p6-risk] p6-risk-1  |           \"critical\": 0,",
+        "[p9-storage] p9-storage-1  |     \"error\": \"Pfad nicht gefunden: /Users/olivermueller\"",
+        "[p9-storage] p9-storage-1  |     \"error\": \"Pfad nicht gefunden: /Volumes/THX_CORE_16TB\"",
+        "[p9-storage] p9-storage-1  |     \"error\": \"Pfad nicht gefunden: /Volumes/THIXO_BACKUP_28TB\""
+      ],
+      "warnings": [
+        "[infra-state] infra-state-1  | 1:C 26 Aug 2026 13:45:16.861 # WARNING Memory overcommit must be enabled! Without it, a background save or replication may fail under low memory condition. Being disabled, it can also cause failures without low memory condition, see https://github.com/jemalloc/jemalloc/issues/1328. To fix this issue add 'vm.overcommit_memory = 1' to /etc/sysctl.conf and then reboot or run the command 'sysctl vm.overcommit_memory=1' for this to take effect.",
+        "[p6-risk] p6-risk-1  |           \"warning\": 0"
+      ],
+      "service_states": {
+        "infra-z3": {
+          "has_errors": false,
+          "error_count": 0,
+          "warning_count": 0
+        },
+        "infra-hsm": {
+          "has_errors": false,
+          "error_count": 0,
+          "warning_count": 0
+        },
+        "infra-state": {
+          "has_errors": false,
+          "error_count": 0,
+          "warning_count": 1
+        },
+        "p1-ingestion": {
+          "has_errors": false,
+          "error_count": 0,
+          "warning_count": 0
+        },
+        "p2-telematic": {
+          "has_errors": true,
+          "error_count": 1,
+          "warning_count": 0
+        },
+        "p3-pressure": {
+          "has_errors": false,
+          "error_count": 0,
+          "warning_count": 0
+        },
+        "p4-arbitrage": {
+          "has_errors": false,
+          "error_count": 0,
+          "warning_count": 0
+        },
+        "p5-analytics": {
+          "has_errors": false,
+          "error_count": 0,
+          "warning_count": 0
+        },
+        "p6-risk": {
+          "has_errors": true,
+          "error_count": 1,
+          "warning_count": 1
+        },
+        "p7-strategy": {
+          "has_errors": false,
+          "error_count": 0,
+          "warning_count": 0
+        },
+        "p8-force": {
+          "has_errors": false,
+          "error_count": 0,
+          "warning_count": 0
+        },
+        "p9-storage": {
+          "has_errors": true,
+          "error_count": 3,
+          "warning_count": 0
+        }
+      }
+    }
+  },
+  "verdict": "E2E_PASS_WITH_WARNINGS",
+  "log_error_classification": {
+    "note": "Classification of the 5 Phase-5 hits from this run (scanner used substring ERROR/CRITICAL).",
+    "items": [
+      {
+        "source": "p2-telematic",
+        "raw": "total_errors\": 0",
+        "class": "FALSE_POSITIVE",
+        "reason": "JSON counter key matched substring ERROR; value is 0"
+      },
+      {
+        "source": "p6-risk",
+        "raw": "critical\": 0",
+        "class": "FALSE_POSITIVE",
+        "reason": "JSON severity key matched substring CRITICAL; value is 0"
+      },
+      {
+        "source": "p9-storage",
+        "raw": "Pfad nicht gefunden: /Users/olivermueller",
+        "class": "EXPECTED_IN_CONTAINER",
+        "reason": "storage_guardian probes host paths; Podman image has no host home bind"
+      },
+      {
+        "source": "p9-storage",
+        "raw": "Pfad nicht gefunden: /Volumes/THX_CORE_16TB",
+        "class": "EXPECTED_IN_CONTAINER",
+        "reason": "Host volume probe; not mounted into p9 container (by design after Image-Bake)"
+      },
+      {
+        "source": "p9-storage",
+        "raw": "Pfad nicht gefunden: /Volumes/THIXO_BACKUP_28TB",
+        "class": "EXPECTED_IN_CONTAINER",
+        "reason": "Host volume probe; not mounted into p9 container (by design after Image-Bake)"
+      }
+    ],
+    "action": "Accept as known; scanner hardened in test_p9_e2e_live.py for next run. No compose fix required for E2E green path."
+  }
+}
