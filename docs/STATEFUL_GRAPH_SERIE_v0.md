@@ -1,6 +1,6 @@
 # Stateful Graph — Serie v0 (Konsolidierung)
 
-**Status:** Studie 1 · Gegenprobe · \|Q\| · completion · wall_clock · topology · async_verify · 2026-08-26  
+**Status:** Studie 1 · … · topology · async_verify · agent_scale · 2026-08-26  
 **Charakter:** Neue Architekturfamilie — **nicht** Studie 11 der φ/ρ-Kopplung  
 **Sandbox diskret:** `prototypes/v2_stateful_graph/`  
 **Sandbox Dissensus:** `prototypes/v3_continuous_dissensus/` · **kein** Runner-Transfer
@@ -11,10 +11,12 @@ Stateful Graph v0:    STRUCTURE_RELATIONAL (diskret, |Q|=4) — Sweep 6/6
 Dissens-Gegenprobe:   PROTO_PASS (kontinuierlich, matched gate) — kein Pre-Reg
 |Q|-Varianz-Screen:   STRUCTURE_RELATIONAL für |Q| ∈ {4, 8, 16, 32} — 24/24
 |Q|=2 Grenzfall:      STRUCTURE_BREAKS — 0/6 · untere Leistungsgrenze |Q|=4
-completion_proof:     STRUCTURE_RELATIONAL unter Receipt-Gate — 18/18 (baseline/always/lossy)
-wall_clock_verify:    HYPOTHESIS_CONFIRMED — Struktur stabil · ms↑ mit |Q| · tps↓
-topology:             HYPOTHESIS_FALSIFIED — nur sparse (Ring) relational; complete/hub break
-async_verify:         HYPOTHESIS_CONFIRMED — sparse Ring stabil · async D=4 ≈4× tps
+completion_proof:     STRUCTURE_RELATIONAL unter Receipt-Gate — 18/18
+wall_clock_verify:    HYPOTHESIS_CONFIRMED — ms↑ mit |Q| · tps↓
+topology:             HYPOTHESIS_FALSIFIED — nur sparse Ring relational
+async_verify:         HYPOTHESIS_CONFIRMED — async D=4 ≈4× tps · Margin_Δ=0
+agent_scale:          HYPOTHESIS_CONFIRMED — N≤36 relational · Makespan∝N · tps flach (async)
+Korrektur:            Topologie = Zentrum · ⟨k⟩=1 randständig · H-Gate nicht normiert · Option 1 Charter
 ```
 
 ---
@@ -125,6 +127,7 @@ Artefakte: `q2_boundary_screen.py` · `q2_boundary_results.json`.
 | wall_clock_verify | Verifikations-Wandzeit · \|Q\| ∈ {4…32} | `HYPOTHESIS_CONFIRMED` Screen |
 | topology | Signalgraph complete/sparse/hub · \|Q\|=4 | `HYPOTHESIS_FALSIFIED` Screen |
 | async_verify | sync D=1 vs async D=4 · sparse Ring | `HYPOTHESIS_CONFIRMED` Screen |
+| agent_scale | N∈{9,18,27,36} · sparse Ring · async D=4 | `HYPOTHESIS_CONFIRMED` Screen |
 
 ---
 
@@ -216,6 +219,30 @@ Artefakte: `async_verify_screen.py` · `async_verify_results.json`.
 
 ---
 
+## Antwort (agent_scale — Screen only)
+
+**Frage:** Bleibt `STRUCTURE_RELATIONAL` bei N>9 auf dem sparse Ring, und wie skaliert
+die Verifikations-Makespan unter async D=4?
+
+**Freeze:** Seeds `20271001–06` · \|Q\|=4 · sparse Ring · N∈{9,18,27,36} · async D=4 ·
+Heavy-Verify auf Arm B · Gate wie Varianz-Screen.
+
+| N | Passes | Avg Margin | Makespan ms | tps | Verdict |
+|---|--------|------------|-------------|-----|---------|
+| 9 | 6/6 | 0,47 | ≈74 | ≈13694 | `STRUCTURE_RELATIONAL` |
+| 18 | 6/6 | 0,48 | ≈146 (×1,98) | ≈13831 | `STRUCTURE_RELATIONAL` |
+| 27 | 6/6 | 0,50 | ≈220 (×2,99) | ≈13757 | `STRUCTURE_RELATIONAL` |
+| 36 | 6/6 | 0,49 | ≈293 (×3,98) | ≈13766 | `STRUCTURE_RELATIONAL` |
+
+**Hypothese: bestätigt** (`HYPOTHESIS_CONFIRMED`):
+Struktur all N · Makespan ≈ linear in N (Ratio→4 bei N=36).  
+**Txn-tps bleibt flach** unter festem async D=4 (kein Drop) — Verfeinerung:
+„Durchsatz sinkt“ gilt für **Gesamt-Makespan/Arbeit**, nicht für Pipeline-tps.  
+Sparse Ring bleibt die getestete (kritische) Topologie; complete/hub nicht erneut.  
+Artefakte: `agent_scale_screen.py` · `agent_scale_results.json`.
+
+---
+
 ## Studie 1 — Freeze (kurz)
 
 | ID | Inhalt |
@@ -243,17 +270,82 @@ Artefakte: `async_verify_screen.py` · `async_verify_results.json`.
 
 Globale Paarstatistik kann B und C „identisch“ erscheinen lassen und ein
 falsches Negativ erzeugen. Die relationale Frage ist Anti vs. **true** Partner —
-dieselbe Definition wie in Studie 1. **Wahrheit vor Optik.**
+dieselbe Definition wie in Studie 1. Ein früherer Dissensus-`PROTO_FAIL` war
+genau dieser Messfehler und wurde korrigiert, dokumentiert — nicht stillschweigend
+ersetzt. **Wahrheit vor Optik.**
+
+---
+
+## Serien-Korrektur (bindend lesen) — Topologie & Gate-Normierung
+
+Stand 2026-08-26. Diese Lesart **überstimmt** zu optimistische Robustheits-Lektüren
+der Screen-Tabelle oben.
+
+### 1. Topologie ist der zentrale Befund — nicht ein Nebenstrang
+
+Alle übrigen Screens (|Q|-Varianz, |Q|=2, completion_proof, wall_clock, async,
+agent_scale) liefen auf der **einen** Topologie, die den Arm-C-Bruch trägt:
+**Ring mit Grad ⟨k⟩=1**.
+
+| Label im Screen | Tatsache |
+|-----------------|----------|
+| „spärlich“ | **nicht** robust-spärlich: ⟨k⟩=1 ist das **Minimum eines zusammenhängenden Graphen** |
+| complete / hub | Margin≈0 bzw. negativ — **erwartbar**, kein Messversagen |
+
+**Mechanismus:** Bei genau einem Signalpartner **ist die Partneridentität das gesamte
+Signal**. Arm C tauscht diesen einen Sender — der Agent liest eine andere Reihe.
+Bei `complete` (⟨k⟩=8) liest er eine Mischung; die Permutation ändert *welche* acht,
+aber die Mischung mittelt Identitäten weg. Margin≈0 ist die Folge, nicht das Versagen.
+
+**Engere Bedeutung von `STRUCTURE_RELATIONAL`:** nicht „Beziehungen erzeugen Struktur“,
+sondern näher: **bei genau einem Partner ist die gemessene Struktur die Beziehung**.
+Das grenzt an eine Tautologie. Wer die **24/24** aus dem |Q|-Screen als
+Topologie-Robustheit liest, liest falsch — jene Screens **setzen** den Ring voraus.
+
+### 2. H-Gate ist nicht über |Q| normiert
+
+Feste Schwelle \(H\geq 2{,}0\) bei \(H_{\max}=\log_2(|Q|^2)\):
+
+| \|Q\| | H (typ.) | H_max | H/H_max | Gate 2,0 |
+|------|----------|-------|---------|----------|
+| 2 | ≈1,99 | 2 | ≈100 % | knapp verfehlt |
+| 4 | ≈2,99 | 4 | ≈75 % | erfüllt |
+| 8 | ≈3,98 | 6 | ≈66 % | erfüllt |
+| 16 | ≈4,96 | 8 | ≈62 % | erfüllt |
+| 32 | ≈5,92 | 10 | ≈59 % | erfüllt |
+
+Relative Information **sinkt** mit \|Q\|, absolute H steigt, das feste Gate wird
+leichter. Dieselbe Klasse wie ein absoluter `r_floor` über wechselnden Wertebereichen.
+Vergleichbar über \|Q\| wäre z. B. \(H/H_{\max}\geq 0{,}5\) — **nicht** nachträglich an
+versiegelte Artefakte gezogen; nur als methodische Schuld / künftige Screen-Form notiert.
+
+### 3. Was trotzdem steht
+
+- Dual-Metrik-Korrektur (relational vs. global) — gültig und dokumentiert
+- |Q|=2-Grenze und wall_clock/async/scale: **unter Ring-Voraussetzung** gültig
+- topology-Falsifikation: wissenschaftlicher Gewinn, kein Schönheitsfehler
+
+### 4. Handels-/Execution-Frage (nicht übergangen)
+
+Bereits bindend in Map §9 / Charter: **Option 1 — Analyse/Simulation**, Scope
+`DEFENSIVE_CAUSAL_GROUNDING`. Keine Order-Ausführung, keine Arb-/Liquidations-Execution.
+`infra-gate`: `live_execution=false` immer. Wave 39 setzt Negativklausel zur Laufzeit durch.
+**Kein** Weiterarbeiten an Execution-Pfaden in diesem Strang.
 
 ---
 
 ## Status & offene Türen
 
-**Jetzt:** Studie 1 · Dissensus · \|Q\| · completion · wall_clock · topology (FALSIFIED) · **async_verify (CONFIRMED, ≈4×)**.
+**Jetzt:** Serie methodisch **korrigiert** (Topologie-Zentrum · H-Normierungsschuld ·
+Charter Option 1 festgehalten). Keine neuen Screens ohne neue, nicht-tautologische Hypothese.
 
-**Optional später:** Dissensus DRAFT/Pre-Reg/Sweep · Failover `completion_load` / `two-choice tie-break` · Live-Z3-Wandzeit · async mit lossy/Rollback (Stale-Risk).
+**Optional später (nur mit neuer Hypothese):** Grad-Kontinuum ⟨k⟩∈{2…} · normiertes
+H-Gate als *neuer* Screen · Dissensus Pre-Reg · Failover `completion_load` /
+`two-choice` · Live-Z3 · async lossy/Stale.
 
-**Nicht erlaubt:** Studie 11 φ/ρ · Hybrid · Schwellen-Nachjustierung an versiegelten Artefakten · Strang-Negativ aus globaler Metrik.
+**Nicht erlaubt:** Studie 11 φ/ρ · Hybrid · Schwellen-Nachjustierung an versiegelten
+Artefakten · Strang-Negativ aus globaler Metrik · |Q|-24/24 als Topologie-Robustheit verkaufen ·
+Execution/Order-Pfade entgegen Charter.
 
 ---
 
@@ -263,5 +355,7 @@ dieselbe Definition wie in Studie 1. **Wahrheit vor Optik.**
 |----------|-------|
 | `docs/KOPPLUNG_SERIE_ABSCHLUSS.md` | φ/ρ versiegelt |
 | `docs/STATEFUL_GRAPH_v0_DRAFT.md` / `_PREREG.md` | Studie 1 |
-| `prototypes/v2_stateful_graph/` | diskret Sweep + \|Q\|-Varianz-Screen |
+| `docs/AGENT_X_CHARTER.md` | Defensive Scope · Negativklausel |
+| `docs/AGENT_SWARM_P9_MAP_v0.md` §9–§10 | Option 1 · fail-closed Gate |
+| `prototypes/v2_stateful_graph/` | diskret Sweep + Screens |
 | `prototypes/v3_continuous_dissensus/` | Dissensus Screen + Dual-Metrik |

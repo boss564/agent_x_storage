@@ -1,0 +1,353 @@
+{
+  "screen": "agent_scale_v0",
+  "hypothesis": "STRUCTURE_RELATIONAL for N\u2208{9,18,27,36} on sparse ring; async makespan \u2248 linear in N; tps-drop secondary (may stay flat at D=4)",
+  "hypothesis_result": "HYPOTHESIS_CONFIRMED",
+  "hypothesis_parts": {
+    "structure_all_N": true,
+    "makespan_scales_linear": true,
+    "makespan_ratio_vs_N9": {
+      "9": 1.0,
+      "18": 1.9802,
+      "27": 2.9863,
+      "36": 3.9789
+    },
+    "tps_drops_N36_vs_N9": false,
+    "tps_flat_under_async": true,
+    "note": "Primary gate = structure \u2227 linear makespan. Txn-tps often \u2248 flat under fixed async depth."
+  },
+  "freeze": {
+    "Q_size": 4,
+    "topology": "sparse_ring",
+    "async_depth": 4,
+    "INNER": 64,
+    "N_sizes": [
+      9,
+      18,
+      27,
+      36
+    ],
+    "seeds": [
+      20271001,
+      20271002,
+      20271003,
+      20271004,
+      20271005,
+      20271006
+    ],
+    "linear_tol": 0.3
+  },
+  "gate": {
+    "delta_q": 0.5,
+    "h_edge": 2.0,
+    "margin": 0.1
+  },
+  "summary": [
+    {
+      "n_agents": 9,
+      "n_pass": 6,
+      "n": 6,
+      "avg_margin": 0.467593,
+      "avg_makespan_ms": 73.611,
+      "avg_tps": 13693.84,
+      "avg_mean_verify_ms": 0.291624,
+      "verdict": "STRUCTURE_RELATIONAL"
+    },
+    {
+      "n_agents": 18,
+      "n_pass": 6,
+      "n": 6,
+      "avg_margin": 0.475463,
+      "avg_makespan_ms": 145.762,
+      "avg_tps": 13830.854,
+      "avg_mean_verify_ms": 0.288978,
+      "verdict": "STRUCTURE_RELATIONAL"
+    },
+    {
+      "n_agents": 27,
+      "n_pass": 6,
+      "n": 6,
+      "avg_margin": 0.502547,
+      "avg_makespan_ms": 219.824,
+      "avg_tps": 13756.811,
+      "avg_mean_verify_ms": 0.290617,
+      "verdict": "STRUCTURE_RELATIONAL"
+    },
+    {
+      "n_agents": 36,
+      "n_pass": 6,
+      "n": 6,
+      "avg_margin": 0.488079,
+      "avg_makespan_ms": 292.894,
+      "avg_tps": 13766.185,
+      "avg_mean_verify_ms": 0.290467,
+      "verdict": "STRUCTURE_RELATIONAL"
+    }
+  ],
+  "elapsed_s": 17.82,
+  "results": [
+    {
+      "seed": 20271001,
+      "n_agents": 9,
+      "pass": true,
+      "delta_q": 1.229861,
+      "h_edge": 2.986392,
+      "anti_margin": 0.45,
+      "makespan_ms": 73.931,
+      "tps": 13634.41,
+      "mean_verify_ms": 0.292915
+    },
+    {
+      "seed": 20271002,
+      "n_agents": 9,
+      "pass": true,
+      "delta_q": 1.223611,
+      "h_edge": 2.995413,
+      "anti_margin": 0.452778,
+      "makespan_ms": 73.22,
+      "tps": 13766.801,
+      "mean_verify_ms": 0.289963
+    },
+    {
+      "seed": 20271003,
+      "n_agents": 9,
+      "pass": true,
+      "delta_q": 1.280556,
+      "h_edge": 2.995088,
+      "anti_margin": 0.452778,
+      "makespan_ms": 73.418,
+      "tps": 13729.635,
+      "mean_verify_ms": 0.291022
+    },
+    {
+      "seed": 20271004,
+      "n_agents": 9,
+      "pass": true,
+      "delta_q": 1.254167,
+      "h_edge": 2.994584,
+      "anti_margin": 0.533333,
+      "makespan_ms": 74.129,
+      "tps": 13597.88,
+      "mean_verify_ms": 0.29368
+    },
+    {
+      "seed": 20271005,
+      "n_agents": 9,
+      "pass": true,
+      "delta_q": 1.259028,
+      "h_edge": 2.997927,
+      "anti_margin": 0.454167,
+      "makespan_ms": 73.633,
+      "tps": 13689.454,
+      "mean_verify_ms": 0.291569
+    },
+    {
+      "seed": 20271006,
+      "n_agents": 9,
+      "pass": true,
+      "delta_q": 1.238194,
+      "h_edge": 2.985549,
+      "anti_margin": 0.4625,
+      "makespan_ms": 73.337,
+      "tps": 13744.86,
+      "mean_verify_ms": 0.290595
+    },
+    {
+      "seed": 20271001,
+      "n_agents": 18,
+      "pass": true,
+      "delta_q": 1.283333,
+      "h_edge": 2.994705,
+      "anti_margin": 0.490972,
+      "makespan_ms": 146.291,
+      "tps": 13780.705,
+      "mean_verify_ms": 0.290052
+    },
+    {
+      "seed": 20271002,
+      "n_agents": 18,
+      "pass": true,
+      "delta_q": 1.248448,
+      "h_edge": 2.996721,
+      "anti_margin": 0.447917,
+      "makespan_ms": 145.586,
+      "tps": 13847.522,
+      "mean_verify_ms": 0.288572
+    },
+    {
+      "seed": 20271003,
+      "n_agents": 18,
+      "pass": true,
+      "delta_q": 1.275245,
+      "h_edge": 2.993639,
+      "anti_margin": 0.479861,
+      "makespan_ms": 145.256,
+      "tps": 13878.959,
+      "mean_verify_ms": 0.28787
+    },
+    {
+      "seed": 20271004,
+      "n_agents": 18,
+      "pass": true,
+      "delta_q": 1.252124,
+      "h_edge": 2.996463,
+      "anti_margin": 0.451389,
+      "makespan_ms": 146.408,
+      "tps": 13769.728,
+      "mean_verify_ms": 0.290406
+    },
+    {
+      "seed": 20271005,
+      "n_agents": 18,
+      "pass": true,
+      "delta_q": 1.249755,
+      "h_edge": 2.998102,
+      "anti_margin": 0.517361,
+      "makespan_ms": 145.567,
+      "tps": 13849.319,
+      "mean_verify_ms": 0.288512
+    },
+    {
+      "seed": 20271006,
+      "n_agents": 18,
+      "pass": true,
+      "delta_q": 1.238889,
+      "h_edge": 2.990857,
+      "anti_margin": 0.465278,
+      "makespan_ms": 145.466,
+      "tps": 13858.893,
+      "mean_verify_ms": 0.288457
+    },
+    {
+      "seed": 20271001,
+      "n_agents": 27,
+      "pass": true,
+      "delta_q": 1.27557,
+      "h_edge": 2.992988,
+      "anti_margin": 0.512963,
+      "makespan_ms": 220.599,
+      "tps": 13708.11,
+      "mean_verify_ms": 0.291659
+    },
+    {
+      "seed": 20271002,
+      "n_agents": 27,
+      "pass": true,
+      "delta_q": 1.24416,
+      "h_edge": 2.994673,
+      "anti_margin": 0.497222,
+      "makespan_ms": 219.275,
+      "tps": 13790.895,
+      "mean_verify_ms": 0.289912
+    },
+    {
+      "seed": 20271003,
+      "n_agents": 27,
+      "pass": true,
+      "delta_q": 1.237892,
+      "h_edge": 2.999291,
+      "anti_margin": 0.490278,
+      "makespan_ms": 221.482,
+      "tps": 13653.485,
+      "mean_verify_ms": 0.292823
+    },
+    {
+      "seed": 20271004,
+      "n_agents": 27,
+      "pass": true,
+      "delta_q": 1.234046,
+      "h_edge": 2.996468,
+      "anti_margin": 0.503704,
+      "makespan_ms": 218.345,
+      "tps": 13849.613,
+      "mean_verify_ms": 0.288654
+    },
+    {
+      "seed": 20271005,
+      "n_agents": 27,
+      "pass": true,
+      "delta_q": 1.244729,
+      "h_edge": 2.990909,
+      "anti_margin": 0.505093,
+      "makespan_ms": 218.622,
+      "tps": 13832.065,
+      "mean_verify_ms": 0.288985
+    },
+    {
+      "seed": 20271006,
+      "n_agents": 27,
+      "pass": true,
+      "delta_q": 1.262179,
+      "h_edge": 2.992512,
+      "anti_margin": 0.506019,
+      "makespan_ms": 220.622,
+      "tps": 13706.698,
+      "mean_verify_ms": 0.291668
+    },
+    {
+      "seed": 20271001,
+      "n_agents": 36,
+      "pass": true,
+      "delta_q": 1.253671,
+      "h_edge": 2.998745,
+      "anti_margin": 0.502083,
+      "makespan_ms": 292.666,
+      "tps": 13776.783,
+      "mean_verify_ms": 0.290217
+    },
+    {
+      "seed": 20271002,
+      "n_agents": 36,
+      "pass": true,
+      "delta_q": 1.253115,
+      "h_edge": 2.999412,
+      "anti_margin": 0.484028,
+      "makespan_ms": 292.604,
+      "tps": 13779.716,
+      "mean_verify_ms": 0.290163
+    },
+    {
+      "seed": 20271003,
+      "n_agents": 36,
+      "pass": true,
+      "delta_q": 1.260774,
+      "h_edge": 2.999168,
+      "anti_margin": 0.4875,
+      "makespan_ms": 293.911,
+      "tps": 13718.448,
+      "mean_verify_ms": 0.291491
+    },
+    {
+      "seed": 20271004,
+      "n_agents": 36,
+      "pass": true,
+      "delta_q": 1.235575,
+      "h_edge": 2.998074,
+      "anti_margin": 0.489236,
+      "makespan_ms": 293.425,
+      "tps": 13741.164,
+      "mean_verify_ms": 0.290947
+    },
+    {
+      "seed": 20271005,
+      "n_agents": 36,
+      "pass": true,
+      "delta_q": 1.255794,
+      "h_edge": 2.999891,
+      "anti_margin": 0.482292,
+      "makespan_ms": 293.299,
+      "tps": 13747.046,
+      "mean_verify_ms": 0.290894
+    },
+    {
+      "seed": 20271006,
+      "n_agents": 36,
+      "pass": true,
+      "delta_q": 1.264762,
+      "h_edge": 2.999008,
+      "anti_margin": 0.483333,
+      "makespan_ms": 291.457,
+      "tps": 13833.952,
+      "mean_verify_ms": 0.28909
+    }
+  ]
+}
