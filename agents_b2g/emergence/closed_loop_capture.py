@@ -19,7 +19,12 @@ sys.path.insert(0, REPO)
 
 from partner_select import StickySelector, permute_sticky_map
 from coupling import init_timing, update_sender_interval, should_act_this_cycle
-from kanten_ledger import LedgerBook, screen_ledger_component
+from kanten_ledger import (
+    LedgerBook,
+    screen_ledger_component,
+    LATENCY_MODE_EWMA,
+    LATENCY_MODE_M7,
+)
 from response_rij import (
     AgentP,
     assign_p,
@@ -77,6 +82,7 @@ def capture_closed_loop(
     cycles: int = 512,
     warmup_ticks: int = 32,
     run_seed: int = 20261501,
+    latency_mode: str = LATENCY_MODE_EWMA,
 ) -> Dict[str, Any]:
     from agents_b2g.protocol import PayloadType
     from agents_b2g.finale.finale_orchestrator import FinaleOrchestrator
@@ -105,11 +111,12 @@ def capture_closed_loop(
     p_of = assign_p([a.id for a in agents])
     recv_load = {a.id: 0 for a in agents}
     sticky = StickySelector(threshold=8)
-    ledger = LedgerBook(gamma=0.05)
+    ledger = LedgerBook(gamma=0.05, latency_mode=latency_mode)
     coupling_edge: Dict[str, str] = {}
     gamma_book: Dict[EdgeKey, float] = {}
     pending_eval: Dict[str, list] = {a.id: [] for a in evaluators}
     pending_econ: Dict[str, list] = {a.id: [] for a in economics}
+    last_edge_tick: Dict[EdgeKey, int] = {}
     rule_default = dpc.rule_default
     EVALUATOR_RULES = dpc.EVALUATOR_RULES
     frozen_map = None
@@ -123,6 +130,15 @@ def capture_closed_loop(
 
     def _load(a):
         return recv_load.get(a.id, 0) + len(a.inbox)
+
+    def _latency(sender: str, receiver: str, tick: int) -> float:
+        """Inter-arrival on directed edge — varies by traffic (needed for M7)."""
+        key = (sender, receiver)
+        prev = last_edge_tick.get(key)
+        last_edge_tick[key] = int(tick)
+        if prev is None:
+            return 1.0
+        return float(max(1.0, int(tick) - int(prev)))
 
     def deliver(msg):
         if msg.receiver == "evaluator":
@@ -156,9 +172,11 @@ def capture_closed_loop(
             coupling_edge[msg.sender] = partner.id
             partner.receive(msg)
             recv_load[partner.id] = recv_load.get(partner.id, 0) + 1
+            tick = int(tc.cycle)
             ledger.update(
-                msg.sender, partner.id, int(tc.cycle),
-                success=True, signed_net=_signed_net(msg.content), latency=1.0,
+                msg.sender, partner.id, tick,
+                success=True, signed_net=_signed_net(msg.content),
+                latency=_latency(msg.sender, partner.id, tick),
             )
         else:
             for ag in agents:
@@ -166,10 +184,11 @@ def capture_closed_loop(
                     coupling_edge[msg.sender] = ag.id
                     ag.receive(msg)
                     recv_load[ag.id] = recv_load.get(ag.id, 0) + 1
+                    tick = int(tc.cycle)
                     ledger.update(
-                        msg.sender, ag.id, int(tc.cycle),
+                        msg.sender, ag.id, tick,
                         success=True, signed_net=_signed_net(msg.content),
-                        latency=1.0,
+                        latency=_latency(msg.sender, ag.id, tick),
                     )
 
     def flush_ledger(tick: int) -> None:
@@ -192,7 +211,8 @@ def capture_closed_loop(
                     )
                 ledger.update(
                     sender, ev.id, tick, success=holds,
-                    signed_net=_signed_net(content), latency=1.0,
+                    signed_net=_signed_net(content),
+                    latency=_latency(sender, ev.id, tick),
                 )
         for ec in economics:
             batch = pending_econ[ec.id]
@@ -200,7 +220,8 @@ def capture_closed_loop(
             for sender, content in batch:
                 ledger.update(
                     sender, ec.id, tick, success=True,
-                    signed_net=_signed_net(content), latency=1.0,
+                    signed_net=_signed_net(content),
+                    latency=_latency(sender, ec.id, tick),
                 )
 
     def freeze_sigma(m_b) -> float:
@@ -416,28 +437,96 @@ def capture_closed_loop(
         rho_max=0.90,
     )
 
+    # Latency evaluability stats (M7)
+    n_edges = len(ledger._edges)
+    n_eval = sum(1 for e in ledger._edges.values() if e.latency_evaluable)
+    n_thin = sum(
+        1 for e in ledger._edges.values()
+        if e.ever_updated and e.latency_status == "thin"
+    )
+
     return {
         "run_seed": int(run_seed),
         "warmup": warmup,
         "cycles": int(cycles),
         "kappa_behavior": kappa_behavior,
         "kappa_sweep": False,
+        "latency_mode": ledger.latency_mode,
         "formula": "R=a(1+γ)(ℓ-b)",
         "S_ij": "avg_latency",
         "freeze": {
             "F1_eta": eta,
             "F1_eta_default": ETA_DEFAULT,
             "F1_note": "frozen before measure window from warmup |δ|",
-            "F2_ell_update": "LedgerBook.update on interaction only (EWMA)",
+            "F2_ell_update": (
+                "LedgerBook.update on interaction only "
+                f"(mode={ledger.latency_mode})"
+            ),
             "F3_B": "MAE under partner permutation on R",
             "sigma_ell": sigma,
         },
-        "n_edges": len(ledger._edges),
+        "n_edges": n_edges,
         "n_sticky": len(frozen_map or {}),
+        "latency_evaluable_edges": n_eval,
+        "latency_thin_edges": n_thin,
         "phi_L_ell_median_abs_rho": ell_screen.get("median_abs_rho"),
+        "phi_L_ell_screen": {
+            "pass": ell_screen.get("pass"),
+            "mae": ell_screen.get("mae"),
+            "median_abs_rho": ell_screen.get("median_abs_rho"),
+            "n_corr": ell_screen.get("n_corr"),
+            "flags": ell_screen.get("flags"),
+        },
         "layer_a": layer_a,
         "layer_b": layer_b,
         "layer_c": layer_c,
         "verdict": verd,
         "P_assignment": {aid: p.as_dict() for aid, p in p_of.items()},
+        "frozen_map": {
+            f"{sk}|{role}": pid for (sk, role), pid in (frozen_map or {}).items()
+        },
+        "reciprocity": _reciprocity_stats(frozen_map or {}, ledger),
+    }
+
+
+def _reciprocity_stats(frozen_map, ledger) -> Dict[str, Any]:
+    """Fraction of sticky directed edges that have a reverse edge in ledger/sticky."""
+    sticky_pairs = []
+    for (sk, _role), pid in frozen_map.items():
+        sid = sk.split(":")[0]
+        sticky_pairs.append((sid, pid))
+    if not sticky_pairs:
+        return {"n_sticky": 0, "n_reciprocal_sticky": 0, "frac_sticky": 0.0,
+                "n_ledger_dir": 0, "n_reciprocal_ledger": 0, "frac_ledger": 0.0}
+
+    sticky_set = set(sticky_pairs)
+    # sticky reciprocal: (j,i) also a sticky pair (any role)
+    n_rec_s = sum(1 for (i, j) in sticky_pairs if (j, i) in sticky_set)
+    # ledger reciprocal among sticky: reverse edge ever_updated
+    n_rec_l = 0
+    for (i, j) in sticky_pairs:
+        e = ledger.get(j, i)
+        if e is not None and e.ever_updated:
+            n_rec_l += 1
+    n_led = sum(1 for e in ledger._edges.values() if e.ever_updated)
+    n_led_rec = 0
+    seen = set()
+    for (i, j), e in ledger._edges.items():
+        if not e.ever_updated or (i, j) in seen:
+            continue
+        seen.add((i, j))
+        ej = ledger.get(j, i)
+        if ej is not None and ej.ever_updated:
+            n_led_rec += 1
+    return {
+        "n_sticky": len(sticky_pairs),
+        "n_reciprocal_sticky": n_rec_s,
+        "frac_sticky": round(n_rec_s / len(sticky_pairs), 6),
+        "n_reciprocal_sticky_via_ledger": n_rec_l,
+        "frac_sticky_via_ledger": round(n_rec_l / len(sticky_pairs), 6),
+        "n_ledger_dir": n_led,
+        "n_reciprocal_ledger_pairs": n_led_rec // 2,
+        "frac_ledger_edges_with_reverse": round(
+            (n_led_rec / n_led) if n_led else 0.0, 6
+        ),
     }

@@ -1,0 +1,197 @@
+{
+  "schema": "m7_spike_v0",
+  "not_a_pre_reg": true,
+  "threat_ref": "docs/THREAT_MODEL_POST_QUANTUM_v0.md \u00a73.5\u2013\u00a73.7",
+  "note_continuity": "ARCHITECTURE_FIT (20261701\u201303, EWMA) is pre-M7; this spike re-measures under median_m7",
+  "params": {
+    "seeds": [
+      20261711,
+      20261712,
+      20261713
+    ],
+    "warmup": 32,
+    "cycles": 256
+  },
+  "elapsed_s": 8.1,
+  "ewma": {
+    "ell_selective_majority": true,
+    "battery_majority": true,
+    "per_seed": [
+      {
+        "run_seed": 20261711,
+        "latency_mode": "ewma",
+        "ell_rho": 0.239477,
+        "ell_pass": true,
+        "ell_mae": 4.29978,
+        "A": true,
+        "rho": 0.137598,
+        "B": true,
+        "mae_n": 0.878622,
+        "C": true,
+        "dR": 1.56266,
+        "battery": true,
+        "latency_evaluable_edges": 96,
+        "latency_thin_edges": 0,
+        "reciprocity": {
+          "n_sticky": 64,
+          "n_reciprocal_sticky": 0,
+          "frac_sticky": 0.0,
+          "n_reciprocal_sticky_via_ledger": 0,
+          "frac_sticky_via_ledger": 0.0,
+          "n_ledger_dir": 96,
+          "n_reciprocal_ledger_pairs": 0,
+          "frac_ledger_edges_with_reverse": 0.0
+        },
+        "elapsed_s": 1.95
+      },
+      {
+        "run_seed": 20261712,
+        "latency_mode": "ewma",
+        "ell_rho": 0.254687,
+        "ell_pass": true,
+        "ell_mae": 4.271562,
+        "A": true,
+        "rho": 0.127336,
+        "B": true,
+        "mae_n": 0.526991,
+        "C": true,
+        "dR": 1.774427,
+        "battery": true,
+        "latency_evaluable_edges": 97,
+        "latency_thin_edges": 0,
+        "reciprocity": {
+          "n_sticky": 64,
+          "n_reciprocal_sticky": 0,
+          "frac_sticky": 0.0,
+          "n_reciprocal_sticky_via_ledger": 0,
+          "frac_sticky_via_ledger": 0.0,
+          "n_ledger_dir": 97,
+          "n_reciprocal_ledger_pairs": 0,
+          "frac_ledger_edges_with_reverse": 0.0
+        },
+        "elapsed_s": 1.2
+      },
+      {
+        "run_seed": 20261713,
+        "latency_mode": "ewma",
+        "ell_rho": 0.187945,
+        "ell_pass": true,
+        "ell_mae": 4.282885,
+        "A": true,
+        "rho": 0.133341,
+        "B": true,
+        "mae_n": 0.323125,
+        "C": true,
+        "dR": 1.862598,
+        "battery": true,
+        "latency_evaluable_edges": 96,
+        "latency_thin_edges": 0,
+        "reciprocity": {
+          "n_sticky": 64,
+          "n_reciprocal_sticky": 0,
+          "frac_sticky": 0.0,
+          "n_reciprocal_sticky_via_ledger": 0,
+          "frac_sticky_via_ledger": 0.0,
+          "n_ledger_dir": 96,
+          "n_reciprocal_ledger_pairs": 0,
+          "frac_ledger_edges_with_reverse": 0.0
+        },
+        "elapsed_s": 1.22
+      }
+    ]
+  },
+  "m7": {
+    "ell_selective_majority": false,
+    "battery_majority": true,
+    "per_seed": [
+      {
+        "run_seed": 20261711,
+        "latency_mode": "median_m7",
+        "ell_rho": 0.915695,
+        "ell_pass": false,
+        "ell_mae": 0.804761,
+        "A": true,
+        "rho": 0.897928,
+        "B": true,
+        "mae_n": 0.128903,
+        "C": true,
+        "dR": 81.924219,
+        "battery": true,
+        "latency_evaluable_edges": 18,
+        "latency_thin_edges": 79,
+        "reciprocity": {
+          "n_sticky": 64,
+          "n_reciprocal_sticky": 0,
+          "frac_sticky": 0.0,
+          "n_reciprocal_sticky_via_ledger": 0,
+          "frac_sticky_via_ledger": 0.0,
+          "n_ledger_dir": 97,
+          "n_reciprocal_ledger_pairs": 0,
+          "frac_ledger_edges_with_reverse": 0.0
+        },
+        "elapsed_s": 1.22
+      },
+      {
+        "run_seed": 20261712,
+        "latency_mode": "median_m7",
+        "ell_rho": 0.905596,
+        "ell_pass": false,
+        "ell_mae": 1.010264,
+        "A": true,
+        "rho": 0.691517,
+        "B": true,
+        "mae_n": 0.077945,
+        "C": true,
+        "dR": 99.991695,
+        "battery": true,
+        "latency_evaluable_edges": 19,
+        "latency_thin_edges": 78,
+        "reciprocity": {
+          "n_sticky": 64,
+          "n_reciprocal_sticky": 0,
+          "frac_sticky": 0.0,
+          "n_reciprocal_sticky_via_ledger": 0,
+          "frac_sticky_via_ledger": 0.0,
+          "n_ledger_dir": 97,
+          "n_reciprocal_ledger_pairs": 0,
+          "frac_ledger_edges_with_reverse": 0.0
+        },
+        "elapsed_s": 1.26
+      },
+      {
+        "run_seed": 20261713,
+        "latency_mode": "median_m7",
+        "ell_rho": 0.920451,
+        "ell_pass": false,
+        "ell_mae": 0.827407,
+        "A": true,
+        "rho": 0.89652,
+        "B": true,
+        "mae_n": 0.160565,
+        "C": true,
+        "dR": 99.866353,
+        "battery": true,
+        "latency_evaluable_edges": 18,
+        "latency_thin_edges": 81,
+        "reciprocity": {
+          "n_sticky": 64,
+          "n_reciprocal_sticky": 0,
+          "frac_sticky": 0.0,
+          "n_reciprocal_sticky_via_ledger": 0,
+          "frac_sticky_via_ledger": 0.0,
+          "n_ledger_dir": 99,
+          "n_reciprocal_ledger_pairs": 0,
+          "frac_ledger_edges_with_reverse": 0.0
+        },
+        "elapsed_s": 1.23
+      }
+    ],
+    "reciprocity_median_frac_sticky_via_ledger": 0.0
+  },
+  "gate": "M7_LOSES_ELL_SELECTIVITY",
+  "pre_reg_advice": {
+    "reciprocity_condition": "Edge-local Pre-Reg needs mutual reaction on (i,j) and (j,i); measure frac_sticky_via_ledger first",
+    "reciprocity_median": 0.0,
+    "sufficient_hint": "if median frac << 0.5, sticky map may lack reciprocal pairs for two-oscillator coupling"
+  }
+}

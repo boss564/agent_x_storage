@@ -23,8 +23,73 @@ COMPONENT_NAMES: Tuple[str, ...] = (
 LATENCY_EWMA = 0.3
 RISK_UP = 0.10
 RISK_DOWN = 0.05
+# M7 spike (docs/THREAT_MODEL_POST_QUANTUM_v0.md §3.5): engineering, not Pre-Reg
+LATENCY_MODE_EWMA = "ewma"
+LATENCY_MODE_M7 = "median_m7"
+LATENCY_N_MIN = 14
+LATENCY_WINDOW_CAP = 64
+LATENCY_TRIM_FRAC = 0.1  # trimmed-mean tails when n is large
+LATENCY_MAD_K = 3.0
 
 EdgeKey = Tuple[str, str]
+
+
+def _median(xs: Sequence[float]) -> float:
+    ys = sorted(float(x) for x in xs)
+    n = len(ys)
+    if n == 0:
+        return 0.0
+    mid = n // 2
+    if n % 2:
+        return ys[mid]
+    return 0.5 * (ys[mid - 1] + ys[mid])
+
+
+def _mad(xs: Sequence[float], med: float) -> float:
+    if not xs:
+        return 0.0
+    return _median([abs(float(x) - med) for x in xs])
+
+
+def _trimmed_mean(xs: Sequence[float], frac: float = LATENCY_TRIM_FRAC) -> float:
+    ys = sorted(float(x) for x in xs)
+    n = len(ys)
+    if n == 0:
+        return 0.0
+    k = int(n * frac)
+    if 2 * k >= n:
+        return _median(ys)
+    core = ys[k : n - k] if k > 0 else ys
+    return sum(core) / len(core)
+
+
+def robust_latency_from_window(
+    samples: Sequence[float],
+    *,
+    n_min: int = LATENCY_N_MIN,
+    use_trimmed_mean: bool = False,
+) -> Tuple[Optional[float], str]:
+    """Return (ℓ, status). status: ok | thin | empty."""
+    vals = [float(x) for x in samples if x is not None]
+    n = len(vals)
+    if n == 0:
+        return None, "empty"
+    if n < n_min:
+        return None, "thin"
+    med = _median(vals)
+    mad = _mad(vals, med)
+    if mad > 1e-12:
+        kept = [
+            v for v in vals
+            if abs(v - med) <= LATENCY_MAD_K * mad
+        ]
+        if len(kept) < max(n_min, (n + 1) // 2):
+            kept = list(vals)  # MAD wiped too much — fall back to full window
+    else:
+        kept = list(vals)
+    if use_trimmed_mean and len(kept) >= n_min:
+        return _trimmed_mean(kept), "ok"
+    return _median(kept), "ok"
 
 
 @dataclass
@@ -38,6 +103,10 @@ class LedgerEdge:
     last_tick: int = 0
     updates: int = 0
     ever_updated: bool = False
+    # M7: raw latency window (settlement-weighted samples only when mode=m7)
+    latency_samples: List[float] = field(default_factory=list)
+    latency_evaluable: bool = False
+    latency_status: str = "empty"  # ok | thin | empty | ewma
 
     def trust_score(self) -> float:
         return float(self.alpha / (self.alpha + self.beta))
@@ -58,8 +127,24 @@ class LedgerEdge:
 class LedgerBook:
     """Directed ledger: write only on (i,j) interaction."""
 
-    def __init__(self, *, gamma: float = GAMMA):
+    def __init__(
+        self,
+        *,
+        gamma: float = GAMMA,
+        latency_mode: str = LATENCY_MODE_EWMA,
+        latency_n_min: int = LATENCY_N_MIN,
+        use_trimmed_mean: bool = False,
+        m7_settlement_only: bool = False,
+    ):
         self.gamma = float(gamma)
+        mode = str(latency_mode).lower()
+        if mode not in {LATENCY_MODE_EWMA, LATENCY_MODE_M7}:
+            raise ValueError(f"latency_mode={latency_mode}")
+        self.latency_mode = mode
+        self.latency_n_min = int(latency_n_min)
+        self.use_trimmed_mean = bool(use_trimmed_mean)
+        # False = engineering spike (all samples); True = §3.7 strict
+        self.m7_settlement_only = bool(m7_settlement_only)
         self._edges: Dict[EdgeKey, LedgerEdge] = {}
         self._updated_in_window: Dict[EdgeKey, bool] = {}
 
@@ -121,12 +206,45 @@ class LedgerBook:
             e.beta += 1.0
             e.edge_risk = max(0.0, min(1.0, e.edge_risk + RISK_UP))
         lat = max(0.0, float(latency))
-        if e.updates == 0 and not e.ever_updated:
-            e.avg_latency = lat
+        settlement_touch = abs(float(signed_net)) > 1e-12
+
+        if self.latency_mode == LATENCY_MODE_EWMA:
+            if e.updates == 0 and not e.ever_updated:
+                e.avg_latency = lat
+            else:
+                e.avg_latency = (
+                    (1.0 - LATENCY_EWMA) * e.avg_latency + LATENCY_EWMA * lat
+                )
+            e.latency_evaluable = True
+            e.latency_status = "ewma"
         else:
-            e.avg_latency = (
-                (1.0 - LATENCY_EWMA) * e.avg_latency + LATENCY_EWMA * lat
+            # M7 window: settlement-only when m7_settlement_only (§3.7);
+            # spike default accepts all samples so ℓ remains measurable.
+            accept = settlement_touch or (not self.m7_settlement_only)
+            if accept:
+                e.latency_samples.append(lat)
+                if len(e.latency_samples) > LATENCY_WINDOW_CAP:
+                    e.latency_samples = e.latency_samples[-LATENCY_WINDOW_CAP:]
+            if not settlement_touch:
+                e.edge_risk = max(0.0, min(1.0, e.edge_risk + 0.5 * RISK_UP))
+
+            ell, status = robust_latency_from_window(
+                e.latency_samples,
+                n_min=self.latency_n_min,
+                use_trimmed_mean=self.use_trimmed_mean,
             )
+            e.latency_status = status
+            if status == "ok" and ell is not None:
+                e.avg_latency = float(ell)
+                e.latency_evaluable = True
+            else:
+                # thin/empty: not evaluable — do not claim robust ℓ
+                e.latency_evaluable = False
+                if status == "thin":
+                    e.edge_risk = max(0.0, min(1.0, e.edge_risk + RISK_UP))
+                # keep last avg_latency if any; else provisional last sample
+                if e.updates == 0 and not e.ever_updated and settlement_touch:
+                    e.avg_latency = lat
 
         e.updates += 1
         e.ever_updated = True
