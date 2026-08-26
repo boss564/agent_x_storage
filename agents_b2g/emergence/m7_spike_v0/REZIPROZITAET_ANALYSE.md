@@ -51,24 +51,27 @@ Verifikation: `scripts/run_reciprocity_ack_check.py` → `reciprocity_ack_v0/`
 
 | Schritt | Status |
 |---------|--------|
-| 1. Traffic ACK/Receipt | erledigt |
+| 1. Traffic ACK/Receipt | erledigt (`b9da5efe`) |
 | 2. Reziprozität ≥ 0.3 | PASS (1.0) |
-| 3. M7-Filter (sekundär) | offen |
-| 4. Edge-Local Pre-Reg mit Wechselseitigkeit | gesperrt bis Schritt 3 |
+| 3. M7-Filter (sekundär) | **PASS** — `trimmed_m7` · Gate `M7_PRESERVES_FIT` |
+| 4. Edge-Local Pre-Reg mit Wechselseitigkeit | freigegeben (Engineering-Vorbedingungen) |
+
+Siehe `m7_filter_v0/M7_FILTER_ERGEBNIS.md` (Seeds `20261731–33`).
 
 ---
 
-## 4. M7 (sekundär)
+## 4. M7 (erledigt)
 
-Unverändert: Median zerstört sticky-ℓ-Selektivität. Erst nach Reziprozitäts-Fix
-Filter justieren (Trimmed Mean / EWMA+Gate).
+Canonical Intake: **`trimmed_m7`** = MAD-Gate + oberes Trimmed Mean (10 %).  
+Vergleich: `median_m7` und `ewma_gate` ebenfalls ell-selektiv unter ACK-Traffic;
+`ewma_gate` bleibt ρ-näher an EWMA.
 
 ---
 
 ## 5. Status
 
 ```text
-Engpass 1: Reziprozität — behoben (ACK/Receipt, Median via_led = 1.0)
-Engpass 2: M7_LOSES_ELL_SELECTIVITY → Filter — sekundär (nächster Schritt)
-Pre-Reg:   gesperrt bis Engpass 2 adressiert
+Engpass 1: Reziprozität — BEHOBEN (via_led = 1.0)
+Engpass 2: M7_LOSES_ELL_SELECTIVITY — BEHOBEN (trimmed_m7, M7_PRESERVES_FIT)
+Pre-Reg:   Edge-Local mit Wechselseitigkeit darf spezifiziert werden
 ```
