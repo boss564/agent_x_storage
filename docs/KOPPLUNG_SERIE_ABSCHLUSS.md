@@ -3,7 +3,7 @@
 **Status:** TICK-STRANG GESCHLOSSEN · 2026-08-26 (`EDGE_LOCAL_KOPPLUNG_v0`)  
 **Charakter:** Keine neue Pre-Reg in **diesem** (Tick-)Strang. Die iterative Frage ist beantwortet.  
 **Letzte Tick-Studie:** `EDGE_LOCAL_KOPPLUNG_v0` · Artefakte `agents_b2g/emergence/edge_local_kopplung_v0/`  
-**Neuer Strang (offen):** `EVENT_DRIVEN_KOPPLUNG_v0` — siehe unten § Ereignis-Strang.  
+**Ereignis-Strang (offen):** `EVENT_DRIVEN` → `RECIPROCAL_EVENT` — beide `NO_COUPLING`, §1.1 gehalten; siehe § Ereignis-Strang.  
 **Vorgänger-Schluss:** 2026-08-25 nach `CLOSED_LOOP_KOPPLUNG_v0` — Edge-Local war der explizit freigehaltene Folgestrang der Tick-Serie und ist jetzt ebenfalls geschlossen.
 
 ---
