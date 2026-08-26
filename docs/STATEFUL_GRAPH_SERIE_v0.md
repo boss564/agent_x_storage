@@ -1,15 +1,15 @@
 # Stateful Graph — Serie v0 (Konsolidierung)
 
-**Status:** Studie 1 BINDEND · Gegenprobe Screen `PROTO_PASS` · **kein** Pre-Reg für Dissensus · 2026-08-26  
-**Commits:** `91265e8e` (Studie 1) · `ed70d8a1` (Serie) · Dissensus-Screen folgt  
+**Status:** Studie 1 BINDEND · Gegenprobe Screen `PROTO_PASS` · \|Q\|-Varianz Screen 24/24 · 2026-08-26  
 **Charakter:** Neue Architekturfamilie — **nicht** Studie 11 der φ/ρ-Kopplung  
 **Sandbox diskret:** `prototypes/v2_stateful_graph/`  
 **Sandbox Dissensus:** `prototypes/v3_continuous_dissensus/` · **kein** Runner-Transfer
 
 ```text
 Kopplungsfamilie:     FAMILIE GESCHLOSSEN (10 Studien) — Kohärenz nicht relational
-Stateful Graph v0:    STRUCTURE_RELATIONAL (diskret) — Sweep 6/6
+Stateful Graph v0:    STRUCTURE_RELATIONAL (diskret, |Q|=4) — Sweep 6/6
 Dissens-Gegenprobe:   PROTO_PASS (kontinuierlich, matched gate) — kein Pre-Reg
+|Q|-Varianz-Screen:   STRUCTURE_RELATIONAL für alle |Q| ∈ {4, 8, 16, 32} — 24/24
 ```
 
 ---
@@ -53,13 +53,35 @@ Korrigiert: Dual-Metrik in `prototypes/v3_continuous_dissensus/ANALYSIS.md`.
 
 ---
 
+## Antwort (|Q|-Varianz — Screen only)
+
+**Frage:** Bleibt die relationale Trennung (Arm B vs. π) stabil, wenn \|Q\| wächst?
+
+**Mechanik:** BINDEND-Runner (`stateful_graph_study.py`), nur `N_STATES` ∈ {4, 8, 16, 32}.  
+**Seeds:** `20270401–06` (frisch; Studie-1-Seeds gesperrt).  
+**Screen-Gate:** ΔQ ≥ 0,5 ∧ H ≥ 2,0 ∧ Margin > 0,1 (BINDEND-Margin 0,15 separat berichtbar).
+
+| \|Q\| | Passes | Avg Margin | Avg H_B | H_max | Verdict |
+|------|--------|------------|---------|-------|---------|
+| 4 | 6/6 | 0,51 | 2,99 | 4 | `STRUCTURE_RELATIONAL` |
+| 8 | 6/6 | 0,78 | 3,98 | 6 | `STRUCTURE_RELATIONAL` |
+| 16 | 6/6 | 0,89 | 4,96 | 8 | `STRUCTURE_RELATIONAL` |
+| 32 | 6/6 | 0,93 | 5,92 | 10 | `STRUCTURE_RELATIONAL` |
+
+**Befund:** Trennung bricht **nicht** — Margin steigt mit \|Q\| (mehr Differenzierung).  
+Artefakte: `prototypes/v2_stateful_graph/q_variance_screen.py` · `q_variance_results.json`.  
+**Kein Pre-Reg** — Screen-Erweiterung der Serie.
+
+---
+
 ## Abgrenzung zur Kopplungsfamilie
 
 | Serie | Was gemessen wird | Status |
 |-------|-------------------|--------|
 | φ/ρ-Kopplung (10) | Kohärenz / κ | versiegelt |
-| Stateful Graph diskret (1) | Zustandsübergänge · H_Kante | `STRUCTURE_RELATIONAL` |
+| Stateful Graph diskret (1) | Zustandsübergänge · H_Kante · \|Q\|=4 | `STRUCTURE_RELATIONAL` |
 | Dissensus-Gegenprobe | kontinuierliche Repulsion · anti true | `PROTO_PASS` Screen |
+| \|Q\|-Varianz | dieselbe Mechanik · \|Q\| ∈ {4…32} | `STRUCTURE_RELATIONAL` 24/24 Screen |
 
 ---
 
@@ -96,9 +118,9 @@ dieselbe Definition wie in Studie 1. **Wahrheit vor Optik.**
 
 ## Status & offene Türen
 
-**Jetzt:** Studie 1 konsolidiert · Gegenprobe Screen positiv · **kein** Dissensus-Pre-Reg.
+**Jetzt:** Studie 1 · Dissensus-Screen · \|Q\|-Varianz-Screen (24/24) — **kein** Dissensus-Pre-Reg.
 
-**Optional später:** Dissensus DRAFT/Pre-Reg/Sweep · \|Q\|-Variation · Topologie.
+**Optional später:** Dissensus DRAFT/Pre-Reg/Sweep · **Topologie** (vollständig / spärlich / skalenfrei).
 
 **Nicht erlaubt:** Studie 11 φ/ρ · Hybrid · Schwellen-Nachjustierung an versiegelten Artefakten · Strang-Negativ aus globaler Metrik.
 
@@ -110,5 +132,5 @@ dieselbe Definition wie in Studie 1. **Wahrheit vor Optik.**
 |----------|-------|
 | `docs/KOPPLUNG_SERIE_ABSCHLUSS.md` | φ/ρ versiegelt |
 | `docs/STATEFUL_GRAPH_v0_DRAFT.md` / `_PREREG.md` | Studie 1 |
-| `prototypes/v2_stateful_graph/` | diskret Sweep |
+| `prototypes/v2_stateful_graph/` | diskret Sweep + \|Q\|-Varianz-Screen |
 | `prototypes/v3_continuous_dissensus/` | Dissensus Screen + Dual-Metrik |
