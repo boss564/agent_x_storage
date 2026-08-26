@@ -1,0 +1,258 @@
+{
+  "screen": "fail_closed_gate_v0",
+  "scope": "DEFENSIVE_CAUSAL_GROUNDING",
+  "map_ref": "docs/AGENT_SWARM_P9_MAP_v0.md \u00a710",
+  "elapsed_s": 0.001,
+  "budget_ok": true,
+  "n_pass": 21,
+  "n_total": 21,
+  "verdict": "GATE_PROTO_PASS",
+  "invariants": {
+    "no_live_execution": true,
+    "default_closed_blocks": true,
+    "human_open_can_release": true
+  },
+  "abort_conditions": [
+    "M7",
+    "Z3_CASCADE",
+    "BHO",
+    "P3_P8",
+    "HUMAN_GATE_CLOSED"
+  ],
+  "results": [
+    {
+      "seed": 20270701,
+      "scenario": "clean_but_gate_closed",
+      "expected": "BLOCKED",
+      "decision": "BLOCKED",
+      "reasons": [
+        "HUMAN_GATE_CLOSED"
+      ],
+      "match": true,
+      "live_execution": false
+    },
+    {
+      "seed": 20270701,
+      "scenario": "clean_human_open",
+      "expected": "RELEASED",
+      "decision": "RELEASED",
+      "reasons": [
+        "HUMAN_GATE_OPEN",
+        "ALL_CHECKS_PASS"
+      ],
+      "match": true,
+      "live_execution": false
+    },
+    {
+      "seed": 20270701,
+      "scenario": "m7_poison",
+      "expected": "BLOCKED",
+      "decision": "BLOCKED",
+      "reasons": [
+        "M7_LATENCY_POISON"
+      ],
+      "match": true,
+      "live_execution": false
+    },
+    {
+      "seed": 20270701,
+      "scenario": "z3_cascade",
+      "expected": "BLOCKED",
+      "decision": "BLOCKED",
+      "reasons": [
+        "P8_CASCADE_RISK"
+      ],
+      "match": true,
+      "live_execution": false
+    },
+    {
+      "seed": 20270701,
+      "scenario": "bho_break",
+      "expected": "BLOCKED",
+      "decision": "BLOCKED",
+      "reasons": [
+        "BHO_DELTA"
+      ],
+      "match": true,
+      "live_execution": false
+    },
+    {
+      "seed": 20270701,
+      "scenario": "p3_exec_risk",
+      "expected": "BLOCKED",
+      "decision": "BLOCKED",
+      "reasons": [
+        "P3_EXEC_RISK"
+      ],
+      "match": true,
+      "live_execution": false
+    },
+    {
+      "seed": 20270701,
+      "scenario": "bad_oracle",
+      "expected": "BLOCKED",
+      "decision": "BLOCKED",
+      "reasons": [
+        "SIGNAL_INVALID"
+      ],
+      "match": true,
+      "live_execution": false
+    },
+    {
+      "seed": 20270702,
+      "scenario": "clean_but_gate_closed",
+      "expected": "BLOCKED",
+      "decision": "BLOCKED",
+      "reasons": [
+        "HUMAN_GATE_CLOSED"
+      ],
+      "match": true,
+      "live_execution": false
+    },
+    {
+      "seed": 20270702,
+      "scenario": "clean_human_open",
+      "expected": "RELEASED",
+      "decision": "RELEASED",
+      "reasons": [
+        "HUMAN_GATE_OPEN",
+        "ALL_CHECKS_PASS"
+      ],
+      "match": true,
+      "live_execution": false
+    },
+    {
+      "seed": 20270702,
+      "scenario": "m7_poison",
+      "expected": "BLOCKED",
+      "decision": "BLOCKED",
+      "reasons": [
+        "M7_LATENCY_POISON"
+      ],
+      "match": true,
+      "live_execution": false
+    },
+    {
+      "seed": 20270702,
+      "scenario": "z3_cascade",
+      "expected": "BLOCKED",
+      "decision": "BLOCKED",
+      "reasons": [
+        "P8_CASCADE_RISK"
+      ],
+      "match": true,
+      "live_execution": false
+    },
+    {
+      "seed": 20270702,
+      "scenario": "bho_break",
+      "expected": "BLOCKED",
+      "decision": "BLOCKED",
+      "reasons": [
+        "BHO_DELTA"
+      ],
+      "match": true,
+      "live_execution": false
+    },
+    {
+      "seed": 20270702,
+      "scenario": "p3_exec_risk",
+      "expected": "BLOCKED",
+      "decision": "BLOCKED",
+      "reasons": [
+        "P3_EXEC_RISK"
+      ],
+      "match": true,
+      "live_execution": false
+    },
+    {
+      "seed": 20270702,
+      "scenario": "bad_oracle",
+      "expected": "BLOCKED",
+      "decision": "BLOCKED",
+      "reasons": [
+        "SIGNAL_INVALID"
+      ],
+      "match": true,
+      "live_execution": false
+    },
+    {
+      "seed": 20270703,
+      "scenario": "clean_but_gate_closed",
+      "expected": "BLOCKED",
+      "decision": "BLOCKED",
+      "reasons": [
+        "HUMAN_GATE_CLOSED"
+      ],
+      "match": true,
+      "live_execution": false
+    },
+    {
+      "seed": 20270703,
+      "scenario": "clean_human_open",
+      "expected": "RELEASED",
+      "decision": "RELEASED",
+      "reasons": [
+        "HUMAN_GATE_OPEN",
+        "ALL_CHECKS_PASS"
+      ],
+      "match": true,
+      "live_execution": false
+    },
+    {
+      "seed": 20270703,
+      "scenario": "m7_poison",
+      "expected": "BLOCKED",
+      "decision": "BLOCKED",
+      "reasons": [
+        "M7_LATENCY_POISON"
+      ],
+      "match": true,
+      "live_execution": false
+    },
+    {
+      "seed": 20270703,
+      "scenario": "z3_cascade",
+      "expected": "BLOCKED",
+      "decision": "BLOCKED",
+      "reasons": [
+        "P8_CASCADE_RISK"
+      ],
+      "match": true,
+      "live_execution": false
+    },
+    {
+      "seed": 20270703,
+      "scenario": "bho_break",
+      "expected": "BLOCKED",
+      "decision": "BLOCKED",
+      "reasons": [
+        "BHO_DELTA"
+      ],
+      "match": true,
+      "live_execution": false
+    },
+    {
+      "seed": 20270703,
+      "scenario": "p3_exec_risk",
+      "expected": "BLOCKED",
+      "decision": "BLOCKED",
+      "reasons": [
+        "P3_EXEC_RISK"
+      ],
+      "match": true,
+      "live_execution": false
+    },
+    {
+      "seed": 20270703,
+      "scenario": "bad_oracle",
+      "expected": "BLOCKED",
+      "decision": "BLOCKED",
+      "reasons": [
+        "SIGNAL_INVALID"
+      ],
+      "match": true,
+      "live_execution": false
+    }
+  ]
+}
