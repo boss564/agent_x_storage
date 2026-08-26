@@ -109,7 +109,7 @@ def capture_closed_loop_coupling(
     p_of = assign_p([a.id for a in agents])
     recv_load = {a.id: 0 for a in agents}
     sticky = StickySelector(threshold=8)
-    ledger = LedgerBook(gamma=0.05, latency_mode="ewma")  # Vorher-Zustand (pre-M7)
+    ledger = LedgerBook(gamma=0.05, latency_mode="ewma", trust_settlement_only=False)  # Vorher-Zustand (pre-M7/M9)
     coupling_edge: Dict[str, str] = {}
     signal_partner: Dict[str, str] = {}
     gamma_book: Dict[EdgeKey, float] = {}

@@ -363,6 +363,9 @@ Roadmap:  M1–M9 (M7∪M9: Einfluss ∝ Buchungsbewegung · n_min für MAD)
 M7-Status: PRODUCTION — default `trimmed_m7` · MAD-Reject vor Append · Poison-Log
            (`kanten_ledger.py` · `scripts/test_m7_latency_poison.py`)
            Vorher-Zustand: `latency_mode=ewma` / env `AGENT_X_LATENCY_MODE=ewma`
+M9-Status: PRODUCTION — Trust α/β nur bei |Δ|≠0 · Spam zählt nur `interaction_count`
+           (`kanten_ledger.py` · `scripts/test_m9_sybil_trust.py`)
+           Vorher-Zustand: `trust_settlement_only=False` / env `AGENT_X_TRUST_SETTLEMENT_ONLY=0`
 Serie:    sticky-ℓ |ρ|≈0.348 / 0.156 = Vorher-Zustand — nicht übertragbar nach M7/M9
 Entmythologisiert: Grover · Quantensensorik
 Disziplin: Quantenspezifisch nur Shor (+ pairing-SNARK-Soundness)

@@ -137,7 +137,7 @@ def capture_edge_local_coupling(
     p_of = assign_p([a.id for a in agents])
     recv_load = {a.id: 0 for a in agents}
     sticky = StickySelector(threshold=8)
-    ledger = LedgerBook(gamma=0.05, latency_mode=LATENCY_MODE_M7_TRIM)
+    ledger = LedgerBook(gamma=0.05, latency_mode=LATENCY_MODE_M7_TRIM, trust_settlement_only=False)  # Vorher-M9
     coupling_edge: Dict[str, str] = {}
     signal_partner: Dict[str, str] = {}
     gamma_book: Dict[EdgeKey, float] = {}

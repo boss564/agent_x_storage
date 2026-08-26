@@ -81,7 +81,7 @@ def capture_ell_for_s_probe(
     tc, agents, providers, evaluators, economics = _setup_swarm(run_seed, dpc, orch)
     recv_load = {a.id: 0 for a in agents}
     sticky = StickySelector(threshold=8)
-    ledger = LedgerBook(gamma=0.05, latency_mode="ewma")  # Vorher-Zustand (pre-M7)
+    ledger = LedgerBook(gamma=0.05, latency_mode="ewma", trust_settlement_only=False)  # Vorher-Zustand (pre-M7/M9)
     pending_eval: Dict[str, list] = {a.id: [] for a in evaluators}
     pending_econ: Dict[str, list] = {a.id: [] for a in economics}
     rule_default = dpc.rule_default

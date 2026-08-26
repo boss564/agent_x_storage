@@ -110,7 +110,7 @@ def capture_ledger_coupling(
     by_id = {a.id: a for a in agents}
     recv_load = {a.id: 0 for a in agents}
     sticky = StickySelector(threshold=8)
-    ledger = LedgerBook(gamma=0.05, latency_mode="ewma")  # Vorher-Zustand (pre-M7)
+    ledger = LedgerBook(gamma=0.05, latency_mode="ewma", trust_settlement_only=False)  # Vorher-Zustand (pre-M7/M9)
     coupling_edge: Dict[str, str] = {}
     signal_partner: Dict[str, str] = {}
     pending_eval: Dict[str, list] = {a.id: [] for a in evaluators}

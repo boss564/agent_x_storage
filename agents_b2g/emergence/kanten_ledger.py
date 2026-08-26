@@ -8,6 +8,10 @@ Not the sealed KOPPLUNG_EIJ_v1 EdgeBook.
 M7 (docs/THREAT_MODEL_POST_QUANTUM_v0.md §3.5): production default is
 `trimmed_m7` — MAD-Gate reject (>k·MAD) before window append + upper 10% trim.
 Override via latency_mode=… or env AGENT_X_LATENCY_MODE (ewma = Vorher-Zustand).
+
+M9 (§3.6): Trust α/β updates only when |signed_net| > 0 (BHO settlement).
+`interaction_count` remains an ops counter. Override: trust_settlement_only=False
+or env AGENT_X_TRUST_SETTLEMENT_ONLY=0 (Vorher-Zustand).
 """
 from __future__ import annotations
 
@@ -50,6 +54,12 @@ _LATENCY_MODES = {
 def _default_latency_mode() -> str:
     raw = os.environ.get("AGENT_X_LATENCY_MODE", LATENCY_MODE_M7_TRIM).strip().lower()
     return raw if raw in _LATENCY_MODES else LATENCY_MODE_M7_TRIM
+
+
+def _default_trust_settlement_only() -> bool:
+    """M9: Trust (α/β) only on Δ≠0 unless AGENT_X_TRUST_SETTLEMENT_ONLY=0."""
+    raw = os.environ.get("AGENT_X_TRUST_SETTLEMENT_ONLY", "1").strip().lower()
+    return raw not in {"0", "false", "no", "off"}
 
 EdgeKey = Tuple[str, str]
 
@@ -203,6 +213,7 @@ class LedgerBook:
         latency_n_min: int = LATENCY_N_MIN,
         use_trimmed_mean: bool = False,
         m7_settlement_only: bool = False,
+        trust_settlement_only: Optional[bool] = None,
         on_latency_poison: Optional[Callable[[Dict[str, Any]], None]] = None,
     ):
         self.gamma = float(gamma)
@@ -217,11 +228,19 @@ class LedgerBook:
         self.use_trimmed_mean = bool(use_trimmed_mean)
         # False = engineering spike (all samples); True = §3.7 strict
         self.m7_settlement_only = bool(m7_settlement_only)
+        # M9: Trust ∝ BHO volume (Δ≠0); default on in production
+        self.trust_settlement_only = (
+            _default_trust_settlement_only()
+            if trust_settlement_only is None
+            else bool(trust_settlement_only)
+        )
         self.on_latency_poison = on_latency_poison
         self._edges: Dict[EdgeKey, LedgerEdge] = {}
         self._updated_in_window: Dict[EdgeKey, bool] = {}
         # M7 poison audit (in-memory; not GoBD — ops signal only)
         self.latency_poison_events: List[Dict[str, Any]] = []
+        # M9: count of spam interactions that did not move trust
+        self.trust_spam_suppressed: int = 0
 
     def _m7_estimator(self) -> str:
         if self.latency_mode == LATENCY_MODE_M7_TRIM:
@@ -311,14 +330,22 @@ class LedgerBook:
         # S_neu (§ ARCH_BINDEND mapping)
         e.interaction_count += 1.0
         e.bilateral_balance += float(signed_net)
-        if success:
-            e.alpha += 1.0
-            e.edge_risk = max(0.0, min(1.0, e.edge_risk - RISK_DOWN))
-        else:
-            e.beta += 1.0
-            e.edge_risk = max(0.0, min(1.0, e.edge_risk + RISK_UP))
-        lat = max(0.0, float(latency))
         settlement_touch = abs(float(signed_net)) > 1e-12
+        # M9: Trust α/β only on settlement (Δ≠0). Spam without volume is a no-op
+        # for trust_score; interaction_count still counts for ops.
+        trust_touch = settlement_touch or (not self.trust_settlement_only)
+        if trust_touch:
+            if success:
+                e.alpha += 1.0
+                e.edge_risk = max(0.0, min(1.0, e.edge_risk - RISK_DOWN))
+            else:
+                e.beta += 1.0
+                e.edge_risk = max(0.0, min(1.0, e.edge_risk + RISK_UP))
+        else:
+            self.trust_spam_suppressed += 1
+            # Cheap non-settlement traffic: slight risk up, no trust inflation
+            e.edge_risk = max(0.0, min(1.0, e.edge_risk + 0.5 * RISK_UP))
+        lat = max(0.0, float(latency))
 
         if self.latency_mode == LATENCY_MODE_EWMA:
             if e.updates == 0 and not e.ever_updated:
