@@ -68,7 +68,7 @@ Typ:     Prototypen-Screen (Pass/Fail) — keine Pre-Reg
 Screen:  ARCHITECTURE_FIT · A∧B∧C+edge PASS · 5.3s · Seeds 20261701…03
 Static:  28/28 Artefakte present
 Compose: podman-compose.p9.yml  (Intent aus §4–§7; kein Image-Tag-Inventar)
-Scope:   DEFENSIVE_CAUSAL_GROUNDING · Option 1 Analyse/Simulation (§9)
+Scope:   DEFENSIVE_CAUSAL_GROUNDING · Option 1 Analyse/Simulation (§9–§10)
 ```
 
 ---
@@ -209,3 +209,70 @@ Bestehende Module (`agent_x_klasse_c_3_arbitrage.py`, Flashloan-/Flashbots-/Jito
 bleiben **Artefakt-Quellen** für Analyse und Simulation. Ihre Nutzung im P9-Schwarm unter
 Option 1 ist auf **Lesen / Modellieren / Melden** beschränkt — nicht auf live Execution-Pfade
 zu Searcher-/Builder- oder Gewinn-Stacks (Charter §5 Air-Gap).
+
+---
+
+## 10. Fail-Closed Kapitalschutz & menschliches Execution-Gate
+
+**Bindend unter Option 1.** Der „Gewinn“ liegt im **Risikofilter**, nicht in der Execution.
+Pipeline: Signal → Gate-Prüfung → (nur bei Mensch-Freigabe) optionale Externalisierung.
+Ohne menschliche Freigabe bleibt das Gate **zu** (fail-closed Default).
+
+### 10.1 Schichten
+
+| Schicht | Agenten / Module | Defensive Rolle |
+|---------|------------------|-----------------|
+| **Signalerzeugung** | P4, P5, P7 | Market-Stress erkennen · Oracle-Feeds · Szenario-/Strategie-**Vorschlag** (obs., kein Auto-Dispatch) |
+| **Execution-Gate** | P3, P8 | Exec-Risk · Cascade-Risk — **prüfen und blockieren**, nicht ausführen |
+| **Fail-Closed** | P6, M7 (`kanten_ledger`), Z3 | BHO-Settlement · Z3-Invariante · Latenz-Poison-Filter |
+
+P1 bleibt Intake/Invarianten-Vorfilter; P2 liefert Latenz-/Mempool-Beobachtung als Gate-Input;
+P9 archiviert Gate-Entscheidungen (GoBD-WORM).
+
+### 10.2 Abbruchbedingungen (fail-closed)
+
+Ein vorgeschlagener Trade / eine Freigabe-Anfrage wird **abgebrochen** (`BLOCKED`), wenn
+mindestens eine Bedingung gilt:
+
+1. **M7** — Latenz-Poisoning / MAD-Reject am Kanten-Ledger (`trimmed_m7`)
+2. **Z3-Proof-Gate** — unkalkulierbare Markt-Kaskade / Invariantenbruch prognostiziert
+3. **BHO-Settlement** — Zero-Sum / Haushaltsregeln verletzt (\|Δ\| > Toleranz)
+
+Wave 39 (`EthicalAssertionAgent` / `ScopeEnforcerAgent`) bleibt fail-closed über dem Gate.
+
+### 10.3 Schaltbares Execution-Gate (Mensch)
+
+```text
+Charter:         DEFENSIVE_CAUSAL_GROUNDING  (immutable Scope-Flag)
+Default:         Gate CLOSED — Analyse & Warnung only
+Öffnung:         nur explizite menschliche Freigabe (kein Autopilot)
+Air-Gap:         Analyse-Ebene ⟂  Ausführungs-Ebene (Charter §5)
+Nach Freigabe:   externe Systeme dürfen handeln; Agent X führt nicht selbst aus
+```
+
+Das Gate ist **schaltbar**, aber die Charter stellt sicher: Agent X startet **keine**
+eigenständigen Orders, Bundles oder Liquidationen. Die menschliche Entscheidung öffnet
+höchstens einen **Freigabe-Kanal** zu charter-geprüften Schnittstellen — sie ersetzt
+nicht die Negativklausel (keine MEV-Extraktion, keine offensive Liquidation).
+
+### 10.4 Datenfluss (logisch)
+
+```text
+P1 Intake → P5 Oracles / P4 Stress / P7 Szenario
+                ↓
+         P3 Exec-Risk ∧ P8 Cascade-Risk
+                ↓
+         P6 BHO/Z3  ∧  M7 Latenz-Filter
+                ↓
+         FAIL → BLOCKED (P9 WORM)
+         PASS → HUMAN_GATE?
+                ↓ nein → bleibt CLOSED
+                ↓ ja  → Freigabe-Artefakt (kein On-Chain-Send durch P*)
+```
+
+### 10.5 Was dieser Abschnitt nicht ist
+
+- Keine Implementation von Order-Routing oder Searcher-Pipelines
+- Keine Aufweichung von §9 / Charter Negativklausel
+- E2E mit „simulierten Trades“ = **Simulation der Gate-Logik** (BLOCKED/RELEASED),
+  nicht Live-Execution
