@@ -51,13 +51,14 @@ während `recv_load` bei allen mitwächst — der Zombie holt nie auf.
 Unterschätzung der Last (langsamer Zähler, verzögerte Buchung, abweichende
 Metrik) konzentriert Verkehr — ohne Ausfall.
 
-### Zwei Angriffspunkte
+### Zwei Follow-ups (neutral benannt)
 
-1. **Lebendigkeit an Arbeitsnachweis** — `recv_load` zählt Empfang, nicht
-   Verarbeitung. Last braucht einen Abschluss-Term (wie M7/M9: Einfluss ∝
-   nachgewiesener Bewegung).
-2. **Winner-take-all entschärfen** — Power-of-two-choices (2 ziehen, leichteren
-   nehmen) streut bei kleinen Margen.
+1. **`completion_load`** — `recv_load` zählt Empfang, nicht Verarbeitung.
+   Last braucht einen Abschluss-Term (Klasse M7/M9: Einfluss ∝ nachgewiesener
+   Bewegung). Kein kryptographisches Proof-of-Work.
+2. **`two-choice tie-break`** — bei Near-Ties zwei Kandidaten ziehen, den
+   leichteren nehmen (gegen hartes `argmin`). Keine Aussage über kompromittierte
+   Agenten-Paare.
 
 `H0_REMOVAL_OK` (Share = 0): Entfernen aus der Kandidatenliste funktioniert.
 Das Problem ist **Erkennung** (untätig vs. tot), nicht die Filter-Umleitung.
@@ -65,4 +66,4 @@ Das Problem ist **Erkennung** (untätig vs. tot), nicht die Filter-Umleitung.
 ## Nicht in diesem Screen
 
 Podman stop/start P5/P8 · Kanten-Ledger ℓ-Pfad · M7 Spike-Filter unter Kill ·
-Po2-Implementierung (Follow-up).
+`completion_load` / `two-choice tie-break` Implementierung (Follow-up).

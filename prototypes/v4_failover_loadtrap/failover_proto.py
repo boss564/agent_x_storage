@@ -266,8 +266,9 @@ def run_screen() -> Dict[str, Any]:
         "removed": removed_rows,
         "verdict": h1["verdict"],
         "next": (
-            "If H1_CONFIRMED: bind liveness to non-zero processing/Δ "
-            "(same class as M7/M9). If FALSIFIED: document why."
+            "If H1_CONFIRMED: introduce completion_load (bind load to "
+            "processing/Δ, class M7/M9) and/or two-choice tie-break under "
+            "near-ties. If FALSIFIED: document why."
         ),
     }
 

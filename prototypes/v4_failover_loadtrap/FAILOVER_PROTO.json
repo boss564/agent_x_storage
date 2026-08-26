@@ -261,12 +261,12 @@
     }
   ],
   "verdict": "H1_CONFIRMED",
-  "next": "If H1_CONFIRMED: bind liveness to non-zero processing/\u0394 (same class as M7/M9). If FALSIFIED: document why.",
+  "next": "If H1_CONFIRMED: introduce completion_load (bind load to processing/\u0394, class M7/M9) and/or two-choice tie-break under near-ties. If FALSIFIED: document why.",
   "interpretation": {
     "winner_take_all": "Hard argmin on near-tied load_of concentrates traffic; zombie share roughly doubles despite <2% load margin.",
-    "attack_surfaces": [
-      "Bind liveness to processing/completion proof (recv_load alone insufficient)",
-      "Soften argmin via power-of-two-choices under near-ties"
+    "follow_ups": [
+      "completion_load \u2014 bind load to processing/completion (not crypto PoW); recv_load alone insufficient",
+      "two-choice tie-break \u2014 sample two candidates, pick lighter under near-ties (not 'two compromised agents')"
     ],
     "h0_implies": "Candidate removal works; failure mode is detection (idle vs dead)."
   }
