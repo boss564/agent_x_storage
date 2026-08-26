@@ -74,7 +74,8 @@ class SoftwarePureCPUProver:
         self._meta = ProofMetadata(backend="software-cpu", curve="bn254")
 
     def generate_proof(self, witness, state):
-        # Pure Python/arkworks CPU proof — slow but valid
+        # ENGINEERING MOCK — SHA256 digest only. Not arkworks, not a valid SNARK.
+        # Do not treat this return value as cryptographic soundness.
         import hashlib
         return hashlib.sha256(witness + state).digest()
 
@@ -99,7 +100,7 @@ class SGXTDXProver:
         )
 
     def generate_proof(self, witness, state):
-        # Gramine → Intel DCAP attest + prove
+        # ENGINEERING MOCK — SHA256 only; not a TEE-attested SNARK.
         import hashlib
         return hashlib.sha256(b"SGX" + witness + state).digest()
 
@@ -124,6 +125,7 @@ class SEVSNPProver:
         )
 
     def generate_proof(self, witness, state):
+        # ENGINEERING MOCK — SHA256 only; not SEV-attested SNARK.
         import hashlib
         return hashlib.sha256(b"SEV" + witness + state).digest()
 
@@ -152,8 +154,7 @@ class CUDAGPUProver:
         )
 
     def generate_proof(self, witness, state):
-        # Critical: witness held in mlocks, zeroized after cudaMemcpyHtoD
-        # Secure zeroing in production; here simulated
+        # ENGINEERING MOCK — SHA256 only; not CUDA MSM/NTT SNARK.
         import hashlib
         return hashlib.sha256(b"CUDA" + witness + state).digest()
 

@@ -241,25 +241,33 @@ heute und warten. Das ist **nicht** dasselbe wie „Shor ist morgen da“.
 | Session-Tokens, kurzlebige Ops | Niedrig | Klassisch akzeptabel bis Migrationsfenster |
 | HSM-Signaturen (NitroKey / SoftHSM) | Hoch (Integrität) | ML-DSA / Dilithium-Pfad (Wave 33 bereits spezifiziert) |
 | Z3-Proof-Artefakte | Mittel (Integrität > Geheimhaltung) | Signatur-PQC; Inhalt oft ohnehin verifizierbar |
-| ZK-Settlement (Groth16/PLONK) | **Hoch (Soundness)** | **M8:** Migration Richtung STARK / hash-basiert |
+| ZK-Settlement (Groth16/PLONK) | **niedrig heute** (Mock/Label); **hoch** falls pairing produktiv | M8 Audit: Migration n/a; Policy + S6-VK-Sperre |
 
-### 4.3 SNARK-Soundness unter Shor (M8, Prio 2)
+### 4.3 SNARK-Soundness unter Shor (M8) — Audit-Korrektur
 
 Kurvenbasierte SNARKs (Groth16, PLONK auf pairing-freundlichen Kurven) verlieren
-unter Shor nicht nur Vertraulichkeit von Setup-Material, sondern **Soundness**:
-gefälschte Beweise werden möglich. Das ist strengere Schadenklasse als
-„Ciphertext später lesen“.
+unter Shor **Soundness**: gefälschte Beweise werden möglich. Das bleibt als
+**Zukunftsrisiko** gültig, falls pairing-SNARKs produktiv gebunden werden.
 
-| Heute in Agent X | Risiko | Zielbild |
-|------------------|--------|----------|
-| Settlement / Protocol: `Groth16_BN254` | Soundness-Bruch ab Shor-Kipppunkt | Hash-basierte STARKs (FRI) |
-| Wave 33: `zk_compression` (STARK/FRI, SHA3) | bereits PQ-freundlich spezifiziert | Produktionspfad ausbauen |
-| Valhalla / Privacy Groth16 (Wave 25) | gleiches Kurvenrisiko | STARK- oder hash-basierte Alternative planen |
+**Audit 2026-08-26 (`docs/M8_ZK_AUDIT_v0.md`):** In der **aktuellen** Architektur
+ist eine SNARK→STARK-**Migration nicht relevant** — es gibt keine Circom/R1CS/zkey-
+Circuits; „Groth16“ in Python ist Label/Mock. Der produktive BHO-Nachweis ist
+**Z3 SMT** (`services/z3_solver`) und kein ZK-System (Shor-SNARK-Soundness trifft
+Z3 nicht; Artefakt-Signatur → PQC/M5).
 
-**Zeithorizont:** Kipppunkt typ. **2030+** — architektonisch **jetzt** planen
-(Beweisformat, Verifier on-chain/off-chain, Gas/Größe), Migration gestaffelt.
-Kein Grund, morgen alle Groth16-Demos zu löschen; Grund, keine neuen
-Langzeit-Invarianten ausschließlich an pairing-SNARKs zu binden.
+| Fläche | Risiko heute | Hinweis |
+|--------|--------------|---------|
+| Settlement/Protocol Label `Groth16_BN254` | niedrig (Mock) | Keine Circuits zum Migrieren |
+| `ValhallaVerifier.sol` (S6) | **pairing-ready** | Verify-Logik echt; **keine produktive VK** ohne PQ-ADR |
+| Wave 33 `zk_compression` | Simulation | optionaler STARK-Anker |
+| Z3 BHO | nicht SNARK | behalten |
+
+**Policy (bindend, kostenlos):** Keine neuen Langzeit-Invarianten ausschließlich
+an pairing-SNARKs. Falls später ZK: STARK **off-chain**, on-chain nur
+Commitment / Nullifier / Root.
+
+**Zeithorizont:** Kipppunkt typ. **2030+** — Planung nur wenn pairing-SNARKs
+tatsächlich eingeführt werden; keine Circuit-Wochen am falschen Format.
 
 ### 4.4 Bestehende Module
 
@@ -269,7 +277,8 @@ Langzeit-Invarianten ausschließlich an pairing-SNARKs zu binden.
 - Bunker HSM: ECDSA heute — **Gap:** PQC-Signing im HSM-Adapter noch nicht
   Produktionsstandard  
 - Modus `POST_QUANTUM` im Survival-Orchestrator: Umschaltung spezifiziert  
-- Settlement/Protocol: noch `Groth16_BN254` — **Gap:** M8  
+- Settlement/Protocol: Label `Groth16_BN254` — **Mock**; M8-Migration **nicht relevant**
+  (Audit); S6 Pairing-Verifier ohne produktive VK  
 
 ### 4.5 Gap (ehrlich)
 
@@ -330,7 +339,7 @@ zeitverzögertes Krypto-/Beweisbrechen** — nicht Quantensensorik + Grover.
 | **M7** | **Trimmed Mean / Median-Intake `ℓ_ij`** + \(n_{\min}\); Gewicht ∝ \(\Delta\neq0\) (§3.7) | **1** | `kanten_ledger.py` |
 | M4 | Kanal-Inventur HN-DL (was liegt 10–15 J. verschlüsselt im Archiv?) | 2 | Bridge / GoBD / Backup |
 | M5 | Hybride KEM für Langzeitarchive; HSM-Pfad Richtung ML-DSA | 2 | Wave 33 / Bunker |
-| **M8** | **SNARK → STARK** (Soundness unter Shor; Wave-33-Pfad ausbauen) | **2** | Settlement / ZK / Survival |
+| **M8** | **SNARK → STARK** — Audit: **NICHT RELEVANT** (keine Circuits; BHO=Z3) · Policy Prio 0 + S6-VK-Sperre | **—** | `docs/M8_ZK_AUDIT_v0.md` |
 | **M9** | **Trust (+ Latenzgewicht) an BHO-Volumen** (\(\Delta \neq 0\)); kein Spam-Trust | **2** | Ledger Trust + BHO |
 | M6 | Mesh-/Clearing-Redundanz gegen klassische Cuts | 3 | Survival / Clearing |
 
@@ -347,7 +356,8 @@ Keine dieser Maßnahmen ist eine Emergenz-Studie. Umsetzung = Engineering / Comp
 | `agents_b2g/survival/subagents/pqc_signer.py` | NIST PQC (Dilithium / Kyber / SPHINCS+) |
 | `agents_b2g/survival/subagents/zk_compression.py` | STARK/FRI — Anker M8 |
 | `agents_b2g/bunker/hsm_adapter.py` | HSM heute (ECDSA) — PQC-Gap |
-| `agents_b2g/settlement/` · `protocol.py` | Groth16 heute — Gap M8 |
+| `agents_b2g/settlement/` · `protocol.py` | Groth16-**Label**/Mock — M8 Migration n/a |
+| `docs/M8_ZK_AUDIT_v0.md` | M8 Audit · NICHT RELEVANT |
 | Tag `v1.0-kopplung-serie-closed` | Serie versiegelt |
 
 ---
@@ -366,6 +376,10 @@ M7-Status: PRODUCTION — default `trimmed_m7` · MAD-Reject vor Append · Poiso
 M9-Status: PRODUCTION — Trust α/β nur bei |Δ|≠0 · Spam zählt nur `interaction_count`
            (`kanten_ledger.py` · `scripts/test_m9_sybil_trust.py`)
            Vorher-Zustand: `trust_settlement_only=False` / env `AGENT_X_TRUST_SETTLEMENT_ONLY=0`
+M8-Status: NICHT RELEVANT (aktuell) — Audit `docs/M8_ZK_AUDIT_v0.md`
+           Keine SNARK-Circuits; BHO = Z3 SMT; S6 pairing-ready ohne VK
+           Policy: keine neuen pairing-Langzeit-Gates; STARK off-chain falls später ZK
+Härtung:  M7+M9 PRODUCTION · M8 Audit geschlossen (keine Migration)
 Serie:    sticky-ℓ |ρ|≈0.348 / 0.156 = Vorher-Zustand — nicht übertragbar nach M7/M9
 Entmythologisiert: Grover · Quantensensorik
 Disziplin: Quantenspezifisch nur Shor (+ pairing-SNARK-Soundness)
