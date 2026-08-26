@@ -1,0 +1,457 @@
+{
+  "schema": "agent_swarm_prototype_screen_v0",
+  "map_doc": "docs/AGENT_SWARM_P9_MAP_v0.md",
+  "not_a_pre_reg": true,
+  "not_a_hypothesis_test": true,
+  "rules": {
+    "no_type_pair_matrix": true,
+    "S_ij": "avg_latency",
+    "P_source": "Gas A1\u2026A9 \u2192 derive_p_bank"
+  },
+  "P_bank": {
+    "1": {
+      "P_index": 1,
+      "g": 0.009221,
+      "theta": 0.666667,
+      "sat": 0.05,
+      "a": 0.009221
+    },
+    "2": {
+      "P_index": 2,
+      "g": 0.046107,
+      "theta": 0.769231,
+      "sat": 0.03,
+      "a": 0.046107
+    },
+    "3": {
+      "P_index": 3,
+      "g": 0.092213,
+      "theta": 0.833333,
+      "sat": 0.02,
+      "a": 0.092213
+    },
+    "4": {
+      "P_index": 4,
+      "g": 0.461066,
+      "theta": 0.166667,
+      "sat": 0.5,
+      "a": 0.461066
+    },
+    "5": {
+      "P_index": 5,
+      "g": 0.092213,
+      "theta": 0.5,
+      "sat": 0.1,
+      "a": 0.092213
+    },
+    "6": {
+      "P_index": 6,
+      "g": 0.922131,
+      "theta": 0.285714,
+      "sat": 0.25,
+      "a": 0.922131
+    },
+    "7": {
+      "P_index": 7,
+      "g": 0.922131,
+      "theta": 0.333333,
+      "sat": 0.2,
+      "a": 0.922131
+    },
+    "8": {
+      "P_index": 8,
+      "g": 1.844262,
+      "theta": 0.25,
+      "sat": 0.3,
+      "a": 1.844262
+    },
+    "9": {
+      "P_index": 9,
+      "g": 4.610655,
+      "theta": 0.090909,
+      "sat": 1.0,
+      "a": 4.610655
+    }
+  },
+  "ROLE_MAP": {
+    "1": {
+      "role": "Ingestion & Invarianten",
+      "artifacts": [
+        "agent_x_klasse_a_1_ingestion.py",
+        "api_agents/agent_1_gatekeeper.py",
+        "contracts/HandwerkAnchor.sol"
+      ]
+    },
+    "2": {
+      "role": "Telematic & Relay",
+      "artifacts": [
+        "api_agents/agent_9_telemetry.py",
+        "api_agents/agent_17_supply_chain.py",
+        "agents_b2g/telemetry"
+      ]
+    },
+    "3": {
+      "role": "Pressure & Execution",
+      "artifacts": [
+        "agent_x_klasse_b_pressure_b1_ingestion.py",
+        "agent_x_klasse_b_pressure_b2_analytics.py",
+        "api_agents/agent_5_sync_exec.py"
+      ]
+    },
+    "4": {
+      "role": "Arbitrage & Market State",
+      "artifacts": [
+        "agent_x_klasse_c_3_arbitrage.py",
+        "agent_x_klasse_f_sentiment_whale.py",
+        "out/ResourceTrader.sol"
+      ]
+    },
+    "5": {
+      "role": "Analytics & Oracle Feeds",
+      "artifacts": [
+        "agent_x_klasse_d_2_analytics.py",
+        "agent_x_klasse_d_oracle_models.py",
+        "agent_x_pyth_client.py"
+      ]
+    },
+    "6": {
+      "role": "Risk & Compliance Audit",
+      "artifacts": [
+        "agent_x_lending_b2_risk.py",
+        "api_agents/agent_14_audit_compliance.py",
+        "services/z3_solver"
+      ]
+    },
+    "7": {
+      "role": "Strategy & Off-Chain Scout",
+      "artifacts": [
+        "agent_x_klasse_a_3_strategie.py",
+        "agent_x_offchain_scout.py",
+        "agent_x_jito_client.py"
+      ]
+    },
+    "8": {
+      "role": "Liquidation & Force",
+      "artifacts": [
+        "agent_x_klasse_c_2_flashloans.py",
+        "agent_x_lending_b3_liquidation.py",
+        "agent_x_flashbots_client.py"
+      ]
+    },
+    "9": {
+      "role": "Storage & State Anchor",
+      "artifacts": [
+        "agent_x_storage_guardian.py",
+        "agent_x_orchestrator.py",
+        "core/state_store.py",
+        "api_agents/agent_10_blockchain_anchor.py"
+      ]
+    }
+  },
+  "static_map_check": {
+    "n_present": 28,
+    "n_missing": 0,
+    "missing": [],
+    "present": [
+      {
+        "P": 1,
+        "path": "agent_x_klasse_a_1_ingestion.py",
+        "exists": true
+      },
+      {
+        "P": 1,
+        "path": "api_agents/agent_1_gatekeeper.py",
+        "exists": true
+      },
+      {
+        "P": 1,
+        "path": "contracts/HandwerkAnchor.sol",
+        "exists": true
+      },
+      {
+        "P": 2,
+        "path": "api_agents/agent_9_telemetry.py",
+        "exists": true
+      },
+      {
+        "P": 2,
+        "path": "api_agents/agent_17_supply_chain.py",
+        "exists": true
+      },
+      {
+        "P": 2,
+        "path": "agents_b2g/telemetry",
+        "exists": true
+      },
+      {
+        "P": 3,
+        "path": "agent_x_klasse_b_pressure_b1_ingestion.py",
+        "exists": true
+      },
+      {
+        "P": 3,
+        "path": "agent_x_klasse_b_pressure_b2_analytics.py",
+        "exists": true
+      },
+      {
+        "P": 3,
+        "path": "api_agents/agent_5_sync_exec.py",
+        "exists": true
+      },
+      {
+        "P": 4,
+        "path": "agent_x_klasse_c_3_arbitrage.py",
+        "exists": true
+      },
+      {
+        "P": 4,
+        "path": "agent_x_klasse_f_sentiment_whale.py",
+        "exists": true
+      },
+      {
+        "P": 4,
+        "path": "out/ResourceTrader.sol",
+        "exists": true
+      },
+      {
+        "P": 5,
+        "path": "agent_x_klasse_d_2_analytics.py",
+        "exists": true
+      },
+      {
+        "P": 5,
+        "path": "agent_x_klasse_d_oracle_models.py",
+        "exists": true
+      },
+      {
+        "P": 5,
+        "path": "agent_x_pyth_client.py",
+        "exists": true
+      },
+      {
+        "P": 6,
+        "path": "agent_x_lending_b2_risk.py",
+        "exists": true
+      },
+      {
+        "P": 6,
+        "path": "api_agents/agent_14_audit_compliance.py",
+        "exists": true
+      },
+      {
+        "P": 6,
+        "path": "services/z3_solver",
+        "exists": true
+      },
+      {
+        "P": 7,
+        "path": "agent_x_klasse_a_3_strategie.py",
+        "exists": true
+      },
+      {
+        "P": 7,
+        "path": "agent_x_offchain_scout.py",
+        "exists": true
+      },
+      {
+        "P": 7,
+        "path": "agent_x_jito_client.py",
+        "exists": true
+      },
+      {
+        "P": 8,
+        "path": "agent_x_klasse_c_2_flashloans.py",
+        "exists": true
+      },
+      {
+        "P": 8,
+        "path": "agent_x_lending_b3_liquidation.py",
+        "exists": true
+      },
+      {
+        "P": 8,
+        "path": "agent_x_flashbots_client.py",
+        "exists": true
+      },
+      {
+        "P": 9,
+        "path": "agent_x_storage_guardian.py",
+        "exists": true
+      },
+      {
+        "P": 9,
+        "path": "agent_x_orchestrator.py",
+        "exists": true
+      },
+      {
+        "P": 9,
+        "path": "core/state_store.py",
+        "exists": true
+      },
+      {
+        "P": 9,
+        "path": "api_agents/agent_10_blockchain_anchor.py",
+        "exists": true
+      }
+    ],
+    "map_ok": true
+  },
+  "params": {
+    "seeds": [
+      20261701,
+      20261702,
+      20261703
+    ],
+    "warmup": 32,
+    "cycles": 256
+  },
+  "elapsed_s": 5.3,
+  "per_seed": [
+    {
+      "run_seed": 20261701,
+      "layer_a": {
+        "layer": "A",
+        "pass": true,
+        "median_abs_rho": 0.308801,
+        "n_corr": 64,
+        "definition": "median |rho| sticky-R vs swarm mean <= 0.90"
+      },
+      "layer_b": {
+        "layer": "B",
+        "pass": true,
+        "mae_raw": 0.300307,
+        "mae_norm": 0.509342,
+        "sigma_r": 0.589598,
+        "definition": "MAE under partner permutation on R, mae_norm>=0.05"
+      },
+      "layer_c": {
+        "pass": true,
+        "mean_abs_diff": 0.719716,
+        "S1": 0.192148,
+        "S2": 0.604737,
+        "n_agents": 27
+      },
+      "edge_path_contract": {
+        "formula_ok": true,
+        "S_is_ell": true,
+        "P_indices_1_to_9": true,
+        "P_indices_seen": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9
+        ],
+        "pass": true,
+        "note": "no type-pair matrix; P_i from Gas A1\u2026A9 via assign_p"
+      },
+      "phi_L_ell_median_abs_rho": 0.467756,
+      "verdict_label": "RESPONSE_HETEROGENEOUS",
+      "elapsed_s": 2.59
+    },
+    {
+      "run_seed": 20261702,
+      "layer_a": {
+        "layer": "A",
+        "pass": true,
+        "median_abs_rho": 0.265672,
+        "n_corr": 64,
+        "definition": "median |rho| sticky-R vs swarm mean <= 0.90"
+      },
+      "layer_b": {
+        "layer": "B",
+        "pass": true,
+        "mae_raw": 0.311217,
+        "mae_norm": 0.452423,
+        "sigma_r": 0.68789,
+        "definition": "MAE under partner permutation on R, mae_norm>=0.05"
+      },
+      "layer_c": {
+        "pass": true,
+        "mean_abs_diff": 0.859728,
+        "S1": 0.190106,
+        "S2": 0.598892,
+        "n_agents": 27
+      },
+      "edge_path_contract": {
+        "formula_ok": true,
+        "S_is_ell": true,
+        "P_indices_1_to_9": true,
+        "P_indices_seen": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9
+        ],
+        "pass": true,
+        "note": "no type-pair matrix; P_i from Gas A1\u2026A9 via assign_p"
+      },
+      "phi_L_ell_median_abs_rho": 0.423283,
+      "verdict_label": "RESPONSE_HETEROGENEOUS",
+      "elapsed_s": 1.33
+    },
+    {
+      "run_seed": 20261703,
+      "layer_a": {
+        "layer": "A",
+        "pass": true,
+        "median_abs_rho": 0.317524,
+        "n_corr": 64,
+        "definition": "median |rho| sticky-R vs swarm mean <= 0.90"
+      },
+      "layer_b": {
+        "layer": "B",
+        "pass": true,
+        "mae_raw": 0.349072,
+        "mae_norm": 0.610635,
+        "sigma_r": 0.571655,
+        "definition": "MAE under partner permutation on R, mae_norm>=0.05"
+      },
+      "layer_c": {
+        "pass": true,
+        "mean_abs_diff": 0.809268,
+        "S1": 0.201338,
+        "S2": 0.600481,
+        "n_agents": 27
+      },
+      "edge_path_contract": {
+        "formula_ok": true,
+        "S_is_ell": true,
+        "P_indices_1_to_9": true,
+        "P_indices_seen": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9
+        ],
+        "pass": true,
+        "note": "no type-pair matrix; P_i from Gas A1\u2026A9 via assign_p"
+      },
+      "phi_L_ell_median_abs_rho": 0.523349,
+      "verdict_label": "RESPONSE_HETEROGENEOUS",
+      "elapsed_s": 1.34
+    }
+  ],
+  "majority": {
+    "A_pass_seeds": 3,
+    "B_pass_seeds": 3,
+    "C_pass_seeds": 3,
+    "edge_path_all": true,
+    "battery_pass": true,
+    "label": "ARCHITECTURE_FIT"
+  }
+}

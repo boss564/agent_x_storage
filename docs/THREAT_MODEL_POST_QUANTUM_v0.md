@@ -55,12 +55,13 @@ Die versiegelte Serie war Kopplungsforschung — und nebenbei **Surface-Kartogra
 
 | Ledger-Feld | Screen-Befund (Serie) | Relevanz für Threat |
 |-------------|----------------------|---------------------|
-| `avg_latency` | partnerselektiv (\|ρ\|≈0.35 bei φ_L) | **Primäre Vorhersagefläche** (Fahrzeit-Proxy) |
-| `interaction_count` | partnerselektiv (Ledger L2) | Frequenz / Sticky-Partner |
+| `avg_latency` | partnerselektiv (\|ρ\|≈0.35 bei φ_L) · **Vorher-Zustand** (EWMA) | **Primäre Vorhersagefläche** (Fahrzeit-Proxy) |
+| `interaction_count` | partnerselektiv (\|ρ\|≈0.156) · **Vorher-Zustand** | Frequenz / Sticky-Partner |
 | Knoten-Zustände | `NONE_CLOSE` (\|ρ\|≈1) | kaum partnerunterscheidend |
 
 Das ist keine neue Emergenzfrage. Es benennt konkret, welche Felder unter
-Vektor 1 (Inverse Rekonstruktion) stehen.
+Vektor 1 (Inverse Rekonstruktion) stehen. **Zahlen der versiegelten Serie
+gelten nur für die damalige Intake-Definition** (siehe §3.5.1 / §3.6).
 
 ---
 
@@ -137,9 +138,56 @@ Steuerkanal.
 - Latenzproben pro Kante als Fenster speichern (nicht nur EWMA-Punkt).  
 - **Trimmed Mean** oder **Median** über das Fenster für das kanonische
   \(\ell_{ij}\); EWMA höchstens als sekundärer Trend.  
-- Ausreißer (z. B. > k·MAD) verwerfen oder in `edge_risk` eskalieren, nicht in
-  \(\ell\) übernehmen.  
+- Ausreißer-Regel nur bei ausreichender Fenstergröße (→ §3.5.2).  
 - Anker: `agents_b2g/emergence/kanten_ledger.py` (`LATENCY_EWMA` heute = 0.3).
+
+#### 3.5.1 Messkontinuität — Serie beschreibt den Vorher-Zustand
+
+M7 **ändert die Größe**, auf der die versiegelte Kopplungsserie beruht.
+`avg_latency` war L1 in `KOPPLUNG_LEDGER_v1` / φ_L-Signal mit
+`LATENCY_EWMA = 0.3` und sticky-ℓ \|ρ\| ≈ **0,348**. Trimmed Mean / Median
+über ein Fenster hat andere Statistik (geringere Varianz, stärkere Glättung,
+weniger Einfluss einzelner Beobachtungen) und wirkt vermutlich **gegen**
+Partnerselektivität: Glättung entfernt idiosynkratische Ausschläge, die Kanten
+unterscheiden. \|ρ\| = 0,348 könnte nach M7 näher an der 0,90-Schwelle liegen.
+
+Das ist **kein** Argument gegen M7 — Schutz vor einem aktiven Steuerkanal wiegt
+schwerer als eine Vorbedingung eines **geschlossenen** Strangs. Bindend:
+
+> Die Messungen der Kopplungsserie beschreiben den **Vorher-Zustand** und
+> übertragen sich nicht. Wer die Architekturfrage je wieder aufmacht, muss
+> sticky-ℓ **neu messen** und darf 0,348 nicht zitieren.
+
+Ohne diesen Satz wird in Monaten eine Zahl für eine Implementierung herangezogen,
+die es dann nicht mehr gibt. HARKing-Sperre bleibt; Neuvermessung = neuer Strang.
+
+#### 3.5.2 MAD-Regel — Mindestfenstergröße
+
+`> k·MAD` setzt genügend Proben je Kante voraus. `KANTEN_LEDGER_v1` dokumentiert
+bereits Untersampling (`bilateral_balance` n_corr = 9/64, `edge_risk` = 7/64;
+S-G erst ab `n_corr ≥ 14` prüfbar). Auf kurzen Fenstern ist MAD instabil und
+verwirft entweder zu viel oder nichts.
+
+**Regel (bindend für M7-Implementierung):**
+
+| Fenstergröße \(n\) | Verhalten |
+|--------------------|-----------|
+| \(n < n_{\min}\) (Vorschlag: \(n_{\min} = 14\), analog S-G) | **Kein** Trimming / kein MAD-Reject. \(\ell\) als „nicht bewertbar“ markieren **oder** Eskalation in `edge_risk` — nicht stillschweigend EWMA fortschreiben als „robust“. |
+| \(n \ge n_{\min}\) | Trimmed Mean / Median + optional MAD-Filter |
+
+Sonst greift die Robustheitsmaßnahme genau auf den **dünnen** Kanten nicht, die
+ein Angreifer am billigsten bespielt.
+
+#### 3.5.3 M7 als eigene Angriffsfläche — Mehrheit vs. Ausreißer
+
+Ein Median verwirft Ausreißer; ein Angreifer, der die **Mehrheit** der Proben
+auf einer Kante stellt, verschiebt den Median vollständig und wird dabei *nicht*
+als Ausreißer erkannt. Robuste Schätzer schützen gegen wenige Extreme, nicht
+gegen viele moderate Proben. Auf dünn belegten Kanten ist die Mehrheit billig.
+
+**Natürliche Ergänzung zu M9:** Das **Gewicht einer Latenzprobe** soll am
+Settlement-Bezug hängen (\(\Delta \neq 0\)), nicht nur an ihrer Existenz —
+dieselbe Grundlage wie Trust (→ §3.7).
 
 ### 3.6 Sybil über `interaction_count` (Prio 2)
 
@@ -153,6 +201,23 @@ Steuerkanal.
   bzw. wirkungslos.  
 - `interaction_count` bleibt Ops-Metrik; steuert Trust nicht allein.  
 - Anker: Ledger `trust_score` (α/β) + BHO-Invariante (Treasury / Clearing).
+
+**Messkontinuität:** L2 sticky-ℓ \|ρ\| ≈ **0,156** gilt für den Vorher-Zustand
+(Zählung jeder Interaktion). Trust an BHO-Volumen zu koppeln ändert, **was
+gezählt / gewichtet wird** — dieselbe Regel wie §3.5.1: Zahl nicht auf
+Post-M9-Architektur übertragen; Neuvermessung bei Wiederaufnahme.
+
+### 3.7 Gemeinsame Grundlage M7 ∪ M9 — Einfluss ∝ Buchungsbewegung
+
+M7 und M9 sollen **kein** Paar getrennter Mechanismen bleiben:
+
+| Mechanismus | Heute (Risiko) | Ziel |
+|-------------|----------------|------|
+| Latenzprobe → \(\ell_{ij}\) | jede Probe gleich | Gewicht ∝ Settlement-Bezug (\(\Delta \neq 0\)), sonst nur `edge_risk` / „unbewertet“ |
+| Interaktion → Trust | `interaction_count` spam-bar | Update ∝ BHO-Volumen (\(\Delta \neq 0\)) |
+
+**Leitregel:** Einfluss auf Steuergrößen (\(\ell\), Trust) proportional zu echter
+Buchungsbewegung. Existenz einer Nachricht allein reicht nicht.
 
 ---
 
@@ -262,11 +327,11 @@ zeitverzögertes Krypto-/Beweisbrechen** — nicht Quantensensorik + Grover.
 | M1 | Export-Policy: `avg_latency` / `interaction_count` nur aggregiert + Noise | 1 | Ledger / Ops-API |
 | M2 | Trennung Audit-WORM (Balance) vs. Ops-Timing (räuschbar) | 1 | GoBD / BHO |
 | M3 | Party-ID-Pseudonymisierung in allen Nicht-Audit-Exports | 1 | DSGVO / DID |
-| **M7** | **Trimmed Mean / Median-Filter für Intake-`ℓ_ij`** (Delay Attacks) | **1** | `kanten_ledger.py` |
+| **M7** | **Trimmed Mean / Median-Intake `ℓ_ij`** + \(n_{\min}\); Gewicht ∝ \(\Delta\neq0\) (§3.7) | **1** | `kanten_ledger.py` |
 | M4 | Kanal-Inventur HN-DL (was liegt 10–15 J. verschlüsselt im Archiv?) | 2 | Bridge / GoBD / Backup |
 | M5 | Hybride KEM für Langzeitarchive; HSM-Pfad Richtung ML-DSA | 2 | Wave 33 / Bunker |
 | **M8** | **SNARK → STARK** (Soundness unter Shor; Wave-33-Pfad ausbauen) | **2** | Settlement / ZK / Survival |
-| **M9** | **Trust-Score an BHO-Volumen** (\(\Delta \neq 0\)); kein Spam-Trust | **2** | Ledger Trust + BHO |
+| **M9** | **Trust (+ Latenzgewicht) an BHO-Volumen** (\(\Delta \neq 0\)); kein Spam-Trust | **2** | Ledger Trust + BHO |
 | M6 | Mesh-/Clearing-Redundanz gegen klassische Cuts | 3 | Survival / Clearing |
 
 Keine dieser Maßnahmen ist eine Emergenz-Studie. Umsetzung = Engineering / Compliance.
@@ -294,7 +359,8 @@ Dokument: docs/THREAT_MODEL_POST_QUANTUM_v0.md
 Typ:      Threat-Surface-Landkarte (Analyse)
 Nicht:    DRAFT / Pre-Reg / Sweep
 Vektoren: Rekonstruktion · Timing-Poisoning · Shor/HN-DL(+SNARK) · Sybil
-Roadmap:  M1–M9 (M7 Prio1 · M8/M9 Prio2)
+Roadmap:  M1–M9 (M7∪M9: Einfluss ∝ Buchungsbewegung · n_min für MAD)
+Serie:    sticky-ℓ |ρ|≈0.348 / 0.156 = Vorher-Zustand — nicht übertragbar nach M7/M9
 Entmythologisiert: Grover · Quantensensorik
 Disziplin: Quantenspezifisch nur Shor (+ pairing-SNARK-Soundness)
 ```
