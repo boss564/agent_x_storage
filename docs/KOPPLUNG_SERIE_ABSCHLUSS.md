@@ -117,11 +117,26 @@ Arm B:                   ebenfalls NO_COUPLING (fast überall)
 **nicht** mehrheitlich erzwingt. Die Nullhypothese bleibt über **fehlendes Gate**,
 nicht über §1.1-Fail.
 
-**Wendepunkt (nicht Abschluss):** Die Ereignisbasis bricht falsche und echte
-Kohärenz zugleich. Offene Frage des Ereignis-Strangs (eigene Pre-Reg, wenn
-weitergearbeitet wird):
+### Folgestudie: `RECIPROCAL_EVENT_KOPPLUNG_v0`
 
-> Wie bricht man Arm C, ohne Arm B zu brechen?
+**Pre-Reg:** `docs/RECIPROCAL_EVENT_KOPPLUNG_v0_PREREG.md` (BINDEND)  
+**Artefakte:** `agents_b2g/emergence/reciprocal_event_kopplung_v0/`  
+**Verdict:** `NO_COUPLING` · Spot `20262201` Batterie PASS · §1.1 **gehalten**
+
+```text
+Spot κ=0 Seed 20262201:  A∧B∧C PASS
+intact_kappas:           alle κ · 6/6
+§1.1:                    gehalten (Arm C 0/6 COUPLED)
+Gate B↔C ≥4/6:           nirgends
+r_B:                     flach (≈0.28–0.31; Span≈0.028 < sd_pool≈0.045)
+Verdrahtung:             κ ANGESCHLOSSEN (T_mean Δ≈−0.33; States/Messages ≠)
+```
+
+**Befund:** Design funktioniert (Kontrollarm unten → interpretierbar). Modulation
+ändert Timing/Zustand, erzeugt aber keine Phasenkohärenz — **echtes Negativ**,
+kein Wiring-Fail. Offene Frage des Ereignis-Strangs bleibt:
+
+> Wie erzeugt man Gate-fähige Kohärenz auf Arm B, ohne §1.1 zu verlieren?
 
 Hybrid Tick-für-B / Event-für-C ist ein Rückfall in die versiegelte Tick-Serie
 und **nicht** zulässig.
@@ -141,7 +156,9 @@ und **nicht** zulässig.
 | `docs/CLOSED_LOOP_RESPONSE_v0_DRAFT.md` | Schritt-2 Batterie · PASS |
 | `docs/CLOSED_LOOP_KOPPLUNG_v0_PREREG.md` | Closed-Loop Sweep · INVALID |
 | `docs/EDGE_LOCAL_KOPPLUNG_v0_PREREG.md` | Edge-Local · BINDEND · INVALID · Tick-Serie letzte |
-| `docs/EVENT_DRIVEN_KOPPLUNG_v0_PREREG.md` | Ereignis-Strang · BINDEND · `NO_COUPLING` · offen |
+| `docs/EVENT_DRIVEN_KOPPLUNG_v0_PREREG.md` | Ereignis-Strang · BINDEND · `NO_COUPLING` |
+| `docs/RECIPROCAL_EVENT_KOPPLUNG_v0_PREREG.md` | Reziprozitäts-Event · BINDEND · `NO_COUPLING` · §1.1 JA |
 | `agents_b2g/emergence/closed_loop_kopplung_v0/` | Studie 6 |
 | `agents_b2g/emergence/edge_local_kopplung_v0/` | Studie 7 (letzte Tick-Studie) |
 | `agents_b2g/emergence/event_driven_kopplung_v0/` | Ereignis-Strang Studie 1 |
+| `agents_b2g/emergence/reciprocal_event_kopplung_v0/` | Ereignis-Strang Studie 2 |

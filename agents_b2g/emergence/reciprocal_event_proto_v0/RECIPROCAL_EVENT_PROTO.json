@@ -1,0 +1,143 @@
+{
+  "schema": "reciprocal_event_proto_v0",
+  "not_a_pre_reg": true,
+  "strand": "1b_reciprocal_event",
+  "gate_rule": "delta_R_i > 0 AND median_|rho| < 0.90",
+  "seeds": [
+    20262101,
+    20262102,
+    20262103
+  ],
+  "elapsed_s": 0.015,
+  "budget_s": 16.0,
+  "budget_ok": true,
+  "majority_pass": true,
+  "n_pass": 3,
+  "gate": "PROTO_PASS",
+  "per_seed": [
+    {
+      "run_seed": 20262101,
+      "strand": "reciprocal_event",
+      "n_agents": 9,
+      "n_requests": 64,
+      "kappa_proto": 0.6,
+      "median_abs_rho": 0.219944,
+      "mean_delta_r": 1.343605,
+      "layer_a_pass": true,
+      "layer_b_pass": true,
+      "pass": true,
+      "arm_b": {
+        "arm": "B",
+        "median_abs_rho": 0.219944,
+        "mean_delta_r": 1.343605,
+        "layer_a_pass": true,
+        "layer_b_pass": true,
+        "pass": true,
+        "frac_coupling_on": 1.0,
+        "n_couple_on": 575,
+        "n_couple_off": 0
+      },
+      "arm_c": {
+        "arm": "C",
+        "median_abs_rho": 0.219944,
+        "mean_delta_r": 1.343605,
+        "layer_a_pass": true,
+        "layer_b_pass": true,
+        "pass": true,
+        "frac_coupling_on": 0.0,
+        "n_couple_on": 0,
+        "n_couple_off": 575
+      },
+      "selectivity_hint": {
+        "frac_on_B": 1.0,
+        "frac_on_C": 0.0,
+        "note": "\u03ba fires only if receipt sender == signal partner"
+      },
+      "formula": "sensitivity_gamma_v02",
+      "note": "delivery on M; receipt from true partner; \u03ba iff receipt==signal"
+    },
+    {
+      "run_seed": 20262102,
+      "strand": "reciprocal_event",
+      "n_agents": 9,
+      "n_requests": 64,
+      "kappa_proto": 0.6,
+      "median_abs_rho": 0.341271,
+      "mean_delta_r": 1.564658,
+      "layer_a_pass": true,
+      "layer_b_pass": true,
+      "pass": true,
+      "arm_b": {
+        "arm": "B",
+        "median_abs_rho": 0.341271,
+        "mean_delta_r": 1.564658,
+        "layer_a_pass": true,
+        "layer_b_pass": true,
+        "pass": true,
+        "frac_coupling_on": 1.0,
+        "n_couple_on": 575,
+        "n_couple_off": 0
+      },
+      "arm_c": {
+        "arm": "C",
+        "median_abs_rho": 0.341271,
+        "mean_delta_r": 1.564658,
+        "layer_a_pass": true,
+        "layer_b_pass": true,
+        "pass": true,
+        "frac_coupling_on": 0.0,
+        "n_couple_on": 0,
+        "n_couple_off": 575
+      },
+      "selectivity_hint": {
+        "frac_on_B": 1.0,
+        "frac_on_C": 0.0,
+        "note": "\u03ba fires only if receipt sender == signal partner"
+      },
+      "formula": "sensitivity_gamma_v02",
+      "note": "delivery on M; receipt from true partner; \u03ba iff receipt==signal"
+    },
+    {
+      "run_seed": 20262103,
+      "strand": "reciprocal_event",
+      "n_agents": 9,
+      "n_requests": 64,
+      "kappa_proto": 0.6,
+      "median_abs_rho": 0.149463,
+      "mean_delta_r": 1.52341,
+      "layer_a_pass": true,
+      "layer_b_pass": true,
+      "pass": true,
+      "arm_b": {
+        "arm": "B",
+        "median_abs_rho": 0.149463,
+        "mean_delta_r": 1.52341,
+        "layer_a_pass": true,
+        "layer_b_pass": true,
+        "pass": true,
+        "frac_coupling_on": 1.0,
+        "n_couple_on": 575,
+        "n_couple_off": 0
+      },
+      "arm_c": {
+        "arm": "C",
+        "median_abs_rho": 0.149463,
+        "mean_delta_r": 1.52341,
+        "layer_a_pass": true,
+        "layer_b_pass": true,
+        "pass": true,
+        "frac_coupling_on": 0.0,
+        "n_couple_on": 0,
+        "n_couple_off": 575
+      },
+      "selectivity_hint": {
+        "frac_on_B": 1.0,
+        "frac_on_C": 0.0,
+        "note": "\u03ba fires only if receipt sender == signal partner"
+      },
+      "formula": "sensitivity_gamma_v02",
+      "note": "delivery on M; receipt from true partner; \u03ba iff receipt==signal"
+    }
+  ],
+  "next": "DRAFT allowed only if PROTO_PASS"
+}

@@ -1,0 +1,13 @@
+{
+  "precondition_intact": true,
+  "precondition_label": "INTACT",
+  "mae_norm": 0.445989,
+  "median_abs_rho": 0.184155,
+  "n_corr": 9,
+  "mean_abs_diff": 1.625847,
+  "battery_A": true,
+  "battery_B": true,
+  "battery_C": true,
+  "frac_coupling_on": 0.0,
+  "n_snapshots": 18
+}
