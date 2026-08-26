@@ -11,7 +11,10 @@
 
 1. **Keine Verhaltens-Matrizen** — Interaktion nur über \(\mathbf{P}_i=(g_i,\theta_i^0)\) und Kanten-Ledger.  
 2. **Kanten-Signal-Pfad** — \(S_{ij}=\ell_{ij}\) (`avg_latency`), kein globaler Broadcast-Bus als Steuergröße.  
-3. **Screening-Pflicht** — Batterie A∧B∧C muss PASS, bevor Experimente auf dieser Architektur starten.
+3. **Screening-Pflicht** — Batterie A∧B∧C muss PASS, bevor Experimente auf dieser Architektur starten.  
+4. **Charter (Option 1)** — Scope `DEFENSIVE_CAUSAL_GROUNDING` (`docs/AGENT_X_CHARTER.md`).  
+   P9 modelliert Markt-/Handels**dynamik** zur Risiko- und Schwarmanalyse — **keine** Order-Execution,  
+   keine MEV-Extraktion, keine offensiven Liquidationen. Wave 39 fail-closed.
 
 Messkontinuität: sticky-ℓ-Zahlen der Kopplungsserie (EWMA) sind **Vorher-Zustand**;
 dieses Screening prüft die **aktuelle** Intake-Definition (heute noch EWMA).
@@ -22,17 +25,17 @@ dieses Screening prüft die **aktuelle** Intake-Definition (heute noch EWMA).
 
 Pfade relativ zum Repo-Root `agent_x_storage/`. Wo nötig: `api_agents/`-Präfix.
 
-| Agent | Rolle | Primäre Artefakte | Aufgabe |
-|-------|-------|-------------------|---------|
-| **P₁** | Ingestion & Invarianten | `agent_x_klasse_a_1_ingestion.py`, `api_agents/agent_1_gatekeeper.py`, `contracts/HandwerkAnchor.sol` | Filter, Schema, Null-Toleranz |
-| **P₂** | Telematic & Relay | `api_agents/agent_9_telemetry.py`, `api_agents/agent_17_supply_chain.py`, `agents_b2g/telemetry/` | Puffer, Signal, Latenz-Glättung |
-| **P₃** | Pressure & Execution | `agent_x_klasse_b_pressure_b1_ingestion.py`, `agent_x_klasse_b_pressure_b2_analytics.py`, `api_agents/agent_5_sync_exec.py` | Durchsatz, Batch, Druck |
-| **P₄** | Arbitrage & Market | `agent_x_klasse_c_3_arbitrage.py`, `agent_x_klasse_f_sentiment_whale.py`, `out/ResourceTrader.sol` | Asymmetrien, Rand-Signale |
-| **P₅** | Analytics & Oracle | `agent_x_klasse_d_2_analytics.py`, `agent_x_klasse_d_oracle_models.py`, `agent_x_pyth_client.py` | Reduktion, Oracle-Feeds |
-| **P₆** | Risk & Compliance | `agent_x_lending_b2_risk.py`, `api_agents/agent_14_audit_compliance.py`, `services/z3_solver/` | Audit, Z3, Risiko |
-| **P₇** | Strategy & Scout | `agent_x_klasse_a_3_strategie.py`, `agent_x_offchain_scout.py`, `agent_x_jito_client.py` | Exploration, Off-Chain |
-| **P₈** | Liquidation & Force | `agent_x_klasse_c_2_flashloans.py`, `agent_x_lending_b3_liquidation.py`, `agent_x_flashbots_client.py` | Schwellen, Liquidation |
-| **P₉** | Storage & Anchor | `agent_x_storage_guardian.py`, `agent_x_orchestrator.py`, `core/state_store.py`, `api_agents/agent_10_blockchain_anchor.py` | State, Ledger, Konsolidierung |
+| Agent | Rolle | Primäre Artefakte | Aufgabe (defensiv) |
+|-------|-------|-------------------|---------------------|
+| **P₁** | Ingestion & Invarianten | `agent_x_klasse_a_1_ingestion.py`, `api_agents/agent_1_gatekeeper.py`, `contracts/HandwerkAnchor.sol` | Filter, Schema, Null-Toleranz; Beobachter-Intake |
+| **P₂** | Telematic & Relay | `api_agents/agent_9_telemetry.py`, `api_agents/agent_17_supply_chain.py`, `agents_b2g/telemetry/` | Datenfluss-Puffer, Latenz-Analytik; Relay/Mempool-**Beobachtung** (kein Bundle-Send) |
+| **P₃** | Pressure & Exec-Risk | `agent_x_klasse_b_pressure_b1_ingestion.py`, `agent_x_klasse_b_pressure_b2_analytics.py`, `api_agents/agent_5_sync_exec.py` | Durchsatz/Druck; Ausführungs-**Risiko** (Slippage, MEV-Exposition) — keine Order |
+| **P₄** | Market-Stress | `agent_x_klasse_c_3_arbitrage.py`, `agent_x_klasse_f_sentiment_whale.py`, `out/ResourceTrader.sol` | Arbitrage-**Lücken** als Stress-Indikator messen — keine Arb-Execution |
+| **P₅** | Analytics & Oracle | `agent_x_klasse_d_2_analytics.py`, `agent_x_klasse_d_oracle_models.py`, `agent_x_pyth_client.py` | Reduktion, Oracle-Feeds (Beobachtung) |
+| **P₆** | Risk & Compliance | `agent_x_lending_b2_risk.py`, `api_agents/agent_14_audit_compliance.py`, `services/z3_solver/` | Z3/BHO-Invarianten, Risk-Limits — Beobachter |
+| **P₇** | Strategy-Scout (obs.) | `agent_x_klasse_a_3_strategie.py`, `agent_x_offchain_scout.py`, `agent_x_jito_client.py` | Off-Chain-**Signale** beobachten; Szenario-Scout — keine Trade-Steuerung |
+| **P₈** | Cascade & Force-Risk | `agent_x_klasse_c_2_flashloans.py`, `agent_x_lending_b3_liquidation.py`, `agent_x_flashbots_client.py` | Liquidations-**Kaskaden** modellieren (`liquidatable`/`at_risk`) — keine Execution |
+| **P₉** | Storage & Anchor | `agent_x_storage_guardian.py`, `agent_x_orchestrator.py`, `core/state_store.py`, `api_agents/agent_10_blockchain_anchor.py` | State, Ledger, GoBD-WORM-Beobachtung |
 
 \(\mathbf{P}_i\)-Vektoren selbst: Gas A1…A9 → `agents_b2g/emergence/response_rij.py` (`derive_p_bank`).
 
@@ -65,6 +68,7 @@ Typ:     Prototypen-Screen (Pass/Fail) — keine Pre-Reg
 Screen:  ARCHITECTURE_FIT · A∧B∧C+edge PASS · 5.3s · Seeds 20261701…03
 Static:  28/28 Artefakte present
 Compose: podman-compose.p9.yml  (Intent aus §4–§7; kein Image-Tag-Inventar)
+Scope:   DEFENSIVE_CAUSAL_GROUNDING · Option 1 Analyse/Simulation (§9)
 ```
 
 ---
@@ -166,3 +170,42 @@ podman compose -f podman-compose.p9.yml up --build
 Optional (Live-Edit ohne Rebuild): Volume in die Podman-Maschine share’n, z. B.
 `podman machine set -v "/Volumes/THX_OS_ULTRA - Data:/Volumes/THX_OS_ULTRA - Data"`,
 dann erst wieder Bind-Mount — Default bleibt Image-Bake.
+
+---
+
+## 9. Defensive Markt-/Handelsdynamik (Option 1 — bindend)
+
+**Entscheidung 2026-08-26:** Analyse-/Simulationssystem, **nicht** ausführende Abschöpfung.  
+Charter: `docs/AGENT_X_CHARTER.md` · Scope-Flag `DEFENSIVE_CAUSAL_GROUNDING` · Wave 39 Vierfach-Sperre.
+
+### 9.1 Erlaubt vs. ausgeschlossen
+
+| Ebene | Erlaubt (Option 1) | Ausgeschlossen (Option 2 / Negativklausel) |
+|-------|--------------------|---------------------------------------------|
+| P2 | Relay-/Mempool-**Beobachtung**, Latenz-/Puffer-Messung | Flashbots/Jito-**Bundles senden** |
+| P3 | Ausführungs-**Risiko** (Slippage, MEV-Exposition) modellieren | Uniswap-/DEX-**Order-Ausführung** |
+| P4 | Arbitrage-Lücken als **Marktstress-Indikator** | DEX-**Arbitrage ausführen** |
+| P8 | Liquidations-**Kaskaden** / Ansteckung simulieren | Flashloan-**Liquidationen** zur Gewinn-Umleitung |
+| P1/P5/P6/P9 | Ingestion, Oracles, Z3/BHO, State/GoBD-WORM (Beobachter) | Kausalsignale → Trade-Execution-Pipeline |
+| P7 | Off-Chain-Signale / Szenario-Scout (obs.) | Searcher-/Builder-Steuerung |
+
+### 9.2 Rollen ↔ defensive Handelsdynamik
+
+| Agent | Defensive Funktion | Anbindung (Beobachtung / Modell) |
+|-------|--------------------|----------------------------------|
+| **P₁** | Intake & Invarianten | On/Off-Ramp-**Daten** (Schema/Null-Toleranz); HSM nur Signatur-Beobachtungspfad |
+| **P₂** | Signal-Puffer & Latenz | Relay/Mempool-Telemetrie; Wave-28-Frontrunning-**Detection** (kein Send) |
+| **P₃** | Exec-Risiko / Druck | Stress der Ausführungs-Exposition; keine Order-Relays |
+| **P₄** | Marktstress | Preis-Asymmetrien als Indikator; keine Arb-Tx |
+| **P₅** | Oracle-Feeds | Pyth u. a. als Input für Risiko-Modelle |
+| **P₆** | BHO / Z3 / Limits | Settlement-Invarianten, Risk-Gates (fail-closed) |
+| **P₇** | Scout (obs.) | Off-Chain-Frühwarnsignale; keine Trade-Dispatch |
+| **P₈** | Kaskaden-Risiko | `liquidatable` / `at_risk` (Klasse C / Orchestrator); Simulation only |
+| **P₉** | State-Anchor | Ledger-Persistenz, GoBD-WORM-Beobachtung |
+
+### 9.3 Architektur-Hinweis
+
+Bestehende Module (`agent_x_klasse_c_3_arbitrage.py`, Flashloan-/Flashbots-/Jito-Clients)
+bleiben **Artefakt-Quellen** für Analyse und Simulation. Ihre Nutzung im P9-Schwarm unter
+Option 1 ist auf **Lesen / Modellieren / Melden** beschränkt — nicht auf live Execution-Pfade
+zu Searcher-/Builder- oder Gewinn-Stacks (Charter §5 Air-Gap).
