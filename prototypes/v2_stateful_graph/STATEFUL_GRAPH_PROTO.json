@@ -1,0 +1,123 @@
+{
+  "schema": "stateful_graph_proto_v0",
+  "sandbox": "prototypes/v2_stateful_graph",
+  "not_a_pre_reg": true,
+  "coupling_family_transfer": false,
+  "gate_rule": "delta_Q > 0 AND H_edge > eps AND arm_C_break",
+  "seeds": [
+    20270101,
+    20270102,
+    20270103
+  ],
+  "elapsed_s": 0.006,
+  "budget_s": 16.0,
+  "budget_ok": true,
+  "majority_pass": true,
+  "n_pass": 3,
+  "gate": "PROTO_PASS",
+  "per_seed": [
+    {
+      "run_seed": 20270101,
+      "strand": "stateful_graph_v2",
+      "n_agents": 9,
+      "n_states": 4,
+      "n_events": 80,
+      "eps_h": 0.15,
+      "arm_c_margin": 0.15,
+      "delta_q": 1.275694,
+      "h_edge": 2.981686,
+      "anti_b": 1.0,
+      "anti_c": 0.525,
+      "delta_q_pass": true,
+      "h_pass": true,
+      "arm_c_break": true,
+      "pass": true,
+      "arm_b": {
+        "arm": "B",
+        "delta_q": 1.275694,
+        "h_edge": 2.981686,
+        "anti_frac_vs_true": 1.0,
+        "n_edge_obs": 720,
+        "series_len": 80
+      },
+      "arm_c": {
+        "arm": "C",
+        "delta_q": 1.279861,
+        "h_edge": 3.812034,
+        "anti_frac_vs_true": 0.525,
+        "n_edge_obs": 720,
+        "series_len": 80
+      },
+      "note": "sandbox-only; no coupling-family imports"
+    },
+    {
+      "run_seed": 20270102,
+      "strand": "stateful_graph_v2",
+      "n_agents": 9,
+      "n_states": 4,
+      "n_events": 80,
+      "eps_h": 0.15,
+      "arm_c_margin": 0.15,
+      "delta_q": 1.228472,
+      "h_edge": 2.990824,
+      "anti_b": 1.0,
+      "anti_c": 0.473611,
+      "delta_q_pass": true,
+      "h_pass": true,
+      "arm_c_break": true,
+      "pass": true,
+      "arm_b": {
+        "arm": "B",
+        "delta_q": 1.228472,
+        "h_edge": 2.990824,
+        "anti_frac_vs_true": 1.0,
+        "n_edge_obs": 720,
+        "series_len": 80
+      },
+      "arm_c": {
+        "arm": "C",
+        "delta_q": 1.302083,
+        "h_edge": 3.980449,
+        "anti_frac_vs_true": 0.473611,
+        "n_edge_obs": 720,
+        "series_len": 80
+      },
+      "note": "sandbox-only; no coupling-family imports"
+    },
+    {
+      "run_seed": 20270103,
+      "strand": "stateful_graph_v2",
+      "n_agents": 9,
+      "n_states": 4,
+      "n_events": 80,
+      "eps_h": 0.15,
+      "arm_c_margin": 0.15,
+      "delta_q": 1.302778,
+      "h_edge": 2.979753,
+      "anti_b": 1.0,
+      "anti_c": 0.477778,
+      "delta_q_pass": true,
+      "h_pass": true,
+      "arm_c_break": true,
+      "pass": true,
+      "arm_b": {
+        "arm": "B",
+        "delta_q": 1.302778,
+        "h_edge": 2.979753,
+        "anti_frac_vs_true": 1.0,
+        "n_edge_obs": 720,
+        "series_len": 80
+      },
+      "arm_c": {
+        "arm": "C",
+        "delta_q": 1.338889,
+        "h_edge": 3.971449,
+        "anti_frac_vs_true": 0.477778,
+        "n_edge_obs": 720,
+        "series_len": 80
+      },
+      "note": "sandbox-only; no coupling-family imports"
+    }
+  ],
+  "next": "DRAFT / Pre-Reg 01 allowed only if PROTO_PASS"
+}

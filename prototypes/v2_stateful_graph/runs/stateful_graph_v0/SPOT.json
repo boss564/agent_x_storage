@@ -1,0 +1,61 @@
+{
+  "label": "SPOT_PASS",
+  "ok": true,
+  "cell": {
+    "run_seed": 20270201,
+    "strand": "stateful_graph_v0",
+    "contamination": false,
+    "n_agents": 9,
+    "n_states": 4,
+    "h_max": 4.0,
+    "warmup": 32,
+    "measure": 80,
+    "delta_q_floor": 0.5,
+    "eps_h": 2.0,
+    "arm_c_margin": 0.15,
+    "delta_q": 1.232639,
+    "h_edge": 2.990714,
+    "anti_a": 0.533333,
+    "anti_b": 1.0,
+    "anti_c": 0.455556,
+    "anti_margin": 0.544444,
+    "delta_q_pass": true,
+    "h_pass": true,
+    "arm_c_break": true,
+    "triad": true,
+    "arm_a_sanity": true,
+    "arm_a_delta_ok": true,
+    "arm_a_h_ok": true,
+    "pass": true,
+    "arm_a": {
+      "arm": "A",
+      "delta_q": 1.031944,
+      "h_edge": 3.973872,
+      "anti_frac_vs_true": 0.533333,
+      "n_edge_obs": 720,
+      "series_len": 80,
+      "warmup": 32,
+      "measure": 80
+    },
+    "arm_b": {
+      "arm": "B",
+      "delta_q": 1.232639,
+      "h_edge": 2.990714,
+      "anti_frac_vs_true": 1.0,
+      "n_edge_obs": 720,
+      "series_len": 80,
+      "warmup": 32,
+      "measure": 80
+    },
+    "arm_c": {
+      "arm": "C",
+      "delta_q": 1.29375,
+      "h_edge": 3.96858,
+      "anti_frac_vs_true": 0.455556,
+      "n_edge_obs": 720,
+      "series_len": 80,
+      "warmup": 32,
+      "measure": 80
+    }
+  }
+}
