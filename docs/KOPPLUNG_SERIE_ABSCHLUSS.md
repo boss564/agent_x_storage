@@ -126,8 +126,9 @@ Vierarm A/B/C/D · Gate B↔D (matched κ) · P1 YES 6/6 · P2 0/6.
 eigenem 16s-Proto, eigener Pre-Reg, eigenen Seeds — **Serie 1**, nicht Studie 11.
 
 **Stand 2026-08-26:** Stateful Graph Studie 1 → `STRUCTURE_RELATIONAL`
-(`docs/STATEFUL_GRAPH_SERIE_v0.md` · Commit `91265e8e`). Kopplungsfamilie bleibt
-geschlossen; Dissens-Gegenprobe optional, Pause valid.
+(`docs/STATEFUL_GRAPH_SERIE_v0.md` · Commit `91265e8e`). Dissensus-Gegenprobe
+Screen → `PROTO_PASS` (matched anti_true; global stats irreführend) · **kein** Pre-Reg.
+Kopplungsfamilie bleibt geschlossen.
 
 ---
 

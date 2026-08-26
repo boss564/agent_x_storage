@@ -1,0 +1,229 @@
+{
+  "schema": "continuous_dissensus_proto_v1",
+  "sandbox": "prototypes/v3_continuous_dissensus",
+  "not_a_pre_reg": true,
+  "question": "Does STRUCTURE_RELATIONAL generalize to continuous |S_i-S_j|?",
+  "primary_gate": "delta_S >= 0.5 AND anti_true_B - anti_true_C >= 0.15",
+  "secondary_note": "global pairwise anti is nearly identical on B vs C; must not replace the relational (true-partner) gate",
+  "seeds": [
+    20270301,
+    20270302,
+    20270303
+  ],
+  "elapsed_s": 0.004,
+  "budget_ok": true,
+  "v1_unbounded": {
+    "all_diverged": true,
+    "per_seed": [
+      {
+        "run_seed": 20270301,
+        "mode": "sync",
+        "variant": "v1_unbounded",
+        "exploded": true,
+        "pass_relational": false,
+        "fail_reason": "DIVERGENCE",
+        "arm_b": {
+          "arm": "B",
+          "exploded": true,
+          "bounded": false,
+          "delta_s_pair": null,
+          "anti_true": 0.0,
+          "anti_global": 0.0,
+          "series_len": 24,
+          "max_abs": 1008930308615.6997
+        },
+        "arm_c": {
+          "arm": "C",
+          "exploded": true,
+          "bounded": false,
+          "delta_s_pair": null,
+          "anti_true": 0.0,
+          "anti_global": 0.0,
+          "series_len": 22,
+          "max_abs": 1186713947502.6504
+        }
+      },
+      {
+        "run_seed": 20270302,
+        "mode": "sync",
+        "variant": "v1_unbounded",
+        "exploded": true,
+        "pass_relational": false,
+        "fail_reason": "DIVERGENCE",
+        "arm_b": {
+          "arm": "B",
+          "exploded": true,
+          "bounded": false,
+          "delta_s_pair": null,
+          "anti_true": 0.0,
+          "anti_global": 0.0,
+          "series_len": 23,
+          "max_abs": 1571780610663.567
+        },
+        "arm_c": {
+          "arm": "C",
+          "exploded": true,
+          "bounded": false,
+          "delta_s_pair": null,
+          "anti_true": 0.0,
+          "anti_global": 0.0,
+          "series_len": 24,
+          "max_abs": 1227073910341.682
+        }
+      },
+      {
+        "run_seed": 20270303,
+        "mode": "sync",
+        "variant": "v1_unbounded",
+        "exploded": true,
+        "pass_relational": false,
+        "fail_reason": "DIVERGENCE",
+        "arm_b": {
+          "arm": "B",
+          "exploded": true,
+          "bounded": false,
+          "delta_s_pair": null,
+          "anti_true": 0.0,
+          "anti_global": 0.0,
+          "series_len": 24,
+          "max_abs": 1598587417391.7449
+        },
+        "arm_c": {
+          "arm": "C",
+          "exploded": true,
+          "bounded": false,
+          "delta_s_pair": null,
+          "anti_true": 0.0,
+          "anti_global": 0.0,
+          "series_len": 22,
+          "max_abs": 1017482825408.8684
+        }
+      }
+    ]
+  },
+  "v2_bounded_tanh": {
+    "n_pass_relational": 3,
+    "per_seed": [
+      {
+        "run_seed": 20270301,
+        "mode": "sync",
+        "variant": "v2_bounded_tanh",
+        "exploded": false,
+        "delta_s_b": 0.912902,
+        "delta_s_c": 1.011635,
+        "anti_true_b": 0.666667,
+        "anti_true_c": 0.463889,
+        "margin_true": 0.202778,
+        "anti_global_b": 0.526389,
+        "anti_global_c": 0.555556,
+        "margin_global": -0.029167,
+        "delta_s_ok": true,
+        "arm_c_break_relational": true,
+        "global_looks_identical": true,
+        "pass_relational": true,
+        "fail_reason": null,
+        "arm_b": {
+          "arm": "B",
+          "exploded": false,
+          "bounded": true,
+          "delta_s_pair": 0.912902,
+          "anti_true": 0.666667,
+          "anti_global": 0.526389,
+          "series_len": 80,
+          "max_abs": 0.91362
+        },
+        "arm_c": {
+          "arm": "C",
+          "exploded": false,
+          "bounded": true,
+          "delta_s_pair": 1.011635,
+          "anti_true": 0.463889,
+          "anti_global": 0.555556,
+          "series_len": 80,
+          "max_abs": 0.914569
+        }
+      },
+      {
+        "run_seed": 20270302,
+        "mode": "sync",
+        "variant": "v2_bounded_tanh",
+        "exploded": false,
+        "delta_s_b": 1.011714,
+        "delta_s_c": 0.91826,
+        "anti_true_b": 0.888889,
+        "anti_true_c": 0.502778,
+        "margin_true": 0.386111,
+        "anti_global_b": 0.555556,
+        "anti_global_c": 0.530556,
+        "margin_global": 0.025,
+        "delta_s_ok": true,
+        "arm_c_break_relational": true,
+        "global_looks_identical": true,
+        "pass_relational": true,
+        "fail_reason": null,
+        "arm_b": {
+          "arm": "B",
+          "exploded": false,
+          "bounded": true,
+          "delta_s_pair": 1.011714,
+          "anti_true": 0.888889,
+          "anti_global": 0.555556,
+          "series_len": 80,
+          "max_abs": 0.914569
+        },
+        "arm_c": {
+          "arm": "C",
+          "exploded": false,
+          "bounded": true,
+          "delta_s_pair": 0.91826,
+          "anti_true": 0.502778,
+          "anti_global": 0.530556,
+          "series_len": 80,
+          "max_abs": 0.914546
+        }
+      },
+      {
+        "run_seed": 20270303,
+        "mode": "sync",
+        "variant": "v2_bounded_tanh",
+        "exploded": false,
+        "delta_s_b": 1.011592,
+        "delta_s_c": 1.011593,
+        "anti_true_b": 0.888889,
+        "anti_true_c": 0.561111,
+        "margin_true": 0.327778,
+        "anti_global_b": 0.555556,
+        "anti_global_c": 0.555556,
+        "margin_global": 0.0,
+        "delta_s_ok": true,
+        "arm_c_break_relational": true,
+        "global_looks_identical": true,
+        "pass_relational": true,
+        "fail_reason": null,
+        "arm_b": {
+          "arm": "B",
+          "exploded": false,
+          "bounded": true,
+          "delta_s_pair": 1.011592,
+          "anti_true": 0.888889,
+          "anti_global": 0.555556,
+          "series_len": 80,
+          "max_abs": 0.914569
+        },
+        "arm_c": {
+          "arm": "C",
+          "exploded": false,
+          "bounded": true,
+          "delta_s_pair": 1.011593,
+          "anti_true": 0.561111,
+          "anti_global": 0.555556,
+          "series_len": 80,
+          "max_abs": 0.914569
+        }
+      }
+    ]
+  },
+  "gate": "PROTO_PASS",
+  "interpretation": "PROTO_PASS under matched true-partner protocol means continuous repulsion can still break under \u03c0(M) on anti_true \u2014 do not seal a negative from global-swarm stats alone. PROTO_FAIL would mean no relational Arm-C break under matched protocol.",
+  "next": "if PROTO_PASS: DRAFT/Pre-Reg decision by user \u2014 not auto-opened; if PROTO_FAIL: document negative Gegenprobe, no Pre-Reg"
+}
