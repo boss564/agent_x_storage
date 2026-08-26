@@ -26,7 +26,7 @@ import time
 from pathlib import Path
 
 COMPOSE_FILE = "podman-compose.p9.yml"
-Z3_HEALTH_URL = "http://127.0.0.1:8000/health"
+Z3_HEALTH_URL = "http://127.0.0.1:8001/health"
 
 # Exact service names from podman-compose.p9.yml (not short p1…p9 aliases)
 SERVICES = [

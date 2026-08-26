@@ -97,7 +97,7 @@ Begleitmodule ohne `__main__` sind **Import-Only** (nicht eigener Service).
 
 | Service | Image / Build | Entry / Rolle |
 |---------|---------------|---------------|
-| **infra-z3** | Build `services/z3_solver/Dockerfile.z3` → Tag lokal `agentx-z3:p9` | `uvicorn main:app --host 0.0.0.0 --port 8000` · Volume `z3-data:/data` |
+| **infra-z3** | Build `services/z3_solver/Dockerfile.z3` → Tag lokal `agentx-z3:p9` | Container `:8000` · Host-Publish `8001:8000` · Volume `z3-data:/data` |
 | **infra-hsm** | Build `Dockerfile.bunker` → Tag lokal `agentx-bunker:p9` | SoftHSM/Mock · Volume `hsm-keys:/keys` (+ SoftHSM-Token-Pfad) |
 | **infra-state** | `redis:7.4-alpine` | Persistenz hinter `core/state_store.py` · Volume `state-data:/data` |
 | **infra-gate** | Build `services/fail_closed_gate/Dockerfile.gate` → `agentx-gate:p9` | Fail-Closed Gate HTTP `:8010` · Default `HUMAN_GATE_OPEN=false` |

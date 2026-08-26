@@ -39,7 +39,8 @@ services:
     volumes:
       - z3-data:/data
     ports:
-      - "8000:8000"
+      # Host 8001 → container 8000 (avoids clash with other local :8000 services)
+      - "8001:8000"
     networks:
       - agent_x_p9
     healthcheck:
