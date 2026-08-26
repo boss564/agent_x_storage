@@ -1,0 +1,84 @@
+{
+  "screen": "q2_boundary",
+  "Q_size": 2,
+  "h_max": 2.0,
+  "mechanics": "stateful_graph_study.py (BINDEND F0\u2013F10)",
+  "extends": "q_variance_screen.py / commit 01846061 (|Q|\u2208{4,8,16,32})",
+  "hypothesis": "At |Q|=2 relational separation breaks (collision / monotone lockstep)",
+  "hypothesis_result": "HYPOTHESIS_CONFIRMED",
+  "gate": {
+    "delta_q": 0.5,
+    "h_edge": 2.0,
+    "margin": 0.1,
+    "passes_needed": 4
+  },
+  "seeds": [
+    20270501,
+    20270502,
+    20270503,
+    20270504,
+    20270505,
+    20270506
+  ],
+  "n_pass": 0,
+  "avg_delta_q": 0.502315,
+  "avg_h_edge": 1.994931,
+  "avg_margin": 0.0,
+  "verdict": "STRUCTURE_BREAKS",
+  "results": [
+    {
+      "seed": 20270501,
+      "screen_pass": false,
+      "delta_q": 0.493056,
+      "h_edge": 1.994382,
+      "anti_b": 1.0,
+      "anti_c": 1.0,
+      "anti_margin": 0.0
+    },
+    {
+      "seed": 20270502,
+      "screen_pass": false,
+      "delta_q": 0.525,
+      "h_edge": 1.999632,
+      "anti_b": 1.0,
+      "anti_c": 1.0,
+      "anti_margin": 0.0
+    },
+    {
+      "seed": 20270503,
+      "screen_pass": false,
+      "delta_q": 0.502083,
+      "h_edge": 1.997195,
+      "anti_b": 1.0,
+      "anti_c": 1.0,
+      "anti_margin": 0.0
+    },
+    {
+      "seed": 20270504,
+      "screen_pass": false,
+      "delta_q": 0.495833,
+      "h_edge": 1.998385,
+      "anti_b": 1.0,
+      "anti_c": 1.0,
+      "anti_margin": 0.0
+    },
+    {
+      "seed": 20270505,
+      "screen_pass": false,
+      "delta_q": 0.499306,
+      "h_edge": 1.999026,
+      "anti_b": 1.0,
+      "anti_c": 1.0,
+      "anti_margin": 0.0
+    },
+    {
+      "seed": 20270506,
+      "screen_pass": false,
+      "delta_q": 0.498611,
+      "h_edge": 1.980968,
+      "anti_b": 1.0,
+      "anti_c": 1.0,
+      "anti_margin": 0.0
+    }
+  ]
+}

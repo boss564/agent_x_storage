@@ -1,6 +1,6 @@
 # Stateful Graph — Serie v0 (Konsolidierung)
 
-**Status:** Studie 1 BINDEND · Gegenprobe Screen `PROTO_PASS` · \|Q\|-Varianz Screen 24/24 · 2026-08-26  
+**Status:** Studie 1 BINDEND · Gegenprobe Screen · \|Q\|-Varianz + Grenzfall \|Q\|=2 · 2026-08-26  
 **Charakter:** Neue Architekturfamilie — **nicht** Studie 11 der φ/ρ-Kopplung  
 **Sandbox diskret:** `prototypes/v2_stateful_graph/`  
 **Sandbox Dissensus:** `prototypes/v3_continuous_dissensus/` · **kein** Runner-Transfer
@@ -9,7 +9,8 @@
 Kopplungsfamilie:     FAMILIE GESCHLOSSEN (10 Studien) — Kohärenz nicht relational
 Stateful Graph v0:    STRUCTURE_RELATIONAL (diskret, |Q|=4) — Sweep 6/6
 Dissens-Gegenprobe:   PROTO_PASS (kontinuierlich, matched gate) — kein Pre-Reg
-|Q|-Varianz-Screen:   STRUCTURE_RELATIONAL für alle |Q| ∈ {4, 8, 16, 32} — 24/24
+|Q|-Varianz-Screen:   STRUCTURE_RELATIONAL für |Q| ∈ {4, 8, 16, 32} — 24/24
+|Q|=2 Grenzfall:      STRUCTURE_BREAKS — 0/6 · untere Leistungsgrenze |Q|=4
 ```
 
 ---
@@ -68,9 +69,42 @@ Korrigiert: Dual-Metrik in `prototypes/v3_continuous_dissensus/ANALYSIS.md`.
 | 16 | 6/6 | 0,89 | 4,96 | 8 | `STRUCTURE_RELATIONAL` |
 | 32 | 6/6 | 0,93 | 5,92 | 10 | `STRUCTURE_RELATIONAL` |
 
-**Befund:** Trennung bricht **nicht** — Margin steigt mit \|Q\| (mehr Differenzierung).  
+**Befund:** Trennung bricht **nicht** für \|Q\|≥4 — Margin steigt mit \|Q\|.  
 Artefakte: `prototypes/v2_stateful_graph/q_variance_screen.py` · `q_variance_results.json`.  
 **Kein Pre-Reg** — Screen-Erweiterung der Serie.
+
+---
+
+## Antwort (|Q|=2 Grenzfall — Screen only)
+
+**Frage:** Bricht die relationale Trennung am minimalen Zustandsraum?
+
+**Mechanik:** dieselbe BINDEND-Pipeline · nur `N_STATES=2`.  
+**Seeds:** `20270501–06` · Gate wie Varianz-Screen (Margin > 0,1).  
+**H_max:** \(\log_2(2^2)=2{,}0\) bit — Gate H≥2 verlangt Sättigung.
+
+| Metrik | Sweep | Lesart |
+|--------|-------|--------|
+| ΔQ | ≈ 0,49–0,53 | Bewegung ja, nicht relational |
+| H_Kante | ≈ 1,98–2,00 | an der Decke |
+| anti_B / anti_C | 1,0 / 1,0 | identisch |
+| Margin | **0,000** | keine B↔C-Diskrimination |
+| Passes | **0/6** | — |
+| Verdict | **`STRUCTURE_BREAKS`** | Hypothese bestätigt |
+
+**Vollbild:**
+
+| \|Q\| | Avg Margin | Verdict |
+|------|------------|---------|
+| **2** | **0,00** | **`STRUCTURE_BREAKS`** ← Grenze |
+| 4 | 0,51 | `STRUCTURE_RELATIONAL` |
+| 8 | 0,78 | `STRUCTURE_RELATIONAL` |
+| 16 | 0,89 | `STRUCTURE_RELATIONAL` |
+| 32 | 0,93 | `STRUCTURE_RELATIONAL` |
+
+**Untere Leistungsgrenze: \|Q\|=4.** Darunter (hier \|Q\|=2) ist Partnerpermutation
+nicht mehr diskriminierbar (`anti_B=anti_C`).  
+Artefakte: `q2_boundary_screen.py` · `q2_boundary_results.json`.
 
 ---
 
@@ -82,6 +116,7 @@ Artefakte: `prototypes/v2_stateful_graph/q_variance_screen.py` · `q_variance_re
 | Stateful Graph diskret (1) | Zustandsübergänge · H_Kante · \|Q\|=4 | `STRUCTURE_RELATIONAL` |
 | Dissensus-Gegenprobe | kontinuierliche Repulsion · anti true | `PROTO_PASS` Screen |
 | \|Q\|-Varianz | dieselbe Mechanik · \|Q\| ∈ {4…32} | `STRUCTURE_RELATIONAL` 24/24 Screen |
+| \|Q\|=2 Grenzfall | dieselbe Mechanik · \|Q\|=2 | `STRUCTURE_BREAKS` 0/6 Screen |
 
 ---
 
@@ -118,9 +153,9 @@ dieselbe Definition wie in Studie 1. **Wahrheit vor Optik.**
 
 ## Status & offene Türen
 
-**Jetzt:** Studie 1 · Dissensus-Screen · \|Q\|-Varianz-Screen (24/24) — **kein** Dissensus-Pre-Reg.
+**Jetzt:** Studie 1 · Dissensus-Screen · \|Q\|-Varianz (≥4) · Grenzfall \|Q\|=2 (`STRUCTURE_BREAKS`).
 
-**Optional später:** Dissensus DRAFT/Pre-Reg/Sweep · **Topologie** (vollständig / spärlich / skalenfrei).
+**Optional später:** Dissensus DRAFT/Pre-Reg/Sweep · Topologie · `completion_load` / `two-choice tie-break` (Failover-Folge).
 
 **Nicht erlaubt:** Studie 11 φ/ρ · Hybrid · Schwellen-Nachjustierung an versiegelten Artefakten · Strang-Negativ aus globaler Metrik.
 
