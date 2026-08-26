@@ -1,6 +1,6 @@
 # Stateful Graph — Serie v0 (Konsolidierung)
 
-**Status:** Studie 1 · Gegenprobe · \|Q\|-Varianz · \|Q\|=2-Grenze · completion_proof · 2026-08-26  
+**Status:** Studie 1 · Gegenprobe · \|Q\|-Varianz · \|Q\|=2-Grenze · completion_proof · wall_clock_verify · 2026-08-26  
 **Charakter:** Neue Architekturfamilie — **nicht** Studie 11 der φ/ρ-Kopplung  
 **Sandbox diskret:** `prototypes/v2_stateful_graph/`  
 **Sandbox Dissensus:** `prototypes/v3_continuous_dissensus/` · **kein** Runner-Transfer
@@ -12,6 +12,7 @@ Dissens-Gegenprobe:   PROTO_PASS (kontinuierlich, matched gate) — kein Pre-Reg
 |Q|-Varianz-Screen:   STRUCTURE_RELATIONAL für |Q| ∈ {4, 8, 16, 32} — 24/24
 |Q|=2 Grenzfall:      STRUCTURE_BREAKS — 0/6 · untere Leistungsgrenze |Q|=4
 completion_proof:     STRUCTURE_RELATIONAL unter Receipt-Gate — 18/18 (baseline/always/lossy)
+wall_clock_verify:    HYPOTHESIS_CONFIRMED — Struktur stabil · ms↑ mit |Q| · tps↓
 ```
 
 ---
@@ -119,6 +120,7 @@ Artefakte: `q2_boundary_screen.py` · `q2_boundary_results.json`.
 | \|Q\|-Varianz | dieselbe Mechanik · \|Q\| ∈ {4…32} | `STRUCTURE_RELATIONAL` 24/24 Screen |
 | \|Q\|=2 Grenzfall | dieselbe Mechanik · \|Q\|=2 | `STRUCTURE_BREAKS` 0/6 Screen |
 | completion_proof | Übergangs-Receipt (Mock-Z3/BHO) · \|Q\|=4 | `STRUCTURE_RELATIONAL` 18/18 Screen |
+| wall_clock_verify | Verifikations-Wandzeit · \|Q\| ∈ {4…32} | `HYPOTHESIS_CONFIRMED` Screen |
 
 ---
 
@@ -140,6 +142,28 @@ verifizierbaren Nachweis braucht (`completion_proof` — **kein** kryptographisc
 (kein Zustands-Bremsen); Wandzeit-Overhead der Verifikation ist **nicht** die Messgröße.
 `lossy` bremst ~28% der Übergänge, Margin bleibt >0,4.  
 Artefakte: `completion_proof_screen.py` · `completion_proof_results.json` · `COMPLETION_PROOF_PROTO.md`.
+
+---
+
+## Antwort (wall_clock_verify — Screen only)
+
+**Frage:** Skaliert die Verifikations-Wandzeit (Mock-Z3/BHO über \(Q\times Q\)) mit \|Q\|,
+während die relationale Struktur stabil bleibt?
+
+**Freeze:** Seeds `20270701–06` · \|Q\| ∈ {4,8,16,32} · Work \(O(|Q|^2\times\mathrm{INNER})\),
+\(\mathrm{INNER}=64\) (CPU, kein sleep) · Struktur = BINDEND-Zelle · Timing = 64 Samples/Zelle.
+
+| \|Q\| | Passes | Avg Margin | mean ms/txn | tps | Verdict |
+|------|--------|------------|-------------|-----|---------|
+| 4 | 6/6 | 0,51 | **0,29** | ≈3425 | `STRUCTURE_RELATIONAL` |
+| 8 | 6/6 | 0,79 | 1,16 | ≈862 | `STRUCTURE_RELATIONAL` |
+| 16 | 6/6 | 0,91 | 4,72 | ≈212 | `STRUCTURE_RELATIONAL` |
+| 32 | 6/6 | 0,92 | **19,0** | ≈53 | `STRUCTURE_RELATIONAL` |
+
+**Hypothese: bestätigt** (`HYPOTHESIS_CONFIRMED`):
+Struktur all \|Q\| relational · mean_ms(4)<1 · mean_ms(32)>10 · ms monoton steigend · tps fallend.  
+Kein Live-HTTP zu `infra-z3` — Mock-Constraint-Matrix als Performance-Proxy.  
+Artefakte: `wall_clock_verify_screen.py` · `wall_clock_verify_results.json`.
 
 ---
 
@@ -176,9 +200,9 @@ dieselbe Definition wie in Studie 1. **Wahrheit vor Optik.**
 
 ## Status & offene Türen
 
-**Jetzt:** Studie 1 · Dissensus · \|Q\|-Varianz · \|Q\|=2-Grenze · completion_proof (18/18).
+**Jetzt:** Studie 1 · Dissensus · \|Q\|-Varianz · \|Q\|=2-Grenze · completion_proof (18/18) · wall_clock_verify (CONFIRMED).
 
-**Optional später:** Dissensus DRAFT/Pre-Reg/Sweep · Topologie · Failover `completion_load` / `two-choice tie-break`.
+**Optional später:** Dissensus DRAFT/Pre-Reg/Sweep · Topologie · Failover `completion_load` / `two-choice tie-break` · Live-Z3-Wandzeit gegen `infra-z3`.
 
 **Nicht erlaubt:** Studie 11 φ/ρ · Hybrid · Schwellen-Nachjustierung an versiegelten Artefakten · Strang-Negativ aus globaler Metrik.
 
