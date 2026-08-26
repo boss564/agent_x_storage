@@ -358,6 +358,7 @@ Keine dieser Maßnahmen ist eine Emergenz-Studie. Umsetzung = Engineering / Comp
 | `agents_b2g/bunker/hsm_adapter.py` | HSM heute (ECDSA) — PQC-Gap |
 | `agents_b2g/settlement/` · `protocol.py` | Groth16-**Label**/Mock — M8 Migration n/a |
 | `docs/M8_ZK_AUDIT_v0.md` | M8 Audit · NICHT RELEVANT |
+| `docs/HAERTUNG_STRANG_ABSCHLUSS.md` | Operative Härtung · STRANG GESCHLOSSEN |
 | Tag `v1.0-kopplung-serie-closed` | Serie versiegelt |
 
 ---
@@ -379,7 +380,8 @@ M9-Status: PRODUCTION — Trust α/β nur bei |Δ|≠0 · Spam zählt nur `inter
 M8-Status: NICHT RELEVANT (aktuell) — Audit `docs/M8_ZK_AUDIT_v0.md`
            Keine SNARK-Circuits; BHO = Z3 SMT; S6 pairing-ready ohne VK
            Policy: keine neuen pairing-Langzeit-Gates; STARK off-chain falls später ZK
-Härtung:  M7+M9 PRODUCTION · M8 Audit geschlossen (keine Migration)
+Härtung:  STRANG GESCHLOSSEN — `docs/HAERTUNG_STRANG_ABSCHLUSS.md`
+           M7+M9 PRODUCTION · M8 Audit NICHT RELEVANT · Pause
 Serie:    sticky-ℓ |ρ|≈0.348 / 0.156 = Vorher-Zustand — nicht übertragbar nach M7/M9
 Entmythologisiert: Grover · Quantensensorik
 Disziplin: Quantenspezifisch nur Shor (+ pairing-SNARK-Soundness)
