@@ -103,6 +103,18 @@ Keine Orderbuch-Claims aus Klines erfinden.
 
 **Pause nach P1 ist erlaubt.** P3 ist nie automatische Folge von „besserer Kurve“.
 
+### 5.1 Verdict-Semantik (bindend)
+
+| Verdict | Bedeutet | Bedeutet **nicht** |
+|---------|----------|---------------------|
+| `RAAS_BARRIER_CAL_SURFACE_PASS` | P1-Screen **durchgelaufen** (Grid × Daten × Tabellen geschrieben, Charter-Stamps ok) | Aussage über „gute“/„schlechte“ Schranken; Freigabe neuer Prod-Kanten; Beleg für Option-1-Retune |
+| `RAAS_BARRIER_FEATURE_PASS` | P2-Feature-Screen durchgelaufen unter vorab gesetzten Mindestregeln | Dass der HL-Proxy „das Gate verbessert“ |
+| `DATA_INSUFFICIENT` | Zu wenige Ereignisse / fehlende Daten für belastbare Feature-Aussage | Peinliches Scheitern — gültiger wissenschaftlicher Ausgang |
+
+**P1 ist explorativ.** Oberflächen-Zahlen (P/R, FP/FN pro Grid-Punkt) stehen im Report; das `PASS`-Verdict zitiert man nicht als Schranken-Beweis.
+
+**P2 / Ereigniszahl:** 180d Retro hatte **21 Observed**-Ereignisse — für ein Zusatzsignal (HL-Proxy) ist das knapp. Unterschreitet die vorab gesetzte Mindestzahl (Screen-Skript: z. B. `n_observed < 30` oder `n_warn_band < 15`, konkret im Runner einfrieren) → **`DATA_INSUFFICIENT`**, kein Overclaim.
+
 ---
 
 ## 6. Abbruch- / Integritätsregeln
