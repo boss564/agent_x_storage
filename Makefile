@@ -321,6 +321,12 @@ raas-prefilter-n-robust-metric: ## §4.3.1 N-robust queue metric (bootstrap n0=1
 raas-prefilter-fixed-vs-random-holdout: ## §4.3.1 isolate composition (fixed vs random H=1000)
 	PYTHONPATH=. python3 scripts/diagnose_prefilter_fixed_vs_random_holdout.py
 
+raas-prefilter-multi-holdout-freeze: ## §4.3.1 A — draw+hash holdout sets BEFORE eval (git-tracked manifest)
+	PYTHONPATH=. python3 scripts/freeze_prefilter_multi_holdout.py
+
+raas-prefilter-multi-holdout-eval: ## §4.3.1 A — baseline mean±σ across frozen sets (never best)
+	PYTHONPATH=. python3 scripts/eval_prefilter_multi_holdout.py
+
 raas-gateway-prefilter-cutover: ## Phase 4A backlog priority cutover (no core skip)
 	PYTHONPATH=. python3 scripts/test_gateway_prefilter_cutover.py
 

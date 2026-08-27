@@ -483,29 +483,55 @@ Modell‑only‑σ. Zusammensetzung ist bestätigt. Die 4,18 pp aus nested‑r
 mischen zusätzliche Faktoren und müssen nicht bitgleich getroffen werden.
 
 Runner: `make raas-prefilter-fixed-vs-random-holdout`  
-Pfad 1 bleibt gesperrt, bis bewusst entschieden wird, wie Claims mit
-Zusammensetzungsunsicherheit umgehen (Referenz unverändert: fixierter Holdout).
 
-##### Umgang mit Zusammensetzungs-σ — Entscheidung offen (vor Pfad 1)
+##### Umgang mit Zusammensetzungs-σ — **Entscheidung A** (2026-08-27)
 
-Die Referenz `+4,48 % ± 1,47 pp` ist stabil **nur für den einen fixierten Holdout**.
-Zufalls-Holdouts gleicher Größe: σ≈2,55 pp, 8/36 negativ. Ohne bewusste Wahl
-kein Kalibrierungs-/DEFAULT_ON-Claim.
+| Option | Inhalt | Status |
+|--------|--------|--------|
+| **A** Mehrere feste Holdouts | 5–10 stratifizierte feste Sets à 1000; Claim = Mittel ± Streuung über Sets | **gewählt** |
+| **B** Ursachenanalyse (Pfad 2) | SHAP/Tail auf kippende Zusammensetzungen | zurückgestellt — sinnvoll **nach** A (stabiles Ziel) |
+| **C** Mit σ leben (> 2·σ_composition ≈ 5,1 pp) | Keine Extra-Arbeit | **abgelehnt** — wäre Einstellung des Pakets unter Kriterium-Tarnung (Effekt ~4,5 pp, Kalibrierung ≤ +0,58 pp) |
 
-| Option | Inhalt | Pro | Contra |
-|--------|--------|-----|--------|
-| **A** Mehrere feste Holdouts | 5–10 stratifizierte feste Sets à 1000; Claim = Mittel ± Streuung über Sets | Deterministisch, robust | Singularität von 4,48 % entfällt |
-| **B** Ursachenanalyse (Pfad 2) | SHAP/Tail: welche Zusammensetzungen kippen negativ? Generator/Label nachziehen | Varianz an der Wurzel | Länger, Ergebnis offen |
-| **C** Mit σ leben | Freigabe erst bei Verbesserung > 2·σ_composition (≈5,1 pp bei 2,55 pp) | Keine Extra-Arbeit, konservativ | Aktueller ~4,5 %-Effekt unter Schwelle |
+**Begründung A:** Die Singularität von 4,48 % ist kein zu bewahrender Wert, sondern der Mangel —
+eine Aussage über eine Ziehung, bei der 8/36 vergleichbarer Ziehungen negativ sind.
+Mehrere feste, versionierbare Sets ersetzen Genauigkeits-Illusion durch ausgewiesene Streuung;
+Determinismus bleibt (fixe Indizes + Hash), wird aber nicht mit Reichweite verwechselt.
 
-**Status:** Wahl **A / B / C** ausstehend · **Pfad 1 gesperrt** bis Eintrag hier.  
-Kein Automatismus; Entscheidung dokumentieren, bevor ein Lauf startet.
+**Historische raw-Referenz:** `+4,48 % ± 1,47 pp` @ fixiertem Holdout (n_risky=581) bleibt
+als historischer Wert stehen (Geltungsbereich §4.3.1 oben). A stellt eine **Referenz mit
+Reichweite** daneben — widerruft die Historie nicht.
 
-Runner: `make raas-prefilter-r5-train-vs-holdout` · `make raas-prefilter-n-robust-metric`
+**Bindende Bedingungen (Bridge-Siegel-Disziplin):**
+
+1. **Freeze-vor-Lauf:** Sets werden **vor** dem ersten Evaluationslauf gezogen und im
+   Manifest gehasht (`manifest_sha256` über kanonische Indexlisten). Kein Nachziehen
+   der Referenzmenge nach erstem Claim. Überschreiben nur mit `--force` (invalidiert
+   vorherige A-Claims ausdrücklich).
+2. **Claim-Form:** immer **Mittel ± Streuung über Sets** — nie das beste Set.
+   (Sonst wird A wieder zu C mit Cherry-Pick.)
+
+Artefakte / Runner:
+
+| Schritt | Befehl / Datei |
+|---------|----------------|
+| Freeze (nur ziehen + hashen) | `make raas-prefilter-multi-holdout-freeze` → `config/prefilter/prefilter_multi_holdout_manifest.json` (git-tracked) |
+| Baseline-Eval (nach Freeze) | `make raas-prefilter-multi-holdout-eval` → `models/prefilter/prefilter_multi_holdout_baseline.json` |
+| Hash-Verify | Eval verweigert Lauf bei Manifest-Mismatch |
+
+**A-Baseline (2026-08-27, nach Freeze):** 8 Sets à 1000 · stratifiziert ·
+`manifest_sha256=ae893a5b…` · Claim **+2,12 % ± 1,21 pp** über Sets
+(nie best: H05 forensic +3,90 %). Historische Singularität +4,48 % bleibt separat.
+
+**Pfad 1:** freigabefähig **nur** gegen diese A-Referenz (gepaart: mean(Δ) über dieselben
+Sets; nie vs. bestes Set / nie vs. historischer Singularität allein). DEFAULT_ON weiter
+gesperrt, bis A-Claim und Freigaberegel explizit gesetzt sind.
+
+Runner (Diagnose): `make raas-prefilter-r5-train-vs-holdout` · `make raas-prefilter-n-robust-metric`
 
 **Reihenfolge (bindend):** Gate-Map (§4.2/§4.3) → Seed-Spread-Check →
 Sondierungs-Skript → Generator. Nicht umgekehrt.  
-**Kalibrierung / Pfad 1 gesperrt**, bis Umgang mit Zusammensetzungs‑σ bewusst gewählt.
+**Kalibrierung / Pfad 1:** gegen A-Baseline (+2,12 % ± 1,21 pp über Sets) freigabefähig;
+DEFAULT_ON weiter gesperrt.
 
 ---
 
@@ -517,9 +543,9 @@ Sondierungs-Skript → Generator. Nicht umgekehrt.
 | Stufe 2 Gateway/Shell-Bus Implementierung | **gesperrt** bis §4 Sequenz 3c + §4.1 Kriterien + **Topologie-Re-Screen** (~16 s) |
 | Phase 4A `risk_prefilter` Cutover | ✅ Facade-Batch · Default OFF · FIFO-Fallback · kein Skip |
 | Phase 4A Modell-Optimierung (mehr Synth) | **optional** — erst nach Seed-Spread (§4.2) |
-| Public-Ingest (Kalibrierungsprofile) | Sondierung ✅ · **Pfad 1 gesperrt** bis Wahl A/B/C (Zusammensetzungs-σ) |
-| Zusammensetzungs-σ Umgang | **offen** — Gate-Map §4.3.1 Optionen A/B/C; Entscheidung vor Pfad 1 |
-| Referenzklärung 5k↔20k Queue-Baseline | Composition @H=1000 **CONFIRMED** · Ref. gilt nur für fixierten Holdout |
+| Public-Ingest (Kalibrierungsprofile) | Sondierung ✅ · Pfad 1 gegen A-Baseline freigabefähig · DEFAULT_ON gesperrt |
+| Zusammensetzungs-σ Umgang | **A gewählt** · Freeze+Baseline ✅ · Claim +2,12 % ± 1,21 pp über 8 Sets · C abgelehnt · B nach A |
+| Referenzklärung 5k↔20k Queue-Baseline | Composition **CONFIRMED** · Historie 4,48 % (1 Holdout) · A-Reichweite 2,12 % ± 1,21 pp |
 | Phase 4B LLM-LoRA | **nach** 4A · eigener Bedarf |
 | Broadcast-Subjects als Steuerpfad | **gesperrt** (Serie + `forbid_broadcast`) |
 | „Echtzeit-Insolvenz“ in Pitch/Map | **erlaubt nur mit Live-Zahlen** (p50≈1,2 ms wall, 2026-08-27) — nicht Mock |
@@ -546,6 +572,9 @@ Sondierungs-Skript → Generator. Nicht umgekehrt.
 | `scripts/diagnose_prefilter_r5_train_vs_holdout.py` | §4.3.1 R5 Train-n vs Holdout-n |
 | `scripts/diagnose_prefilter_n_robust_metric.py` | §4.3.1 N-robuste Queue-Metrik (Bootstrap n₀) |
 | `scripts/diagnose_prefilter_fixed_vs_random_holdout.py` | §4.3.1 fester vs. random Holdout (Composition) |
+| `scripts/freeze_prefilter_multi_holdout.py` | §4.3.1 A — Sets ziehen + Manifest-Hash (vor Eval) |
+| `scripts/eval_prefilter_multi_holdout.py` | §4.3.1 A — Baseline Mittel±σ über Sets (nie best) |
+| `config/prefilter/prefilter_multi_holdout_manifest.json` | A-Siegel: fixe Holdout-Indizes + `manifest_sha256` |
 | `agents_b2g/protocol.py` | `broadcast`-Pfad |
 | `services/fail_closed_gate/d_suite_enforcer.py` | D1–D4 app layer2 |
 | `prototypes/raas_hybrid_shell/` | Facade + Gateway (sync Pilot) |
