@@ -55,11 +55,15 @@ def main() -> int:
     failed = 0
     attacks = {}
 
-    for kind in ("STALE_PRICE", "FAT_FINGER", "FLASH_CRASH"):
+    for kind in ("STALE_PRICE", "FAT_FINGER", "FLASH_CRASH", "DEPEG_SIM"):
         state = initialize_scenario(
             kind,
             scenario_id=f"smoke-{kind.lower()}",
-            params={"fair_price": 100.0, "feed_id": "SYNTHETIC_ORACLE_A"},
+            params=(
+                {"fair_price": 1.0, "peg_price": 1.0, "break_pct": 25.0, "feed_id": "SYNTHETIC_ORACLE_A"}
+                if kind == "DEPEG_SIM"
+                else {"fair_price": 100.0, "feed_id": "SYNTHETIC_ORACLE_A"}
+            ),
             seed=20260827,
         )
         attack = run_oracle_attack_scenario(state)

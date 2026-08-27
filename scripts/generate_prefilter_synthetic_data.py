@@ -4,18 +4,21 @@
 Purpose (Gate-Map §4.2): features for a *prioritization* signal under backlog.
 Every request still gets a full core check — this data is not for skip/abbrev.
 
+Profiles:
+  mixed    — mild+moderate cycle (default)
+  extremes — controlled OOD: latency jitter, sandwich, flash, depeg, fat-finger
+
 Label modes (provenance — see Gate-Map):
   severity_proxy — plugin severity pseudo-label; smoke/features only; not "risk"
-  gateway        — TrustedCoreGateway verdict; learns the gate function (circular
-                   for AUC-vs-gate claims; banned as Phase-4A success metric)
+  gateway        — TrustedCoreGateway gate_verdict (circular for AUC-vs-gate;
+                   stored as gate_verdict_label — NOT live BHO/Z3 HTTP)
 
 Writes under data/raas/sandbox/prefilter_synth/ (D2 Red sandbox path).
 Never signs envelopes. live_execution=false.
 
 Usage:
-  PYTHONPATH=. python3 scripts/generate_prefilter_synthetic_data.py
-  PYTHONPATH=. python3 scripts/generate_prefilter_synthetic_data.py --n 24 --label-mode severity_proxy
-  PYTHONPATH=. python3 scripts/generate_prefilter_synthetic_data.py --n 8 --label-mode gateway
+  PYTHONPATH=. python3 scripts/generate_prefilter_synthetic_data.py --profile extremes --n 96
+  PYTHONPATH=. python3 scripts/generate_prefilter_synthetic_data.py --profile extremes --label-mode gateway --n 24
 """
 from __future__ import annotations
 
@@ -25,7 +28,7 @@ import hashlib
 import json
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 from zlib import crc32
 
 _ROOT = Path(__file__).resolve().parents[1]
@@ -45,11 +48,21 @@ SCOPE = "DEFENSIVE_CAUSAL_GROUNDING"
 OUT_DIR = _ROOT / "data" / "raas" / "sandbox" / "prefilter_synth"
 
 MEV_KINDS = ("LATENCY_SPIKE", "SANDWICH_SIM", "JITTER_BURST")
-ORA_KINDS = ("STALE_PRICE", "FAT_FINGER", "FLASH_CRASH")
+ORA_KINDS = ("STALE_PRICE", "FAT_FINGER", "FLASH_CRASH", "DEPEG_SIM")
+EXTREME_CYCLE: Tuple[Tuple[str, str], ...] = (
+    ("mev", "LATENCY_SPIKE"),
+    ("mev", "JITTER_BURST"),
+    ("mev", "SANDWICH_SIM"),
+    ("oracle", "FLASH_CRASH"),
+    ("oracle", "FAT_FINGER"),
+    ("oracle", "DEPEG_SIM"),
+    ("oracle", "STALE_PRICE"),
+)
 
 FEATURE_COLS = [
     "sample_id",
     "seed",
+    "profile",
     "source_plugin",
     "scenario_kind",
     "latency_ms",
@@ -62,7 +75,9 @@ FEATURE_COLS = [
     "strategy_complexity_score",
     "severity_score",
     "label_mode",
+    "label_provenance",
     "verdict",
+    "gate_verdict_label",
     "risk_block_rate",
     "live_execution",
     "scope",
@@ -73,9 +88,30 @@ def _sev_score(severity: str) -> float:
     return {"LOW": 0.2, "MODERATE": 0.55, "HIGH": 0.9}.get(str(severity).upper(), 0.5)
 
 
+def _extreme_mev_params(kind: str, dig: int) -> Dict[str, Any]:
+    if kind == "LATENCY_SPIKE":
+        return {"base_latency_ms": 50.0 + (dig % 200)}  # 50–249 ms baseline → large spike
+    if kind == "SANDWICH_SIM":
+        return {"base_latency_ms": 20.0}
+    return {"base_latency_ms": 30.0 + (dig % 40)}
+
+
+def _extreme_ora_params(kind: str, dig: int) -> Dict[str, Any]:
+    base = {"fair_price": 100.0, "feed_id": "SYNTHETIC_ORACLE_EXTREME"}
+    if kind == "DEPEG_SIM":
+        base["peg_price"] = 1.0
+        base["break_pct"] = 15 + (dig % 40)  # 15–54% break
+        base["fair_price"] = 1.0
+    elif kind == "FLASH_CRASH":
+        base["fair_price"] = 100.0
+    elif kind == "STALE_PRICE":
+        base["fair_price"] = 100.0
+    return base
+
+
 def _features_from_mev(art: Dict[str, Any], dig: int) -> Dict[str, float]:
     latency = float(art.get("observed_ms") or art.get("p95_ms") or art.get("baseline_ms") or 5.0)
-    slip = float(art.get("observed_bps") or 0.0) / 100.0  # bps → pct
+    slip = float(art.get("observed_bps") or 0.0) / 100.0
     return {
         "latency_ms": round(latency, 4),
         "slippage_pct": round(slip if slip > 0 else 0.05 + (dig % 20) / 100.0, 4),
@@ -95,7 +131,7 @@ def _features_from_oracle(art: Dict[str, Any], dig: int) -> Dict[str, float]:
     elif "drawdown_pct" in art:
         dev = float(art["drawdown_pct"])
     elif "staleness_s" in art:
-        dev = float(art["staleness_s"]) / 10.0  # scale stale seconds → proxy %
+        dev = float(art["staleness_s"]) / 10.0
     else:
         dev = 1.0 + (dig % 20) / 10.0
     return {
@@ -121,13 +157,13 @@ def _proxy_label(severity_score: float) -> tuple[str, float]:
 
 
 def _gateway_label(row: Dict[str, Any], idx: int) -> tuple[str, float]:
+    """TrustedCoreGateway stress gate — circular vs evaluate_gate; not live BHO Z3."""
     from prototypes.raas_hybrid_shell.schemas import LLMStrategyProposal
     from prototypes.raas_hybrid_shell.trusted_gateway import TrustedCoreGateway
 
-    # Map features → untrusted proposal; core decides
     slip = max(0.1, float(row["slippage_pct"]))
-    if row["severity_score"] >= 0.85:
-        slip = max(slip, 2.5)  # above core ceiling → hard block path
+    if row["severity_score"] >= 0.85 or row["profile"] == "extremes":
+        slip = max(slip, 2.5)
         profile = "aggressive"
     elif row["oracle_deviation_pct"] >= 20:
         profile = "oracle_stress"
@@ -140,7 +176,7 @@ def _gateway_label(row: Dict[str, Any], idx: int) -> tuple[str, float]:
         label=str(row["scenario_kind"]),
         rebalance_interval_h=1.0,
         max_slippage_pct=slip,
-        latency_budget_ms=float(row["latency_ms"]),
+        latency_budget_ms=min(float(row["latency_ms"]), 500.0),
         profile_hint=profile,
         untrusted=True,
         source="prefilter_synth_batch",
@@ -149,61 +185,78 @@ def _gateway_label(row: Dict[str, Any], idx: int) -> tuple[str, float]:
     return env.gate_verdict, float(env.risk_block_rate)
 
 
+def _kind_cycle(n: int, profile: str) -> List[Tuple[str, str]]:
+    if profile == "extremes":
+        base = list(EXTREME_CYCLE)
+    else:
+        base = [("mev", k) for k in MEV_KINDS] + [("oracle", k) for k in ORA_KINDS]
+    out: List[Tuple[str, str]] = []
+    while len(out) < n:
+        out.extend(base)
+    return out[:n]
+
+
 def generate_rows(
     n: int,
     *,
     seed: int = 20260827,
     label_mode: str = "severity_proxy",
+    profile: str = "mixed",
 ) -> List[Dict[str, Any]]:
+    if profile not in ("mixed", "extremes"):
+        raise ValueError(f"unknown profile: {profile}")
     rows: List[Dict[str, Any]] = []
-    kinds_cycle: List[tuple[str, str]] = []
-    while len(kinds_cycle) < n:
-        for k in MEV_KINDS:
-            kinds_cycle.append(("mev", k))
-        for k in ORA_KINDS:
-            kinds_cycle.append(("oracle", k))
-    kinds_cycle = kinds_cycle[:n]
+    provenance = (
+        "TrustedCoreGateway.evaluate_shell_proposal→gate_verdict "
+        "(circular vs evaluate_gate; not live infra-z3 BHO)"
+        if label_mode == "gateway"
+        else "plugin_severity_proxy (not risk / not gate)"
+    )
 
-    for i, (plugin, kind) in enumerate(kinds_cycle):
-        dig = crc32(f"{seed}|{plugin}|{kind}|{i}".encode()) & 0xFFFFFFFF
+    for i, (plugin, kind) in enumerate(_kind_cycle(n, profile)):
+        dig = crc32(f"{seed}|{profile}|{plugin}|{kind}|{i}".encode()) & 0xFFFFFFFF
         if plugin == "mev":
-            st = mev_init(
-                kind,
-                scenario_id=f"pf-mev-{i}",
-                params={"base_latency_ms": 5.0 + (dig % 10)},
-                seed=seed + i,
+            params = (
+                _extreme_mev_params(kind, dig)
+                if profile == "extremes"
+                else {"base_latency_ms": 5.0 + (dig % 10)}
             )
+            st = mev_init(kind, scenario_id=f"pf-mev-{i}", params=params, seed=seed + i)
             attack = mev_run(st)
             feats = _features_from_mev(attack["artifact"], dig)
         else:
-            st = ora_init(
-                kind,
-                scenario_id=f"pf-ora-{i}",
-                params={"fair_price": 100.0, "feed_id": "SYNTHETIC_ORACLE_A"},
-                seed=seed + i,
+            params = (
+                _extreme_ora_params(kind, dig)
+                if profile == "extremes"
+                else {"fair_price": 100.0, "feed_id": "SYNTHETIC_ORACLE_A"}
             )
+            st = ora_init(kind, scenario_id=f"pf-ora-{i}", params=params, seed=seed + i)
             attack = ora_run(st)
             feats = _features_from_oracle(attack["artifact"], dig)
 
         row: Dict[str, Any] = {
-            "sample_id": f"{seed}-{i:05d}",
+            "sample_id": f"{seed}-{profile}-{i:05d}",
             "seed": seed + i,
+            "profile": profile,
             "source_plugin": plugin,
             "scenario_kind": kind,
+            "scenario_inputs": dict(params),
+            "scenario_artifact": attack.get("artifact"),
             **feats,
             "label_mode": label_mode,
+            "label_provenance": provenance,
             "live_execution": False,
             "scope": SCOPE,
         }
 
         if label_mode == "gateway":
             verdict, rbr = _gateway_label(row, i)
+            row["gate_verdict_label"] = verdict
         else:
             verdict, rbr = _proxy_label(float(row["severity_score"]))
+            row["gate_verdict_label"] = ""
         row["verdict"] = verdict
         row["risk_block_rate"] = rbr
-        # Training labels may store verdict; the future prefilter service must
-        # never *emit* gate_verdict as a decision field.
         rows.append(row)
     return rows
 
@@ -216,7 +269,7 @@ def write_outputs(rows: List[Dict[str, Any]], out_dir: Path) -> Dict[str, str]:
 
     with jsonl.open("w", encoding="utf-8") as f:
         for row in rows:
-            f.write(json.dumps(row, sort_keys=True) + "\n")
+            f.write(json.dumps(row, sort_keys=True, default=str) + "\n")
 
     with csv_path.open("w", encoding="utf-8", newline="") as f:
         w = csv.DictWriter(f, fieldnames=FEATURE_COLS, extrasaction="ignore")
@@ -226,17 +279,21 @@ def write_outputs(rows: List[Dict[str, Any]], out_dir: Path) -> Dict[str, str]:
 
     material = {
         "n": len(rows),
+        "profiles": sorted({r["profile"] for r in rows}),
         "label_modes": sorted({r["label_mode"] for r in rows}),
+        "scenario_kinds": sorted({r["scenario_kind"] for r in rows}),
         "verdicts": {
             v: sum(1 for r in rows if r["verdict"] == v)
             for v in sorted({r["verdict"] for r in rows})
         },
         "scope": SCOPE,
         "live_execution": False,
+        "purpose": "queue_prioritization_under_backlog",
         "note": (
             "Synthetic rows for queue-priority features (Phase 4A). "
-            "severity_proxy ≠ risk. gateway labels are circular vs evaluate_gate — "
-            "do not cite AUC-against-gate as success. No core skip."
+            "severity_proxy ≠ risk. gateway→gate_verdict_label is circular vs "
+            "evaluate_gate — ban AUC-against-gate as success. No core skip. "
+            "Not live infra-z3 BHO."
         ),
     }
     digest = hashlib.sha256(
@@ -257,6 +314,12 @@ def main(argv: Optional[List[str]] = None) -> int:
     p.add_argument("--n", type=int, default=48, help="number of rows")
     p.add_argument("--seed", type=int, default=20260827)
     p.add_argument(
+        "--profile",
+        choices=("mixed", "extremes"),
+        default="mixed",
+        help="mixed=balanced cycle; extremes=OOD stress params",
+    )
+    p.add_argument(
         "--label-mode",
         choices=("severity_proxy", "gateway"),
         default="severity_proxy",
@@ -264,18 +327,30 @@ def main(argv: Optional[List[str]] = None) -> int:
     p.add_argument(
         "--out",
         type=Path,
-        default=OUT_DIR,
-        help="output directory (default: sandbox prefilter_synth)",
+        default=None,
+        help="output directory (default: sandbox prefilter_synth[/extremes])",
     )
     args = p.parse_args(argv)
+    out = args.out or (
+        OUT_DIR / "extremes" if args.profile == "extremes" else OUT_DIR / "mixed"
+    )
 
     print("Phase 4A synthetic prefilter datagen")
     print("=" * 60)
-    print(f"n={args.n} seed={args.seed} label_mode={args.label_mode}")
-    rows = generate_rows(args.n, seed=args.seed, label_mode=args.label_mode)
-    paths = write_outputs(rows, args.out)
+    print(
+        f"n={args.n} seed={args.seed} profile={args.profile} "
+        f"label_mode={args.label_mode}"
+    )
+    rows = generate_rows(
+        args.n,
+        seed=args.seed,
+        label_mode=args.label_mode,
+        profile=args.profile,
+    )
+    paths = write_outputs(rows, out)
     print(f"jsonl: {paths['jsonl']}")
     print(f"csv:   {paths['csv']}")
+    print(f"kinds: {sorted({r['scenario_kind'] for r in rows})}")
     print(f"manifest sample_id_sha256={paths['sample_id_sha256'][:16]}…")
     print("VERDICT: PREFILTER_DATAGEN_OK")
     return 0

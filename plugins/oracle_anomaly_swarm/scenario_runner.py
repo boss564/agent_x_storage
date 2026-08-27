@@ -1,7 +1,7 @@
 """Oracle anomaly scenarios — simulation only (no live feed mutation).
 
 initialize_scenario → run_oracle_attack_scenario → report_scenario
-Kinds: STALE_PRICE · FAT_FINGER · FLASH_CRASH
+Kinds: STALE_PRICE · FAT_FINGER · FLASH_CRASH · DEPEG_SIM
 """
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ from zlib import crc32
 from plugins.oracle_anomaly_swarm.sandbox_io import write_sandbox_json
 
 SCOPE = "DEFENSIVE_CAUSAL_GROUNDING"
-ALLOWED_KINDS = frozenset({"STALE_PRICE", "FAT_FINGER", "FLASH_CRASH"})
+ALLOWED_KINDS = frozenset({"STALE_PRICE", "FAT_FINGER", "FLASH_CRASH", "DEPEG_SIM"})
 
 
 @dataclass
@@ -80,6 +80,20 @@ def run_oracle_attack_scenario(state: ScenarioState) -> Dict[str, Any]:
             "quoted_price": round(quoted, 6),
             "deviation_pct": round(deviation_pct, 3),
             "severity": "HIGH" if deviation_pct >= 50 else "MODERATE",
+        }
+    elif state.kind == "DEPEG_SIM":
+        # Synthetic stable/peg break (e.g. 1.0 → 0.95…0.55)
+        peg = float(state.params.get("peg_price", fair))
+        break_pct = float(state.params.get("break_pct") or (5 + (dig % 45)))
+        quoted = peg * (1.0 - break_pct / 100.0)
+        result = {
+            "scenario_kind": state.kind,
+            "metric": "oracle_depeg_pct",
+            "feed_id": feed,
+            "fair_price": peg,
+            "quoted_price": round(quoted, 6),
+            "deviation_pct": round(break_pct, 3),
+            "severity": "HIGH" if break_pct >= 10 else "MODERATE",
         }
     else:  # FLASH_CRASH
         drawdown_pct = 15 + (dig % 40)  # 15–54%
