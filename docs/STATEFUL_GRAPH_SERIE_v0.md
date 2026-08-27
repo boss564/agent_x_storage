@@ -262,7 +262,15 @@ Avg Margin pre≈0,48 · post≈0,45 · Recovery-Onset-Proxy ≈16 Post-Events.
 **Lesart mit Serien-Korrektur:** Die Reform stellt wieder ⟨k⟩=1 her — dieselbe
 Vorbedingung wie Studie 1. Erholung heißt nicht „Topologie egal“, sondern
 „1:1-Ring unter Survivors reicht erneut“. Ohne Reform wäre Bruch erwartbar
-(nicht Gegenstand dieses Screens).  
+(nicht Gegenstand dieses Screens).
+
+**Neben v4 Load-Trap (nicht derselbe Screen, dasselbe Bild):**
+
+| Toter in der Liste | Toter aus der Liste |
+|--------------------|---------------------|
+| **`H1_CONFIRMED`** — Zombie zieht Verkehr (`load_of` = Untätigkeit) | **`STRUCTURE_RECOVERS` / `H0_REMOVAL_OK`** — Ring-Reform bzw. Filter |
+
+Quelle: `prototypes/v4_failover_loadtrap/FAILOVER_PROTO.md`.  
 Artefakte: `failover_ring_screen.py` · `failover_ring_results.json`.
 
 ---

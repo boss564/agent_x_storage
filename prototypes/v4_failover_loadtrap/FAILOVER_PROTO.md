@@ -63,6 +63,18 @@ Metrik) konzentriert Verkehr — ohne Ausfall.
 `H0_REMOVAL_OK` (Share = 0): Entfernen aus der Kandidatenliste funktioniert.
 Das Problem ist **Erkennung** (untätig vs. tot), nicht die Filter-Umleitung.
 
+## Zwei Befunde nebeneinander
+
+| Liste | Was passiert | Verdict | Ort |
+|-------|----------------|---------|-----|
+| Toter **bleibt** Kandidat (Zombie, Inbox leer) | `load_of` liest Untätigkeit als Verfügbarkeit → Verkehr **steigt** | **`H1_CONFIRMED`** | dieser Proto |
+| Toter **aus der Liste** (Filter / Ring-Reform auf Survivors) | Share → 0 · relationale Trennung erholt sich | **`H0_REMOVAL_OK`** · **`STRUCTURE_RECOVERS` 6/6** | dieser Proto · `docs/STATEFUL_GRAPH_SERIE_v0.md` (failover_ring) |
+
+Dasselbe Bild, zwei Messungen: **drinbleiben zieht; draußen erholt sich die Struktur.**
+Kein Widerspruch — die Topologie heilt nicht den Zombie in der Liste.
+
+Serie-Screen (Kill-1 + Cycle auf Survivors): `prototypes/v2_stateful_graph/failover_ring_screen.py`.
+
 ## Nicht in diesem Screen
 
 Podman stop/start P5/P8 · Kanten-Ledger ℓ-Pfad · M7 Spike-Filter unter Kill ·
