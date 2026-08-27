@@ -136,10 +136,10 @@ Dockerfile (`USER redteam`, `--read-only` / `--cap-drop ALL` Runtime-Intent).
       └─ Dockerfile-Intent: USER≠root · --read-only · --cap-drop ALL · kein Core/WORM-Mount
 4.  Stufe 2 — Gateway/Shell-Bus (**geplant, noch nicht implementiert**)
       └─ siehe §4.1 — Abbruchkriterien bindend vor Cutover
-4A. Phase 4A — Schnellfilter (**Priorisierung**, Training-Pilot)
+4A. Phase 4A — Schnellfilter (**Priorisierung**, Training + Cutover-Pilot)
       └─ siehe §4.2 — Queue-Ordnung unter Rückstau; nie Kern-Skip / nie AUC-gegen-Gate
-      └─ Synth `data/synthetic/prefilter/` · Train `make raas-prefilter-train`
-      └─ Plugin-Skeleton `plugins/risk_prefilter/` · Subject `edge.gateway.prefilter.request`
+      └─ Synth · Train `make raas-prefilter-train` · Plugin `plugins/risk_prefilter/`
+      └─ Gateway-Cutover `make raas-gateway-prefilter-cutover` (PREFILTER_ENABLED)
 5.  Liquidity Plugin nach Bedarf (wenn Cross-Chain-Strategien anstehen)
 6.  Inter-Swarm (WSS/Libp2p) — zuletzt; P₉-Signatur + Z3-Header Intent
 ```
@@ -222,8 +222,22 @@ Gate-Labels (`gateway`) dürfen Feature-Pipelines und Ranking-Proxies speisen, a
 6. D1–D4: Prefilter emittiert keine `gate_verdict`/`envelope_id`; Rolle Untrusted.  
 7. Bestehende Smokes bleiben grün.
 
-Runner: `make raas-prefilter-train` · Plugin-Skeleton `plugins/risk_prefilter/`
+Runner: `make raas-prefilter-train` · Plugin `plugins/risk_prefilter/`
 (Subject `edge.gateway.prefilter.request`).
+
+#### Gateway-Cutover (lastabhängige Priorisierung)
+
+| Element | Festlegung |
+|---------|------------|
+| Default | `PREFILTER_ENABLED=false` → FIFO wie bisher |
+| Aktiv | `PREFILTER_ENABLED=true` **und** Pending ≥ `PREFILTER_BACKLOG_THRESHOLD` (Default 3) |
+| Ablauf | Score → Sortierung absteigend → **sequentiell** voller Kern (kein Skip) |
+| Fallback | Prefilter unerreichbar / Score fehlt → **FIFO**; Anfragen gehen nicht verloren |
+| Oberfläche | `SupranodeFacade.handle_external_batch` + `prefilter_backlog.py` |
+| Kern | `TrustedCoreGateway` unverändert |
+| Tests | `GATEWAY_CUTOVER_PASS` · `GATEWAY_FALLBACK_PASS` |
+
+**Verbot:** Score ersetzt Freigabe · Skip · „spart Kern-Rechenzeit“ als Claim.
 
 #### Daten & Modell (nach Zweck)
 
@@ -246,7 +260,7 @@ Runner: `make raas-prefilter-train` · Plugin-Skeleton `plugins/risk_prefilter/`
 |--------|--------|
 | NATS JetStream Cutover für RaaS-P9 | Gate 0 PASS · **Ring-Bus Pilot+9 Kanten** — Gateway-Cutover = Stufe 2 (offen) |
 | Stufe 2 Gateway/Shell-Bus Implementierung | **gesperrt** bis §4 Sequenz 3c + §4.1 Kriterien |
-| Phase 4A `risk_prefilter` Dienst-Cutover | **gesperrt** bis §4.2 Warteschlangen-Metrik + Latenz nachweisbar scheiterbar |
+| Phase 4A `risk_prefilter` Dienst-Cutover | Cutover-Pilot an Facade (`handle_external_batch`); Default OFF |
 | Öffentliche Market-Daten / Nicht-Gate-Labels | **eigenes Arbeitspaket** (kein Verdict in Klines; RPCs oft geblockt) |
 | Phase 4B LLM-LoRA | **nach** 4A |
 | Broadcast-Subjects als Steuerpfad | **gesperrt** (Serie + `forbid_broadcast`) |

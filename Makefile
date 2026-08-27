@@ -292,6 +292,9 @@ raas-prefilter-batch-extremes: ## Phase 4A scale extremes synth (n=5000, severit
 raas-prefilter-train: ## Phase 4A GBT train + queue metric (severity_proxy only)
 	PYTHONPATH=. python3 scripts/test_prefilter_training.py
 
+raas-gateway-prefilter-cutover: ## Phase 4A backlog priority cutover (no core skip)
+	PYTHONPATH=. python3 scripts/test_gateway_prefilter_cutover.py
+
 raas-portal: ## Start RaaS portal on :8020
 	PYTHONPATH=. uvicorn services.raas_portal.main:app --host 0.0.0.0 --port 8020
 

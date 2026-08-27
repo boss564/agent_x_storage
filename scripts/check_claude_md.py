@@ -223,6 +223,7 @@ NO_TEST_SUMMARY: set[str] = {
     "scripts/check_prefilter_synth_quality.py",  # Phase 4A training-corpus label quality
     "scripts/train_prefilter_model.py",  # Phase 4A GBT train (invoked by test)
     "scripts/test_prefilter_training.py",  # Phase 4A training + queue metric smoke
+    "scripts/test_gateway_prefilter_cutover.py",  # Phase 4A backlog priority cutover
 }
 
 

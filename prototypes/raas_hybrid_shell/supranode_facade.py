@@ -76,6 +76,7 @@ class SupranodeFacade:
     ) -> None:
         self.core = core or TrustedCoreGateway(tenant_id=tenant_id)
         self.enforcer = enforcer or DSuiteEnforcer()
+        self.tenant_id = tenant_id
 
     def ingress(self, request: ExternalRequest) -> LLMStrategyProposal:
         """Validate exterior request; force untrusted boundary."""
@@ -137,6 +138,53 @@ class SupranodeFacade:
             worm_anchor_sha256=str(safe.get("_worm_anchor_sha256") or ""),
         )
 
+    def handle_external_batch(
+        self,
+        requests: list,
+        *,
+        n_scenarios: int = 20,
+        prefilter_enabled: Optional[bool] = None,
+        backlog_threshold: Optional[int] = None,
+        score_fn: Optional[Any] = None,
+    ) -> Any:
+        """Optional backlog prioritization; every item still hits full core."""
+        from prototypes.raas_hybrid_shell.prefilter_backlog import (
+            PrefilterBacklogController,
+        )
+
+        ctrl = PrefilterBacklogController(
+            facade=self,
+            enabled=(
+                self._prefilter_enabled()
+                if prefilter_enabled is None
+                else bool(prefilter_enabled)
+            ),
+            backlog_threshold=(
+                self._backlog_threshold()
+                if backlog_threshold is None
+                else int(backlog_threshold)
+            ),
+            score_fn=score_fn,
+        )
+        return ctrl.process_batch(requests, n_scenarios=n_scenarios)
+
+    @staticmethod
+    def _prefilter_enabled() -> bool:
+        import os
+
+        return os.environ.get("PREFILTER_ENABLED", "").lower() in (
+            "1",
+            "true",
+            "yes",
+            "on",
+        )
+
+    @staticmethod
+    def _backlog_threshold() -> int:
+        import os
+
+        return int(os.environ.get("PREFILTER_BACKLOG_THRESHOLD", "3"))
+
     def health(self) -> Dict[str, Any]:
         h = self.core.health()
         debts = list(h.get("debt") or [])
@@ -151,4 +199,7 @@ class SupranodeFacade:
             "d_suite_enforcer": "layer2_active",
             "bus": None,
             "microservices": 0,
+            "prefilter_enabled": self._prefilter_enabled(),
+            "prefilter_backlog_threshold": self._backlog_threshold(),
+            "prefilter_role": "queue_priority_only",
         }
