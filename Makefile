@@ -315,6 +315,9 @@ raas-prefilter-reference-diagnosis: ## §4.3.1 R1 repro + R3 5k-subset-from-20k
 raas-prefilter-r5-train-vs-holdout: ## §4.3.1 R5 isolate train-n vs holdout-n
 	PYTHONPATH=. python3 scripts/diagnose_prefilter_r5_train_vs_holdout.py
 
+raas-prefilter-n-robust-metric: ## §4.3.1 N-robust queue metric (bootstrap n0=1000)
+	PYTHONPATH=. python3 scripts/diagnose_prefilter_n_robust_metric.py
+
 raas-gateway-prefilter-cutover: ## Phase 4A backlog priority cutover (no core skip)
 	PYTHONPATH=. python3 scripts/test_gateway_prefilter_cutover.py
 

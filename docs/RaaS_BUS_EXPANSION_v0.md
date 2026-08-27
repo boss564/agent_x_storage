@@ -395,6 +395,21 @@ Artefakt: `models/prefilter/prefilter_reference_diagnosis.json`.
 Claims und gepaarte Vergleiche nur mit **Holdout=1000** (oder explizit neu geeicht).  
 Feature-Kopplung / DEFAULT_ON weiter gesperrt, bis bewusst eine neue Referenz gewählt wird.
 
+**N-robuste Sekundärmetrik (2026-08-27):** `queue_metric_n_robust` in
+`scripts/train_prefilter_model.py` — Fixed-Subsample-Bootstrap bei **n₀=1000**,
+B=40, stratifiziert nach risky/non-risky. Entkoppelt den Score von Holdout-N
+(R5-Befund), **ohne** die eingefrorene Primär-Referenz zu ersetzen.
+
+| Check (nested random pools N=1000→4000, Train 5k) | Δ |
+|--------------------------------------------------|---|
+| raw `improvement_vs_fifo` | **−1,11 pp** |
+| robust bootstrap n₀=1000 | **+0,44 pp** |
+| Verdict | `PREFILTER_N_ROBUST_PASS` (|Δrob| < ½|Δraw|) |
+
+Artefakt: `models/prefilter/prefilter_n_robust_metric.json` ·
+`make raas-prefilter-n-robust-metric`  
+**Claims:** weiter raw @ Holdout=1000. **Cross-N-Vergleiche:** robust n₀.
+
 Runner: `make raas-prefilter-r5-train-vs-holdout`
 
 **Reihenfolge (bindend):** Gate-Map (§4.2/§4.3) → Seed-Spread-Check →
@@ -436,6 +451,7 @@ Sondierungs-Skript → Generator. Nicht umgekehrt. **Kalibrierung erst nach §4.
 | `scripts/compare_prefilter_queue_paired.py` | §4.3 gepaarter Queue-Vergleich mean(Δ)>2·SEM(Δ) |
 | `scripts/diagnose_prefilter_reference.py` | §4.3.1 R1 Repro + R3 5k-Subset-from-20k |
 | `scripts/diagnose_prefilter_r5_train_vs_holdout.py` | §4.3.1 R5 Train-n vs Holdout-n |
+| `scripts/diagnose_prefilter_n_robust_metric.py` | §4.3.1 N-robuste Queue-Metrik (Bootstrap n₀) |
 | `agents_b2g/protocol.py` | `broadcast`-Pfad |
 | `services/fail_closed_gate/d_suite_enforcer.py` | D1–D4 app layer2 |
 | `prototypes/raas_hybrid_shell/` | Facade + Gateway (sync Pilot) |

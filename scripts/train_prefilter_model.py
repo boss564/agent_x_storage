@@ -167,6 +167,9 @@ def feature_importance(
         return {name: 0.0 for name in FEATURE_NAMES}
 
 
+REF_HOLDOUT_N = 1000  # frozen reference holdout size (§4.3.1)
+
+
 def simulate_backlog_wait(
     true_severity: np.ndarray,
     priority_scores: np.ndarray,
@@ -229,6 +232,126 @@ def simulate_backlog_wait(
         "beats_random": beats_random,
         "metric": "mean_wait_time_of_risky_requests",
         "note": "Full core check for every request; score only reorders queue",
+    }
+
+
+def _sample_indices_n0(
+    n: int,
+    eval_n: int,
+    *,
+    risky_mask: np.ndarray,
+    rng: np.random.Generator,
+    stratified: bool,
+) -> np.ndarray:
+    """Draw eval_n indices; optional stratify by risky / non-risky share."""
+    if not stratified:
+        return rng.choice(n, size=eval_n, replace=False)
+    risky_idx = np.flatnonzero(risky_mask)
+    safe_idx = np.flatnonzero(~risky_mask)
+    n_risky_target = int(round(eval_n * (len(risky_idx) / max(n, 1))))
+    n_risky_target = min(max(n_risky_target, 0), len(risky_idx), eval_n)
+    n_safe_target = eval_n - n_risky_target
+    if n_safe_target > len(safe_idx):
+        n_safe_target = len(safe_idx)
+        n_risky_target = eval_n - n_safe_target
+    if n_risky_target > len(risky_idx) or n_safe_target > len(safe_idx):
+        return rng.choice(n, size=eval_n, replace=False)
+    pick_r = rng.choice(risky_idx, size=n_risky_target, replace=False)
+    pick_s = rng.choice(safe_idx, size=n_safe_target, replace=False)
+    out = np.concatenate([pick_r, pick_s])
+    rng.shuffle(out)
+    return out
+
+
+def queue_metric_n_robust(
+    true_severity: np.ndarray,
+    priority_scores: np.ndarray,
+    *,
+    eval_n: int = REF_HOLDOUT_N,
+    n_bootstraps: int = 40,
+    seed: int = 20260827,
+    stratified: bool = True,
+    service_time_s: float = 1.0,
+    arrival_interval_s: float = 0.2,
+) -> Dict[str, Any]:
+    """Holdout-N-robust queue score via fixed-size bootstrap (§4.3.1).
+
+    Regardless of holdout length N, evaluate M = improvement_vs_fifo on B
+    subsamples of size n0 (=eval_n, frozen reference 1000). Primary claim
+    metric for cross-N comparison; raw simulate_backlog_wait remains the
+    single-holdout diagnostic.
+
+    Does not change labels or training. Not a market-risk forecast.
+    """
+    y = np.asarray(true_severity, dtype=np.float64)
+    s = np.asarray(priority_scores, dtype=np.float64)
+    if y.shape != s.shape:
+        raise ValueError("severity and scores length mismatch")
+    n = int(y.shape[0])
+    if n < eval_n:
+        raise ValueError(f"holdout N ({n}) < reference n0 ({eval_n})")
+
+    risky = y >= RISKY_THRESHOLD
+    rng = np.random.default_rng(seed)
+
+    if n == eval_n and n_bootstraps <= 1:
+        raw = simulate_backlog_wait(
+            y, s, service_time_s=service_time_s, arrival_interval_s=arrival_interval_s, seed=seed
+        )
+        return {
+            "improvement_vs_fifo_mean": raw["improvement_vs_fifo"],
+            "improvement_vs_fifo_std": 0.0,
+            "improvement_vs_fifo_per_boot": [raw["improvement_vs_fifo"]],
+            "eval_n_reference": eval_n,
+            "n_holdout": n,
+            "n_bootstraps": 1,
+            "stratified": stratified,
+            "raw_full_holdout": raw,
+            "metric": "queue_improvement_vs_fifo_bootstrap_n0",
+            "note": "N==n0; single evaluation",
+        }
+
+    buf: List[float] = []
+    for b in range(n_bootstraps):
+        idx = _sample_indices_n0(
+            n, eval_n, risky_mask=risky, rng=rng, stratified=stratified
+        )
+        # Re-index arrivals inside sim by using contiguous subsample arrays
+        sub_y = y[idx]
+        sub_s = s[idx]
+        m = simulate_backlog_wait(
+            sub_y,
+            sub_s,
+            service_time_s=service_time_s,
+            arrival_interval_s=arrival_interval_s,
+            seed=int(seed + b + 1),
+        )
+        buf.append(float(m["improvement_vs_fifo"]))
+
+    arr = np.asarray(buf, dtype=np.float64)
+    raw_full = simulate_backlog_wait(
+        y, s, service_time_s=service_time_s, arrival_interval_s=arrival_interval_s, seed=seed
+    )
+    return {
+        "improvement_vs_fifo_mean": float(np.nanmean(arr)),
+        "improvement_vs_fifo_std": float(np.nanstd(arr, ddof=1)) if len(arr) > 1 else 0.0,
+        "improvement_vs_fifo_per_boot": buf,
+        "eval_n_reference": eval_n,
+        "n_holdout": n,
+        "n_bootstraps": n_bootstraps,
+        "stratified": stratified,
+        "risky_share_full": float(np.mean(risky)),
+        "raw_full_holdout_improvement": raw_full["improvement_vs_fifo"],
+        "raw_full_holdout": {
+            "n": raw_full["n"],
+            "n_risky": raw_full["n_risky"],
+            "improvement_vs_fifo": raw_full["improvement_vs_fifo"],
+        },
+        "metric": "queue_improvement_vs_fifo_bootstrap_n0",
+        "note": (
+            f"Fixed-subsample bootstrap n0={eval_n}, B={n_bootstraps}; "
+            "decouples score from holdout N (R5). Not a risk forecast."
+        ),
     }
 
 
