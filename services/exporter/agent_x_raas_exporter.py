@@ -1,8 +1,10 @@
-"""Agent X RaaS B2B Exporter — P9 output only (JSON / Markdown / PDF + Merkle).
+"""Agent X RaaS Exporter — P9 output (B2B gutachten + paper-trading report).
 
-Does not touch gate, runner, prefilter, or orchestration. Reads an existing
-tenant run via raas_portal store/certificate builders and writes a commercial
-gutachten package under {run_dir}/exports/b2b/.
+Does not touch gate, runner, prefilter, or orchestration.
+
+Modes:
+  --mode b2b --tenant-id … --run-id …     commercial gutachten + Merkle
+  --mode paper_trading --format markdown  WORM audit → exports/reports/
 
 Charter: DEFENSIVE_CAUSAL_GROUNDING · live_execution=false · submitter-only
 Baseline tag: v1.0-raas-baseline
@@ -281,9 +283,276 @@ def export_b2b_gutachten(
     }
 
 
+# ---------------------------------------------------------------------------
+# Paper-trading shadow report (reads WORM audit — no sample/fake fills)
+# ---------------------------------------------------------------------------
+
+DEFAULT_PAPER_AUDIT = Path("logs/worm/paper_trading_audit.jsonl")
+DEFAULT_PAPER_REPORT_DIR = Path("exports/reports")
+
+
+def _repo_root() -> Path:
+    """Prefer cwd when invoked from the repo (matches make / relative logs/)."""
+    cwd = Path.cwd()
+    if (cwd / "services" / "exporter").is_dir():
+        return cwd
+    return Path(__file__).resolve().parents[2]
+
+
+def load_paper_trading_audit(
+    audit_path: Optional[Path] = None,
+) -> List[Dict[str, Any]]:
+    """Load real dry-run lines. Never invents sample trades."""
+    root = _repo_root()
+    path = Path(audit_path) if audit_path else (root / DEFAULT_PAPER_AUDIT)
+    if not path.is_file():
+        raise FileNotFoundError(
+            f"Paper audit not found: {path}. "
+            "Run: python3 scripts/test_raas_paper_trading.py"
+        )
+    rows: List[Dict[str, Any]] = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if line:
+            rows.append(json.loads(line))
+    if not rows:
+        raise ValueError(f"Paper audit empty: {path}")
+    return rows
+
+
+def _row_table_fields(row: Dict[str, Any]) -> Dict[str, Any]:
+    """Map audit JSONL → report columns (truthful field mapping)."""
+    summary = row.get("summary") or {}
+    hit = summary.get("envelope_hit_rate") or {}
+    pf = summary.get("profit_factor_diagnostic") or {}
+    precision = hit.get("precision")
+    recall = hit.get("recall")
+    if precision is not None and recall is not None:
+        hit_display = f"P={float(precision):.0%} / R={float(recall):.0%}"
+    else:
+        hit_display = "n/a"
+    pf_val = pf.get("profit_factor")
+    fees_note = (
+        f"PF={pf_val} (diagnostic_only)"
+        if pf_val is not None
+        else "PF=n/a (diagnostic_only)"
+    )
+    live_sent = bool(row.get("live_execution") is True) or int(
+        summary.get("order_send_count") or 0
+    ) > 0
+    return {
+        "run_index": row.get("run_index") or row.get("run_id"),
+        "ts": row.get("ts") or "",
+        "market": row.get("market") or "",
+        "equity_eur": summary.get("ledger_equity_eur") or "n/a",
+        "pnl_fees_diagnostic": fees_note,
+        "envelope_hit_rate": hit_display,
+        "live_order_sent": live_sent,
+        "order_send_count": int(summary.get("order_send_count") or 0),
+        "not_investment_advice": bool(
+            row.get("not_investment_advice", True)
+        ),
+        "hash": row.get("hash") or "",
+    }
+
+
+def generate_paper_trading_markdown(
+    rows: Sequence[Dict[str, Any]],
+    *,
+    generated_at: Optional[str] = None,
+) -> str:
+    ts = generated_at or _now()
+    order_send_total = 0
+    table_rows: List[str] = []
+    for row in rows:
+        f = _row_table_fields(row)
+        order_send_total += int(f["order_send_count"])
+        table_rows.append(
+            f"| {f['run_index']} | {f['ts']} | {f['market']} | "
+            f"€{f['equity_eur']} | {f['pnl_fees_diagnostic']} | "
+            f"{f['envelope_hit_rate']} | {f['live_order_sent']} |"
+        )
+    status = (
+        "PAPER_TRADING_PASS" if order_send_total == 0 else "PAPER_TRADING_FAIL"
+    )
+    parts = [
+        "# Paper Trading Audit & Shadow-Trade Report",
+        "",
+        f"**Generated:** {ts}",
+        f"**Baseline:** `{BASELINE_TAG}`",
+        f"**Scope:** `{SCOPE}` · `live_execution=false` · `not_investment_advice=true`",
+        "",
+        "| Run # | Zeitstempel | Markt | Simuliertes Guthaben | PnL / Gebühren (Diagnose) | Envelope Hit Rate | Live Order Sent? |",
+        "|-------|-------------|-------|----------------------|---------------------------|-------------------|------------------|",
+        *table_rows,
+        "",
+        "---",
+        "",
+        "## Compliance Summary",
+        "",
+        "```text",
+        "live_execution = false",
+        f"order_send_count = {order_send_total}",
+        f"scope = {SCOPE}",
+        "primary_metric = envelope_break_hit_rate",
+        "profit_factor = diagnostic_only (not a track record)",
+        f"status = {status}",
+        "```",
+        "",
+        "**Shadow trades only.** No live orders. Envelope hit-rate is the "
+        "primary metric; profit factor is diagnostic only "
+        "(`docs/PAPER_TRADING_SETUP_v0.md`).",
+        "",
+    ]
+    return "\n".join(parts)
+
+
+def export_paper_trading_report(
+    *,
+    audit_path: Optional[Path] = None,
+    report_dir: Optional[Path] = None,
+    fmt: str = "markdown",
+) -> Dict[str, Any]:
+    """Write paper-trading report under exports/reports/ from real WORM audit.
+
+    Always writes markdown. ``fmt`` ``json`` / ``pdf`` / ``all`` adds extras.
+    Never invents sample trades if the audit is missing.
+    """
+    if fmt not in ("markdown", "json", "pdf", "all"):
+        raise ValueError(f"unsupported format: {fmt}")
+
+    root = _repo_root()
+    rows = load_paper_trading_audit(audit_path)
+    out_dir = Path(report_dir) if report_dir else (root / DEFAULT_PAPER_REPORT_DIR)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    order_send_total = sum(
+        int((r.get("summary") or {}).get("order_send_count") or 0) for r in rows
+    )
+    if any(r.get("live_execution") is True for r in rows) or order_send_total > 0:
+        raise RuntimeError(
+            "Refuse report: live_execution=true or order_send_count>0 in audit"
+        )
+
+    md_path = out_dir / "paper_trades_latest.md"
+    md_path.write_text(generate_paper_trading_markdown(rows), encoding="utf-8")
+    paths: Dict[str, str] = {"markdown": str(md_path)}
+
+    if fmt in ("json", "all"):
+        json_path = out_dir / "paper_trades_latest.json"
+        payload = {
+            "schema": "raas_paper_trading_report_v0",
+            "baseline_tag": BASELINE_TAG,
+            "scope": SCOPE,
+            "live_execution": False,
+            "not_investment_advice": True,
+            "order_send_count": 0,
+            "primary_metric": "envelope_break_hit_rate",
+            "generated_at": _now(),
+            "rows": [_row_table_fields(r) for r in rows],
+            "source_audit": str(
+                Path(audit_path) if audit_path else root / DEFAULT_PAPER_AUDIT
+            ),
+        }
+        json_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+        paths["json"] = str(json_path)
+
+    if fmt in ("pdf", "all"):
+        pdf_path = out_dir / "paper_trades_latest.pdf"
+        pdf_lines = [
+            f"Runs: {len(rows)}",
+            "live_execution=false  order_send_count=0",
+            "primary_metric=envelope_break_hit_rate",
+            "profit_factor=diagnostic_only",
+        ]
+        for r in rows:
+            f = _row_table_fields(r)
+            pdf_lines.append(
+                f"#{f['run_index']} {f['market']} equity={f['equity_eur']} "
+                f"hit={f['envelope_hit_rate']}"
+            )
+        pdf_path.write_bytes(
+            _minimal_pdf("Agent X Paper Trading Report", pdf_lines)
+        )
+        paths["pdf"] = str(pdf_path)
+
+    return {
+        "status": "completed",
+        "paths": paths,
+        "n_rows": len(rows),
+        "live_execution": False,
+        "order_send_count": 0,
+        "scope": SCOPE,
+        "baseline_tag": BASELINE_TAG,
+    }
+
+
+def _open_path(path: Path) -> None:
+    import os
+    import sys
+
+    target = str(path)
+    if sys.platform == "darwin":
+        os.system(f'open "{target}"')  # noqa: S605
+    elif sys.platform == "linux":
+        os.system(f'xdg-open "{target}" 2>/dev/null || true')  # noqa: S605
+    elif sys.platform == "win32":
+        os.system(f'start "" "{target}"')  # noqa: S605
+
+
+def main(argv: Optional[List[str]] = None) -> int:
+    import argparse
+    import sys
+
+    p = argparse.ArgumentParser(description="Agent X RaaS Exporter (P9 output)")
+    p.add_argument(
+        "--mode",
+        choices=["paper_trading", "b2b"],
+        required=True,
+        help="paper_trading: WORM audit report; b2b: requires tenant/run",
+    )
+    p.add_argument(
+        "--format",
+        choices=["markdown", "json", "pdf", "all"],
+        default="markdown",
+    )
+    p.add_argument("--audit", type=Path, default=None, help="paper audit JSONL")
+    p.add_argument("--out-dir", type=Path, default=None)
+    p.add_argument("--open", action="store_true", help="open markdown in OS viewer")
+    p.add_argument("--tenant-id", default=None)
+    p.add_argument("--run-id", default=None)
+    args = p.parse_args(argv)
+
+    if args.mode == "paper_trading":
+        result = export_paper_trading_report(
+            audit_path=args.audit,
+            report_dir=args.out_dir,
+            fmt=args.format,
+        )
+        md = result["paths"].get("markdown")
+        print(f"Report generated: {md or result['paths']}")
+        if args.open and md:
+            _open_path(Path(md))
+        return 0
+
+    if not args.tenant_id or not args.run_id:
+        print("b2b mode requires --tenant-id and --run-id", file=sys.stderr)
+        return 2
+    out = export_b2b_gutachten(tenant_id=args.tenant_id, run_id=args.run_id)
+    print(json.dumps({"package_id": out["package_id"], "paths": out["paths"]}, indent=2))
+    return 0
+
+
 __all__ = [
     "BASELINE_TAG",
     "build_b2b_package",
     "export_b2b_gutachten",
+    "export_paper_trading_report",
+    "generate_paper_trading_markdown",
+    "load_paper_trading_audit",
     "package_to_markdown",
 ]
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

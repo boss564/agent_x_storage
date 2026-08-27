@@ -149,10 +149,27 @@ Binance WS / Pyth (read-only)
 |--------|--------|
 | Diese Map | ✅ |
 | WS-Feed-Adapter + Ledger + Paper-WORM | ✅ Smoke (`make raas-paper-trading-smoke`) · Live-WS optional · 30-Tage gesperrt |
+| Paper-Report aus WORM (`exports/reports/`) | ✅ `make raas-paper-report` — **keine Sample-Fills**; Audit muss existieren |
+| Option 5 Flash-Crash-Retrospective | ✅ MAP `docs/RaaS_FLASH_CRASH_RETROSPECTIVE_v0.md` · `make raas-flash-crash-retro` (14d Smoke) / `--days 180` |
 | 30-Tage-Lauf | **gesperrt** bis Fee/Slippage-Manifest gehasht + Startsignal |
 | Order-Send / API-Keys mit Trade-Scope | **verboten** |
 | v3 Multi-Schwarm / M1 Prefilter | orthogonal; Paper nutzt M1 wenn Prefilter an (je Mandant) |
 | Core-`paper_trading_agent_x.py` ersetzen | **nein** — eigener RaaS-Pfad |
+
+**Report (P9 output-only):**
+
+```bash
+# Voraussetzung: Audit aus Smoke
+make raas-paper-trading-smoke
+# Markdown aus realem WORM (kein Fake bei fehlendem Log)
+PYTHONPATH=. python3 services/exporter/agent_x_raas_exporter.py \
+  --mode paper_trading --format markdown
+# optional: --open  ·  --format all (md+json+pdf)
+```
+
+Quelle: `logs/worm/paper_trading_audit.jsonl` → `exports/reports/paper_trades_latest.md`.
+Primärmetrik = Envelope Hit-Rate; Profit Factor nur als `diagnostic_only`.
+B2B-Gutachten-Pfad (`--mode b2b`) bleibt unverändert.
 
 **Auslöser Bau:** explizites Startsignal · Fee-/Slippage-Manifest · Symbol-Liste ·
 Abbruch-Schwellen vorab.
@@ -166,6 +183,8 @@ Abbruch-Schwellen vorab.
 | `docs/RaaS_P9_MAPPING_v1.md` | Strategie · Envelope · Advice-Schuld |
 | `docs/RaaS_P9_MAPPING_v3.md` | Multi-Schwarm · M1 · Envelope-Isolation |
 | `docs/RaaS_BUS_EXPANSION_v0.md` §4.3 | Public-Ingest / Referenz A (kein Live-Trade) |
-| `services/exporter/` | B2B-Gutachten (Paper-Ergebnisse optional einbetten) |
+| `services/exporter/` | B2B-Gutachten + Paper-Report (`--mode paper_trading`) |
+| `logs/worm/paper_trading_audit.jsonl` | Paper-WORM (Quelle für Report) |
+| `exports/reports/paper_trades_latest.md` | Shadow-Trade-Report (gitignored under `exports/`) |
 | `scripts/paper_trading_agent_x.py` | Core-Paper (CHI) — **nicht** diese Map |
 | Tag `v1.0-raas-baseline` | Fixierte RaaS-Baseline vor Paper-Bau |

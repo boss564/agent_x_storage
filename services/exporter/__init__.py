@@ -4,6 +4,9 @@ from services.exporter.agent_x_raas_exporter import (
     BASELINE_TAG,
     build_b2b_package,
     export_b2b_gutachten,
+    export_paper_trading_report,
+    generate_paper_trading_markdown,
+    load_paper_trading_audit,
     package_to_markdown,
 )
 
@@ -11,5 +14,8 @@ __all__ = [
     "BASELINE_TAG",
     "build_b2b_package",
     "export_b2b_gutachten",
+    "export_paper_trading_report",
+    "generate_paper_trading_markdown",
+    "load_paper_trading_audit",
     "package_to_markdown",
 ]

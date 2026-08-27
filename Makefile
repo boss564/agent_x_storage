@@ -339,6 +339,15 @@ raas-b2b-exporter-smoke: ## B2B P9 gutachten JSON/PDF/Merkle (core untouched)
 raas-paper-trading-smoke: ## Paper setup — feed·ledger·WORM·envelope hit-rate (no order send)
 	PYTHONPATH=. python3 scripts/test_raas_paper_trading.py
 
+raas-paper-report: ## Paper WORM → exports/reports/paper_trades_latest.md (no sample fills)
+	PYTHONPATH=. python3 services/exporter/agent_x_raas_exporter.py --mode paper_trading --format markdown
+
+raas-flash-crash-retro: ## Option 5 — Z3-Gate risk layer vs historical klines (MAP v0)
+	PYTHONPATH=. python3 scripts/raas_flash_crash_retrospective.py --days 14
+
+raas-flash-crash-retro-180: ## Option 5 full window (needs network for missing cache days)
+	PYTHONPATH=. python3 scripts/raas_flash_crash_retrospective.py --days 180
+
 raas-gateway-prefilter-cutover: ## Phase 4A backlog priority cutover (no core skip)
 	PYTHONPATH=. python3 scripts/test_gateway_prefilter_cutover.py
 
