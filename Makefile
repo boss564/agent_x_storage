@@ -354,6 +354,12 @@ raas-fn-belt-screen: ## FN-Gürtel Ursachen A–D (same definition_hash, no retu
 raas-barrier-cal-surface: ## P1 counterfactual FP/FN surface (labels only, prod edges frozen)
 	PYTHONPATH=. python3 scripts/raas_barrier_cal_surface.py --days 180
 
+raas-daily-paper-report: ## Cron entry: paper WORM → markdown (logs/cron_exporter.log)
+	bash scripts/raas_daily_paper_report.sh
+
+raas-notify-gate-blocks: ## Dry-run notify bridge (risk BLOCK only; --send to post)
+	PYTHONPATH=. python3 scripts/raas_notify_gate_blocks.py
+
 raas-gateway-prefilter-cutover: ## Phase 4A backlog priority cutover (no core skip)
 	PYTHONPATH=. python3 scripts/test_gateway_prefilter_cutover.py
 

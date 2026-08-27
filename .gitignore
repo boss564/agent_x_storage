@@ -10,6 +10,7 @@ build/
 # Environment
 .env
 .env.local
+config/raas_ops.env
 
 # Generated / cache
 logs/

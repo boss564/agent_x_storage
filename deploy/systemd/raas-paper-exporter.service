@@ -1,0 +1,14 @@
+[Unit]
+Description=RaaS daily paper-trading markdown export
+After=network-online.target
+
+[Service]
+Type=oneshot
+# Set to your clone path:
+WorkingDirectory=/ABS/PFAD/agent_x_storage
+Environment=PYTHONPATH=.
+# Optional: EnvironmentFile=/ABS/PFAD/agent_x_storage/config/raas_ops.env
+ExecStart=/ABS/PFAD/agent_x_storage/scripts/raas_daily_paper_report.sh
+
+[Install]
+WantedBy=multi-user.target

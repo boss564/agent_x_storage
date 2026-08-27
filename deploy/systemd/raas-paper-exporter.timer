@@ -1,0 +1,10 @@
+[Unit]
+Description=Daily timer for RaaS paper-trading exporter
+
+[Timer]
+OnCalendar=*-*-* 23:00:00
+Persistent=true
+Unit=raas-paper-exporter.service
+
+[Install]
+WantedBy=timers.target
