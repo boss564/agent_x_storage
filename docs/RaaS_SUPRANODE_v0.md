@@ -112,6 +112,7 @@ Pilot-Test bleibt gültig: Facade muss `HYBRID_SHELL_PASS`-Semantik erhalten
 | Dokument | ✅ `docs/RaaS_SUPRANODE_v0.md` |
 | Dünne Facade | ✅ `prototypes/raas_hybrid_shell/supranode_facade.py` |
 | Smoke | ✅ `scripts/test_raas_supranode.py` · `make raas-supranode` |
+| D1–D4 layer2 | ✅ `d_suite_enforcer.py` vor Kern · `make raas-d-suite` |
 | 9 Microservices / NATS-Bus | **nicht gebaut** (Ausbaustufe) |
 
 **Bau-Regel:** Keine 9 Container mit Remap. Bus-Worker erst nach D1–D3-Pfad und ohne Rollen-Umschreibung.

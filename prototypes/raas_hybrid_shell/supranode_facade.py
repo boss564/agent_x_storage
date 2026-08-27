@@ -2,14 +2,26 @@
 
 Thin outer skin only — does not remap P₁…P₉, no NATS bus, no 9 services.
 D4: exterior surface is ingress/egress; core stays behind the gateway.
+D1–D4: DSuiteEnforcer runs before core evaluation (layer 2).
 """
 from __future__ import annotations
 
 import hashlib
 import json
+import sys
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Dict, Optional
+
+_ROOT = Path(__file__).resolve().parents[2]
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
+_GATE = _ROOT / "services" / "fail_closed_gate"
+if str(_GATE) not in sys.path:
+    sys.path.insert(0, str(_GATE))
+
+from d_suite_enforcer import DSuiteEnforcer, DSuiteViolation, EnforcerContext  # noqa: E402
 
 from prototypes.raas_hybrid_shell.schemas import LLMStrategyProposal, SafetyEnvelope
 from prototypes.raas_hybrid_shell.trusted_gateway import TrustedCoreGateway
@@ -37,6 +49,7 @@ class ExternalResponse:
     scope: str = SCOPE
     live_execution: bool = False
     not_investment_advice: bool = True
+    worm_anchor_sha256: str = ""
     debt: list = field(
         default_factory=lambda: [
             "D1_not_investment_advice",
@@ -59,8 +72,10 @@ class SupranodeFacade:
         self,
         tenant_id: str = "supranode",
         core: Optional[TrustedCoreGateway] = None,
+        enforcer: Optional[DSuiteEnforcer] = None,
     ) -> None:
         self.core = core or TrustedCoreGateway(tenant_id=tenant_id)
+        self.enforcer = enforcer or DSuiteEnforcer()
 
     def ingress(self, request: ExternalRequest) -> LLMStrategyProposal:
         """Validate exterior request; force untrusted boundary."""
@@ -76,6 +91,7 @@ class SupranodeFacade:
         *,
         correlation_id: str,
         envelope: SafetyEnvelope,
+        worm_anchor_sha256: str = "",
     ) -> ExternalResponse:
         """Seal envelope for exterior — soft seal (HSM later); no auto-exec."""
         material = {
@@ -84,6 +100,7 @@ class SupranodeFacade:
             "gate_verdict": envelope.gate_verdict,
             "live_execution": False,
             "scope": SCOPE,
+            "worm_anchor_sha256": worm_anchor_sha256,
         }
         seal = hashlib.sha256(
             json.dumps(material, sort_keys=True).encode()
@@ -93,6 +110,7 @@ class SupranodeFacade:
             envelope=envelope,
             egress_seal=seal,
             sealed_at=datetime.now(timezone.utc).isoformat(),
+            worm_anchor_sha256=worm_anchor_sha256,
         )
 
     def handle_external_request(
@@ -101,13 +119,22 @@ class SupranodeFacade:
         *,
         n_scenarios: int = 40,
     ) -> ExternalResponse:
-        """Ingress → core → egress. Sole public entry for the facade."""
+        """Ingress → D-suite enforce → core → egress."""
         proposal = self.ingress(request)
+        safe = self.enforcer.enforce_all(
+            EnforcerContext(
+                caller_role="UNTRUSTED_SHELL",
+                target_path="/api/v1/raas/evaluate",
+                payload=proposal.to_dict(),
+            )
+        )
         envelope = self.core.evaluate_shell_proposal(
             proposal, n_scenarios=n_scenarios
         )
         return self.egress(
-            correlation_id=request.correlation_id, envelope=envelope
+            correlation_id=request.correlation_id,
+            envelope=envelope,
+            worm_anchor_sha256=str(safe.get("_worm_anchor_sha256") or ""),
         )
 
     def health(self) -> Dict[str, Any]:
@@ -121,6 +148,7 @@ class SupranodeFacade:
             "facade": "ingress_egress",
             "core_service": h.get("service"),
             "debt": debts,
+            "d_suite_enforcer": "layer2_active",
             "bus": None,
             "microservices": 0,
         }

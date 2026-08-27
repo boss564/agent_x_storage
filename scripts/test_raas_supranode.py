@@ -54,6 +54,8 @@ def main() -> int:
             "D4_ingress_egress_only" in facade.health()["debt"],
             facade.health().get("microservices") == 0,
             facade.health().get("bus") is None,
+            facade.health().get("d_suite_enforcer") == "layer2_active",
+            bool(r_mild.worm_anchor_sha256),
             not any(
                 "execute_" in c.lower()
                 for c in r_agg.envelope.countermeasures

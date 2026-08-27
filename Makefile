@@ -258,6 +258,9 @@ raas-hybrid-shell: ## Core/Shell pilot (untrusted shell → TrustedCoreGateway)
 raas-supranode: ## Ingress/Egress facade over TrustedCoreGateway
 	PYTHONPATH=. python3 scripts/test_raas_supranode.py
 
+raas-d-suite: ## D1–D4 application barriers (DSuiteEnforcer)
+	PYTHONPATH=. python3 scripts/test_d_suite_enforcer.py
+
 raas-portal: ## Start RaaS portal on :8020
 	PYTHONPATH=. uvicorn services.raas_portal.main:app --host 0.0.0.0 --port 8020
 

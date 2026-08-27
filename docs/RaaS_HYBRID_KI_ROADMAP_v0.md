@@ -39,21 +39,21 @@ Plugins; synthetische Daten trainieren eine schnelle Zweitmeinung — nie die Fr
 
 ---
 
-## 2.1 Schuld — Ebene 1 wartet auf Ebene 2
+## 2.1 Schuld — D1–D4 (layer 2 aktiv)
 
-`live_execution=false` setzt `ScopeEnforcerAgent` (Wave 39) bereits durch:
-anhängen, validieren, weiterreichen. Die folgenden Zusagen sind **nur Map/Roadmap**
-(Ebene 1). Beim Bau gehören sie in **dieselbe Kette**, sonst hängt die Abgrenzung
-an der Disziplin der Implementierung.
+`live_execution=false` setzt `ScopeEnforcerAgent` (Wave 39) durch.
+Zusätzlich erzwingt `services/fail_closed_gate/d_suite_enforcer.py` die
+Zusagen auf Schnittstellenebene (Facade ruft vor dem Kern auf):
 
-| ID | Zusage | Herkunft | Ist | Soll beim Bau |
-|----|--------|----------|-----|----------------|
-| D1 | `not_investment_advice=true` | RaaS v1 Envelope | Deklaration | ScopeEnforcer analog `live_execution` |
-| D2 | Red schreibt nur Sandbox; Blue allein zeichnet Gate/Envelope | RaaS v2 Overlay | Regel im Dokument | ScopeEnforcer / Gateway-Policy |
-| D3 | KI-Hülle nur über **Validierungs-Gateway** | diese Roadmap §2 Core/Shell | **Intent** (kein Service) | Gateway = Durchsetzung + Audit → P₉; Shell nie Direkt-Kern |
+| ID | Zusage | Herkunft | Ist | Ergänzung später |
+|----|--------|----------|-----|------------------|
+| D1 | `not_investment_advice=true` | RaaS v1 | **layer2** Stamp + Free-Text-Filter | Wave-39 ScopeEnforcer komplementär |
+| D2 | Red nur Sandbox; keine Gate-Felder | RaaS v2 | **layer2** Pfad + Decision-Block | OS/Container-Isolation |
+| D3 | Shell nur über Gateway-Targets | Hybrid roadmap | **layer2** Allow-List + Facade | Netz-Segmentierung |
+| D4 | Ingress/Egress-only exterior | Supranode | **layer2** Exterior-Allow-List | Bus weiterhin Intent |
 
-Drei Ebene-1-Zusagen, eine Ebene-2-Referenz (`live_execution`). Liste hier führen,
-nicht in Phasen verstecken.
+WORM-Hash-Stempel (`_worm_anchor_sha256` + `WormAnchorStore`) ist **quer** zu D1–D4
+(GoBD-Anker), keine Umnummerierung von D4.
 
 ---
 
@@ -149,7 +149,8 @@ Kern-Refactor möglich.
 | Neues `agents/p1…p9` Remap | **abgelehnt** — v1-Rollen bleiben; `agents/` = Air/Surface/Mechanized |
 | Tool-Wrapper / LangGraph / LLM-Shell | Pilot: synthetische Shell; echtes LLM **nicht gebaut** |
 | Adversarial Plugins / Feature-Store / Schnell-Modell | **nicht gebaut** |
-| Validierungs-Gateway (D3) | Pilot-Klasse `TrustedCoreGateway` — noch **Ebene 1** (kein ScopeEnforcer) |
+| Validierungs-Gateway (D3) | Facade + `DSuiteEnforcer` layer2 · Wave-39 ScopeEnforcer komplementär |
+| D-Suite barriers | ✅ `d_suite_enforcer.py` · `make raas-d-suite` |
 | Order-Send / Searcher / Auto-Rebalance | **gesperrt** |
 
 ---
