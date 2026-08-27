@@ -327,9 +327,26 @@ nicht Label-Unabhängigkeit (Zirkularität bleibt benannt).
 | Nur Gas/MEV-Kalibrierung vs. unkalibriert n=20k | mean(Δ) ≈ **+0,58 pp** · SEM≈0,35 · 2·SEM≈0,70 · **FAIL** (knapp unter Schwelle) |
 | Unkalibriert n=20k allein | improvement mean **−1,8 %** · Seed-Spread FAIL (Baseline n=5k bleibt +4,5 %) |
 
+**Diagnostik Risiko-Anteil (`severity_score ≥ 0.85`) — Confound-Check:**
+
+| Charge | n | n_risky | share | Holdout share (train_frac=0.8) |
+|--------|---|---------|-------|--------------------------------|
+| extremes 5k | 5000 | 2992 | **59,8 %** | 581/1000 = **58,1 %** |
+| extremes 20k (unkalibriert) | 20000 | 12130 | **60,6 %** | 2445/4000 = **61,1 %** |
+| calibrated 20k | 20000 | 12130 | **60,6 %** | 61,1 % (Labels unverändert) |
+
+Kind-Mix (DEPEG/FAT 100 % risky, JITTER 0 %, Rest dazwischen) ist über 5k/20k
+strukturell gleich. **Δshare Holdout ≈ +3 pp** — nicht 80 %, kein Hebel-Kollaps.
+Damit ist `−1,8 %` **kein** Zusammensetzungs-Effekt der hypothetischen Art
+„zu viele Riskante → Priorisierung schlechter als FIFO“. Vorzeichen-Kipp 5k→20k
+bleibt **unerklärt** (Modell-/Holdout-n-/Sim-Skalierung); `+4,5 %` und `−1,8 %`
+sind **nicht** als gleiche Baseline vergleichbar, solange die Ursache offen ist.
+Weitere Feature-Kopplungsversuche gegen diese Referenz: **gestoppt**.
+
 **Folgerung:** Public-Ingest-Profile sind nutzbar als Artefakte; aktuelle Kalibrierung
 rechtfertigt **kein** DEFAULT_ON und keinen Fortschritts-Claim. Phase-4A-Cutover bleibt
-Default OFF; n=5k-Unkalibriert ist die belegte Queue-Baseline.
+Default OFF. Halt: Pipeline + Profile + gepaartes Kriterium stehen; Gewissheit über
+die Referenz (warum 5k≠20k) fehlt noch — nicht ein vierter Kalibrierungsversuch.
 
 **Reihenfolge (bindend):** Gate-Map (§4.2/§4.3) → Seed-Spread-Check →
 Sondierungs-Skript → Generator. Nicht umgekehrt.
