@@ -486,6 +486,21 @@ Runner: `make raas-prefilter-fixed-vs-random-holdout`
 Pfad 1 bleibt gesperrt, bis bewusst entschieden wird, wie Claims mit
 Zusammensetzungsunsicherheit umgehen (Referenz unverändert: fixierter Holdout).
 
+##### Umgang mit Zusammensetzungs-σ — Entscheidung offen (vor Pfad 1)
+
+Die Referenz `+4,48 % ± 1,47 pp` ist stabil **nur für den einen fixierten Holdout**.
+Zufalls-Holdouts gleicher Größe: σ≈2,55 pp, 8/36 negativ. Ohne bewusste Wahl
+kein Kalibrierungs-/DEFAULT_ON-Claim.
+
+| Option | Inhalt | Pro | Contra |
+|--------|--------|-----|--------|
+| **A** Mehrere feste Holdouts | 5–10 stratifizierte feste Sets à 1000; Claim = Mittel ± Streuung über Sets | Deterministisch, robust | Singularität von 4,48 % entfällt |
+| **B** Ursachenanalyse (Pfad 2) | SHAP/Tail: welche Zusammensetzungen kippen negativ? Generator/Label nachziehen | Varianz an der Wurzel | Länger, Ergebnis offen |
+| **C** Mit σ leben | Freigabe erst bei Verbesserung > 2·σ_composition (≈5,1 pp bei 2,55 pp) | Keine Extra-Arbeit, konservativ | Aktueller ~4,5 %-Effekt unter Schwelle |
+
+**Status:** Wahl **A / B / C** ausstehend · **Pfad 1 gesperrt** bis Eintrag hier.  
+Kein Automatismus; Entscheidung dokumentieren, bevor ein Lauf startet.
+
 Runner: `make raas-prefilter-r5-train-vs-holdout` · `make raas-prefilter-n-robust-metric`
 
 **Reihenfolge (bindend):** Gate-Map (§4.2/§4.3) → Seed-Spread-Check →
@@ -502,7 +517,8 @@ Sondierungs-Skript → Generator. Nicht umgekehrt.
 | Stufe 2 Gateway/Shell-Bus Implementierung | **gesperrt** bis §4 Sequenz 3c + §4.1 Kriterien + **Topologie-Re-Screen** (~16 s) |
 | Phase 4A `risk_prefilter` Cutover | ✅ Facade-Batch · Default OFF · FIFO-Fallback · kein Skip |
 | Phase 4A Modell-Optimierung (mehr Synth) | **optional** — erst nach Seed-Spread (§4.2) |
-| Public-Ingest (Kalibrierungsprofile) | Sondierung ✅ · **Pfad 1 gesperrt** bis σ‑Widerspruch @ n=1000 geklärt |
+| Public-Ingest (Kalibrierungsprofile) | Sondierung ✅ · **Pfad 1 gesperrt** bis Wahl A/B/C (Zusammensetzungs-σ) |
+| Zusammensetzungs-σ Umgang | **offen** — Gate-Map §4.3.1 Optionen A/B/C; Entscheidung vor Pfad 1 |
 | Referenzklärung 5k↔20k Queue-Baseline | Composition @H=1000 **CONFIRMED** · Ref. gilt nur für fixierten Holdout |
 | Phase 4B LLM-LoRA | **nach** 4A · eigener Bedarf |
 | Broadcast-Subjects als Steuerpfad | **gesperrt** (Serie + `forbid_broadcast`) |
