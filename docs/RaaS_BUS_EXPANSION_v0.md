@@ -107,8 +107,10 @@ Parallel-Sub-Schwarm (Z3) bleibt optional; bei p95 ≪ 10 ms ist er kein N
 Orchestrierung der Sub-Schwärme = **Shell/Plugin außerhalb** (v2), nicht P₂-Umbenennung.
 `execute_*` bleibt verboten; `run_attack_scenario` / `report_scenario`.
 
-**D2:** App-layer2 existiert (`DSuiteEnforcer`). Sub-Schwarm ist der erste Ort, an dem
-**OS/Container-Sandbox** (read-only root, eigener User) praktisch wird — weiterhin Schuld.
+**D2:** App-layer2 existiert (`DSuiteEnforcer`). Sub-Schwarm-Pilot:
+`plugins/mev_latency_redteam/` — Sandbox-IO + Dockerfile (`USER redteam`,
+`--read-only` / `--cap-drop ALL` Runtime-Intent). OS-Isolation = Skeleton;
+volle Compose-Anbindung folgt bei Bedarf.
 
 ---
 
@@ -125,6 +127,8 @@ Orchestrierung der Sub-Schwärme = **Shell/Plugin außerhalb** (v2), nicht P₂-
       └─ Runner: `test_stage1_edge_bus_pilot.py` · `test_stage1_edge_bus_ring.py`
 2.  Live-Z3-Latenz messen (infra-z3) → **PASS 2026-08-27** (p50≈1,2 ms wall)
 3.  Red-Team-Plugin (MEV/Latency) unter /sandbox/ + D2 OS-Isolation
+      └─ `plugins/mev_latency_redteam/` · Subject `edge.P2.redteam.sandbox`
+      └─ Runner `scripts/test_mev_latency_redteam.py` · `make raas-mev-redteam`
 4.  Oracle / Liquidity Plugins nach Bedarf
 5.  Inter-Swarm (WSS/Libp2p) — zuletzt; P₉-Signatur + Z3-Header Intent
 ```

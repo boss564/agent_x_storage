@@ -273,6 +273,9 @@ raas-stage1-edge-ring: ## Stage-1 ring: P1→…→P9→P1 Queue-Group sequentia
 raas-live-z3-latency: ## Live HTTP latency vs infra-z3 (:8001)
 	PYTHONPATH=. python3 scripts/test_live_z3_latency.py
 
+raas-mev-redteam: ## MEV/Latency Red-Team plugin (sandbox + D2)
+	PYTHONPATH=. python3 scripts/test_mev_latency_redteam.py
+
 raas-portal: ## Start RaaS portal on :8020
 	PYTHONPATH=. uvicorn services.raas_portal.main:app --host 0.0.0.0 --port 8020
 

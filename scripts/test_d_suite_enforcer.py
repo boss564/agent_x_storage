@@ -148,6 +148,36 @@ def main() -> int:
         print(f"  FAIL  D2 sandbox allow: {exc}")
         failed += 1
 
+    # D2: Red-Team plugin must not sign envelopes / set gate
+    try:
+        enforcer.enforce_all(
+            EnforcerContext(
+                caller_role="RED_TEAM",
+                target_path="internal://plugin/mev_latency",
+                write_path="data/raas/sandbox/mev_latency_redteam/",
+                payload={"type": "attack_result", "envelope_id": "ENV-1"},
+            )
+        )
+        print("  FAIL  D2 should block Red-Team envelope_id")
+        failed += 1
+    except DSuiteViolation as v:
+        assert v.debt_id == "D2"
+        _ok("D2 blocks Red-Team envelope_id")
+
+    try:
+        enforcer.enforce_all(
+            EnforcerContext(
+                caller_role="RED_TEAM",
+                target_path="internal://plugin/mev_latency",
+                write_path="data/raas/sandbox/mev_latency_redteam/ok/",
+                payload={"type": "attack_result", "label": "LATENCY_SPIKE"},
+            )
+        )
+        _ok("D2 allows Red-Team plugin sandbox write")
+    except Exception as exc:
+        print(f"  FAIL  D2 Red-Team sandbox allow: {exc}")
+        failed += 1
+
     verdict = "D_SUITE_PASS" if failed == 0 else "D_SUITE_FAIL"
     print("=" * 60)
     print(f"VERDICT: {verdict}  failures={failed}")

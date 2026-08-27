@@ -216,6 +216,7 @@ NO_TEST_SUMMARY: set[str] = {
     "scripts/test_stage1_edge_bus_pilot.py",  # Stage-1 single-edge P1→P2 pilot
     "scripts/test_stage1_edge_bus_ring.py",  # Stage-1 full ring P1→…→P9→P1
     "scripts/test_live_z3_latency.py",  # Live HTTP latency vs infra-z3
+    "scripts/test_mev_latency_redteam.py",  # MEV/Latency Red-Team sandbox plugin
 }
 
 
