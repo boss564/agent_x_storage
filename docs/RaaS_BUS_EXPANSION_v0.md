@@ -281,13 +281,13 @@ Runner: `make raas-prefilter-train` · Plugin `plugins/risk_prefilter/`
 
 ### 4.3 Arbeitspaket Public-Ingest — Kalibrierung (nicht Trainingslabels)
 
-**Status:** geplant · **getrennt** von Phase 4A · kein DEFAULT_ON-Trigger ohne Seed-Spread  
+**Status:** Sondierung ✅ (`PUBLIC_INGEST_SONDIERUNG_PASS`) · Generator-Kalibrierung offen · kein DEFAULT_ON  
 **Zweck der öffentlichen Daten:** Verteilungsquelle für den Synth-Generator —
 **nicht** unlabeled Trainingszeilen, **kein** Proxy-Verdict aus Klines/MEV.
 
 | Schritt | Inhalt | Nicht |
 |---------|--------|-------|
-| 1 Sondierung | Binance-Klines / Flashbots-Stichprobe → `exports/open_data/` | Terabytes · Live-Trading |
+| 1 Sondierung | Binance-Klines / Flashbots-Stichprobe → `exports/open_data/` · `make raas-public-ingest-sondierung` | Terabytes · Live-Trading · Trainingslabels |
 | 2 Profile | Latenz-/Vol-/MEV-/Oracle-Perzentile als JSON/YAML | Training auf Rohzeilen |
 | 3 Generator | Profile → `generate_prefilter_synthetic_data.py` | Label-Mode ändern |
 | 4 Re-Train | 20k–50k Synth · Quality-Gate · Queue-Metrik | Claim ohne gepaarten Seed-Vergleich |
@@ -352,6 +352,7 @@ Sondierungs-Skript → Generator. Nicht umgekehrt.
 | `scripts/test_os_isolation_subswarms.py` | D2 OS-Isolation Intent (Dockerfiles) |
 | `scripts/generate_prefilter_synthetic_data.py` | Phase-4A Synth-Datengen |
 | `scripts/check_prefilter_queue_seed_spread.py` | Queue-Metrik Seed-Spread (≥6) |
+| `scripts/ingest_public_distributions.py` | §4.3 Sondierung → Profile unter `exports/open_data/` |
 | `agents_b2g/protocol.py` | `broadcast`-Pfad |
 | `services/fail_closed_gate/d_suite_enforcer.py` | D1–D4 app layer2 |
 | `prototypes/raas_hybrid_shell/` | Facade + Gateway (sync Pilot) |

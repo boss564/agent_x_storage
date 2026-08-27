@@ -295,6 +295,9 @@ raas-prefilter-train: ## Phase 4A GBT train + queue metric (severity_proxy only)
 raas-prefilter-queue-seed-spread: ## Queue metric mean/std over ≥6 train seeds (§4.2)
 	PYTHONPATH=. python3 scripts/check_prefilter_queue_seed_spread.py
 
+raas-public-ingest-sondierung: ## §4.3 Public-Ingest — distribution profiles only (no train labels)
+	PYTHONPATH=. python3 scripts/ingest_public_distributions.py
+
 raas-gateway-prefilter-cutover: ## Phase 4A backlog priority cutover (no core skip)
 	PYTHONPATH=. python3 scripts/test_gateway_prefilter_cutover.py
 
