@@ -117,9 +117,9 @@ Kern-Refactor möglich.
 | Kern | unverändert; Prefilter = Untrusted Hülle (D1–D4); **kein Skip**, kein Z3-Ersatz |
 | Label-Herkunft | Gate-Map §4.2 — Training nur `severity_proxy` |
 | Erfolg | Warteschlangen-Metrik vs. FIFO/Null (kann FAIL) · **nicht** AUC-gegen-Gate |
-| Stand | Synth · Train · Plugin · Facade-Cutover (`PREFILTER_ENABLED`, Default false) |
-| Make | `raas-prefilter-batch-extremes` · `raas-prefilter-train` · `raas-gateway-prefilter-cutover` |
-| Nicht jetzt | LLM-LoRA (4B) · Public-Ingest · Stufe-2 Bus-Cutover |
+| Stand | Synth · Train · Plugin · Facade-Cutover (`PREFILTER_ENABLED`, Default false) · **Referenz A aktiv** (Multi-Holdout +2,12 % ± 1,21 pp) |
+| Make | `raas-prefilter-batch-extremes` · `raas-prefilter-train` · `raas-gateway-prefilter-cutover` · `raas-prefilter-multi-holdout-*` |
+| Nicht jetzt | LLM-LoRA (4B) · **Public-Ingest Kalibrierung Pause** (Haltepunkt §4.3) · Stufe-2 Bus-Cutover |
 
 Training: `scripts/train_prefilter_model.py` · Plugin `plugins/risk_prefilter/`  
 Details: `docs/RaaS_BUS_EXPANSION_v0.md` §4.2
@@ -177,8 +177,8 @@ Details: `docs/RaaS_BUS_EXPANSION_v0.md` §4.2
 | Adversarial Plugins / Feature-Store / Schnell-Modell | ✅ MEV+Oracle Plugins · Synth-Prefilter · Queue-Cutover (Phase 4A) |
 | Validierungs-Gateway (D3) | Facade + `DSuiteEnforcer` layer2 · Wave-39 ScopeEnforcer komplementär |
 | D-Suite barriers | ✅ `d_suite_enforcer.py` · `make raas-d-suite` |
-| Phase 4A Prefilter | ✅ Train + `GATEWAY_CUTOVER_PASS` / `GATEWAY_FALLBACK_PASS` · Default OFF |
-| Phase 4B LLM-LoRA / Public-Ingest | Public-Ingest = §4.3 Kalibrierung (nach Seed-Spread); 4B eigener Bedarf |
+| Phase 4A Prefilter | ✅ Train + Cutover · Default OFF · **Referenz A aktiv** (Haltepunkt) |
+| Phase 4B LLM-LoRA / Public-Ingest | Public-Ingest = §4.3 **konsolidiert** (Referenz A); Kalibrierung/Pfad 2 Pause bis Auslöser; 4B eigener Bedarf |
 | Order-Send / Searcher / Auto-Rebalance | **gesperrt** |
 | D1–D3 → ScopeEnforcer (Ebene 2) | **offen** — Health zeigt Schuld; Kette analog `live_execution` bei Intake/Red/Gateway |
 | Vor Stufe 2: Topologie-Re-Screen | **bindend** — Bus-Expansion §4.1 · ~16 s · Ring vs. complete |

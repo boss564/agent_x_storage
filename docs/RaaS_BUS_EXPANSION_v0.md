@@ -281,7 +281,9 @@ Runner: `make raas-prefilter-train` · Plugin `plugins/risk_prefilter/`
 
 ### 4.3 Arbeitspaket Public-Ingest — Kalibrierung (nicht Trainingslabels)
 
-**Status:** Sondierung ✅ · Generator-Anbindung ✅ · gepaarter Vergleich **FAIL** (2026-08-27) · kein DEFAULT_ON  
+**Status:** **Konsolidiert · Referenz A aktiv** (2026-08-27) · Sondierung ✅ ·
+Generator ✅ · Composition CONFIRMED · Multi-Holdout-Freeze+Baseline ✅ ·
+**Haltepunkt** — keine Neukalibrierung / kein Pfad‑2 ohne Auslöser · kein DEFAULT_ON  
 **Zweck der öffentlichen Daten:** Verteilungsquelle für den Synth-Generator —
 **nicht** unlabeled Trainingszeilen, **kein** Proxy-Verdict aus Klines/MEV.
 
@@ -526,11 +528,16 @@ Artefakte / Runner:
 Sets; nie vs. bestes Set / nie vs. historischer Singularität allein). DEFAULT_ON weiter
 gesperrt, bis A-Claim und Freigaberegel explizit gesetzt sind.
 
+**Haltepunkt (2026-08-27):** Kein sofortiger Pfad‑1‑Lauf und kein Pfad‑2.
+Zusammensetzungsvarianz ist kontrolliert; Claim belastbar. Neukalibrierung oder
+Ursachenanalyse erst bei konkretem Auslöser (z. B. DEFAULT_ON-Bedarf, neue Daten,
+explizite Ursachenfrage) — Schutz vor Daten-Fishing.
+
 Runner (Diagnose): `make raas-prefilter-r5-train-vs-holdout` · `make raas-prefilter-n-robust-metric`
 
 **Reihenfolge (bindend):** Gate-Map (§4.2/§4.3) → Seed-Spread-Check →
 Sondierungs-Skript → Generator. Nicht umgekehrt.  
-**Kalibrierung / Pfad 1:** gegen A-Baseline (+2,12 % ± 1,21 pp über Sets) freigabefähig;
+**Kalibrierung / Pfad 1:** gegen A-Baseline freigabefähig, **derzeit Pause** (Haltepunkt);
 DEFAULT_ON weiter gesperrt.
 
 ---
@@ -543,9 +550,9 @@ DEFAULT_ON weiter gesperrt.
 | Stufe 2 Gateway/Shell-Bus Implementierung | **gesperrt** bis §4 Sequenz 3c + §4.1 Kriterien + **Topologie-Re-Screen** (~16 s) |
 | Phase 4A `risk_prefilter` Cutover | ✅ Facade-Batch · Default OFF · FIFO-Fallback · kein Skip |
 | Phase 4A Modell-Optimierung (mehr Synth) | **optional** — erst nach Seed-Spread (§4.2) |
-| Public-Ingest (Kalibrierungsprofile) | Sondierung ✅ · Pfad 1 gegen A-Baseline freigabefähig · DEFAULT_ON gesperrt |
-| Zusammensetzungs-σ Umgang | **A gewählt** · Freeze+Baseline ✅ · Claim +2,12 % ± 1,21 pp über 8 Sets · C abgelehnt · B nach A |
-| Referenzklärung 5k↔20k Queue-Baseline | Composition **CONFIRMED** · Historie 4,48 % (1 Holdout) · A-Reichweite 2,12 % ± 1,21 pp |
+| Public-Ingest (Kalibrierungsprofile) | **Konsolidiert · Referenz A aktiv** · Haltepunkt · DEFAULT_ON gesperrt |
+| Zusammensetzungs-σ Umgang | **A gewählt** · Claim +2,12 % ± 1,21 pp · Pfad 1/2 **Pause** bis Auslöser · C abgelehnt |
+| Referenzklärung 5k↔20k Queue-Baseline | Composition **CONFIRMED** · Historie 4,48 % · A-Reichweite 2,12 % ± 1,21 pp · **geschlossen** |
 | Phase 4B LLM-LoRA | **nach** 4A · eigener Bedarf |
 | Broadcast-Subjects als Steuerpfad | **gesperrt** (Serie + `forbid_broadcast`) |
 | „Echtzeit-Insolvenz“ in Pitch/Map | **erlaubt nur mit Live-Zahlen** (p50≈1,2 ms wall, 2026-08-27) — nicht Mock |
