@@ -217,6 +217,7 @@ NO_TEST_SUMMARY: set[str] = {
     "scripts/test_stage1_edge_bus_ring.py",  # Stage-1 full ring P1→…→P9→P1
     "scripts/test_live_z3_latency.py",  # Live HTTP latency vs infra-z3
     "scripts/test_mev_latency_redteam.py",  # MEV/Latency Red-Team sandbox plugin
+    "scripts/test_oracle_anomaly_swarm.py",  # Oracle Anomaly Swarm P5 sandbox plugin
 }
 
 
