@@ -348,8 +348,39 @@ rechtfertigt **kein** DEFAULT_ON und keinen Fortschritts-Claim. Phase-4A-Cutover
 Default OFF. Halt: Pipeline + Profile + gepaartes Kriterium stehen; Gewissheit über
 die Referenz (warum 5k≠20k) fehlt noch — nicht ein vierter Kalibrierungsversuch.
 
+#### 4.3.1 Arbeitspaket Referenzklärung (vor jeder weiteren Kalibrierung)
+
+**Status:** offen · **blockiert** Profil-Kopplung / DEFAULT_ON / Feature-Tuning  
+**Ziel:** Vorzeichen-Kipp `+4,5 %` (n=5k) → `−1,8 %` (n=20k) erklären oder
+als Artefakt der Evaluation ausweisen. Ohne stabile Referenz keine weiteren Claims.
+
+| Schritt | Prüfung | Isoliert |
+|---------|---------|----------|
+| R1 Reproduzierbarkeit | Seed-Spread 5k erneut → gleiche mean/σ wie Report? | Nicht-Determiniertheit |
+| R2 Eval-Parität | Gleiche Sim-Parameter (`service_time`, `arrival_interval`, Seeds) | Eval-Confound |
+| R3 5k-Subset aus 20k | Gleiche Kind-Verteilung + gleicher n → Spread vs Original-5k | **Datenmenge vs. Charge** |
+| R4 Feature-Diff | Perzentile Holdout 5k vs 20k (Latenz, Slip, Oracle, …) | Feature-Shift |
+| R5 Sim-Skalierung | Identisches Modell, Holdout n=1000 vs 4000 | Sim-n-Effekt |
+
+**Gesperrt bis R1–R3 grün oder Ursache dokumentiert:** weitere Feature-Kopplung,
+Public-Ingest-Re-Train als Erfolg, DEFAULT_ON.
+
+Runner: `scripts/diagnose_prefilter_reference.py` · `make raas-prefilter-reference-diagnosis`  
+Artefakt: `models/prefilter/prefilter_reference_diagnosis.json`.
+
+**Stand 2026-08-27:**
+
+| Schritt | Ergebnis |
+|---------|----------|
+| R1 Repro | **PASS** — mean/σ bitgleich zum Report (0,044788 / 0,014705) |
+| R3 5k-Subset aus 20k | **Δmean = 0** vs. 5k-Rerun (gleiche Kind-Counts) → Charge ≡ 5k; Vorzeichen-Kipp entsteht erst bei **voller 20k-Trainingsmenge / Holdout n=4000** |
+
+**Lesart:** Nicht „andere Charge“, sondern **Datenmenge / Holdout-n** (R5 noch offen:
+Train-n vs. Eval-n trennen). Referenz für Claims bleibt **n=5k Holdout=1000**, bis R5
+geklärt ist. Feature-Kopplung weiter gesperrt.
+
 **Reihenfolge (bindend):** Gate-Map (§4.2/§4.3) → Seed-Spread-Check →
-Sondierungs-Skript → Generator. Nicht umgekehrt.
+Sondierungs-Skript → Generator. Nicht umgekehrt. **Kalibrierung erst nach §4.3.1.**
 
 ---
 
@@ -361,7 +392,8 @@ Sondierungs-Skript → Generator. Nicht umgekehrt.
 | Stufe 2 Gateway/Shell-Bus Implementierung | **gesperrt** bis §4 Sequenz 3c + §4.1 Kriterien + **Topologie-Re-Screen** (~16 s) |
 | Phase 4A `risk_prefilter` Cutover | ✅ Facade-Batch · Default OFF · FIFO-Fallback · kein Skip |
 | Phase 4A Modell-Optimierung (mehr Synth) | **optional** — erst nach Seed-Spread (§4.2) |
-| Public-Ingest (Kalibrierungsprofile) | **§4.3** — nach Seed-Spread; Rohdaten ≠ Trainingslabels |
+| Public-Ingest (Kalibrierungsprofile) | Sondierung ✅ · Kalibrierung **gesperrt** bis §4.3.1 Referenzklärung |
+| Referenzklärung 5k↔20k Queue-Baseline | **§4.3.1** — R1 Repro → R3 Subset (Datenmenge vs Charge) |
 | Phase 4B LLM-LoRA | **nach** 4A · eigener Bedarf |
 | Broadcast-Subjects als Steuerpfad | **gesperrt** (Serie + `forbid_broadcast`) |
 | „Echtzeit-Insolvenz“ in Pitch/Map | **erlaubt nur mit Live-Zahlen** (p50≈1,2 ms wall, 2026-08-27) — nicht Mock |
@@ -384,6 +416,7 @@ Sondierungs-Skript → Generator. Nicht umgekehrt.
 | `scripts/check_prefilter_queue_seed_spread.py` | Queue-Metrik Seed-Spread (≥6) |
 | `scripts/ingest_public_distributions.py` | §4.3 Sondierung → Profile unter `exports/open_data/` |
 | `scripts/compare_prefilter_queue_paired.py` | §4.3 gepaarter Queue-Vergleich mean(Δ)>2·SEM(Δ) |
+| `scripts/diagnose_prefilter_reference.py` | §4.3.1 R1 Repro + R3 5k-Subset-from-20k |
 | `agents_b2g/protocol.py` | `broadcast`-Pfad |
 | `services/fail_closed_gate/d_suite_enforcer.py` | D1–D4 app layer2 |
 | `prototypes/raas_hybrid_shell/` | Facade + Gateway (sync Pilot) |

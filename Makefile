@@ -309,6 +309,9 @@ raas-prefilter-calibrated-batch: ## §4.3 calibrated extremes batch (n=20000)
 raas-prefilter-paired-compare: ## §4.3 paired queue Δ vs baseline seed-spread
 	PYTHONPATH=. python3 scripts/compare_prefilter_queue_paired.py
 
+raas-prefilter-reference-diagnosis: ## §4.3.1 R1 repro + R3 5k-subset-from-20k
+	PYTHONPATH=. python3 scripts/diagnose_prefilter_reference.py
+
 raas-gateway-prefilter-cutover: ## Phase 4A backlog priority cutover (no core skip)
 	PYTHONPATH=. python3 scripts/test_gateway_prefilter_cutover.py
 
