@@ -99,13 +99,20 @@ Orchestrierung der Sub-Schwärme = **Shell/Plugin außerhalb** (v2), nicht P₂-
 
 ```text
 0.  Topologie-Screen gegen geplantes Bus-Zustellmuster
-      └─ FAIL (complete/hub-Semantik) → Entwurf ändern, kein JetStream-Cutover
-1.  Stufe 1: Core-Bus nur wenn Gate 0 PASS (Queue-Group-Ring)
+      └─ PASS 2026-08-27 QUEUEGROUP_RING_PASS
+1.  Stufe 1: Core-Bus — **Pilot gestartet**
+      └─ Adapter `prototypes/raas_hybrid_shell/edge_bus.py`
+      └─ Eine Kante P1→P2 Queue-Group · Sync-Default bleibt TrustedCoreGateway
+      └─ Runner `scripts/test_stage1_edge_bus_pilot.py`
 2.  Live-Z3-Latenz messen (infra-z3) → erst dann „Echtzeit“-Sprache
 3.  Red-Team-Plugin (MEV/Latency) unter /sandbox/ + D2 OS-Isolation
 4.  Oracle / Liquidity Plugins nach Bedarf
 5.  Inter-Swarm (WSS/Libp2p) — zuletzt; P₉-Signatur + Z3-Header Intent
 ```
+
+**Stufe-1-Regeln (Pilot):** Orchestrator wartet auf Antwort der Kante (request/reply)
+→ feste Sequenz, kein Broadcast. D1–D4 bleiben an der Facade. Vollständige
+Migration aller Kanten erst nach grünem Pilot + Determinismus-Test.
 
 Stufe 2 (Gateway/Shell-Bus) kann parallel zur Facade bleiben; sie ersetzt nicht Gate 0.
 
@@ -115,8 +122,8 @@ Stufe 2 (Gateway/Shell-Bus) kann parallel zur Facade bleiben; sie ersetzt nicht 
 
 | Arbeit | Status |
 |--------|--------|
-| NATS JetStream Cutover für RaaS-P9 | Gate 0 **PASS** (Queue-Group) — Cutover noch **nicht** gestartet; nur freigegeben unter Queue-Group-Bindung |
-| Broadcast-Subjects als Steuerpfad | **gesperrt** (Serie) |
+| NATS JetStream Cutover für RaaS-P9 | Gate 0 PASS · **Pilot P1→P2** (`edge_bus.py`) — kein Full-Cutover |
+| Broadcast-Subjects als Steuerpfad | **gesperrt** (Serie + `forbid_broadcast`) |
 | „Echtzeit-Insolvenz“ in Pitch/Map | **gesperrt** bis Live-Z3 |
 | 9 neue Remap-Microservices | **abgelehnt** (v1/v2) |
 | Libp2p Inter-Swarm | Intent only |
