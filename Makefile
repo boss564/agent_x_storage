@@ -279,6 +279,9 @@ raas-mev-redteam: ## MEV/Latency Red-Team plugin (sandbox + D2)
 raas-oracle-anomaly: ## Oracle Anomaly Swarm plugin (P5 sandbox + D2)
 	PYTHONPATH=. python3 scripts/test_oracle_anomaly_swarm.py
 
+raas-os-isolation: ## D2 OS-isolation intent for Sub-Swarm Dockerfiles
+	PYTHONPATH=. python3 scripts/test_os_isolation_subswarms.py
+
 raas-portal: ## Start RaaS portal on :8020
 	PYTHONPATH=. uvicorn services.raas_portal.main:app --host 0.0.0.0 --port 8020
 

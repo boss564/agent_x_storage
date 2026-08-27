@@ -218,6 +218,7 @@ NO_TEST_SUMMARY: set[str] = {
     "scripts/test_live_z3_latency.py",  # Live HTTP latency vs infra-z3
     "scripts/test_mev_latency_redteam.py",  # MEV/Latency Red-Team sandbox plugin
     "scripts/test_oracle_anomaly_swarm.py",  # Oracle Anomaly Swarm P5 sandbox plugin
+    "scripts/test_os_isolation_subswarms.py",  # D2 OS-isolation Dockerfile consolidation
 }
 
 

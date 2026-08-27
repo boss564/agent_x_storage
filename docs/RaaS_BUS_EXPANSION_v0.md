@@ -131,15 +131,48 @@ Dockerfile (`USER redteam`, `--read-only` / `--cap-drop ALL` Runtime-Intent).
 3b. Oracle Anomaly Swarm (P5) — **PASS-Muster**
       └─ `plugins/oracle_anomaly_swarm/` · Subject `edge.P5.oracle.sandbox`
       └─ STALE_PRICE / FAT_FINGER / FLASH_CRASH · `make raas-oracle-anomaly`
-4.  Liquidity Plugin nach Bedarf (wenn Cross-Chain-Strategien anstehen)
-5.  Inter-Swarm (WSS/Libp2p) — zuletzt; P₉-Signatur + Z3-Header Intent
+3c. Konsolidierung — **OS-Isolationstest** (Voraussetzung vor Stufe 2)
+      └─ `scripts/test_os_isolation_subswarms.py` · `make raas-os-isolation`
+      └─ Dockerfile-Intent: USER≠root · --read-only · --cap-drop ALL · kein Core/WORM-Mount
+4.  Stufe 2 — Gateway/Shell-Bus (**geplant, noch nicht implementiert**)
+      └─ siehe §4.1 — Abbruchkriterien bindend vor Cutover
+5.  Liquidity Plugin nach Bedarf (wenn Cross-Chain-Strategien anstehen)
+6.  Inter-Swarm (WSS/Libp2p) — zuletzt; P₉-Signatur + Z3-Header Intent
 ```
 
 **Stufe-1-Regeln:** Orchestrator wartet auf Antwort der Kante (request/reply)
 → feste Sequenz, kein Broadcast. D1–D4 bleiben an der Facade. Gateway bleibt
-sync; Bus-Ring ist die gemessene Kern-Nachbarschaft vor Cutover.
+sync bis Stufe 2 bewusst freigegeben ist; Bus-Ring ist die gemessene
+Kern-Nachbarschaft vor Cutover.
 
-Stufe 2 (Gateway/Shell-Bus) kann parallel zur Facade bleiben; sie ersetzt nicht Gate 0.
+### 4.1 Stufe 2 — Gateway/Shell-Bus (geplant)
+
+**Status:** nicht implementiert · kein „mal eben“-Cutover  
+**Voraussetzung:** Sequenz 0–3c grün (`OS_ISOLATION_PASS` + bestehende Smokes)
+
+| Ziel | Inhalt |
+|------|--------|
+| Außenhülle auf Bus | Ingress/Egress-Events über NATS Queue-Groups (1-von-N), kein Broadcast |
+| Kern unangetastet wo möglich | `TrustedCoreGateway`-Logik bleibt; Transport wechselt, Rollen (P₁…P₉) nicht |
+| Fail-closed bleibt vorne | `DSuiteEnforcer` (D1–D4) **vor** jedem Kernaufruf — auch nach Bus-Hop |
+
+| Komponente | Rolle in Stufe 2 |
+|------------|------------------|
+| `SupranodeFacade` | Bleibt Außenhaut; publiziert/empfängt nur erlaubte Subjects |
+| `DSuiteEnforcer` | Weiter vor Core; Bus ersetzt den Enforcer **nicht** |
+| `TrustedCoreGateway` | Sync-Default bis Cutover; danach Request/Reply hinter Facade |
+| NATS | Nur Queue-Group Subjects (z. B. `edge.facade.core.*`); Broadcast gesperrt |
+
+**Fail-Closed-Bedingungen (Abbruch → Stufe 2 stoppen):**
+
+1. Jede neue Kante muss 1-von-N liefern (wie Gate 0); Fan-out = BLOCKED.  
+2. Red/Plugin-Pfade schreiben weiter nur unter `data/raas/sandbox/`; Decision-Felder verboten.  
+3. Exterior ohne Ingress/Egress/Evaluate = D4-Verletzung.  
+4. `live_execution` bleibt `false`; keine `execute_*`-APIs.  
+5. Determinismus-Test: gleiche Eingabe → gleiches Envelope/Seal über den Bus.  
+6. `HYBRID_SHELL_PASS` · `SUPRANODE_FACADE_PASS` · `D_SUITE_PASS` · Bus-Gates bleiben grün.
+
+Stufe 2 ersetzt **nicht** Gate 0 und nicht die Plugin-Isolation.
 
 ---
 
@@ -147,9 +180,11 @@ Stufe 2 (Gateway/Shell-Bus) kann parallel zur Facade bleiben; sie ersetzt nicht 
 
 | Arbeit | Status |
 |--------|--------|
-| NATS JetStream Cutover für RaaS-P9 | Gate 0 PASS · **Ring-Bus Pilot+9 Kanten** — Gateway-Cutover offen |
+| NATS JetStream Cutover für RaaS-P9 | Gate 0 PASS · **Ring-Bus Pilot+9 Kanten** — Gateway-Cutover = Stufe 2 (offen) |
+| Stufe 2 Gateway/Shell-Bus Implementierung | **gesperrt** bis §4 Sequenz 3c + §4.1 Kriterien |
 | Broadcast-Subjects als Steuerpfad | **gesperrt** (Serie + `forbid_broadcast`) |
 | „Echtzeit-Insolvenz“ in Pitch/Map | **erlaubt nur mit Live-Zahlen** (p50≈1,2 ms wall, 2026-08-27) — nicht Mock |
+| Multi-Chain Liquidity Sub-Schwarm | **zurückgestellt** bis Kundenbedarf Cross-Chain |
 | 9 neue Remap-Microservices | **abgelehnt** (v1/v2) |
 | Libp2p Inter-Swarm | Intent only |
 
@@ -162,6 +197,8 @@ Stufe 2 (Gateway/Shell-Bus) kann parallel zur Facade bleiben; sie ersetzt nicht 
 | `docs/STATEFUL_GRAPH_SERIE_v0.md` | topology · async_verify · wall_clock |
 | `prototypes/v2_stateful_graph/` | Screen-Runner · `live_z3_latency_results.json` |
 | `scripts/test_live_z3_latency.py` | Live HTTP → infra-z3 |
+| `scripts/test_os_isolation_subswarms.py` | D2 OS-Isolation Intent (Dockerfiles) |
 | `agents_b2g/protocol.py` | `broadcast`-Pfad |
 | `services/fail_closed_gate/d_suite_enforcer.py` | D1–D4 app layer2 |
 | `prototypes/raas_hybrid_shell/` | Facade + Gateway (sync Pilot) |
+| `plugins/mev_latency_redteam/` · `plugins/oracle_anomaly_swarm/` | Sub-Schwarm-Muster |

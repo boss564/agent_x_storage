@@ -48,7 +48,7 @@ Zusagen auf Schnittstellenebene (Facade ruft vor dem Kern auf):
 | ID | Zusage | Herkunft | Ist | Ergänzung später |
 |----|--------|----------|-----|------------------|
 | D1 | `not_investment_advice=true` | RaaS v1 | **layer2** Stamp + Free-Text-Filter | Wave-39 ScopeEnforcer komplementär |
-| D2 | Red nur Sandbox; keine Gate-Felder | RaaS v2 | **layer2** Pfad + Decision-Block | OS/Container-Isolation |
+| D2 | Red nur Sandbox; keine Gate-Felder | RaaS v2 | **layer2** Pfad + Decision-Block | OS/Container-Isolation (`test_os_isolation_subswarms.py`; Live optional `OS_ISOLATION_LIVE=1`) |
 | D3 | Shell nur über Gateway-Targets | Hybrid roadmap | **layer2** Allow-List + Facade | Netz-Segmentierung |
 | D4 | Ingress/Egress-only exterior | Supranode | **layer2** Exterior-Allow-List | Bus weiterhin Intent |
 
