@@ -96,6 +96,9 @@ Make: `make raas-fn-belt-screen` (180d).
 
 Das ist **Design**, kein automatisches Retune aus diesem Screen.
 
+**Entscheidung (2026-08-27):** Option **3** gewählt — Design-Amendment
+`docs/RaaS_WARN_BAND_AMENDMENT_v0.md` (Semantik + getrennte Metriken, **nicht** implementiert).
+
 ---
 
 ## 6. Verweise
@@ -103,5 +106,6 @@ Das ist **Design**, kein automatisches Retune aus diesem Screen.
 | Artefakt | Rolle |
 |----------|-------|
 | `docs/RaaS_FLASH_CRASH_RETROSPECTIVE_v0.md` | Parent-Screen · §5.1 Ergebnisse |
+| `docs/RaaS_WARN_BAND_AMENDMENT_v0.md` | Option-3 Design (Warnstufe), ohne Code |
 | `services/fail_closed_gate/gate_core.py` | Unveränderte Schwellen |
 | Tag `v1.0-raas-baseline` | Fixpunkt |
