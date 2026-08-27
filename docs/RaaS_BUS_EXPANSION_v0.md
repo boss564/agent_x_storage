@@ -41,10 +41,22 @@ Ein Bus, auf dem jeder publiziert und viele subskribieren, ist strukturell
 **Rettung:** NATS **Queue-Groups** = 1-von-N (wie `StickySelector`), nicht Fan-out.
 Das ist eine **Entwurfsentscheidung**, keine NATS-Eigenschaft.
 
-**Gate vor Stufe 1:** Topologie-Screen (oder Äquivalent) gegen das **tatsächliche
+**Gate vor Stufe 1:** Topologie-Screen gegen das **tatsächliche
 Zustellmuster** des geplanten Bus (Subjects + Queue-Groups). Verdict muss
-zeigen: Muster zählt als Ring (⟨k⟩≈1 / Margin hält), nicht als complete.
+zeigen: Muster zählt als Ring (⟨k⟩≈1 / 1-von-N), nicht als complete.
 Dauer: Minuten, nicht Wochen.
+
+**Runner:** `scripts/test_topology_bus_queuegroups.py` · `make raas-bus-topology-gate`  
+**Messung (2026-08-27, NATS `nats-gate0` :4222):**
+
+| Muster | exact_one | multi | mean receivers | Lesart |
+|--------|-----------|-------|----------------|--------|
+| Queue-Group (pro Kante) | 270/270 | 0 | 1,0 | **Ring-like 1-von-N** |
+| Broadcast-Subscribe (Kontrolle) | 0/270 | 270 | 3,0 | **complete-like Fan-out** |
+
+Verdict: **`QUEUEGROUP_RING_PASS`** · `gate0=PASS` · `stage1_allowed=true`  
+Bindung: Stufe 1 **nur** mit Queue-Group-Subjects — Broadcast als Steuerpfad bleibt gesperrt.  
+Artefakt: `prototypes/v2_stateful_graph/bus_topology_gate_results.json`
 
 ### 2.2 „Kern bleibt unangetastet“ gilt für Stufe 1 nicht
 
