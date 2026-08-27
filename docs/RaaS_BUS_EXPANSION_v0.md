@@ -3,7 +3,7 @@
 **Status:** GATE v0 (2026-08-27) · bindend vor jeder Bus-Migration  
 **Scope:** `DEFENSIVE_CAUSAL_GROUNDING` · `live_execution=false`  
 **Serie:** `docs/STATEFUL_GRAPH_SERIE_v0.md` (topology FALSIFIED · async_verify CONFIRMED unter Pipeline-Modell)  
-**Basis:** `docs/RaaS_HYBRID_KI_ROADMAP_v0.md` · `docs/RaaS_P9_MAPPING_v2.md` · `docs/RaaS_SUPRANODE_v0.md`
+**Basis:** `docs/RaaS_HYBRID_KI_ROADMAP_v0.md` · `docs/RaaS_P9_MAPPING_v2.md` · `docs/RaaS_P9_MAPPING_v3.md` · `docs/RaaS_SUPRANODE_v0.md`
 
 Roh-Ausbaustufen (Core-Bus → Gateway-Bus → Inter-Swarm) sind **plausibel**,
 aber Stufe 1 berührt zwei **gemessene** Eigenschaften der Serie. Dieses Dokument
@@ -556,6 +556,7 @@ DEFAULT_ON weiter gesperrt.
 | Phase 4B LLM-LoRA | **nach** 4A · eigener Bedarf |
 | Broadcast-Subjects als Steuerpfad | **gesperrt** (Serie + `forbid_broadcast`) |
 | „Echtzeit-Insolvenz“ in Pitch/Map | **erlaubt nur mit Live-Zahlen** (p50≈1,2 ms wall, 2026-08-27) — nicht Mock |
+| Multi-Schwarm-Schiedsrichter (v3) | Map ✅ · §4 gewählt (Verzeichnis · **M1** · Envelope nur Einreicher) · Betrieb bis M1-Bau gesperrt |
 | Multi-Chain Liquidity Sub-Schwarm | **zurückgestellt** bis Kundenbedarf Cross-Chain |
 | 9 neue Remap-Microservices | **abgelehnt** (v1/v2) |
 | Libp2p Inter-Swarm | Intent only |

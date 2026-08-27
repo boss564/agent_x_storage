@@ -191,6 +191,7 @@ Details: `docs/RaaS_BUS_EXPANSION_v0.md` §4.2
 |----------|-------|
 | `docs/RaaS_BUS_EXPANSION_v0.md` | Bus/Sub-Schwarm — Topologie-Gate vor Stufe 1 |
 | `docs/RaaS_SUPRANODE_v0.md` | Ingress/Egress-Facade · kein P-Remap |
+| `docs/RaaS_P9_MAPPING_v3.md` | Multi-Schwarm · Rollen-Lesart · §4: Verzeichnis · M1 · Envelope-Isolation |
 | `docs/RaaS_P9_MAPPING_v2.md` | Red/Blue Overlay · Sandbox-Schuld |
 | `docs/RaaS_P9_MAPPING_v1.md` | Strategie · Envelope · Advice-Schuld |
 | `docs/RaaS_P9_MAPPING_v0.md` | Contract-RaaS Proto |

@@ -144,6 +144,7 @@ v2 beschreibt **wer darf was**, nicht dass Sub-Schwärme laufen.
 | `docs/RaaS_HYBRID_KI_ROADMAP_v0.md` | Core/Shell · Tool-KI · Plugins · Synthetic Data (Roadmap) |
 | `docs/RaaS_P9_MAPPING_v1.md` | Strategie, Envelope, Advice-Schuld |
 | `docs/RaaS_P9_MAPPING_v0.md` | Contract-RaaS, API, Proto |
+| `docs/RaaS_P9_MAPPING_v3.md` | Multi-Schwarm-Schiedsrichter · §4 entschieden (M1 · strikt) |
 | `docs/AGENT_SWARM_P9_MAP_v0.md` | P-Artefakte, Compose, Gate |
 | `charts/agent-x/` | K8s Intent (nicht diese Map als Runtime) |
 | `services/raas_portal/` | Laufender Proto |
