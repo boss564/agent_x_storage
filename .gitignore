@@ -34,9 +34,8 @@ map_cache/
 # Multi-tenant test data (Audit-Archive, WORM, Nutzer-Artefakte)
 data/
 
-# Phase 4A trained model binaries (reports may be committed separately)
-models/prefilter/*.pkl
-models/prefilter/*.txt
+# Phase 4A trained model artifacts (local only)
+models/prefilter/
 
 # CertiK test logs (temporäre .jsonl aus Testläufen)
 /tmp/certik_test_*.jsonl
