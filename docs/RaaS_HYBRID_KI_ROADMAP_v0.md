@@ -103,18 +103,19 @@ Kern-Refactor möglich.
 
 **Ziel:** Features + Labels aus Simulationsläufen → leichtes Modell (z. B. GBT) als Vorfilter.
 
-#### Phase 4A — Schnellfilter (LightGBM/XGBoost) — **Priorisierung**
+#### Phase 4A — Schnellfilter (GBT) — **Priorisierung · IMPLEMENTIERT**
 
 | Element | Festlegung |
 |---------|------------|
 | Zweck | Score = **Queue-Priorität unter Rückstau**; jede Anfrage geht trotzdem voll durch den Kern |
 | Kern | unverändert; Prefilter = Untrusted Hülle (D1–D4); **kein Skip**, kein Z3-Ersatz |
-| Label-Herkunft | eigene Zeile in Gate-Map §4.2 — `severity_proxy` / `gateway` (zirkulär) / public unlabeled / externe Nicht-Gate-Labels |
-| Erfolg | Warteschlangen-Metrik vs. FIFO/Null (kann FAIL) · p95 Inferenzen &lt;5 ms · **nicht** AUC&gt;0.95 gegen dasselbe Gate |
-| Nicht jetzt | LLM-LoRA (4B) · „gesparte Simulationszeit“ ohne Skip · Public-Ingest als Blocker |
+| Label-Herkunft | Gate-Map §4.2 — Training nur `severity_proxy` |
+| Erfolg | Warteschlangen-Metrik vs. FIFO/Null (kann FAIL) · **nicht** AUC-gegen-Gate |
+| Stand | Synth · Train · Plugin · Facade-Cutover (`PREFILTER_ENABLED`, Default false) |
+| Make | `raas-prefilter-batch-extremes` · `raas-prefilter-train` · `raas-gateway-prefilter-cutover` |
+| Nicht jetzt | LLM-LoRA (4B) · Public-Ingest · Stufe-2 Bus-Cutover |
 
-Generator-Pilot: `scripts/generate_prefilter_synthetic_data.py` · Smoke `scripts/test_prefilter_datagen.py`  
-Training: `scripts/train_prefilter_model.py` · `make raas-prefilter-train` · Plugin `plugins/risk_prefilter/`  
+Training: `scripts/train_prefilter_model.py` · Plugin `plugins/risk_prefilter/`  
 Details: `docs/RaaS_BUS_EXPANSION_v0.md` §4.2
 
 #### Phase 4B — LLM Fine-Tuning (LoRA) — **nach 4A**
@@ -167,9 +168,11 @@ Details: `docs/RaaS_BUS_EXPANSION_v0.md` §4.2
 | Phase-1 Pilot Core/Shell | ✅ `prototypes/raas_hybrid_shell/` · `scripts/test_raas_hybrid_shell.py` |
 | Neues `agents/p1…p9` Remap | **abgelehnt** — v1-Rollen bleiben; `agents/` = Air/Surface/Mechanized |
 | Tool-Wrapper / LangGraph / LLM-Shell | Pilot: synthetische Shell; echtes LLM **nicht gebaut** |
-| Adversarial Plugins / Feature-Store / Schnell-Modell | **nicht gebaut** |
+| Adversarial Plugins / Feature-Store / Schnell-Modell | ✅ MEV+Oracle Plugins · Synth-Prefilter · Queue-Cutover (Phase 4A) |
 | Validierungs-Gateway (D3) | Facade + `DSuiteEnforcer` layer2 · Wave-39 ScopeEnforcer komplementär |
 | D-Suite barriers | ✅ `d_suite_enforcer.py` · `make raas-d-suite` |
+| Phase 4A Prefilter | ✅ Train + `GATEWAY_CUTOVER_PASS` / `GATEWAY_FALLBACK_PASS` · Default OFF |
+| Phase 4B LLM-LoRA / Public-Ingest | **nicht begonnen** — eigener Bedarf nötig |
 | Order-Send / Searcher / Auto-Rebalance | **gesperrt** |
 
 ---

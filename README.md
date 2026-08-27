@@ -105,4 +105,23 @@ curl -s http://localhost:8080/metrics
 
 ---
 
+## RaaS Hybrid (Risk-as-a-Service) — Kurzstand
+
+Deterministischer Kern + Untrusted Shell; Charter `live_execution=false`.
+
+| Baustein | Stand |
+|----------|--------|
+| Hybrid Shell / Supranode Facade | ✅ `prototypes/raas_hybrid_shell/` |
+| D1–D4 Enforcer | ✅ `make raas-d-suite` |
+| Bus Stufe 1 (Ring Queue-Groups) | ✅ Gate 0 + Stage-1 Ring |
+| Live-Z3-Latenz | ✅ `make raas-live-z3-latency` |
+| Sub-Schwärme MEV / Oracle | ✅ `plugins/mev_latency_redteam/` · `plugins/oracle_anomaly_swarm/` |
+| Phase 4A Prefilter (Queue-Priorität) | ✅ Default OFF · Cutover unter Rückstau · kein Kern-Skip |
+| Stufe 2 Bus / Phase 4B LLM / Public-Ingest | gesperrt bzw. eigener Bedarf |
+
+Maps: `docs/RaaS_HYBRID_KI_ROADMAP_v0.md` · `docs/RaaS_BUS_EXPANSION_v0.md`  
+Smoke: `make raas-prefilter-train` · `make raas-gateway-prefilter-cutover`
+
+---
+
 Damit ist der gesamte Stack — von den ersten 223k-TPS-Ingest-Versuchen über die 84 % → 0 % ZK-Optimierung bis hin zur Panzergrenadier-Infanterie und dem L1-Verankerungspunkt — lückenlos dokumentiert, verifiziert und produktionsbereit im Repo verankert.

@@ -136,10 +136,9 @@ Dockerfile (`USER redteam`, `--read-only` / `--cap-drop ALL` Runtime-Intent).
       └─ Dockerfile-Intent: USER≠root · --read-only · --cap-drop ALL · kein Core/WORM-Mount
 4.  Stufe 2 — Gateway/Shell-Bus (**geplant, noch nicht implementiert**)
       └─ siehe §4.1 — Abbruchkriterien bindend vor Cutover
-4A. Phase 4A — Schnellfilter (**Priorisierung**, Training + Cutover-Pilot)
-      └─ siehe §4.2 — Queue-Ordnung unter Rückstau; nie Kern-Skip / nie AUC-gegen-Gate
-      └─ Synth · Train `make raas-prefilter-train` · Plugin `plugins/risk_prefilter/`
-      └─ Gateway-Cutover `make raas-gateway-prefilter-cutover` (PREFILTER_ENABLED)
+4A. Phase 4A — Schnellfilter (**Priorisierung**) — **IMPLEMENTIERT 2026-08-27**
+      └─ siehe §4.2 — Queue unter Rückstau; Default FIFO; kein Kern-Skip
+      └─ Synth · Train · Plugin · Facade-Cutover (`PREFILTER_ENABLED`)
 5.  Liquidity Plugin nach Bedarf (wenn Cross-Chain-Strategien anstehen)
 6.  Inter-Swarm (WSS/Libp2p) — zuletzt; P₉-Signatur + Z3-Header Intent
 ```
@@ -178,10 +177,21 @@ Kern-Nachbarschaft vor Cutover.
 
 Stufe 2 ersetzt **nicht** Gate 0 und nicht die Plugin-Isolation.
 
-### 4.2 Phase 4A — Schnellfilter (GBT/LightGBM) — Priorisierung
+### 4.2 Phase 4A — Schnellfilter (GBT) — Priorisierung · **IMPLEMENTIERT**
 
-**Status:** Training-Pilot · `risk_prefilter` Skeleton · **kein** LLM · **kein** Kern-Skip  
-**Abgrenzung:** Parallel zu Stufe 2 möglich. Prefilter = Untrusted Hülle (D1–D4).
+**Status:** ✅ implementiert (2026-08-27) · Default `PREFILTER_ENABLED=false` · **kein** LLM · **kein** Kern-Skip  
+**Abgrenzung:** Parallel zu Stufe 2 (weiterhin gesperrt). Prefilter = Untrusted Hülle (D1–D4).
+
+| Deliverable | Artefakt / Runner |
+|-------------|-------------------|
+| Synth-Corpus | `data/synthetic/prefilter/` · `make raas-prefilter-batch-extremes` |
+| Label-Qualität | `PREFILTER_SYNTH_QUALITY_PASS` (nur `severity_proxy`) |
+| Training + Queue-Metrik | `make raas-prefilter-train` · `PREFILTER_TRAINING_PASS` / `PREFILTER_QUEUE_METRIC_*` |
+| Plugin | `plugins/risk_prefilter/` · Subject `edge.gateway.prefilter.request` |
+| Facade-Cutover | `handle_external_batch` · `make raas-gateway-prefilter-cutover` |
+| Cutover-Tests | `GATEWAY_CUTOVER_PASS` · `GATEWAY_FALLBACK_PASS` |
+
+Erstes Queue-Ergebnis (Holdout-Sim): riskante Wartezeit ≈ **−5,2 % vs FIFO**, besser als Random — ehrlich bescheiden; Optimierung optional, kein Architekturzwang.
 
 #### Deklarierter Zweck (bindend)
 
@@ -260,7 +270,8 @@ Runner: `make raas-prefilter-train` · Plugin `plugins/risk_prefilter/`
 |--------|--------|
 | NATS JetStream Cutover für RaaS-P9 | Gate 0 PASS · **Ring-Bus Pilot+9 Kanten** — Gateway-Cutover = Stufe 2 (offen) |
 | Stufe 2 Gateway/Shell-Bus Implementierung | **gesperrt** bis §4 Sequenz 3c + §4.1 Kriterien |
-| Phase 4A `risk_prefilter` Dienst-Cutover | Cutover-Pilot an Facade (`handle_external_batch`); Default OFF |
+| Phase 4A `risk_prefilter` Cutover | ✅ Facade-Batch · Default OFF · FIFO-Fallback · kein Skip |
+| Phase 4A Modell-Optimierung (mehr Synth) | **optional** — Konsolidierung, kein Architekturzwang |
 | Öffentliche Market-Daten / Nicht-Gate-Labels | **eigenes Arbeitspaket** (kein Verdict in Klines; RPCs oft geblockt) |
 | Phase 4B LLM-LoRA | **nach** 4A |
 | Broadcast-Subjects als Steuerpfad | **gesperrt** (Serie + `forbid_broadcast`) |
