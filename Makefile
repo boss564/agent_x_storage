@@ -292,6 +292,9 @@ raas-prefilter-batch-extremes: ## Phase 4A scale extremes synth (n=5000, severit
 raas-prefilter-train: ## Phase 4A GBT train + queue metric (severity_proxy only)
 	PYTHONPATH=. python3 scripts/test_prefilter_training.py
 
+raas-prefilter-queue-seed-spread: ## Queue metric mean/std over ≥6 train seeds (§4.2)
+	PYTHONPATH=. python3 scripts/check_prefilter_queue_seed_spread.py
+
 raas-gateway-prefilter-cutover: ## Phase 4A backlog priority cutover (no core skip)
 	PYTHONPATH=. python3 scripts/test_gateway_prefilter_cutover.py
 

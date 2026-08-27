@@ -52,6 +52,12 @@ Zusagen auf Schnittstellenebene (Facade ruft vor dem Kern auf):
 | D3 | Shell nur über Gateway-Targets | Hybrid roadmap | **layer2** Allow-List + Facade | Netz-Segmentierung |
 | D4 | Ingress/Egress-only exterior | Supranode | **layer2** Exterior-Allow-List | Bus weiterhin Intent |
 
+**Ebene 1 (sichtbar, noch nicht ScopeEnforcer):** Gateway-`health` meldet
+`D1_not_investment_advice`, `D2_red_sandbox`, `D3_gateway` (siehe
+`TrustedCoreGateway.health` / Facade). Sobald Code für Intake, Red-Sandbox oder
+Gateway-Härtung entsteht, gehören diese drei in **dieselbe Durchsetzungskette**
+wie `live_execution=false` über `ScopeEnforcerAgent` — nicht nur layer2-Stamp.
+
 WORM-Hash-Stempel (`_worm_anchor_sha256` + `WormAnchorStore`) ist **quer** zu D1–D4
 (GoBD-Anker), keine Umnummerierung von D4.
 
@@ -172,8 +178,10 @@ Details: `docs/RaaS_BUS_EXPANSION_v0.md` §4.2
 | Validierungs-Gateway (D3) | Facade + `DSuiteEnforcer` layer2 · Wave-39 ScopeEnforcer komplementär |
 | D-Suite barriers | ✅ `d_suite_enforcer.py` · `make raas-d-suite` |
 | Phase 4A Prefilter | ✅ Train + `GATEWAY_CUTOVER_PASS` / `GATEWAY_FALLBACK_PASS` · Default OFF |
-| Phase 4B LLM-LoRA / Public-Ingest | **nicht begonnen** — eigener Bedarf nötig |
+| Phase 4B LLM-LoRA / Public-Ingest | Public-Ingest = §4.3 Kalibrierung (nach Seed-Spread); 4B eigener Bedarf |
 | Order-Send / Searcher / Auto-Rebalance | **gesperrt** |
+| D1–D3 → ScopeEnforcer (Ebene 2) | **offen** — Health zeigt Schuld; Kette analog `live_execution` bei Intake/Red/Gateway |
+| Vor Stufe 2: Topologie-Re-Screen | **bindend** — Bus-Expansion §4.1 · ~16 s · Ring vs. complete |
 
 ---
 

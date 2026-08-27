@@ -245,6 +245,107 @@ def save_model(model: Any, backend: str, path: Path, meta: Dict[str, Any]) -> No
     meta_path.write_text(json.dumps(meta, indent=2), encoding="utf-8")
 
 
+def run_training_once(
+    data_dir: Path,
+    *,
+    train_frac: float = 0.8,
+    seed: int = 20260827,
+    persist_importance: bool = True,
+) -> Dict[str, Any]:
+    """Train + queue metric for one seed (no model write)."""
+    rows = load_severity_proxy_rows(data_dir)
+    x, y, seeds = matrix_from_rows(rows)
+    x_tr, y_tr, x_te, y_te = seed_split(x, y, seeds, train_frac=train_frac)
+    model, backend, val_m = train_gbt(x_tr, y_tr, x_te, y_te, seed=seed)
+    scores_te = predict_scores(model, backend, x_te)
+    queue = simulate_backlog_wait(y_te, scores_te, seed=seed)
+    imp = (
+        feature_importance(model, backend, x_te, y_te)
+        if persist_importance
+        else {name: 0.0 for name in FEATURE_NAMES}
+    )
+    return {
+        "model": model,
+        "backend": backend,
+        "n_total": len(rows),
+        "n_train": int(len(x_tr)),
+        "n_holdout": int(len(x_te)),
+        "val_metrics": val_m,
+        "feature_importance": imp,
+        "queue_metric": queue,
+        "seed": seed,
+    }
+
+
+def run_queue_seed_spread(
+    data_dir: Path,
+    *,
+    n_seeds: int = 6,
+    base_seed: int = 20260827,
+    train_frac: float = 0.8,
+) -> Dict[str, Any]:
+    """Retrain n_seeds times; report mean/std of improvement_vs_fifo.
+
+    Gate-Map §4.2: a single-run % is not an success criterion until spread is known.
+    """
+    if n_seeds < 2:
+        raise ValueError("n_seeds must be >= 2")
+    seeds_used: List[int] = []
+    improvements: List[float] = []
+    runs: List[Dict[str, Any]] = []
+    for i in range(n_seeds):
+        seed = base_seed + i
+        once = run_training_once(
+            data_dir, train_frac=train_frac, seed=seed, persist_importance=False
+        )
+        q = once["queue_metric"]
+        imp = q.get("improvement_vs_fifo")
+        seeds_used.append(seed)
+        improvements.append(float(imp) if imp is not None and not np.isnan(imp) else float("nan"))
+        runs.append(
+            {
+                "seed": seed,
+                "backend": once["backend"],
+                "improvement_vs_fifo": improvements[-1],
+                "beats_fifo": q.get("beats_fifo"),
+                "beats_random": q.get("beats_random"),
+                "mean_wait_risky_fifo_s": q.get("mean_wait_risky_fifo_s"),
+                "mean_wait_risky_priority_s": q.get("mean_wait_risky_priority_s"),
+                "n_holdout": once["n_holdout"],
+                "n_risky": q.get("n_risky"),
+            }
+        )
+
+    arr = np.asarray(improvements, dtype=np.float64)
+    mean = float(np.nanmean(arr))
+    std = float(np.nanstd(arr, ddof=1)) if n_seeds > 1 else 0.0
+    # Separable from zero if |mean| > 2σ (and σ finite); can fail honestly
+    separable = bool(np.isfinite(mean) and np.isfinite(std) and abs(mean) > 2.0 * std and std >= 0)
+    # Also require mean positive (priority better than FIFO on average)
+    spread_pass = bool(separable and mean > 0)
+
+    return {
+        "verdict": (
+            "PREFILTER_QUEUE_SEED_SPREAD_PASS"
+            if spread_pass
+            else "PREFILTER_QUEUE_SEED_SPREAD_FAIL"
+        ),
+        "n_seeds": n_seeds,
+        "seeds": seeds_used,
+        "improvement_vs_fifo_per_seed": improvements,
+        "improvement_vs_fifo_mean": mean,
+        "improvement_vs_fifo_std": std,
+        "separable_from_zero_2sigma": separable,
+        "criterion": "mean>0 and |mean|>2*std (ddof=1); single-run % is not success",
+        "runs": runs,
+        "label_mode": "severity_proxy",
+        "purpose": "queue_prioritization_under_backlog",
+        "note": "Model approximates gate for sorting; does not predict market risk",
+        "scope": SCOPE,
+        "live_execution": False,
+    }
+
+
 def run_training(
     data_dir: Path,
     *,
@@ -252,13 +353,12 @@ def run_training(
     train_frac: float = 0.8,
     seed: int = 20260827,
 ) -> Dict[str, Any]:
-    rows = load_severity_proxy_rows(data_dir)
-    x, y, seeds = matrix_from_rows(rows)
-    x_tr, y_tr, x_te, y_te = seed_split(x, y, seeds, train_frac=train_frac)
-    model, backend, val_m = train_gbt(x_tr, y_tr, x_te, y_te, seed=seed)
-    scores_te = predict_scores(model, backend, x_te)
-    queue = simulate_backlog_wait(y_te, scores_te, seed=seed)
-    imp = feature_importance(model, backend, x_te, y_te)
+    once = run_training_once(data_dir, train_frac=train_frac, seed=seed, persist_importance=True)
+    model = once["model"]
+    backend = once["backend"]
+    queue = once["queue_metric"]
+    imp = once["feature_importance"]
+    val_m = once["val_metrics"]
 
     # Primary success: can fail
     queue_pass = bool(queue["beats_fifo"] and queue["beats_random"])
@@ -270,18 +370,23 @@ def run_training(
             "PREFILTER_QUEUE_METRIC_PASS" if queue_pass else "PREFILTER_QUEUE_METRIC_FAIL"
         ),
         "backend": backend,
-        "n_total": len(rows),
-        "n_train": int(len(x_tr)),
-        "n_holdout": int(len(x_te)),
+        "n_total": once["n_total"],
+        "n_train": once["n_train"],
+        "n_holdout": once["n_holdout"],
         "label_mode": "severity_proxy",
         "features": FEATURE_NAMES,
         "val_metrics": val_m,
         "feature_importance": imp,
         "queue_metric": queue,
+        "seeds": [seed],
         "scope": SCOPE,
         "live_execution": False,
         "purpose": "queue_prioritization_under_backlog",
-        "banned": ["auc_against_gate", "core_skip", "model_only_release"],
+        "purpose_statement": (
+            "Model approximates the gate verdict for sorting; "
+            "it does not predict market risk."
+        ),
+        "banned": ["auc_against_gate", "core_skip", "model_only_release", "risk_forecast_claim"],
     }
 
     save_model(

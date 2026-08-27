@@ -153,6 +153,12 @@ Kern-Nachbarschaft vor Cutover.
 **Status:** nicht implementiert · kein „mal eben“-Cutover  
 **Voraussetzung:** Sequenz 0–3c grün (`OS_ISOLATION_PASS` + bestehende Smokes)
 
+**Vor Cutover (bindend):** Topologie-Screen erneut gegen das **tatsächliche**
+Zustellmuster des Bus (§2.1 / `make raas-bus-topology-gate`, ~16 s). Verdict
+entscheidet, ob NATS den Ring erhält (`QUEUEGROUP_RING_PASS`, ⟨k⟩≈1) oder ihn zu
+`complete` macht (Fan-out — dort lag die Serie-Marge bei null). Ohne PASS kein
+Stufe-2-Cutover.
+
 | Ziel | Inhalt |
 |------|--------|
 | Außenhülle auf Bus | Ingress/Egress-Events über NATS Queue-Groups (1-von-N), kein Broadcast |
@@ -191,26 +197,33 @@ Stufe 2 ersetzt **nicht** Gate 0 und nicht die Plugin-Isolation.
 | Facade-Cutover | `handle_external_batch` · `make raas-gateway-prefilter-cutover` |
 | Cutover-Tests | `GATEWAY_CUTOVER_PASS` · `GATEWAY_FALLBACK_PASS` |
 
-Erstes Queue-Ergebnis (Holdout-Sim): riskante Wartezeit ≈ **−5,2 % vs FIFO**, besser als Random — ehrlich bescheiden; Optimierung optional, kein Architekturzwang.
+Erstes Queue-Ergebnis (Holdout-Sim, ein Seed): riskante Wartezeit ≈ **−5,2 % vs FIFO**.
+**Seed-Spread (2026-08-27, n=6):** mean **4,48 %** · σ **1,47 %** · Range 2,2–6,1 % ·
+`PREFILTER_QUEUE_SEED_SPREAD_PASS` (mean > 2σ) — Einzellauf war am oberen Rand;
+Artefakt `models/prefilter/prefilter_queue_seed_spread.json`.
 
 #### Deklarierter Zweck (bindend)
 
 **Priorisierung unter Rückstau** — nicht Abkürzung, nicht Freigabe.
 
+**Satz (bindend):** *Das Modell approximiert das Gate-Verdict, es prognostiziert
+kein Marktrisiko.* Es sortiert; Freigabe bleibt allein beim deterministischen Kern.
+
 - Jede Anfrage wird **vollständig** vom deterministischen Kern geprüft.  
 - Der Score bestimmt nur die **Reihenfolge** in der Warteschlange (riskante zuerst).  
 - Wenn kein Rückstau existiert, ist der Prefilter optional und darf **keine** Latenz
   als „Ersparnis“ verkaufen (er addiert dann nur Overhead).  
-- **Verboten zu zitieren:** „spart Rechenzeit / überspringt Simulation“ — das ist nicht der Zweck.
+- **Verboten zu zitieren:** „spart Rechenzeit / überspringt Simulation“ ·
+  „Risikovorhersage“ · „Marktrisiko erkannt“ — das ist nicht der Zweck.
 
 #### Label-Herkunft (eigene Zeile — vor jedem Trainingslauf ausfüllen)
 
 | Mode / Quelle | Was steckt im Label? | Für überwachtes Lernen? | Zirkularität |
 |---------------|----------------------|-------------------------|--------------|
-| `severity_proxy` | Plugin-Severity → Pseudo-Verdict | nur Pipeline-Smoke / Feature-Export | kein Gate — **kein** Risk-Claim |
+| `severity_proxy` | Plugin-Severity → Pseudo-Verdict | Training erlaubt (Sortierhelfer) | **verschoben, nicht aufgehoben** — Zielgröße = deterministische Funktion der Eingänge; Kalibrierung ändert Abdeckung, nicht Label-Unabhängigkeit |
 | `gateway` | `TrustedCoreGateway` / `evaluate_gate` | lernt die **eigene Gate-Funktion** | **ja** — AUC vs. denselben Gate ist Vanity |
-| öffentlich (`data/external/`) | Klines/MEV-Rohdaten | Features **ohne** `verdict` | unbeschriftet; Pseudo-Label via Gate = wieder Zirkel |
-| externe Nicht-Gate-Labels | z. B. ex-post Incidents, manuelle Tags | Generalisierungstest | Zielbild — **eigenes Arbeitspaket**, nicht Blocker der Datengen |
+| öffentlich (roh) | Klines/MEV ohne Verdict | **kein** Trainingslabel | unlabeled; direkt trainieren = Proxy-Label-Risiko → **verboten** |
+| Public-Ingest (§4.3) | Verteilungsprofile → Synth-Generator | Labels bleiben `severity_proxy` | Kalibrierung der **Eingänge**, nicht der Labels |
 
 Gate-Labels (`gateway`) dürfen Feature-Pipelines und Ranking-Proxies speisen, aber
 **nicht** als Beweis gelten, dass das Modell „Risiko“ gelernt hat.
@@ -224,6 +237,10 @@ Gate-Labels (`gateway`) dürfen Feature-Pipelines und Ranking-Proxies speisen, a
    (zufällige Reihenfolge / FIFO) getestet werden und darf **fehlschlagen**.  
    Artefakt: `PREFILTER_QUEUE_METRIC_PASS|FAIL` in `models/prefilter/prefilter_train_report.json`.  
    *(Kein* „AUC &gt; 0,95 auf Synth-Extrems“ *als Erfolg.)*  
+   **Seed-Spread (vor Kalibrierungs-Claims):** ≥6 Trainings-Seeds →
+   `improvement_vs_fifo` Mittelwert **und** Streuung (`seeds`-Feld im Report).
+   Ein Einzellauf (% vs FIFO) ist **kein** Erfolgskriterium.  
+   Runner: `make raas-prefilter-queue-seed-spread`.  
 3. `PREFILTER_TRAINING_PASS` — Trainingspipeline auf `severity_proxy`-Corpus
    (`scripts/train_prefilter_model.py` · GBT: LightGBM falls vorhanden, sonst
    sklearn HistGradientBoosting).  
@@ -262,6 +279,48 @@ Runner: `make raas-prefilter-train` · Plugin `plugins/risk_prefilter/`
 **Nicht jetzt:** LoRA/LLM (4B) · Live-Exchange-Ingest als Freigabekriterium ·
 „gesparte Simulationszeit“ ohne Skip (widerspricht Zweck).
 
+### 4.3 Arbeitspaket Public-Ingest — Kalibrierung (nicht Trainingslabels)
+
+**Status:** geplant · **getrennt** von Phase 4A · kein DEFAULT_ON-Trigger ohne Seed-Spread  
+**Zweck der öffentlichen Daten:** Verteilungsquelle für den Synth-Generator —
+**nicht** unlabeled Trainingszeilen, **kein** Proxy-Verdict aus Klines/MEV.
+
+| Schritt | Inhalt | Nicht |
+|---------|--------|-------|
+| 1 Sondierung | Binance-Klines / Flashbots-Stichprobe → `exports/open_data/` | Terabytes · Live-Trading |
+| 2 Profile | Latenz-/Vol-/MEV-/Oracle-Perzentile als JSON/YAML | Training auf Rohzeilen |
+| 3 Generator | Profile → `generate_prefilter_synthetic_data.py` | Label-Mode ändern |
+| 4 Re-Train | 20k–50k Synth · Quality-Gate · Queue-Metrik | Claim ohne gepaarten Seed-Vergleich |
+| 5 DEFAULT_ON | nur wenn mean(Δ) > 2·SEM(Δ) (gleiche Seeds) | nackte %-Zahl · 2σ-Einzellauf als Cut |
+
+**Zweck-Satz (wie §4.2):** Modell approximiert Gate zum **Sortieren**; prognostiziert
+kein Marktrisiko. Kalibrierung verbessert **Abdeckung** (realistischere Ränder),
+nicht Label-Unabhängigkeit (Zirkularität bleibt benannt).
+
+**Label-Herkunft:** Training weiter nur `severity_proxy` aus dem Simulator.
+Öffentliche Rohdaten → Parameterprofile → Synth → dieselben Label-Regeln.
+
+**Erfolgskriterium (muss scheitern können):**
+
+1. **Baseline (Einzellauf-Streuung):** `make raas-prefilter-queue-seed-spread`
+   (≥6 Seeds) → `improvement_vs_fifo_mean` / `_std` / Feld `seeds`.
+   Das 2σ-Kriterium dort prüft nur: *ist der Effekt von null unterscheidbar?*
+   (Ist-Stand 2026-08-27: mean 4,48 % · σ 1,47 % · mean/SEM≈7,5 · PASS).  
+2. **Public-Ingest-Vergleich = gepaart (bindend):** dieselben sechs Seeds
+   vor und nach Kalibrierung; je Seed Δ = improvement_after − improvement_before;
+   Erfolg nur wenn  
+   `mean(Δ) > 2 · SEM(Δ)` mit `SEM(Δ) = std(Δ)/√n` (n=6).  
+   *Nicht* Δmean ≳ 2·σ_Einzellauf (≈2,94 pp) — das wäre zu streng für zwei
+   Mittelwerte und würde reale ~2 pp-Gewinne als Rauschen verwerfen.  
+   Orientierung ungepaart: 2·SEM_diff ≈ 1,7 pp; gepaart typisch darunter.
+   Nebenbei sichtbar: wirkt die Kalibrierung gleichmäßig über Seeds oder nur
+   auf Ausreißern?  
+3. Quality-Gate `PREFILTER_SYNTH_QUALITY_PASS` bleibt grün.  
+4. Kein Kern-Skip · D1–D4 unverändert · kein Risk-Claim aus öffentlichen Daten.
+
+**Reihenfolge (bindend):** Gate-Map (§4.2/§4.3) → Seed-Spread-Check →
+Sondierungs-Skript → Generator. Nicht umgekehrt.
+
 ---
 
 ## 5. Nicht jetzt
@@ -269,11 +328,11 @@ Runner: `make raas-prefilter-train` · Plugin `plugins/risk_prefilter/`
 | Arbeit | Status |
 |--------|--------|
 | NATS JetStream Cutover für RaaS-P9 | Gate 0 PASS · **Ring-Bus Pilot+9 Kanten** — Gateway-Cutover = Stufe 2 (offen) |
-| Stufe 2 Gateway/Shell-Bus Implementierung | **gesperrt** bis §4 Sequenz 3c + §4.1 Kriterien |
+| Stufe 2 Gateway/Shell-Bus Implementierung | **gesperrt** bis §4 Sequenz 3c + §4.1 Kriterien + **Topologie-Re-Screen** (~16 s) |
 | Phase 4A `risk_prefilter` Cutover | ✅ Facade-Batch · Default OFF · FIFO-Fallback · kein Skip |
-| Phase 4A Modell-Optimierung (mehr Synth) | **optional** — Konsolidierung, kein Architekturzwang |
-| Öffentliche Market-Daten / Nicht-Gate-Labels | **eigenes Arbeitspaket** (kein Verdict in Klines; RPCs oft geblockt) |
-| Phase 4B LLM-LoRA | **nach** 4A |
+| Phase 4A Modell-Optimierung (mehr Synth) | **optional** — erst nach Seed-Spread (§4.2) |
+| Public-Ingest (Kalibrierungsprofile) | **§4.3** — nach Seed-Spread; Rohdaten ≠ Trainingslabels |
+| Phase 4B LLM-LoRA | **nach** 4A · eigener Bedarf |
 | Broadcast-Subjects als Steuerpfad | **gesperrt** (Serie + `forbid_broadcast`) |
 | „Echtzeit-Insolvenz“ in Pitch/Map | **erlaubt nur mit Live-Zahlen** (p50≈1,2 ms wall, 2026-08-27) — nicht Mock |
 | Multi-Chain Liquidity Sub-Schwarm | **zurückgestellt** bis Kundenbedarf Cross-Chain |
@@ -292,6 +351,7 @@ Runner: `make raas-prefilter-train` · Plugin `plugins/risk_prefilter/`
 | `scripts/test_live_z3_latency.py` | Live HTTP → infra-z3 |
 | `scripts/test_os_isolation_subswarms.py` | D2 OS-Isolation Intent (Dockerfiles) |
 | `scripts/generate_prefilter_synthetic_data.py` | Phase-4A Synth-Datengen |
+| `scripts/check_prefilter_queue_seed_spread.py` | Queue-Metrik Seed-Spread (≥6) |
 | `agents_b2g/protocol.py` | `broadcast`-Pfad |
 | `services/fail_closed_gate/d_suite_enforcer.py` | D1–D4 app layer2 |
 | `prototypes/raas_hybrid_shell/` | Facade + Gateway (sync Pilot) |
