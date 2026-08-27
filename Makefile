@@ -298,6 +298,17 @@ raas-prefilter-queue-seed-spread: ## Queue metric mean/std over ≥6 train seeds
 raas-public-ingest-sondierung: ## §4.3 Public-Ingest — distribution profiles only (no train labels)
 	PYTHONPATH=. python3 scripts/ingest_public_distributions.py
 
+raas-prefilter-calibrated-smoke: ## §4.3 generator+profiles smoke (n=5000)
+	PYTHONPATH=. python3 scripts/generate_prefilter_synthetic_data.py --profile extremes --n 5000 --label-mode severity_proxy --out data/synthetic/prefilter/calibrated_smoke
+	PYTHONPATH=. python3 scripts/check_prefilter_synth_quality.py data/synthetic/prefilter/calibrated_smoke
+
+raas-prefilter-calibrated-batch: ## §4.3 calibrated extremes batch (n=20000)
+	PYTHONPATH=. python3 scripts/generate_prefilter_synthetic_data.py --profile extremes --n 20000 --label-mode severity_proxy --out data/synthetic/prefilter/calibrated
+	PYTHONPATH=. python3 scripts/check_prefilter_synth_quality.py data/synthetic/prefilter/calibrated
+
+raas-prefilter-paired-compare: ## §4.3 paired queue Δ vs baseline seed-spread
+	PYTHONPATH=. python3 scripts/compare_prefilter_queue_paired.py
+
 raas-gateway-prefilter-cutover: ## Phase 4A backlog priority cutover (no core skip)
 	PYTHONPATH=. python3 scripts/test_gateway_prefilter_cutover.py
 

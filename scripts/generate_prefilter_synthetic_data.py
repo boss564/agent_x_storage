@@ -48,6 +48,7 @@ SCOPE = "DEFENSIVE_CAUSAL_GROUNDING"
 # Structured synth corpus for Phase 4A (gitignored under data/)
 OUT_DIR = _ROOT / "data" / "synthetic" / "prefilter"
 SANDBOX_OUT = _ROOT / "data" / "raas" / "sandbox" / "prefilter_synth"
+DEFAULT_CALIBRATION_DIR = _ROOT / "exports" / "open_data"
 
 MEV_KINDS = ("LATENCY_SPIKE", "SANDWICH_SIM", "JITTER_BURST")
 ORA_KINDS = ("STALE_PRICE", "FAT_FINGER", "FLASH_CRASH", "DEPEG_SIM")
@@ -59,6 +60,9 @@ EXTREME_CYCLE: Tuple[Tuple[str, str], ...] = (
     ("oracle", "FAT_FINGER"),
     ("oracle", "DEPEG_SIM"),
     ("oracle", "STALE_PRICE"),
+)
+STRESS_KINDS = frozenset(
+    {"LATENCY_SPIKE", "SANDWICH_SIM", "FLASH_CRASH", "FAT_FINGER", "DEPEG_SIM"}
 )
 
 FEATURE_COLS = [
@@ -83,11 +87,139 @@ FEATURE_COLS = [
     "risk_block_rate",
     "live_execution",
     "scope",
+    "calibration_applied",
 ]
 
 
 def _sev_score(severity: str) -> float:
     return {"LOW": 0.2, "MODERATE": 0.55, "HIGH": 0.9}.get(str(severity).upper(), 0.5)
+
+
+def load_calibration_profiles(cal_dir: Path) -> Optional[Dict[str, Any]]:
+    """Load §4.3 distribution profiles (not labels). Returns None if missing."""
+    if not cal_dir.is_dir():
+        return None
+    index_path = cal_dir / "calibration_profiles_index.json"
+    binance = None
+    flashbots = None
+    paths: List[str] = []
+    if index_path.is_file():
+        idx = json.loads(index_path.read_text(encoding="utf-8"))
+        for p in idx.get("profiles") or []:
+            path = Path(p)
+            if not path.is_file():
+                path = cal_dir / Path(p).name
+            if not path.is_file():
+                continue
+            doc = json.loads(path.read_text(encoding="utf-8"))
+            paths.append(str(path))
+            src = str(doc.get("source", ""))
+            if "binance" in src:
+                binance = doc
+            elif "flashbots" in src:
+                flashbots = doc
+    # Fallback by filename
+    if binance is None:
+        for cand in sorted(cal_dir.glob("binance_*_klines_profile.json")):
+            binance = json.loads(cand.read_text(encoding="utf-8"))
+            paths.append(str(cand))
+            break
+    if flashbots is None:
+        fb = cal_dir / "flashbots_latency_profile.json"
+        if fb.is_file():
+            flashbots = json.loads(fb.read_text(encoding="utf-8"))
+            paths.append(str(fb))
+    if binance is None and flashbots is None:
+        return None
+    return {
+        "binance": binance,
+        "flashbots": flashbots,
+        "paths": paths,
+        "purpose": "calibration_profile_not_training_labels",
+        "label_mode": None,
+    }
+
+
+def _pctile_band(dig: int, *, stress: bool) -> str:
+    """Deterministic band from dig — stress biases toward tails."""
+    r = dig % 100
+    if stress:
+        if r < 35:
+            return "p90"
+        if r < 75:
+            return "p99"
+        return "max"
+    if r < 50:
+        return "p50"
+    if r < 80:
+        return "p90"
+    if r < 95:
+        return "p99"
+    return "max"
+
+
+def _draw_pctile(stats: Optional[Dict[str, Any]], dig: int, *, stress: bool) -> Optional[float]:
+    if not stats or not isinstance(stats, dict):
+        return None
+    key = _pctile_band(dig, stress=stress)
+    val = stats.get(key)
+    if val is None or (isinstance(val, float) and val != val):  # NaN
+        return None
+    try:
+        return float(val)
+    except (TypeError, ValueError):
+        return None
+
+
+def _rescale_gas_proxy(raw: float, stats: Dict[str, Any]) -> float:
+    """Map Flashbots effective gas proxy into synth gwei-like range (~10–150)."""
+    lo = float(stats.get("p50") or raw)
+    hi = float(stats.get("max") or (raw * 2 if raw else 1.0))
+    if hi <= lo:
+        return 25.0
+    t = (raw - lo) / (hi - lo)
+    t = max(0.0, min(1.0, t))
+    return round(12.0 + t * (140.0 - 12.0), 4)
+
+
+def apply_calibration(
+    feats: Dict[str, float],
+    cal: Dict[str, Any],
+    *,
+    dig: int,
+    scenario_kind: str,
+    blend: float = 0.30,
+) -> Dict[str, float]:
+    """Calibrate gas/MEV from public profiles; leave severity-linked features to plugins.
+
+    Full/slippage replacement broke severity↔feature rank (paired FAIL). Soft-blend
+    on those features still hurt. Gas/MEV are weaker label drivers — safe anchors.
+    Labels stay severity_proxy — calibration changes inputs only.
+    """
+    out = dict(feats)
+    stress = scenario_kind in STRESS_KINDS
+    fb = (cal.get("flashbots") or {}).get("features") or {}
+    w = min(1.0, max(0.0, blend))
+
+    def _blend(plugin_val: float, public_val: Optional[float]) -> float:
+        if public_val is None:
+            return plugin_val
+        return (1.0 - w) * plugin_val + w * public_val
+
+    gas_raw = _draw_pctile(fb.get("gas_price_gwei"), dig ^ 0x11, stress=stress)
+    if gas_raw is not None and isinstance(fb.get("gas_price_gwei"), dict):
+        gas = _rescale_gas_proxy(gas_raw, fb["gas_price_gwei"])
+        out["gas_price_gwei"] = round(_blend(float(out["gas_price_gwei"]), gas), 4)
+
+    mev_act = _draw_pctile(fb.get("mev_bundle_activity"), dig ^ 0x55, stress=stress)
+    if mev_act is not None:
+        act = max(0.0, min(1.0, mev_act / 100.0))
+        out["mev_bundle_activity"] = round(_blend(float(out["mev_bundle_activity"]), act), 4)
+
+    # Binance slip/vol/oracle: recorded in manifest for future experiments;
+    # not applied to features here (preserves severity rank).
+    # latency_ms: no public timing — keep plugin
+    return out
 
 
 def _extreme_mev_params(kind: str, dig: int) -> Dict[str, Any]:
@@ -204,6 +336,7 @@ def generate_rows(
     seed: int = 20260827,
     label_mode: str = "severity_proxy",
     profile: str = "mixed",
+    calibration: Optional[Dict[str, Any]] = None,
 ) -> List[Dict[str, Any]]:
     if profile not in ("mixed", "extremes"):
         raise ValueError(f"unknown profile: {profile}")
@@ -236,6 +369,11 @@ def generate_rows(
             attack = ora_run(st)
             feats = _features_from_oracle(attack["artifact"], dig)
 
+        cal_applied = False
+        if calibration is not None:
+            feats = apply_calibration(feats, calibration, dig=dig, scenario_kind=kind)
+            cal_applied = True
+
         row: Dict[str, Any] = {
             "sample_id": f"{seed}-{profile}-{i:05d}",
             "seed": seed + i,
@@ -249,6 +387,7 @@ def generate_rows(
             "label_provenance": provenance,
             "live_execution": False,
             "scope": SCOPE,
+            "calibration_applied": cal_applied,
         }
 
         if label_mode == "gateway":
@@ -263,7 +402,12 @@ def generate_rows(
     return rows
 
 
-def write_outputs(rows: List[Dict[str, Any]], out_dir: Path) -> Dict[str, str]:
+def write_outputs(
+    rows: List[Dict[str, Any]],
+    out_dir: Path,
+    *,
+    calibration_meta: Optional[Dict[str, Any]] = None,
+) -> Dict[str, str]:
     out_dir.mkdir(parents=True, exist_ok=True)
     jsonl = out_dir / "features.jsonl"
     csv_path = out_dir / "features.csv"
@@ -291,10 +435,17 @@ def write_outputs(rows: List[Dict[str, Any]], out_dir: Path) -> Dict[str, str]:
         "scope": SCOPE,
         "live_execution": False,
         "purpose": "queue_prioritization_under_backlog",
+        "purpose_statement": (
+            "Model approximates the gate verdict for sorting; "
+            "it does not predict market risk."
+        ),
         "training_allowed": all(r.get("label_mode") == "severity_proxy" for r in rows),
+        "calibration_applied": any(r.get("calibration_applied") for r in rows),
+        "calibration": calibration_meta,
         "note": (
-            "Synthetic rows for queue-priority features (Phase 4A). "
+            "Synthetic rows for queue-priority features (Phase 4A / §4.3). "
             "Train only on severity_proxy batches (training_allowed=true). "
+            "Public profiles calibrate feature distributions only — not labels. "
             "gateway→gate_verdict_label is circular vs evaluate_gate — "
             "ban AUC-against-gate as success. No core skip. "
             "Not live infra-z3 BHO."
@@ -329,6 +480,17 @@ def main(argv: Optional[List[str]] = None) -> int:
         default="severity_proxy",
     )
     p.add_argument(
+        "--calibration-dir",
+        type=Path,
+        default=None,
+        help="§4.3 profile dir (default: exports/open_data if present)",
+    )
+    p.add_argument(
+        "--no-calibration",
+        action="store_true",
+        help="disable public-profile feature calibration",
+    )
+    p.add_argument(
         "--out",
         type=Path,
         default=None,
@@ -337,19 +499,33 @@ def main(argv: Optional[List[str]] = None) -> int:
     args = p.parse_args(argv)
     out = args.out or (OUT_DIR / args.profile)
 
+    cal = None
+    cal_meta = None
+    if not args.no_calibration:
+        cal_dir = args.calibration_dir or DEFAULT_CALIBRATION_DIR
+        cal = load_calibration_profiles(cal_dir)
+        if cal is not None:
+            cal_meta = {
+                "dir": str(cal_dir),
+                "paths": cal.get("paths"),
+                "purpose": cal.get("purpose"),
+                "label_mode": None,
+            }
+
     print("Phase 4A synthetic prefilter datagen")
     print("=" * 60)
     print(
         f"n={args.n} seed={args.seed} profile={args.profile} "
-        f"label_mode={args.label_mode}"
+        f"label_mode={args.label_mode} calibration={'on' if cal else 'off'}"
     )
     rows = generate_rows(
         args.n,
         seed=args.seed,
         label_mode=args.label_mode,
         profile=args.profile,
+        calibration=cal,
     )
-    paths = write_outputs(rows, out)
+    paths = write_outputs(rows, out, calibration_meta=cal_meta)
     print(f"jsonl: {paths['jsonl']}")
     print(f"csv:   {paths['csv']}")
     print(f"kinds: {sorted({r['scenario_kind'] for r in rows})}")

@@ -281,7 +281,7 @@ Runner: `make raas-prefilter-train` · Plugin `plugins/risk_prefilter/`
 
 ### 4.3 Arbeitspaket Public-Ingest — Kalibrierung (nicht Trainingslabels)
 
-**Status:** Sondierung ✅ (`PUBLIC_INGEST_SONDIERUNG_PASS`) · Generator-Kalibrierung offen · kein DEFAULT_ON  
+**Status:** Sondierung ✅ · Generator-Anbindung ✅ · gepaarter Vergleich **FAIL** (2026-08-27) · kein DEFAULT_ON  
 **Zweck der öffentlichen Daten:** Verteilungsquelle für den Synth-Generator —
 **nicht** unlabeled Trainingszeilen, **kein** Proxy-Verdict aus Klines/MEV.
 
@@ -318,6 +318,19 @@ nicht Label-Unabhängigkeit (Zirkularität bleibt benannt).
 3. Quality-Gate `PREFILTER_SYNTH_QUALITY_PASS` bleibt grün.  
 4. Kein Kern-Skip · D1–D4 unverändert · kein Risk-Claim aus öffentlichen Daten.
 
+**Messung 2026-08-27 (Artefakt `prefilter_queue_profile_calibrated.json`):**
+
+| Versuch | Ergebnis |
+|---------|----------|
+| Feature-Replace (Binance+Flashbots) | mean(Δ) ≈ **−15,9 pp** · FAIL — Severity↔Feature entkoppelt |
+| Soft-Blend Slip/Vol/Oracle | mean(Δ) ≈ **−4,5 pp** · FAIL |
+| Nur Gas/MEV-Kalibrierung vs. unkalibriert n=20k | mean(Δ) ≈ **+0,58 pp** · SEM≈0,35 · 2·SEM≈0,70 · **FAIL** (knapp unter Schwelle) |
+| Unkalibriert n=20k allein | improvement mean **−1,8 %** · Seed-Spread FAIL (Baseline n=5k bleibt +4,5 %) |
+
+**Folgerung:** Public-Ingest-Profile sind nutzbar als Artefakte; aktuelle Kalibrierung
+rechtfertigt **kein** DEFAULT_ON und keinen Fortschritts-Claim. Phase-4A-Cutover bleibt
+Default OFF; n=5k-Unkalibriert ist die belegte Queue-Baseline.
+
 **Reihenfolge (bindend):** Gate-Map (§4.2/§4.3) → Seed-Spread-Check →
 Sondierungs-Skript → Generator. Nicht umgekehrt.
 
@@ -353,6 +366,7 @@ Sondierungs-Skript → Generator. Nicht umgekehrt.
 | `scripts/generate_prefilter_synthetic_data.py` | Phase-4A Synth-Datengen |
 | `scripts/check_prefilter_queue_seed_spread.py` | Queue-Metrik Seed-Spread (≥6) |
 | `scripts/ingest_public_distributions.py` | §4.3 Sondierung → Profile unter `exports/open_data/` |
+| `scripts/compare_prefilter_queue_paired.py` | §4.3 gepaarter Queue-Vergleich mean(Δ)>2·SEM(Δ) |
 | `agents_b2g/protocol.py` | `broadcast`-Pfad |
 | `services/fail_closed_gate/d_suite_enforcer.py` | D1–D4 app layer2 |
 | `prototypes/raas_hybrid_shell/` | Facade + Gateway (sync Pilot) |
