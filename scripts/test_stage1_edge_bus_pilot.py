@@ -77,12 +77,15 @@ def main() -> int:
     print(f"VERDICT: {verdict}")
 
     out = _ROOT / "data" / "raas" / "stage1_edge_pilot_last.json"
-    out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(
-        json.dumps({"verdict": verdict, "a": a, "b": b}, indent=2),
-        encoding="utf-8",
-    )
-    print(f"artifact: {out}")
+    try:
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(
+            json.dumps({"verdict": verdict, "a": a, "b": b}, indent=2),
+            encoding="utf-8",
+        )
+        print(f"artifact: {out}")
+    except OSError as exc:
+        print(f"artifact: skipped ({exc})")
     return 0 if ok else 1
 
 
