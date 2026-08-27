@@ -556,7 +556,7 @@ DEFAULT_ON weiter gesperrt.
 | Phase 4B LLM-LoRA | **nach** 4A · eigener Bedarf |
 | Broadcast-Subjects als Steuerpfad | **gesperrt** (Serie + `forbid_broadcast`) |
 | „Echtzeit-Insolvenz“ in Pitch/Map | **erlaubt nur mit Live-Zahlen** (p50≈1,2 ms wall, 2026-08-27) — nicht Mock |
-| Multi-Schwarm-Schiedsrichter (v3) | Map ✅ · §4 gewählt (Verzeichnis · **M1** · Envelope nur Einreicher) · Betrieb bis M1-Bau gesperrt |
+| Multi-Schwarm-Schiedsrichter (v3) | Map ✅ · M1 Proto **gebaut** (Screen+E2E PASS) · DEFAULT_ON weiter gesperrt · M2 abgelehnt |
 | Multi-Chain Liquidity Sub-Schwarm | **zurückgestellt** bis Kundenbedarf Cross-Chain |
 | 9 neue Remap-Microservices | **abgelehnt** (v1/v2) |
 | Libp2p Inter-Swarm | Intent only |
@@ -583,6 +583,9 @@ DEFAULT_ON weiter gesperrt.
 | `scripts/freeze_prefilter_multi_holdout.py` | §4.3.1 A — Sets ziehen + Manifest-Hash (vor Eval) |
 | `scripts/eval_prefilter_multi_holdout.py` | §4.3.1 A — Baseline Mittel±σ über Sets (nie best) |
 | `config/prefilter/prefilter_multi_holdout_manifest.json` | A-Siegel: fixe Holdout-Indizes + `manifest_sha256` |
+| `docs/RaaS_MULTI_TENANT_PREFILTER_M1_PROTO_v0.md` | M1 Proto |
+| `scripts/screen_prefilter_m1_isolation.py` | M1 Isolation-Screen (M2 Negativkontrolle) |
+| `scripts/test_prefilter_m1_e2e.py` | M1 E2E path·envelope·WORM |
 | `agents_b2g/protocol.py` | `broadcast`-Pfad |
 | `services/fail_closed_gate/d_suite_enforcer.py` | D1–D4 app layer2 |
 | `prototypes/raas_hybrid_shell/` | Facade + Gateway (sync Pilot) |

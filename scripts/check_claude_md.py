@@ -224,6 +224,7 @@ NO_TEST_SUMMARY: set[str] = {
     "scripts/train_prefilter_model.py",  # Phase 4A GBT train (invoked by test)
     "scripts/test_prefilter_training.py",  # Phase 4A training + queue metric smoke
     "scripts/test_gateway_prefilter_cutover.py",  # Phase 4A backlog priority cutover
+    "scripts/test_prefilter_m1_e2e.py",  # M1 path·envelope·WORM (PREFILTER_M1_E2E_PASS/FAIL)
 }
 
 

@@ -134,8 +134,15 @@ def get_run(
 def get_certificate(
     run_id: str,
     tenant_id: str = Query("demo"),
+    caller_tenant_id: Optional[str] = Query(
+        None,
+        description="Must match tenant_id (submitter-only envelope); default=tenant_id",
+    ),
     format: str = Query("json", alias="format"),
 ) -> Dict[str, Any]:
+    caller = caller_tenant_id if caller_tenant_id is not None else tenant_id
+    if caller != tenant_id:
+        raise HTTPException(403, "ENVELOPE_CROSS_TENANT_DENY")
     rec = store.get_run(tenant_id=tenant_id, run_id=run_id)
     if not rec:
         raise HTTPException(404, "run not found")
@@ -143,8 +150,13 @@ def get_certificate(
         raise HTTPException(409, f"run status={rec.get('status')}")
     try:
         out = exporter.export_certificate(
-            tenant_id=tenant_id, run_id=run_id, fmt=format
+            tenant_id=tenant_id,
+            run_id=run_id,
+            fmt=format,
+            caller_tenant_id=caller,
         )
+    except exporter.EnvelopeCrossTenantDeny as e:
+        raise HTTPException(403, str(e)) from e
     except ValueError as e:
         raise HTTPException(404, str(e)) from e
     return _scope_wrap(out)

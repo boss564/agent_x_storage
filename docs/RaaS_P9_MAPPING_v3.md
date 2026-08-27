@@ -152,16 +152,17 @@ Kein Multi-Schwarm-Claim ändert die Negativklausel. Schiedsrichter ≠ Ausführ
 |--------|--------|
 | Vier Rollen als Code-Module | **abgelehnt** — nur Lesart (§3) |
 | §4.1 / §4.2 / §4.3 Policy | **entschieden** — Verzeichnis-Schuld · **M1** · Envelope nur Einreicher |
-| Multi-Schwarm-Betrieb produktiv | **gesperrt** bis M1-Prefilter + Envelope-Schuld im Proto (Policy steht) |
+| Multi-Schwarm-Betrieb produktiv | **gesperrt** bis Isolation-Screen+E2E grün und Ops-Freigabe |
 | Prefilter DEFAULT_ON | **gesperrt** (Bus-Expansion Haltepunkt; Multi-Tenant nur unter M1) |
 | Prefilter geteilt (M2) | **abgelehnt** |
+| M1 Proto (Pfad·Envelope·Screen·E2E) | **gebaut** — `RaaS_MULTI_TENANT_PREFILTER_M1_PROTO_v0.md` · make targets |
 | Pfad 1 Kalibrierung gegen Referenz A | Pause bis Auslöser (Bus-Expansion); bei Multi-Tenant je Mandant |
 | Pfad 2 Ursachenanalyse Holdouts | nach A; optional |
 | Wave-8 Isolator → RaaS-Pfad | Intent · **separate** Ebene (§4.1); nicht Voraussetzung für M1-Pfad-Schuld |
 | v0/v1/v2 überschreiben | **verboten** |
 
-**Auslöser für v3-Bau:** M1-Artefaktpfad (`…/{tenant_id}/prefilter/`) · Envelope
-nur-Einreicher-Schuld im Exporter · optional Wave-8-Verdrahtung als eigene Stufe.
+**Auslöser für v3-Bau:** siehe `docs/RaaS_MULTI_TENANT_PREFILTER_M1_PROTO_v0.md`
+(M1-Pfad · Envelope nur-Einreicher · Isolation-Screen · E2E WORM).
 
 ---
 
@@ -172,6 +173,7 @@ nur-Einreicher-Schuld im Exporter · optional Wave-8-Verdrahtung als eigene Stuf
 | `docs/RaaS_P9_MAPPING_v0.md` | Contract-RaaS Proto |
 | `docs/RaaS_P9_MAPPING_v1.md` | Strategie · Envelope · Advice-Schuld |
 | `docs/RaaS_P9_MAPPING_v2.md` | Red/Blue · Sub-Schwärme je Chain |
+| `docs/RaaS_MULTI_TENANT_PREFILTER_M1_PROTO_v0.md` | M1-Bau: Pfad · Envelope · Screen · E2E |
 | `docs/RaaS_BUS_EXPANSION_v0.md` §4.3 | Referenz A · Prefilter-Haltepunkt |
 | `docs/RaaS_HYBRID_KI_ROADMAP_v0.md` | Phase 4A/4B |
 | `docs/AGENT_X_CHARTER.md` | Negativklausel |

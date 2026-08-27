@@ -202,4 +202,6 @@ class SupranodeFacade:
             "prefilter_enabled": self._prefilter_enabled(),
             "prefilter_backlog_threshold": self._backlog_threshold(),
             "prefilter_role": "queue_priority_only",
+            "prefilter_policy": "M1_per_tenant",
+            "tenant_id": self.tenant_id,
         }

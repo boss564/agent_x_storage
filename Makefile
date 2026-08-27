@@ -327,6 +327,12 @@ raas-prefilter-multi-holdout-freeze: ## §4.3.1 A — draw+hash holdout sets BEF
 raas-prefilter-multi-holdout-eval: ## §4.3.1 A — baseline mean±σ across frozen sets (never best)
 	PYTHONPATH=. python3 scripts/eval_prefilter_multi_holdout.py
 
+raas-prefilter-m1-isolation-screen: ## M1 Proto §3.3 — isolation vs M2 negative control
+	PYTHONPATH=. python3 scripts/screen_prefilter_m1_isolation.py
+
+raas-prefilter-m1-e2e: ## M1 Proto §3.4 — path · envelope · WORM
+	PYTHONPATH=. python3 scripts/test_prefilter_m1_e2e.py
+
 raas-gateway-prefilter-cutover: ## Phase 4A backlog priority cutover (no core skip)
 	PYTHONPATH=. python3 scripts/test_gateway_prefilter_cutover.py
 

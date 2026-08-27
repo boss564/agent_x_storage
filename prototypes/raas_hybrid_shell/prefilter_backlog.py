@@ -4,12 +4,16 @@ When PREFILTER_ENABLED and pending count ≥ threshold, requests are scored
 and processed highest-score-first. Every request still runs full
 TrustedCoreGateway evaluation. Score failure → FIFO fallback.
 
+M1 (v3 §4.2): model path is per-tenant under {data_root}/{tenant_id}/prefilter/.
+No silent fallback to another tenant's weights or a shared production model.
+
 Charter: DEFENSIVE_CAUSAL_GROUNDING · live_execution=false
 """
 from __future__ import annotations
 
 import os
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 from prototypes.raas_hybrid_shell.schemas import LLMStrategyProposal
@@ -20,6 +24,7 @@ from prototypes.raas_hybrid_shell.supranode_facade import (
 )
 
 SCOPE = "DEFENSIVE_CAUSAL_GROUNDING"
+MODEL_NAME = "prefilter_gbt.pkl"
 
 ScoreFn = Callable[[Dict[str, float]], Dict[str, Any]]
 
@@ -31,11 +36,44 @@ def _env_bool(name: str, default: bool = False) -> bool:
     return raw.strip().lower() in ("1", "true", "yes", "on")
 
 
+def _data_root() -> Path:
+    return Path(os.environ.get("RAAS_DATA_ROOT", "data/raas"))
+
+
+def tenant_prefilter_dir(tenant_id: str, *, data_root: Optional[Path] = None) -> Path:
+    root = data_root if data_root is not None else _data_root()
+    return root / tenant_id / "prefilter"
+
+
+def resolve_tenant_prefilter_model(
+    tenant_id: str,
+    *,
+    data_root: Optional[Path] = None,
+) -> Optional[Path]:
+    """Return this tenant's model path, or None → caller must FIFO.
+
+    Never returns another tenant's weights. Global PREFILTER_MODEL_PATH is
+    only used when PREFILTER_ALLOW_GLOBAL_MODEL is explicitly enabled (dev).
+    """
+    tid = (tenant_id or "").strip()
+    if not tid:
+        return None
+    path = tenant_prefilter_dir(tid, data_root=data_root) / MODEL_NAME
+    if path.is_file():
+        return path
+    if _env_bool("PREFILTER_ALLOW_GLOBAL_MODEL", False):
+        override = os.environ.get("PREFILTER_MODEL_PATH", "").strip()
+        if override:
+            op = Path(override)
+            if op.is_file():
+                return op
+    return None
+
+
 def proposal_to_features(prop: LLMStrategyProposal) -> Dict[str, float]:
     """Map shell proposal fields into prefilter feature space (deterministic)."""
     slip = float(prop.max_slippage_pct)
     lat = float(prop.latency_budget_ms)
-    # Heuristic fills for synth-trained dimensions not on the proposal
     return {
         "latency_ms": lat,
         "slippage_pct": slip,
@@ -48,14 +86,32 @@ def proposal_to_features(prop: LLMStrategyProposal) -> Dict[str, float]:
     }
 
 
-def default_score_fn(features: Dict[str, float]) -> Dict[str, Any]:
-    """In-process scorer (NATS optional later). Raises on hard failure."""
-    from plugins.risk_prefilter.scorer import score_features
+def default_score_fn_for_tenant(tenant_id: str) -> ScoreFn:
+    """Build a score_fn that only loads this tenant's M1 weights."""
 
-    model = os.environ.get(
-        "PREFILTER_MODEL_PATH", "models/prefilter/prefilter_gbt.pkl"
-    )
-    return score_features(features, model_path=model)
+    def _score(features: Dict[str, float]) -> Dict[str, Any]:
+        from plugins.risk_prefilter.scorer import score_features
+
+        model = resolve_tenant_prefilter_model(tenant_id)
+        if model is None:
+            raise FileNotFoundError(
+                f"M1 prefilter missing for tenant={tenant_id!r} "
+                f"(expected …/{tenant_id}/prefilter/{MODEL_NAME}); FIFO"
+            )
+        return score_features(features, model_path=model)
+
+    return _score
+
+
+def default_score_fn(features: Dict[str, float]) -> Dict[str, Any]:
+    """Legacy entry: requires PREFILTER_TENANT_ID or fails closed to FIFO."""
+    tid = os.environ.get("PREFILTER_TENANT_ID", "").strip()
+    if not tid:
+        raise RuntimeError(
+            "M1: set tenant via PrefilterBacklogController/facade "
+            "or PREFILTER_TENANT_ID; no silent global model"
+        )
+    return default_score_fn_for_tenant(tid)(features)
 
 
 @dataclass
@@ -71,6 +127,8 @@ class BacklogBatchResult:
     live_execution: bool = False
     scope: str = SCOPE
     note: str = ""
+    tenant_id: str = ""
+    model_path: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -85,6 +143,9 @@ class BacklogBatchResult:
             "live_execution": self.live_execution,
             "scope": self.scope,
             "note": self.note,
+            "tenant_id": self.tenant_id,
+            "model_path": self.model_path,
+            "prefilter_policy": "M1_per_tenant",
             "gate_verdicts": [r.envelope.gate_verdict for r in self.responses],
         }
 
@@ -100,14 +161,17 @@ class PrefilterBacklogController:
     )
     score_fn: Optional[ScoreFn] = None
 
+    def _tenant_id(self) -> str:
+        return str(getattr(self.facade, "tenant_id", "") or "")
+
     def _score_one(self, req: ExternalRequest) -> Tuple[float, bool]:
         """Returns (score, ok). ok=False → treat as unscored (FIFO path)."""
-        fn = self.score_fn or default_score_fn
+        tid = self._tenant_id()
+        fn = self.score_fn or default_score_fn_for_tenant(tid)
         try:
             out = fn(proposal_to_features(req.proposal))
             if "prefilter_score" not in out:
                 return 0.0, False
-            # Reject if scorer leaked decision fields
             for banned in (
                 "gate_verdict",
                 "audit_verdict",
@@ -130,6 +194,8 @@ class PrefilterBacklogController:
         pending = list(requests)
         n = len(pending)
         use_priority = self.enabled and n >= self.backlog_threshold
+        tid = self._tenant_id()
+        resolved = resolve_tenant_prefilter_model(tid)
 
         scored = 0
         failures = 0
@@ -145,20 +211,17 @@ class PrefilterBacklogController:
                     ranked.append((score, i, req))
                 else:
                     failures += 1
-                    ranked.append((float("-inf"), i, req))  # keep relative FIFO among fails
+                    ranked.append((float("-inf"), i, req))
             if failures == n:
-                # Total prefilter outage → pure FIFO
                 order = list(pending)
                 mode = "fifo"
             else:
-                # Highest score first; stable by arrival index for ties
                 ranked.sort(key=lambda t: (-t[0], t[1]))
                 order = [t[2] for t in ranked]
                 mode = "priority"
 
         responses: List[ExternalResponse] = []
         for req in order:
-            # Full deterministic core path — never skipped
             responses.append(
                 self.facade.handle_external_request(req, n_scenarios=n_scenarios)
             )
@@ -172,8 +235,10 @@ class PrefilterBacklogController:
             scored=scored if use_priority else 0,
             score_failures=failures if use_priority else 0,
             all_processed=len(responses) == n,
+            tenant_id=tid,
+            model_path=str(resolved) if resolved else None,
             note=(
-                "Priority reorders under backlog only; every request fully "
-                "evaluated by TrustedCoreGateway. Score failure → FIFO."
+                "M1: priority under backlog uses only this tenant's weights; "
+                "missing model → FIFO. Every request fully evaluated by core."
             ),
         )
