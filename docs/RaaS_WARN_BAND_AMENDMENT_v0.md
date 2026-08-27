@@ -93,3 +93,4 @@ scope = DEFENSIVE_CAUSAL_GROUNDING
 | `docs/RaaS_FLASH_CRASH_RETROSPECTIVE_v0.md` | Parent-Definitionen · `definition_hash` |
 | `services/fail_closed_gate/gate_core.py` | Unveränderte BLOCK-Schwellen |
 | Tag `v1.0-raas-baseline` | Fixpunkt |
+| `docs/RaaS_Z3_BARRIER_CALIBRATION_v0.md` | P6 Kalibrier-**Plan** (Trade-off-Oberfläche, kein Auto-Retune) |
