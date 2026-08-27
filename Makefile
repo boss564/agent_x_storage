@@ -348,6 +348,9 @@ raas-flash-crash-retro: ## Option 5 — Z3-Gate risk layer vs historical klines 
 raas-flash-crash-retro-180: ## Option 5 full window (needs network for missing cache days)
 	PYTHONPATH=. python3 scripts/raas_flash_crash_retrospective.py --days 180
 
+raas-fn-belt-screen: ## FN-Gürtel Ursachen A–D (same definition_hash, no retune)
+	PYTHONPATH=. python3 scripts/raas_fn_belt_screen.py --days 180
+
 raas-gateway-prefilter-cutover: ## Phase 4A backlog priority cutover (no core skip)
 	PYTHONPATH=. python3 scripts/test_gateway_prefilter_cutover.py
 
