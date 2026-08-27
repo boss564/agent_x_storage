@@ -114,6 +114,7 @@ Kern-Refactor möglich.
 | Nicht jetzt | LLM-LoRA (4B) · „gesparte Simulationszeit“ ohne Skip · Public-Ingest als Blocker |
 
 Generator-Pilot: `scripts/generate_prefilter_synthetic_data.py` · Smoke `scripts/test_prefilter_datagen.py`  
+Training: `scripts/train_prefilter_model.py` · `make raas-prefilter-train` · Plugin `plugins/risk_prefilter/`  
 Details: `docs/RaaS_BUS_EXPANSION_v0.md` §4.2
 
 #### Phase 4B — LLM Fine-Tuning (LoRA) — **nach 4A**

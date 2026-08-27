@@ -136,9 +136,10 @@ Dockerfile (`USER redteam`, `--read-only` / `--cap-drop ALL` Runtime-Intent).
       └─ Dockerfile-Intent: USER≠root · --read-only · --cap-drop ALL · kein Core/WORM-Mount
 4.  Stufe 2 — Gateway/Shell-Bus (**geplant, noch nicht implementiert**)
       └─ siehe §4.1 — Abbruchkriterien bindend vor Cutover
-4A. Phase 4A — Schnellfilter (**Priorisierung**, Datengen-Pilot)
-      └─ siehe §4.2 — Queue-Ordnung unter Rückstau; nie Kern-Skip / nie AUC-gegen-Gate als Erfolg
-      └─ Synth-Generator `scripts/generate_prefilter_synthetic_data.py`
+4A. Phase 4A — Schnellfilter (**Priorisierung**, Training-Pilot)
+      └─ siehe §4.2 — Queue-Ordnung unter Rückstau; nie Kern-Skip / nie AUC-gegen-Gate
+      └─ Synth `data/synthetic/prefilter/` · Train `make raas-prefilter-train`
+      └─ Plugin-Skeleton `plugins/risk_prefilter/` · Subject `edge.gateway.prefilter.request`
 5.  Liquidity Plugin nach Bedarf (wenn Cross-Chain-Strategien anstehen)
 6.  Inter-Swarm (WSS/Libp2p) — zuletzt; P₉-Signatur + Z3-Header Intent
 ```
@@ -179,7 +180,7 @@ Stufe 2 ersetzt **nicht** Gate 0 und nicht die Plugin-Isolation.
 
 ### 4.2 Phase 4A — Schnellfilter (GBT/LightGBM) — Priorisierung
 
-**Status:** Datengen-Pilot · kein Dienst-Cutover · **kein** LLM · **kein** Kern-Skip  
+**Status:** Training-Pilot · `risk_prefilter` Skeleton · **kein** LLM · **kein** Kern-Skip  
 **Abgrenzung:** Parallel zu Stufe 2 möglich. Prefilter = Untrusted Hülle (D1–D4).
 
 #### Deklarierter Zweck (bindend)
@@ -211,12 +212,18 @@ Gate-Labels (`gateway`) dürfen Feature-Pipelines und Ranking-Proxies speisen, a
    (FIFO vs. Score-Priorität, gleicher Kern-Durchsatz) sinkt die mittlere Wartezeit
    der als riskant markierten Anfragen; der Effekt muss gegen eine **Null-Baseline**
    (zufällige Reihenfolge / FIFO) getestet werden und darf **fehlschlagen**.  
-   *(Kein* „AUC &gt; 0,95 auf Synth-Extrems“ *als Erfolg — das ist bei Gate-Labels
-   strukturell fast sicher und misst Nachbildung der Schwelle, nicht Risiko.)*  
-3. Inferenzen-Latenz p95 &lt;5 ms (CPU) — gemessen, notiert; bei Überschreitung FAIL.  
-4. Semantik-Check: Score ändert nur Queue-Ordnung; Kern-Pfad unverändert; kein Skip.  
-5. D1–D4: Prefilter emittiert keine `gate_verdict`/`envelope_id`; Rolle Untrusted.  
-6. Bestehende Smokes bleiben grün.
+   Artefakt: `PREFILTER_QUEUE_METRIC_PASS|FAIL` in `models/prefilter/prefilter_train_report.json`.  
+   *(Kein* „AUC &gt; 0,95 auf Synth-Extrems“ *als Erfolg.)*  
+3. `PREFILTER_TRAINING_PASS` — Trainingspipeline auf `severity_proxy`-Corpus
+   (`scripts/train_prefilter_model.py` · GBT: LightGBM falls vorhanden, sonst
+   sklearn HistGradientBoosting).  
+4. Inferenzen-Latenz p95 &lt;5 ms (CPU) — gemessen, notiert; bei Überschreitung FAIL.  
+5. Semantik-Check: Score ändert nur Queue-Ordnung; Kern-Pfad unverändert; kein Skip.  
+6. D1–D4: Prefilter emittiert keine `gate_verdict`/`envelope_id`; Rolle Untrusted.  
+7. Bestehende Smokes bleiben grün.
+
+Runner: `make raas-prefilter-train` · Plugin-Skeleton `plugins/risk_prefilter/`
+(Subject `edge.gateway.prefilter.request`).
 
 #### Daten & Modell (nach Zweck)
 

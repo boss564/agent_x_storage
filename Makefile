@@ -289,6 +289,9 @@ raas-prefilter-batch-extremes: ## Phase 4A scale extremes synth (n=5000, severit
 	PYTHONPATH=. python3 scripts/generate_prefilter_synthetic_data.py --profile extremes --n 5000 --label-mode severity_proxy --out data/synthetic/prefilter/extremes
 	PYTHONPATH=. python3 scripts/check_prefilter_synth_quality.py data/synthetic/prefilter/extremes
 
+raas-prefilter-train: ## Phase 4A GBT train + queue metric (severity_proxy only)
+	PYTHONPATH=. python3 scripts/test_prefilter_training.py
+
 raas-portal: ## Start RaaS portal on :8020
 	PYTHONPATH=. uvicorn services.raas_portal.main:app --host 0.0.0.0 --port 8020
 
