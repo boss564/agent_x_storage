@@ -383,7 +383,10 @@ Public-Ingest-Re-Train als Erfolg, DEFAULT_ON (Cutover bleibt Default OFF).
   Prefilter-Variante vs. FIFO-Fallback erst freigabefähig diskutieren, wenn
   Bootstrap-Streuung der robusten Metrik **σ_robust < 0,02** (über Seeds/Boots)
   dokumentiert ist — **zusätzlich** zu den bestehenden Cutover-Tests
-  (`GATEWAY_CUTOVER_PASS` / Fallback) und Default OFF. Kein Automatismus.
+  (`GATEWAY_CUTOVER_PASS` / Fallback) und Default OFF. Kein Automatismus.  
+  **Hinweis:** Aktuell Seed‑σ_robust @ nested‑random n=1000 ≈ **4,18 pp** —
+  Schwelle dort unerreichbar, bis fester vs. random Holdout geklärt ist
+  (siehe „Widerspruch σ @ n=1000“ unten). Kein Pfad‑1‑Lauf gegen diese Zahl.
 
 Runner: `scripts/diagnose_prefilter_reference.py` · `make raas-prefilter-reference-diagnosis`  
 Artefakt: `models/prefilter/prefilter_reference_diagnosis.json`.
@@ -430,10 +433,46 @@ Artefakt: `models/prefilter/prefilter_n_robust_metric.json` ·
 `make raas-prefilter-n-robust-metric`  
 **Claims:** weiter raw @ Holdout=1000. **Cross-N-Vergleiche:** robust n₀.
 
+##### Widerspruch σ @ n=1000 (offen — vor Pfad‑1‑Kalibrierung)
+
+Aus `prefilter_n_robust_metric.json` (nested **random** pools, Train 5k, 6 Seeds)
+gegenüber der eingefrorenen Referenz (seed_split‑**fester** Holdout):
+
+| Quelle | n | mean | σ (über Seeds) | Seeds negativ |
+|--------|---|------|----------------|---------------|
+| **Eingefroren raw** (fester Holdout, n_risky=581) | 1000 | **+4,48 %** | **1,47 pp** | **0/6** |
+| Nested-random raw/robust (N=n₀ → identisch) | 1000 | **+0,33 %** | **4,18 pp** | **2/6** |
+| Nested-random robust | 2000 | +1,52 % | 0,80 pp | 0/6 |
+| Nested-random robust | 4000 | +0,77 % | 0,55 pp | 0/6 |
+
+**Lesart (Hypothese, ungeprüft):** Der eingefrorene Lauf hält die Holdout‑Zusammensetzung
+konstant → Seed‑Streuung ≈ nur Modellvarianz. Nested‑random @ n=1000 zieht jedes Mal
+eine andere Zusammensetzung → höhere σ und Vorzeichenkipps. Bei N=n₀ gibt es **keinen**
+Bootstrap (rob = raw); die 4,18 pp sind also **Pool‑/Zusammensetzungs‑Unsicherheit**,
+nicht Bootstrap‑σ. Ob +4,48 % bei fester Zusammensetzung die Unsicherheit **unterschätzt**,
+ist offen — Referenz wird **nicht** geändert, aber Claims dürfen den Widerspruch nicht
+überschreiben.
+
+**Folgerungen für geplante Läufe:**
+
+1. **Kein Pfad‑1‑Kalibrierungslauf**, solange dieser Widerspruch ungeklärt ist.  
+2. Ziel `σ_robust < 0,02` ist bei aktuell **4,18 pp @ n=1000** unerreichbar als
+   Seed‑σ auf random Pools — nicht als Kalibrierungs‑Fail missverstehen.  
+   Bei n=2000/4000 liegt Seed‑σ bereits unter 0,02 **ohne** Kalibrierung.  
+3. Stabilitätskriterium für Cross‑N: gleiches Vorzeichen / stabile Rangfolge
+   **über Holdout‑n**, nicht nur über Seeds.  
+4. Gate‑Map‑Erfolgskriterien für Neukalibrierung erst **nach** Klärung dieses Punkts
+   (fester vs. random Holdout @ 1000) formulieren.
+
+**Nächster Diagnose‑Schritt (vor Pfad 1):** Isolieren — fester Holdout (n_risky=581)
+vs. repeated random Holdouts der Größe 1000, gleiches Modell/Seeds → misst, wie viel
+der 1,47 pp vs. 4,18 pp‑Lücke Zusammensetzung ist.
+
 Runner: `make raas-prefilter-r5-train-vs-holdout` · `make raas-prefilter-n-robust-metric`
 
 **Reihenfolge (bindend):** Gate-Map (§4.2/§4.3) → Seed-Spread-Check →
-Sondierungs-Skript → Generator. Nicht umgekehrt. **Kalibrierung erst nach §4.3.1.**
+Sondierungs-Skript → Generator. Nicht umgekehrt.  
+**Kalibrierung / Pfad 1 gesperrt**, bis σ‑Widerspruch @ n=1000 dokumentiert geklärt.
 
 ---
 
@@ -445,8 +484,8 @@ Sondierungs-Skript → Generator. Nicht umgekehrt. **Kalibrierung erst nach §4.
 | Stufe 2 Gateway/Shell-Bus Implementierung | **gesperrt** bis §4 Sequenz 3c + §4.1 Kriterien + **Topologie-Re-Screen** (~16 s) |
 | Phase 4A `risk_prefilter` Cutover | ✅ Facade-Batch · Default OFF · FIFO-Fallback · kein Skip |
 | Phase 4A Modell-Optimierung (mehr Synth) | **optional** — erst nach Seed-Spread (§4.2) |
-| Public-Ingest (Kalibrierungsprofile) | Sondierung ✅ · Kalibrierung **gesperrt** bis §4.3.1 Referenzklärung |
-| Referenzklärung 5k↔20k Queue-Baseline | §4.3.1 R1✅ R3✅ R5✅ — Dominant Holdout-n; Ref. Holdout=1000 eingefroren |
+| Public-Ingest (Kalibrierungsprofile) | Sondierung ✅ · **Pfad 1 gesperrt** bis σ‑Widerspruch @ n=1000 geklärt |
+| Referenzklärung 5k↔20k Queue-Baseline | R1✅ R3✅ R5✅ N-robust✅ · **offen:** fester vs random Holdout @1000 |
 | Phase 4B LLM-LoRA | **nach** 4A · eigener Bedarf |
 | Broadcast-Subjects als Steuerpfad | **gesperrt** (Serie + `forbid_broadcast`) |
 | „Echtzeit-Insolvenz“ in Pitch/Map | **erlaubt nur mit Live-Zahlen** (p50≈1,2 ms wall, 2026-08-27) — nicht Mock |
