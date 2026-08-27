@@ -346,6 +346,91 @@ def run_queue_seed_spread(
     }
 
 
+def run_training_on_split(
+    x_tr: np.ndarray,
+    y_tr: np.ndarray,
+    x_te: np.ndarray,
+    y_te: np.ndarray,
+    *,
+    seed: int = 20260827,
+) -> Dict[str, Any]:
+    """Train on explicit arrays; queue metric on explicit holdout (no re-split)."""
+    model, backend, val_m = train_gbt(x_tr, y_tr, x_te, y_te, seed=seed)
+    scores_te = predict_scores(model, backend, x_te)
+    queue = simulate_backlog_wait(y_te, scores_te, seed=seed)
+    return {
+        "backend": backend,
+        "n_train": int(len(x_tr)),
+        "n_holdout": int(len(x_te)),
+        "val_metrics": val_m,
+        "queue_metric": queue,
+        "seed": seed,
+    }
+
+
+def run_queue_seed_spread_on_split(
+    x_tr: np.ndarray,
+    y_tr: np.ndarray,
+    x_te: np.ndarray,
+    y_te: np.ndarray,
+    *,
+    n_seeds: int = 6,
+    base_seed: int = 20260827,
+) -> Dict[str, Any]:
+    """Like run_queue_seed_spread but train/holdout matrices are fixed."""
+    if n_seeds < 2:
+        raise ValueError("n_seeds must be >= 2")
+    seeds_used: List[int] = []
+    improvements: List[float] = []
+    runs: List[Dict[str, Any]] = []
+    for i in range(n_seeds):
+        seed = base_seed + i
+        once = run_training_on_split(x_tr, y_tr, x_te, y_te, seed=seed)
+        q = once["queue_metric"]
+        imp = q.get("improvement_vs_fifo")
+        seeds_used.append(seed)
+        improvements.append(float(imp) if imp is not None and not np.isnan(imp) else float("nan"))
+        runs.append(
+            {
+                "seed": seed,
+                "backend": once["backend"],
+                "improvement_vs_fifo": improvements[-1],
+                "beats_fifo": q.get("beats_fifo"),
+                "beats_random": q.get("beats_random"),
+                "mean_wait_risky_fifo_s": q.get("mean_wait_risky_fifo_s"),
+                "mean_wait_risky_priority_s": q.get("mean_wait_risky_priority_s"),
+                "n_holdout": once["n_holdout"],
+                "n_train": once["n_train"],
+                "n_risky": q.get("n_risky"),
+            }
+        )
+
+    arr = np.asarray(improvements, dtype=np.float64)
+    mean = float(np.nanmean(arr))
+    std = float(np.nanstd(arr, ddof=1)) if n_seeds > 1 else 0.0
+    separable = bool(np.isfinite(mean) and np.isfinite(std) and abs(mean) > 2.0 * std and std >= 0)
+    spread_pass = bool(separable and mean > 0)
+    return {
+        "verdict": (
+            "PREFILTER_QUEUE_SEED_SPREAD_PASS"
+            if spread_pass
+            else "PREFILTER_QUEUE_SEED_SPREAD_FAIL"
+        ),
+        "n_seeds": n_seeds,
+        "seeds": seeds_used,
+        "improvement_vs_fifo_per_seed": improvements,
+        "improvement_vs_fifo_mean": mean,
+        "improvement_vs_fifo_std": std,
+        "separable_from_zero_2sigma": separable,
+        "n_train": int(len(x_tr)),
+        "n_holdout": int(len(x_te)),
+        "runs": runs,
+        "label_mode": "severity_proxy",
+        "purpose": "queue_prioritization_under_backlog",
+        "live_execution": False,
+    }
+
+
 def run_training(
     data_dir: Path,
     *,

@@ -373,11 +373,29 @@ Artefakt: `models/prefilter/prefilter_reference_diagnosis.json`.
 | Schritt | Ergebnis |
 |---------|----------|
 | R1 Repro | **PASS** — mean/σ bitgleich zum Report (0,044788 / 0,014705) |
-| R3 5k-Subset aus 20k | **Δmean = 0** vs. 5k-Rerun (gleiche Kind-Counts) → Charge ≡ 5k; Vorzeichen-Kipp entsteht erst bei **voller 20k-Trainingsmenge / Holdout n=4000** |
+| R3 5k-Subset aus 20k | **Δmean = 0** vs. 5k-Rerun (gleiche Kind-Counts) → Charge ≡ 5k |
+| R5 Train-n vs Holdout-n | **Holdout-n dominant** — siehe unten |
 
-**Lesart:** Nicht „andere Charge“, sondern **Datenmenge / Holdout-n** (R5 noch offen:
-Train-n vs. Eval-n trennen). Referenz für Claims bleibt **n=5k Holdout=1000**, bis R5
-geklärt ist. Feature-Kopplung weiter gesperrt.
+**R5 (2026-08-27, `prefilter_r5_train_vs_holdout.json`):**
+
+| Bedingung | mean(improvement) |
+|-----------|-------------------|
+| A: Train 5k · Holdout 1000 | **+3,92 %** |
+| A: Train 5k · Holdout 4000 (nested) | **+0,55 %** |
+| B: Train 5k · Holdout 1000 (last) | **+1,43 %** |
+| B: Train 19k (20k−H) · gleiches Holdout | **+1,62 %** |
+
+- ΔHoldout (4k−1k, Train fest): **−3,38 pp**  
+- ΔTrain (large−5k, Holdout fest): **+0,19 pp**  
+- **Dominant: Evaluations-/Holdout-Größe**, nicht Trainingsmenge.  
+  Der frühere 20k-Kipp (−1,8 %) ist mit größerem Holdout (n=4000) konsistent erklärbar;
+  mehr Trainingsdaten allein verschlechtern die Metrik hier nicht.
+
+**Referenz (eingefroren, bestätigt):** n_train=5k · n_holdout=**1000** · mean **4,48 %** (σ 1,47 %).  
+Claims und gepaarte Vergleiche nur mit **Holdout=1000** (oder explizit neu geeicht).  
+Feature-Kopplung / DEFAULT_ON weiter gesperrt, bis bewusst eine neue Referenz gewählt wird.
+
+Runner: `make raas-prefilter-r5-train-vs-holdout`
 
 **Reihenfolge (bindend):** Gate-Map (§4.2/§4.3) → Seed-Spread-Check →
 Sondierungs-Skript → Generator. Nicht umgekehrt. **Kalibrierung erst nach §4.3.1.**
@@ -393,7 +411,7 @@ Sondierungs-Skript → Generator. Nicht umgekehrt. **Kalibrierung erst nach §4.
 | Phase 4A `risk_prefilter` Cutover | ✅ Facade-Batch · Default OFF · FIFO-Fallback · kein Skip |
 | Phase 4A Modell-Optimierung (mehr Synth) | **optional** — erst nach Seed-Spread (§4.2) |
 | Public-Ingest (Kalibrierungsprofile) | Sondierung ✅ · Kalibrierung **gesperrt** bis §4.3.1 Referenzklärung |
-| Referenzklärung 5k↔20k Queue-Baseline | **§4.3.1** — R1 Repro → R3 Subset (Datenmenge vs Charge) |
+| Referenzklärung 5k↔20k Queue-Baseline | §4.3.1 R1✅ R3✅ R5✅ — Dominant Holdout-n; Ref. Holdout=1000 eingefroren |
 | Phase 4B LLM-LoRA | **nach** 4A · eigener Bedarf |
 | Broadcast-Subjects als Steuerpfad | **gesperrt** (Serie + `forbid_broadcast`) |
 | „Echtzeit-Insolvenz“ in Pitch/Map | **erlaubt nur mit Live-Zahlen** (p50≈1,2 ms wall, 2026-08-27) — nicht Mock |
@@ -417,6 +435,7 @@ Sondierungs-Skript → Generator. Nicht umgekehrt. **Kalibrierung erst nach §4.
 | `scripts/ingest_public_distributions.py` | §4.3 Sondierung → Profile unter `exports/open_data/` |
 | `scripts/compare_prefilter_queue_paired.py` | §4.3 gepaarter Queue-Vergleich mean(Δ)>2·SEM(Δ) |
 | `scripts/diagnose_prefilter_reference.py` | §4.3.1 R1 Repro + R3 5k-Subset-from-20k |
+| `scripts/diagnose_prefilter_r5_train_vs_holdout.py` | §4.3.1 R5 Train-n vs Holdout-n |
 | `agents_b2g/protocol.py` | `broadcast`-Pfad |
 | `services/fail_closed_gate/d_suite_enforcer.py` | D1–D4 app layer2 |
 | `prototypes/raas_hybrid_shell/` | Facade + Gateway (sync Pilot) |
