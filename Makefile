@@ -252,6 +252,9 @@ test-all:
 raas-smoke: ## RaaS prototype E2E (upload→stress→certificate, gate sim)
 	PYTHONPATH=. python3 scripts/test_raas_smoke.py
 
+raas-hybrid-shell: ## Core/Shell pilot (untrusted shell → TrustedCoreGateway)
+	PYTHONPATH=. python3 scripts/test_raas_hybrid_shell.py
+
 raas-portal: ## Start RaaS portal on :8020
 	PYTHONPATH=. uvicorn services.raas_portal.main:app --host 0.0.0.0 --port 8020
 

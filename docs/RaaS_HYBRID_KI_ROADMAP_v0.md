@@ -144,10 +144,12 @@ Kern-Refactor möglich.
 | Schicht | Stand |
 |---------|--------|
 | Trusted Core (P-Rollen, Gate, Proto) | ✅ Maps v0–v2 + `services/raas_portal/` |
-| Diese Roadmap | ✅ Dokument only |
-| Tool-Wrapper / LangGraph / LLM-Shell | **nicht gebaut** |
+| Diese Roadmap | ✅ Dokument |
+| Phase-1 Pilot Core/Shell | ✅ `prototypes/raas_hybrid_shell/` · `scripts/test_raas_hybrid_shell.py` |
+| Neues `agents/p1…p9` Remap | **abgelehnt** — v1-Rollen bleiben; `agents/` = Air/Surface/Mechanized |
+| Tool-Wrapper / LangGraph / LLM-Shell | Pilot: synthetische Shell; echtes LLM **nicht gebaut** |
 | Adversarial Plugins / Feature-Store / Schnell-Modell | **nicht gebaut** |
-| Validierungs-Gateway (D3) | **Intent** — Ebene 1 |
+| Validierungs-Gateway (D3) | Pilot-Klasse `TrustedCoreGateway` — noch **Ebene 1** (kein ScopeEnforcer) |
 | Order-Send / Searcher / Auto-Rebalance | **gesperrt** |
 
 ---
@@ -162,3 +164,4 @@ Kern-Refactor möglich.
 | `docs/AGENT_X_CHARTER.md` | Negativklausel |
 | `services/fail_closed_gate/` | Gate Core |
 | `services/raas_portal/` | Laufender Tool-Kern (Contract-shaped) |
+| `prototypes/raas_hybrid_shell/` | Phase-1 Pilot: Untrusted Shell → TrustedCoreGateway |
