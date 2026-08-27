@@ -261,6 +261,9 @@ raas-supranode: ## Ingress/Egress facade over TrustedCoreGateway
 raas-d-suite: ## D1–D4 application barriers (DSuiteEnforcer)
 	PYTHONPATH=. python3 scripts/test_d_suite_enforcer.py
 
+raas-bus-topology-gate: ## Gate 0: NATS Queue-Group 1-of-N vs broadcast
+	PYTHONPATH=. python3 scripts/test_topology_bus_queuegroups.py
+
 raas-portal: ## Start RaaS portal on :8020
 	PYTHONPATH=. uvicorn services.raas_portal.main:app --host 0.0.0.0 --port 8020
 

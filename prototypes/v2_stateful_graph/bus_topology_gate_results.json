@@ -1,0 +1,42 @@
+{
+  "verdict": "QUEUEGROUP_RING_PASS",
+  "gate0": "PASS",
+  "stage1_allowed": true,
+  "nats_url": "nats://127.0.0.1:4222",
+  "seed": 20270827,
+  "serie_ref": {
+    "sparse_ring_margin": 0.52,
+    "complete_margin": 0.0,
+    "note": "Delivery pattern only \u2014 not a full Margin re-measure"
+  },
+  "queue_group": {
+    "pattern": "queue_group",
+    "n_published": 270,
+    "n_exact_one": 270,
+    "n_zero": 0,
+    "n_multi": 0,
+    "max_receivers_per_msg": 1,
+    "mean_receivers_per_msg": 1.0,
+    "subscribers_per_edge": 3,
+    "edges": 9,
+    "ring_like_1_of_n": true,
+    "complete_like_fanout": false
+  },
+  "broadcast_control": {
+    "pattern": "broadcast_subscribe",
+    "n_published": 270,
+    "n_exact_one": 0,
+    "n_zero": 0,
+    "n_multi": 270,
+    "max_receivers_per_msg": 3,
+    "mean_receivers_per_msg": 3.0,
+    "subscribers_per_edge": 3,
+    "edges": 9,
+    "ring_like_1_of_n": false,
+    "complete_like_fanout": true
+  },
+  "note": "Queue-Group = 1-of-N (ring-like). Broadcast control = fan-out (complete-like). Stage 1 may proceed only with Queue-Group subjects \u2014 never broadcast control plane.",
+  "scope": "DEFENSIVE_CAUSAL_GROUNDING",
+  "live_execution": false,
+  "elapsed_s": 1.413
+}

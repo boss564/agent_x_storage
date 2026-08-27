@@ -103,7 +103,7 @@ Stufe 2 (Gateway/Shell-Bus) kann parallel zur Facade bleiben; sie ersetzt nicht 
 
 | Arbeit | Status |
 |--------|--------|
-| NATS JetStream Cutover für RaaS-P9 | **gesperrt** bis Gate 0 |
+| NATS JetStream Cutover für RaaS-P9 | Gate 0 **PASS** (Queue-Group) — Cutover noch **nicht** gestartet; nur freigegeben unter Queue-Group-Bindung |
 | Broadcast-Subjects als Steuerpfad | **gesperrt** (Serie) |
 | „Echtzeit-Insolvenz“ in Pitch/Map | **gesperrt** bis Live-Z3 |
 | 9 neue Remap-Microservices | **abgelehnt** (v1/v2) |
