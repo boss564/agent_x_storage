@@ -415,7 +415,10 @@ Artefakt: `models/prefilter/prefilter_reference_diagnosis.json`.
   mehr Trainingsdaten allein verschlechtern die Metrik hier nicht.
 
 **Referenz (eingefroren, bestätigt):** n_train=5k · n_holdout=**1000** · mean **4,48 %** (σ 1,47 %).  
-Claims und gepaarte Vergleiche nur mit **Holdout=1000** (oder explizit neu geeicht).  
+**Geltungsbereich:** gilt für den **fixierten** Holdout (seed_split, n_risky=581),
+**nicht** für beliebige Ziehungen gleicher Größe — σ_raw=1,47 pp misst dort nur
+Modellvarianz; Zusammensetzungsvarianz bleibt ausgeblendet.  
+Claims und gepaarte Vergleiche nur mit diesem fixierten Holdout=1000 (oder explizit neu geeicht).  
 Feature-Kopplung / DEFAULT_ON weiter gesperrt, bis bewusst eine neue Referenz gewählt wird.
 
 **N-robuste Sekundärmetrik (2026-08-27):** `queue_metric_n_robust` in
@@ -468,11 +471,26 @@ ist offen — Referenz wird **nicht** geändert, aber Claims dürfen den Widersp
 vs. repeated random Holdouts der Größe 1000, gleiches Modell/Seeds → misst, wie viel
 der 1,47 pp vs. 4,18 pp‑Lücke Zusammensetzung ist.
 
+**Isolation 2026-08-27 (`prefilter_fixed_vs_random_holdout.json`) — CONFIRMED:**
+
+| Größe | mean | σ | Negativ |
+|-------|------|---|---------|
+| Fester Holdout (über 6 Modell‑Seeds) | +4,48 % | **1,47 pp** (nur Modell) | 0/6 |
+| Zufalls‑Holdouts à 1000 (Modell fix je Seed, 6×6 Draws) | +1,97 % | **within‑model 2,55 pp** · pooled 2,65 pp | 8/36 |
+
+Ein Faktor variiert (Zusammensetzung), Modell fest → σ steigt klar über die
+Modell‑only‑σ. Zusammensetzung ist bestätigt. Die 4,18 pp aus nested‑random
+mischen zusätzliche Faktoren und müssen nicht bitgleich getroffen werden.
+
+Runner: `make raas-prefilter-fixed-vs-random-holdout`  
+Pfad 1 bleibt gesperrt, bis bewusst entschieden wird, wie Claims mit
+Zusammensetzungsunsicherheit umgehen (Referenz unverändert: fixierter Holdout).
+
 Runner: `make raas-prefilter-r5-train-vs-holdout` · `make raas-prefilter-n-robust-metric`
 
 **Reihenfolge (bindend):** Gate-Map (§4.2/§4.3) → Seed-Spread-Check →
 Sondierungs-Skript → Generator. Nicht umgekehrt.  
-**Kalibrierung / Pfad 1 gesperrt**, bis σ‑Widerspruch @ n=1000 dokumentiert geklärt.
+**Kalibrierung / Pfad 1 gesperrt**, bis Umgang mit Zusammensetzungs‑σ bewusst gewählt.
 
 ---
 
@@ -485,7 +503,7 @@ Sondierungs-Skript → Generator. Nicht umgekehrt.
 | Phase 4A `risk_prefilter` Cutover | ✅ Facade-Batch · Default OFF · FIFO-Fallback · kein Skip |
 | Phase 4A Modell-Optimierung (mehr Synth) | **optional** — erst nach Seed-Spread (§4.2) |
 | Public-Ingest (Kalibrierungsprofile) | Sondierung ✅ · **Pfad 1 gesperrt** bis σ‑Widerspruch @ n=1000 geklärt |
-| Referenzklärung 5k↔20k Queue-Baseline | R1✅ R3✅ R5✅ N-robust✅ · **offen:** fester vs random Holdout @1000 |
+| Referenzklärung 5k↔20k Queue-Baseline | Composition @H=1000 **CONFIRMED** · Ref. gilt nur für fixierten Holdout |
 | Phase 4B LLM-LoRA | **nach** 4A · eigener Bedarf |
 | Broadcast-Subjects als Steuerpfad | **gesperrt** (Serie + `forbid_broadcast`) |
 | „Echtzeit-Insolvenz“ in Pitch/Map | **erlaubt nur mit Live-Zahlen** (p50≈1,2 ms wall, 2026-08-27) — nicht Mock |
@@ -511,6 +529,7 @@ Sondierungs-Skript → Generator. Nicht umgekehrt.
 | `scripts/diagnose_prefilter_reference.py` | §4.3.1 R1 Repro + R3 5k-Subset-from-20k |
 | `scripts/diagnose_prefilter_r5_train_vs_holdout.py` | §4.3.1 R5 Train-n vs Holdout-n |
 | `scripts/diagnose_prefilter_n_robust_metric.py` | §4.3.1 N-robuste Queue-Metrik (Bootstrap n₀) |
+| `scripts/diagnose_prefilter_fixed_vs_random_holdout.py` | §4.3.1 fester vs. random Holdout (Composition) |
 | `agents_b2g/protocol.py` | `broadcast`-Pfad |
 | `services/fail_closed_gate/d_suite_enforcer.py` | D1–D4 app layer2 |
 | `prototypes/raas_hybrid_shell/` | Facade + Gateway (sync Pilot) |

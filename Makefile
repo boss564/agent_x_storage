@@ -318,6 +318,9 @@ raas-prefilter-r5-train-vs-holdout: ## §4.3.1 R5 isolate train-n vs holdout-n
 raas-prefilter-n-robust-metric: ## §4.3.1 N-robust queue metric (bootstrap n0=1000)
 	PYTHONPATH=. python3 scripts/diagnose_prefilter_n_robust_metric.py
 
+raas-prefilter-fixed-vs-random-holdout: ## §4.3.1 isolate composition (fixed vs random H=1000)
+	PYTHONPATH=. python3 scripts/diagnose_prefilter_fixed_vs_random_holdout.py
+
 raas-gateway-prefilter-cutover: ## Phase 4A backlog priority cutover (no core skip)
 	PYTHONPATH=. python3 scripts/test_gateway_prefilter_cutover.py
 
