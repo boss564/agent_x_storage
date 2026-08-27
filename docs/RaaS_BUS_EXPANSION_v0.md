@@ -136,6 +136,9 @@ Dockerfile (`USER redteam`, `--read-only` / `--cap-drop ALL` Runtime-Intent).
       └─ Dockerfile-Intent: USER≠root · --read-only · --cap-drop ALL · kein Core/WORM-Mount
 4.  Stufe 2 — Gateway/Shell-Bus (**geplant, noch nicht implementiert**)
       └─ siehe §4.1 — Abbruchkriterien bindend vor Cutover
+4A. Phase 4A — Schnellfilter (**Priorisierung**, Datengen-Pilot)
+      └─ siehe §4.2 — Queue-Ordnung unter Rückstau; nie Kern-Skip / nie AUC-gegen-Gate als Erfolg
+      └─ Synth-Generator `scripts/generate_prefilter_synthetic_data.py`
 5.  Liquidity Plugin nach Bedarf (wenn Cross-Chain-Strategien anstehen)
 6.  Inter-Swarm (WSS/Libp2p) — zuletzt; P₉-Signatur + Z3-Header Intent
 ```
@@ -174,6 +177,60 @@ Kern-Nachbarschaft vor Cutover.
 
 Stufe 2 ersetzt **nicht** Gate 0 und nicht die Plugin-Isolation.
 
+### 4.2 Phase 4A — Schnellfilter (GBT/LightGBM) — Priorisierung
+
+**Status:** Datengen-Pilot · kein Dienst-Cutover · **kein** LLM · **kein** Kern-Skip  
+**Abgrenzung:** Parallel zu Stufe 2 möglich. Prefilter = Untrusted Hülle (D1–D4).
+
+#### Deklarierter Zweck (bindend)
+
+**Priorisierung unter Rückstau** — nicht Abkürzung, nicht Freigabe.
+
+- Jede Anfrage wird **vollständig** vom deterministischen Kern geprüft.  
+- Der Score bestimmt nur die **Reihenfolge** in der Warteschlange (riskante zuerst).  
+- Wenn kein Rückstau existiert, ist der Prefilter optional und darf **keine** Latenz
+  als „Ersparnis“ verkaufen (er addiert dann nur Overhead).  
+- **Verboten zu zitieren:** „spart Rechenzeit / überspringt Simulation“ — das ist nicht der Zweck.
+
+#### Label-Herkunft (eigene Zeile — vor jedem Trainingslauf ausfüllen)
+
+| Mode / Quelle | Was steckt im Label? | Für überwachtes Lernen? | Zirkularität |
+|---------------|----------------------|-------------------------|--------------|
+| `severity_proxy` | Plugin-Severity → Pseudo-Verdict | nur Pipeline-Smoke / Feature-Export | kein Gate — **kein** Risk-Claim |
+| `gateway` | `TrustedCoreGateway` / `evaluate_gate` | lernt die **eigene Gate-Funktion** | **ja** — AUC vs. denselben Gate ist Vanity |
+| öffentlich (`data/external/`) | Klines/MEV-Rohdaten | Features **ohne** `verdict` | unbeschriftet; Pseudo-Label via Gate = wieder Zirkel |
+| externe Nicht-Gate-Labels | z. B. ex-post Incidents, manuelle Tags | Generalisierungstest | Zielbild — **eigenes Arbeitspaket**, nicht Blocker der Datengen |
+
+Gate-Labels (`gateway`) dürfen Feature-Pipelines und Ranking-Proxies speisen, aber
+**nicht** als Beweis gelten, dass das Modell „Risiko“ gelernt hat.
+
+#### Erfolgskriterien (müssen scheitern können)
+
+1. `PREFILTER_DATAGEN_PASS` — Synth-Export reproduzierbar (fester Seed).  
+2. **Warteschlangen-Metrik (primär):** In einem dokumentierten Rückstau-Sim
+   (FIFO vs. Score-Priorität, gleicher Kern-Durchsatz) sinkt die mittlere Wartezeit
+   der als riskant markierten Anfragen; der Effekt muss gegen eine **Null-Baseline**
+   (zufällige Reihenfolge / FIFO) getestet werden und darf **fehlschlagen**.  
+   *(Kein* „AUC &gt; 0,95 auf Synth-Extrems“ *als Erfolg — das ist bei Gate-Labels
+   strukturell fast sicher und misst Nachbildung der Schwelle, nicht Risiko.)*  
+3. Inferenzen-Latenz p95 &lt;5 ms (CPU) — gemessen, notiert; bei Überschreitung FAIL.  
+4. Semantik-Check: Score ändert nur Queue-Ordnung; Kern-Pfad unverändert; kein Skip.  
+5. D1–D4: Prefilter emittiert keine `gate_verdict`/`envelope_id`; Rolle Untrusted.  
+6. Bestehende Smokes bleiben grün.
+
+#### Daten & Modell (nach Zweck)
+
+| Element | Festlegung |
+|---------|------------|
+| Synth | MEV/Oracle-Plugins → Feature-Matrix (`generate_prefilter_synthetic_data.py`) |
+| Öffentlich | **eigenes Arbeitspaket** (RPCs/403, kein Verdict) — parallel, nicht Schritt 2 der Liste |
+| Modell | LightGBM/XGBoost Intent als **Ranking-/Prioritätssignal** |
+| Integration | später `risk_prefilter` NATS Queue-Group → Facade-Warteschlange |
+| Verbot | Modell-only RELEASED · Z3-Ersatz · Kern-Skip · AUC-gegen-Gate als Pitch |
+
+**Nicht jetzt:** LoRA/LLM (4B) · Live-Exchange-Ingest als Freigabekriterium ·
+„gesparte Simulationszeit“ ohne Skip (widerspricht Zweck).
+
 ---
 
 ## 5. Nicht jetzt
@@ -182,6 +239,9 @@ Stufe 2 ersetzt **nicht** Gate 0 und nicht die Plugin-Isolation.
 |--------|--------|
 | NATS JetStream Cutover für RaaS-P9 | Gate 0 PASS · **Ring-Bus Pilot+9 Kanten** — Gateway-Cutover = Stufe 2 (offen) |
 | Stufe 2 Gateway/Shell-Bus Implementierung | **gesperrt** bis §4 Sequenz 3c + §4.1 Kriterien |
+| Phase 4A `risk_prefilter` Dienst-Cutover | **gesperrt** bis §4.2 Warteschlangen-Metrik + Latenz nachweisbar scheiterbar |
+| Öffentliche Market-Daten / Nicht-Gate-Labels | **eigenes Arbeitspaket** (kein Verdict in Klines; RPCs oft geblockt) |
+| Phase 4B LLM-LoRA | **nach** 4A |
 | Broadcast-Subjects als Steuerpfad | **gesperrt** (Serie + `forbid_broadcast`) |
 | „Echtzeit-Insolvenz“ in Pitch/Map | **erlaubt nur mit Live-Zahlen** (p50≈1,2 ms wall, 2026-08-27) — nicht Mock |
 | Multi-Chain Liquidity Sub-Schwarm | **zurückgestellt** bis Kundenbedarf Cross-Chain |
@@ -195,9 +255,11 @@ Stufe 2 ersetzt **nicht** Gate 0 und nicht die Plugin-Isolation.
 | Dokument / Artefakt | Rolle |
 |---------------------|-------|
 | `docs/STATEFUL_GRAPH_SERIE_v0.md` | topology · async_verify · wall_clock |
+| `docs/RaaS_HYBRID_KI_ROADMAP_v0.md` | Phase 4A/4B |
 | `prototypes/v2_stateful_graph/` | Screen-Runner · `live_z3_latency_results.json` |
 | `scripts/test_live_z3_latency.py` | Live HTTP → infra-z3 |
 | `scripts/test_os_isolation_subswarms.py` | D2 OS-Isolation Intent (Dockerfiles) |
+| `scripts/generate_prefilter_synthetic_data.py` | Phase-4A Synth-Datengen |
 | `agents_b2g/protocol.py` | `broadcast`-Pfad |
 | `services/fail_closed_gate/d_suite_enforcer.py` | D1–D4 app layer2 |
 | `prototypes/raas_hybrid_shell/` | Facade + Gateway (sync Pilot) |

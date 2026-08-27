@@ -282,6 +282,9 @@ raas-oracle-anomaly: ## Oracle Anomaly Swarm plugin (P5 sandbox + D2)
 raas-os-isolation: ## D2 OS-isolation intent for Sub-Swarm Dockerfiles
 	PYTHONPATH=. python3 scripts/test_os_isolation_subswarms.py
 
+raas-prefilter-datagen: ## Phase 4A synthetic prefilter feature matrix
+	PYTHONPATH=. python3 scripts/test_prefilter_datagen.py
+
 raas-portal: ## Start RaaS portal on :8020
 	PYTHONPATH=. uvicorn services.raas_portal.main:app --host 0.0.0.0 --port 8020
 

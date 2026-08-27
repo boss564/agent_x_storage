@@ -219,6 +219,7 @@ NO_TEST_SUMMARY: set[str] = {
     "scripts/test_mev_latency_redteam.py",  # MEV/Latency Red-Team sandbox plugin
     "scripts/test_oracle_anomaly_swarm.py",  # Oracle Anomaly Swarm P5 sandbox plugin
     "scripts/test_os_isolation_subswarms.py",  # D2 OS-isolation Dockerfile consolidation
+    "scripts/test_prefilter_datagen.py",  # Phase 4A synthetic prefilter datagen
 }
 
 
