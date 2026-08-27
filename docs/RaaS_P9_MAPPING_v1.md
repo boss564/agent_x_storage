@@ -177,6 +177,7 @@ Abrechnung weiter außerhalb dieses Repos.
 
 | Dokument | Rolle |
 |----------|-------|
+| `docs/RaaS_P9_MAPPING_v2.md` | Red/Blue-Overlay · Sub-Schwärme (additiv, Proto unverändert) |
 | `docs/RaaS_P9_MAPPING_v0.md` | Contract-RaaS, API, Proto-Stand |
 | `docs/AGENT_SWARM_P9_MAP_v0.md` | P-Agenten, Compose, Gate |
 | `docs/AGENT_X_CHARTER.md` | Negativklausel |
