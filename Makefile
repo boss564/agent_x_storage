@@ -270,6 +270,9 @@ raas-stage1-edge-pilot: ## Stage-1 pilot: single edge P1→P2 Queue-Group
 raas-stage1-edge-ring: ## Stage-1 ring: P1→…→P9→P1 Queue-Group sequential
 	PYTHONPATH=. python3 scripts/test_stage1_edge_bus_ring.py
 
+raas-live-z3-latency: ## Live HTTP latency vs infra-z3 (:8001)
+	PYTHONPATH=. python3 scripts/test_live_z3_latency.py
+
 raas-portal: ## Start RaaS portal on :8020
 	PYTHONPATH=. uvicorn services.raas_portal.main:app --host 0.0.0.0 --port 8020
 

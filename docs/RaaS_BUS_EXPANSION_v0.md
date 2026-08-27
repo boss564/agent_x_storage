@@ -68,13 +68,30 @@ gemessenen Per-Txn-ms — **nicht** für Netzlatenz und Umordnung unter NATS.
 
 Dokumentation darf Stufe 1 nicht als „Overlay ohne Kernänderung“ verkaufen.
 
-### 2.3 „Echtzeit-Insolvenz-Prüfung“ ist nicht belegt
+### 2.3 „Echtzeit-Insolvenz-Prüfung“ — Live-Messung liegt vor
 
 `wall_clock_verify` nutzt `mock_z3_bho_verify` — Mock SAT/BHO, **kein** Live-HTTP
-zu `infra-z3`. Die gemessenen ms sind CPU-Proxy.
+zu `infra-z3`. Die dortigen ms sind CPU-Proxy und bleiben als Struktur-Screen gültig.
 
-**Regel:** Das Wort „Echtzeit“ (Z3/Insolvenz) erscheint in Maps/Roadmaps erst nach
-gemessener **Live**-Latenz gegen `infra-z3` (p50/p99, N-Läufe, Seeds fest).
+**Live-Messung (2026-08-27):** `scripts/test_live_z3_latency.py` · `make raas-live-z3-latency`  
+Service: `infra-z3` Z3 5.1.0 · Host `http://127.0.0.1:8001` · `POST /prove_bho_invariant`  
+Payload: BHO-OK Beispiel (45 000 / 36 000 / 6 750 / 2 250) · N=50 · Warmup=5 · seed_tag=`20260827`
+
+| Metrik | Wert |
+|--------|------|
+| wall_ms min | 0,92 |
+| wall_ms median (p50) | 1,18 |
+| wall_ms p95 | 1,48 |
+| wall_ms p99 | 1,71 |
+| wall_ms max | 1,86 |
+| ok | 50/50 |
+| server `proof_time_us` median | ≈20 µs |
+
+Artefakt: `prototypes/v2_stateful_graph/live_z3_latency_results.json` · Verdict `LIVE_Z3_LATENCY_PASS`
+
+**Regel (aktualisiert):** „Echtzeit“ darf nur mit Bezug auf **diese Live-Zahlen** (oder neuere,
+gleichermaßen dokumentierte Wiederholungen) erscheinen — nicht mit Verweis auf den Mock-Screen.
+Parallel-Sub-Schwarm (Z3) bleibt optional; bei p95 ≪ 10 ms ist er kein Notfall.
 
 ---
 
@@ -106,7 +123,7 @@ Orchestrierung der Sub-Schwärme = **Shell/Plugin außerhalb** (v2), nicht P₂-
       └─ `RingOrchestrator` = request/reply, feste Sequenz
       └─ Sync-Default `TrustedCoreGateway` unverändert (kein Full-Cutover)
       └─ Runner: `test_stage1_edge_bus_pilot.py` · `test_stage1_edge_bus_ring.py`
-2.  Live-Z3-Latenz messen (infra-z3) → erst dann „Echtzeit“-Sprache
+2.  Live-Z3-Latenz messen (infra-z3) → **PASS 2026-08-27** (p50≈1,2 ms wall)
 3.  Red-Team-Plugin (MEV/Latency) unter /sandbox/ + D2 OS-Isolation
 4.  Oracle / Liquidity Plugins nach Bedarf
 5.  Inter-Swarm (WSS/Libp2p) — zuletzt; P₉-Signatur + Z3-Header Intent
@@ -126,7 +143,7 @@ Stufe 2 (Gateway/Shell-Bus) kann parallel zur Facade bleiben; sie ersetzt nicht 
 |--------|--------|
 | NATS JetStream Cutover für RaaS-P9 | Gate 0 PASS · **Ring-Bus Pilot+9 Kanten** — Gateway-Cutover offen |
 | Broadcast-Subjects als Steuerpfad | **gesperrt** (Serie + `forbid_broadcast`) |
-| „Echtzeit-Insolvenz“ in Pitch/Map | **gesperrt** bis Live-Z3 |
+| „Echtzeit-Insolvenz“ in Pitch/Map | **erlaubt nur mit Live-Zahlen** (p50≈1,2 ms wall, 2026-08-27) — nicht Mock |
 | 9 neue Remap-Microservices | **abgelehnt** (v1/v2) |
 | Libp2p Inter-Swarm | Intent only |
 
@@ -137,7 +154,8 @@ Stufe 2 (Gateway/Shell-Bus) kann parallel zur Facade bleiben; sie ersetzt nicht 
 | Dokument / Artefakt | Rolle |
 |---------------------|-------|
 | `docs/STATEFUL_GRAPH_SERIE_v0.md` | topology · async_verify · wall_clock |
-| `prototypes/v2_stateful_graph/` | Screen-Runner |
+| `prototypes/v2_stateful_graph/` | Screen-Runner · `live_z3_latency_results.json` |
+| `scripts/test_live_z3_latency.py` | Live HTTP → infra-z3 |
 | `agents_b2g/protocol.py` | `broadcast`-Pfad |
 | `services/fail_closed_gate/d_suite_enforcer.py` | D1–D4 app layer2 |
 | `prototypes/raas_hybrid_shell/` | Facade + Gateway (sync Pilot) |
