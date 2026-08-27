@@ -333,6 +333,9 @@ raas-prefilter-m1-isolation-screen: ## M1 Proto §3.3 — isolation vs M2 negati
 raas-prefilter-m1-e2e: ## M1 Proto §3.4 — path · envelope · WORM
 	PYTHONPATH=. python3 scripts/test_prefilter_m1_e2e.py
 
+raas-b2b-exporter-smoke: ## B2B P9 gutachten JSON/PDF/Merkle (core untouched)
+	PYTHONPATH=. python3 scripts/test_raas_b2b_exporter.py
+
 raas-gateway-prefilter-cutover: ## Phase 4A backlog priority cutover (no core skip)
 	PYTHONPATH=. python3 scripts/test_gateway_prefilter_cutover.py
 

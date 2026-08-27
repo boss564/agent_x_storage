@@ -177,8 +177,9 @@ Details: `docs/RaaS_BUS_EXPANSION_v0.md` §4.2
 | Adversarial Plugins / Feature-Store / Schnell-Modell | ✅ MEV+Oracle Plugins · Synth-Prefilter · Queue-Cutover (Phase 4A) |
 | Validierungs-Gateway (D3) | Facade + `DSuiteEnforcer` layer2 · Wave-39 ScopeEnforcer komplementär |
 | D-Suite barriers | ✅ `d_suite_enforcer.py` · `make raas-d-suite` |
-| Phase 4A Prefilter | ✅ Train + Cutover · Default OFF · **Referenz A aktiv** (Haltepunkt) |
+| Phase 4A Prefilter | ✅ Train + Cutover · Default OFF · **Referenz A aktiv** · **M1 Proto** · Tag `v1.0-raas-baseline` |
 | Phase 4B LLM-LoRA / Public-Ingest | Public-Ingest = §4.3 **konsolidiert** (Referenz A); Kalibrierung/Pfad 2 Pause bis Auslöser; 4B eigener Bedarf |
+| B2B Exporter (P9 Output) | ✅ `services/exporter/` · JSON/PDF/Merkle · Kern unberührt · `make raas-b2b-exporter-smoke` |
 | Order-Send / Searcher / Auto-Rebalance | **gesperrt** |
 | D1–D3 → ScopeEnforcer (Ebene 2) | **offen** — Health zeigt Schuld; Kette analog `live_execution` bei Intake/Red/Gateway |
 | Vor Stufe 2: Topologie-Re-Screen | **bindend** — Bus-Expansion §4.1 · ~16 s · Ring vs. complete |
