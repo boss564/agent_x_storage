@@ -351,6 +351,9 @@ raas-flash-crash-retro-180: ## Option 5 full window (needs network for missing c
 raas-fn-belt-screen: ## FN-Gürtel Ursachen A–D (same definition_hash, no retune)
 	PYTHONPATH=. python3 scripts/raas_fn_belt_screen.py --days 180
 
+raas-barrier-cal-surface: ## P1 counterfactual FP/FN surface (labels only, prod edges frozen)
+	PYTHONPATH=. python3 scripts/raas_barrier_cal_surface.py --days 180
+
 raas-gateway-prefilter-cutover: ## Phase 4A backlog priority cutover (no core skip)
 	PYTHONPATH=. python3 scripts/test_gateway_prefilter_cutover.py
 

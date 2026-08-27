@@ -96,8 +96,8 @@ Keine Orderbuch-Claims aus Klines erfinden.
 | Phase | Deliverable | Gate |
 |-------|-------------|------|
 | **P0** | Dieses Plan-Dokument | ✅ |
-| **P1** | Counterfactual-Screen: Grid §4.1 × 180d Klines; Tabellen Trip-P/R + Warn-P/R + FP-Zählung; gleicher Parent-`definition_hash` für Ground | `RAAS_BARRIER_CAL_SURFACE_PASS` |
-| **P2** | Feature-Add-on Screen: HL-Proxy als *zusätzliches* Warn- oder Trip-Signal (eigenes Label), FP/FN vs. Baseline ohne Retune der Frozen-Edges | `RAAS_BARRIER_FEATURE_PASS` oder `DATA_INSUFFICIENT` |
+| **P1** | Counterfactual-Screen: Grid §4.1 × 180d Klines; Tabellen Trip-P/R + Warn-P/R + FP-Zählung; gleicher Parent-`definition_hash` für Ground | ✅ `RAAS_BARRIER_CAL_SURFACE_PASS` (2026-08-27) — **Durchlauf**, kein Schranken-Beleg |
+| **P2** | Feature-Add-on Screen: HL-Proxy als *zusätzliches* Warn- oder Trip-Signal (eigenes Label), FP/FN vs. Baseline ohne Retune der Frozen-Edges | 🔒 nach Startsignal |
 | **P3** | Nur bei bewusster Wahl: **Design-Amendment** neuer Kanten/Features + neuer Hash — dann erst Code | Startsignal erforderlich |
 | **P4** | Orderbuch-Imbalance (wenn Feed da) | gesperrt bis Daten |
 
@@ -114,6 +114,27 @@ Keine Orderbuch-Claims aus Klines erfinden.
 **P1 ist explorativ.** Oberflächen-Zahlen (P/R, FP/FN pro Grid-Punkt) stehen im Report; das `PASS`-Verdict zitiert man nicht als Schranken-Beweis.
 
 **P2 / Ereigniszahl:** 180d Retro hatte **21 Observed**-Ereignisse — für ein Zusatzsignal (HL-Proxy) ist das knapp. Unterschreitet die vorab gesetzte Mindestzahl (Screen-Skript: z. B. `n_observed < 30` oder `n_warn_band < 15`, konkret im Runner einfrieren) → **`DATA_INSUFFICIENT`**, kein Overclaim.
+
+### 5.2 P1 Surface-Ergebnis (explorativ, kein Retune)
+
+Lauf: `make raas-barrier-cal-surface` · Report `exports/reports/barrier_cal_surface_latest.md` (gitignored).
+
+| Größe | Wert |
+|-------|------|
+| bars / observed / ground_trip / ground_warn | 259 200 / 21 / **3** / 18 |
+| Prod-Punkt `(0.80, 0.75)` Trip/Warn P/R | 1.0 / 1.0 (FP=FN=0) — siehe unten |
+
+**Prod-Punkt = Konsistenzprüfung, keine Detektionsgüte.**  
+Ground-Trip-Kanten sind algebraisch `EXEC_RISK_BLOCK × SCALE` bzw. `CASCADE_BLOCK × SCALE`. Am Gitterpunkt `(0.80, 0.75)` sind Vorhersage und Ground **dieselbe Ungleichung** (nach Skalierung). P/R=1.0 ist dort **arithmetisch erwartet**; eine Abweichung wäre ein Implementierungsfehler der Pipeline, kein empirischer Befund.
+
+**Eigentliches P1-Produkt:** die **anderen 15** Gitterpunkte (Vorhersage ≠ Frozen-Ground):
+
+- niedrigere Blöcke → mehr Trip-**FP** (Warn-Band wird als Trip gelabelt)
+- höhere Cascade (z. B. 0.80) → Trip-**FN**
+
+**Ereigniszahl:** `ground_trip = 3` bei 259 200 Bars trägt **keine** belastbare Präzisions-/Recall-Aussage (Dreierregel: auch 3/3 ist mit deutlich niedrigerer wahrer Rate vereinbar). Die Oberfläche zeigt **Richtungen** des Trade-offs, keine Kantenwahl.
+
+P3 (Übernahme) bleibt gesperrt bis Startsignal + Amendment + neuer Hash — mit n=3 Trip-Events ist keine Prod-Kante begründbar.
 
 ---
 
@@ -155,5 +176,5 @@ klines ≠ training labels for a deployable classifier claim
 
 ## 9. Nächster konkreter Schritt
 
-**P1 Counterfactual-Surface-Screen** (Skript + Make), wenn Startsignal — nicht vorher Prod anfassen.  
-Commit dieses Plans separat möglich (Dokumentation only).
+**P1 erledigt** (Surface-Screen). Optional: Pause, oder Startsignal für **P2** (HL-Proxy).  
+**P3** weiterhin nur nach bewusster Design-Entscheidung.
