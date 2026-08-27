@@ -1,0 +1,164 @@
+# RaaS — Hybrid KI Roadmap v0 (Core/Shell)
+
+**Status:** ROADMAP v0 (2026-08-27) · additiv zu RaaS-Maps v0–v2 · Charter Option 1  
+**Scope:** `DEFENSIVE_CAUSAL_GROUNDING` · `live_execution=false` · KI = untrusted Shell  
+**Nicht:** LLM-Freigabe, Searcher-Send, Auto-Rebalance on-chain, Anlageberatung  
+**Basis:** `docs/RaaS_P9_MAPPING_v2.md` · `docs/RaaS_P9_MAPPING_v1.md` · `docs/AGENT_X_CHARTER.md`
+
+Die vier Strategien (**Core/Shell**, **Tool-Augmented Reasoning**, **Adapter/Plugin**,
+**Synthetic Data**) sind **kombinierbar** und stufenweise — nicht alternativ.
+
+---
+
+## 1. Zielbild (eine Zeile)
+
+**Deterministischer 9-Agenten-Kern entscheidet und archiviert; stochastische KI-Hülle
+schlägt vor und filtert; Kommunikation nur über validierte APIs; Sub-Schwärme als
+Plugins; synthetische Daten trainieren eine schnelle Zweitmeinung — nie die Freigabe.**
+
+---
+
+## 2. Leitplanken
+
+| Prinzip | Umsetzung | Bindung an Bestand |
+|---------|-----------|-------------------|
+| **Core/Shell** | P₁…P₉ + `infra-gate` + WORM = Trusted Core. KI-Hülle sandboxed, Zugang nur über Validierungs-Gateway. | Charter · Wave 39 ScopeEnforcer · v2 Blue zeichnet allein |
+| **Tool-Augmented Reasoning** | Kern als Tools mit Schema (OpenAPI). Orchestrator **außerhalb** des Kerns. | `api/v1/raas/*` Proto · kein Direktzugriff auf Kernel-State |
+| **Adapter/Plugin** | Red/Chain-Adapter als eigene Services; Kern unverändert. | v2 Sub-Schwarm-Intent · Compose/Helm separat |
+| **Synthetic Data** | Gelabelte Runs aus P₃/P₄/P₅/P₈ → kleines Modell als **Vorfilter**. | Envelope-Labels · Kern bleibt letzte Instanz |
+
+### Korrekturen gegenüber Roh-Entwurf (bindend)
+
+| Roh-Formulierung | Hier |
+|------------------|------|
+| „Red-Team-Orchestrator (P₂)“ | **P₂ bleibt Latenz-Simulator (v1/v2).** Red-Orchestrierung = **Shell/Plugin außerhalb** des Kerns — Overlay abziehbar |
+| Plugin-Methode `execute_attack` | **`run_attack_scenario` / `report_scenario`** — Simulation, kein Exploit-Send |
+| Phase 5 „automatische Parameter-Korrekturen / gepatchter Code“ | Nur **Gegenmaßnahme-Kandidaten** → Kern validiert → Envelope. Kein Auto-Deploy, kein on-chain Patch |
+| „Echtzeit-Risiko**entscheidungen**“ der Schnell-KI | Nur **Vorhersage / Vorfilter**; Freigabe ausschließlich deterministisch |
+| Kong/Kafka/Feast/Nitro als Ist | **Intent.** Bestand: NATS (Surface), `raas-portal` Datei+HTTP, Helm Surface/D01, SoftHSM/Bunker — nicht RaaS-KI-Runtime |
+
+---
+
+## 2.1 Schuld — Ebene 1 wartet auf Ebene 2
+
+`live_execution=false` setzt `ScopeEnforcerAgent` (Wave 39) bereits durch:
+anhängen, validieren, weiterreichen. Die folgenden Zusagen sind **nur Map/Roadmap**
+(Ebene 1). Beim Bau gehören sie in **dieselbe Kette**, sonst hängt die Abgrenzung
+an der Disziplin der Implementierung.
+
+| ID | Zusage | Herkunft | Ist | Soll beim Bau |
+|----|--------|----------|-----|----------------|
+| D1 | `not_investment_advice=true` | RaaS v1 Envelope | Deklaration | ScopeEnforcer analog `live_execution` |
+| D2 | Red schreibt nur Sandbox; Blue allein zeichnet Gate/Envelope | RaaS v2 Overlay | Regel im Dokument | ScopeEnforcer / Gateway-Policy |
+| D3 | KI-Hülle nur über **Validierungs-Gateway** | diese Roadmap §2 Core/Shell | **Intent** (kein Service) | Gateway = Durchsetzung + Audit → P₉; Shell nie Direkt-Kern |
+
+Drei Ebene-1-Zusagen, eine Ebene-2-Referenz (`live_execution`). Liste hier führen,
+nicht in Phasen verstecken.
+
+---
+
+## 3. Phases (Roadmap, keine Schätzung als Vertrag)
+
+Wochenangaben sind Planungsfiction. Jede Phase liefert Mehrwert; Abbruch ohne
+Kern-Refactor möglich.
+
+### Phase 0 — API-Inventur & Gateway (Fundament)
+
+**Ziel:** Kern als versionierte Tools dokumentieren und erreichbar machen.
+
+- Inventar P₁…P₉: Intake, Stress-Run, Gate-Evaluate, Certificate/Envelope, WORM-Append  
+- Bestehend nutzen: `services/raas_portal/` (`/api/v1/raas/…`), `infra-gate` (`/v1/evaluate`)  
+- Gateway-Intent: ein Zugang, Audit jedes Aufrufs → P₉-fähig (**Schuld D3**, §2.1)  
+- **Ergebnis:** Kern tool-fähig; kein LLM nötig
+
+### Phase 1 — Tool-Augmented Reasoning
+
+**Ziel:** Externes Framework (z. B. LangGraph) ruft Tools auf; interpretiert nur strukturierte Results.
+
+- Tool-Wrapper pro Endpoint (Schema = Vertrag)  
+- Orchestrator **außerhalb** des Kerns; natürliche Sprache → Tool-Sequenz  
+- Kein Zugriff auf interne Kernel-Zustände  
+- **Ergebnis:** „Kern rechnet, Shell interpretiert“
+
+### Phase 2 — Core/Shell für Strategie-Entwurf
+
+**Ziel:** LLM-Shell schlägt Parameter vor; Kern simuliert + Z3/Gate; nur dann Markierung
+„KI-vorgeschlagen, deterministisch verifiziert“.
+
+- Vorschläge = `untrusted` bis Blue/Gate bestätigt  
+- Self-Patching-**Vorschläge** = Envelope-`countermeasures`, keine Execution  
+- Shell: Ressourcen-Cap, isolierter Container  
+- Schuld v1: `not_investment_advice` → ScopeEnforcer-Kette beim Intake
+
+### Phase 3 — Adversarial Sub-Swarms als Plugins
+
+**Ziel:** Red-Szenarien (MEV/Latenz/Oracle/Shock) als ladbare Plugins.
+
+- Interface skizze: `initialize_scenario` · `run_attack_scenario` · `report_scenario`  
+- Plugins = Microservices; Kern unverändert  
+- Orchestrierung der Plugins: **Shell-Adapter**, nicht Umdefinition von P₂  
+- Schuld v2: Red schreibt nur Sandbox — Ebene 2 = ScopeEnforcer beim Bau
+
+### Phase 4 — Synthetic Data & schnelles Modell
+
+**Ziel:** Features + Labels aus Simulationsläufen → leichtes Modell (z. B. GBT) als Vorfilter.
+
+- Labels an Envelope/Gate-Verdict koppeln (`risk_blocked`, `breaks_at`, …)  
+- Model Registry Intent; Confidence-Schwelle; bei Unsicherheit → voller Kernlauf  
+- **Nie** reine Modell-Freigabe
+
+### Phase 5 — Kontinuierlicher Zyklus (Clearance-Loop)
+
+**Ziel:** Angriff → Verifikation → Kandidaten → erneuter Kernlauf → Envelope/WORM.
+
+- Permanent neue **Szenario-Kampagnen** (nicht Live-Bedrohungs-Execution)  
+- P₆/Gate: Beweis / BLOCKED|RELEASED; P₉: Archiv  
+- LLM darf Varianten vorschlagen; Kern testet  
+- Abbruchkriterium: dokumentierte Clearance, nicht „alle Angriffe besiegt“ als Marketing
+
+---
+
+## 4. Sicherheitsrisiken (Kurz)
+
+| Risiko | Gegenmaßnahme |
+|--------|----------------|
+| LLM-Halluzination | Nur Schema-Vorschläge; Kern verwirft + Audit-Event |
+| Stochastik im Safety-Pfad | Seeded RNG nur im Kern; KI keine Safety-Zufallsentscheidung |
+| Modell-Bias / OOD | Synthetische Coverage + Unsicherheit → voller Lauf |
+| Latenz-Druck | Schnell-Modell = Vorfilter; Freigabe = Kern (ggf. reduzierte N, nie nur KI) |
+| Compliance | Jeder Shell-/Plugin-Schritt gateway-protokolliert → WORM |
+
+---
+
+## 5. Nächste Schritte (konkret, klein)
+
+1. **API-Inventur** gegen bestehenden Proto (`raas-portal`, `infra-gate`) — keine Parallel-API erfinden  
+2. **Ein** Tool-Wrapper + ein Shell-Orchestrator (Phase 1 Pilot) — Simulation anstoßen, Result lesen  
+3. Kein Phase-5-Auto-Patch-Code, bevor Schuld **D1–D3** in ScopeEnforcer/Gateway sitzt  
+4. Red-Plugins erst nach Interface-Namen ohne `execute_*`-Send-Semantik
+
+---
+
+## 6. Implementierungsstand
+
+| Schicht | Stand |
+|---------|--------|
+| Trusted Core (P-Rollen, Gate, Proto) | ✅ Maps v0–v2 + `services/raas_portal/` |
+| Diese Roadmap | ✅ Dokument only |
+| Tool-Wrapper / LangGraph / LLM-Shell | **nicht gebaut** |
+| Adversarial Plugins / Feature-Store / Schnell-Modell | **nicht gebaut** |
+| Validierungs-Gateway (D3) | **Intent** — Ebene 1 |
+| Order-Send / Searcher / Auto-Rebalance | **gesperrt** |
+
+---
+
+## 7. Verweise
+
+| Dokument | Rolle |
+|----------|-------|
+| `docs/RaaS_P9_MAPPING_v2.md` | Red/Blue Overlay · Sandbox-Schuld |
+| `docs/RaaS_P9_MAPPING_v1.md` | Strategie · Envelope · Advice-Schuld |
+| `docs/RaaS_P9_MAPPING_v0.md` | Contract-RaaS Proto |
+| `docs/AGENT_X_CHARTER.md` | Negativklausel |
+| `services/fail_closed_gate/` | Gate Core |
+| `services/raas_portal/` | Laufender Tool-Kern (Contract-shaped) |
