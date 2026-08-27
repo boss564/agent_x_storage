@@ -69,7 +69,7 @@ Human-Gate: nur intern/Operator — nicht Kunden-Self-Service für Execution.
 
 ## 4. Stress-Runner (Compose-Anbindung)
 
-Bestehend: `podman-compose.p9.yml` (P1–P9 + infra-z3/state/hsm/gate).
+Bestehend: `podman-compose.p9.yml` (P1–P9 + infra-z3/state/hsm/gate + **raas-portal** `:8020`).
 
 | Phase | Services | Output |
 |-------|----------|--------|
@@ -127,14 +127,14 @@ Abrechnung: Lizenz pro Tenant + Volumen (Runs/Monat) — **außerhalb** dieses R
 
 ---
 
-## 8. Nächste Implementierungsschritte
+## 8. Implementierungsstand (Prototype)
 
-| # | Deliverable | Abhängigkeit |
-|---|-------------|--------------|
-| 1 | **RaaS-Portal** — FastAPI `api/v1/raas/*` (Upload, Runs, Status) | P₁ Intake |
-| 2 | **Stress-Runner** — `scripts/raas_stress_runner.py` + Compose-Health | P2–P8 live |
-| 3 | **Audit-Exporter** — P₉ Zertifikat-Pipeline (JSON + PDF/A-3) | Gate-Trace |
-| 4 | E2E Smoke | `make raas-smoke` — 1 Contract, 100 Szenarien, Zertifikat |
+| # | Deliverable | Status |
+|---|-------------|--------|
+| 1 | **RaaS-Portal** — `services/raas_portal/` · `api/v1/raas/*` · Compose `raas-portal` | ✅ Proto |
+| 2 | **Stress-Runner** — `scripts/raas_stress_runner.py` (`risk_block_rate` vs latch) | ✅ Proto |
+| 3 | **Audit-Exporter** — JSON + Markdown Zertifikat (PDF/A-3 später) | ✅ Proto |
+| 4 | E2E Smoke | ✅ `make raas-smoke` → `RAAS_SMOKE_PASS` |
 
 **Nicht in Scope:** Order-Routing, Searcher-Pipelines, Live-DEX-Execution.
 

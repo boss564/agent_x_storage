@@ -104,6 +104,38 @@ services:
     networks:
       - agent_x_p9
 
+  # RaaS portal prototype — upload → stress → certificate (no live execution)
+  raas-portal:
+    build:
+      context: .
+      dockerfile: services/raas_portal/Dockerfile.raas
+    image: agentx-raas:p9
+    ports:
+      - "8020:8020"
+    environment:
+      PYTHONPATH: /app
+      RAAS_DATA_ROOT: /data/raas
+      GATE_BASE_URL: http://infra-gate:8010
+      SCOPE: DEFENSIVE_CAUSAL_GROUNDING
+    volumes:
+      - raas-data:/data/raas
+    depends_on:
+      - infra-gate
+      - infra-state
+    networks:
+      - agent_x_p9
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python3",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8020/health')",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
   # ── P1…P9 (Map §4 Entry-Points, §7 depends_on) ──────────────────────
   p1-ingestion:
     <<: *p-agent
@@ -230,3 +262,4 @@ volumes:
   z3-data:
   hsm-keys:
   state-data:
+  raas-data:

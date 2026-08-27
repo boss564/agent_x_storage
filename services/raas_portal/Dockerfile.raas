@@ -1,0 +1,21 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+ENV PYTHONPATH=/app
+ENV RAAS_DATA_ROOT=/data/raas
+ENV RAAS_PORT=8020
+
+COPY services/raas_portal/requirements.txt /tmp/req.txt
+RUN pip install --no-cache-dir -r /tmp/req.txt
+
+RUN mkdir -p /app/agents_b2g/emergence /app/services/raas_portal \
+    && touch /app/agents_b2g/__init__.py \
+    && touch /app/agents_b2g/emergence/__init__.py
+
+COPY services/fail_closed_gate/gate_core.py /app/gate_core.py
+COPY agents_b2g/emergence/kanten_ledger.py /app/agents_b2g/emergence/kanten_ledger.py
+COPY services/raas_portal/ /app/services/raas_portal/
+
+VOLUME ["/data/raas"]
+EXPOSE 8020
+CMD ["uvicorn", "services.raas_portal.main:app", "--host", "0.0.0.0", "--port", "8020"]

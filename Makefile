@@ -247,7 +247,14 @@ test-all:
 	@echo "✅ All test suites complete"
 	@echo "✅ Alle Container, Images und Volumes entfernt"
 
-.PHONY: son-report backup
+.PHONY: son-report backup raas-smoke raas-portal
+
+raas-smoke: ## RaaS prototype E2E (upload→stress→certificate, gate sim)
+	PYTHONPATH=. python3 scripts/test_raas_smoke.py
+
+raas-portal: ## Start RaaS portal on :8020
+	PYTHONPATH=. uvicorn services.raas_portal.main:app --host 0.0.0.0 --port 8020
+
 son-report: ## Regenerate SON report (24h validity for compliance gate)
 	python3 scripts/check_claude_md.py --run-tests --json-report archive_b2g/son_report.json
 
