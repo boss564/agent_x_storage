@@ -255,6 +255,9 @@ raas-smoke: ## RaaS prototype E2E (upload→stress→certificate, gate sim)
 raas-portal: ## Start RaaS portal on :8020
 	PYTHONPATH=. uvicorn services.raas_portal.main:app --host 0.0.0.0 --port 8020
 
+raas-up: ## Compose: raas-portal + gate + redis (kein Z3/:8001)
+	docker compose -f podman-compose.p9.yml up --build raas-portal
+
 son-report: ## Regenerate SON report (24h validity for compliance gate)
 	python3 scripts/check_claude_md.py --run-tests --json-report archive_b2g/son_report.json
 

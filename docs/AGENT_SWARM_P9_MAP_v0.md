@@ -153,7 +153,7 @@ Compose-Netzwerk: `agent_x_p9` (bridge). DNS-Namen = Service-Namen.
 | `p1`…`p5`, `p7`, `p8` | `infra-state` | StateStore / gemeinsame Persistenz |
 | `p6-risk` | `infra-z3`, `infra-state` | Z3-Audit + State |
 | `p9-storage` | `infra-hsm`, `infra-state` | Anchor/Guardian + Keys + State |
-| `infra-gate` | `infra-z3`, `infra-state` | Map §10 Option A |
+| `infra-gate` | `infra-state` | Map §10 Option A; Z3 intern optional (`Z3_BASE_URL`), kein Host-:8001 für RaaS |
 | `p3`–`p8` | `infra-state`, `infra-gate` | Signal/Risk/Gate-Clients |
 
 Keine künstliche `depends_on`-Kette P₁→P₂→… — Kopplung läuft über Ledger, nicht über Compose-Startreihenfolge.

@@ -10,6 +10,11 @@
 #   podman compose -f podman-compose.p9.yml up --build
 #   docker  compose -f podman-compose.p9.yml up --build
 #
+# RaaS-Portal allein (kein infra-z3, kein Host :8001):
+#   docker compose -f podman-compose.p9.yml up --build raas-portal
+#   → http://127.0.0.1:8020/health
+# Nicht Docker Desktop und Podman parallel auf denselben Host-Ports mischen.
+#
 # Hinweis: Viele Agent-CLIs sind One-Shot; nach dem Lauf bleibt der Container
 # mit sleep infinity, damit der Stack (Infra + DNS) prüfbar bleibt.
 
@@ -99,7 +104,6 @@ services:
       Z3_BASE_URL: http://infra-z3:8000
       SCOPE: DEFENSIVE_CAUSAL_GROUNDING
     depends_on:
-      - infra-z3
       - infra-state
     networks:
       - agent_x_p9
