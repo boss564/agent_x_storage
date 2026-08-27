@@ -144,6 +144,7 @@ Abrechnung: Lizenz pro Tenant + Volumen (Runs/Monat) — **außerhalb** dieses R
 
 | Dokument | Rolle |
 |----------|-------|
+| `docs/RaaS_P9_MAPPING_v1.md` | Strategie-Intake · Safety Envelope (additiv, Proto unverändert) |
 | `docs/AGENT_SWARM_P9_MAP_v0.md` | P-Agenten, Compose, §9–§10 Gate |
 | `docs/AGENT_X_CHARTER.md` | Negativklausel, Air-Gap |
 | `docs/COMPLIANCE_PLAYBOOK.md` | GoBD/K1–K8 |
