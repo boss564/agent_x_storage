@@ -45,7 +45,9 @@ from plugins.oracle_anomaly_swarm.scenario_runner import (  # noqa: E402
 )
 
 SCOPE = "DEFENSIVE_CAUSAL_GROUNDING"
-OUT_DIR = _ROOT / "data" / "raas" / "sandbox" / "prefilter_synth"
+# Structured synth corpus for Phase 4A (gitignored under data/)
+OUT_DIR = _ROOT / "data" / "synthetic" / "prefilter"
+SANDBOX_OUT = _ROOT / "data" / "raas" / "sandbox" / "prefilter_synth"
 
 MEV_KINDS = ("LATENCY_SPIKE", "SANDWICH_SIM", "JITTER_BURST")
 ORA_KINDS = ("STALE_PRICE", "FAT_FINGER", "FLASH_CRASH", "DEPEG_SIM")
@@ -289,10 +291,12 @@ def write_outputs(rows: List[Dict[str, Any]], out_dir: Path) -> Dict[str, str]:
         "scope": SCOPE,
         "live_execution": False,
         "purpose": "queue_prioritization_under_backlog",
+        "training_allowed": all(r.get("label_mode") == "severity_proxy" for r in rows),
         "note": (
             "Synthetic rows for queue-priority features (Phase 4A). "
-            "severity_proxy ≠ risk. gateway→gate_verdict_label is circular vs "
-            "evaluate_gate — ban AUC-against-gate as success. No core skip. "
+            "Train only on severity_proxy batches (training_allowed=true). "
+            "gateway→gate_verdict_label is circular vs evaluate_gate — "
+            "ban AUC-against-gate as success. No core skip. "
             "Not live infra-z3 BHO."
         ),
     }
@@ -331,9 +335,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         help="output directory (default: sandbox prefilter_synth[/extremes])",
     )
     args = p.parse_args(argv)
-    out = args.out or (
-        OUT_DIR / "extremes" if args.profile == "extremes" else OUT_DIR / "mixed"
-    )
+    out = args.out or (OUT_DIR / args.profile)
 
     print("Phase 4A synthetic prefilter datagen")
     print("=" * 60)
