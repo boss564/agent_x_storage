@@ -348,11 +348,11 @@ rechtfertigt **kein** DEFAULT_ON und keinen Fortschritts-Claim. Phase-4A-Cutover
 Default OFF. Halt: Pipeline + Profile + gepaartes Kriterium stehen; Gewissheit über
 die Referenz (warum 5k≠20k) fehlt noch — nicht ein vierter Kalibrierungsversuch.
 
-#### 4.3.1 Arbeitspaket Referenzklärung (vor jeder weiteren Kalibrierung)
+#### 4.3.1 Arbeitspaket Referenzklärung & Holdout-N-Stabilisierung
 
-**Status:** offen · **blockiert** Profil-Kopplung / DEFAULT_ON / Feature-Tuning  
-**Ziel:** Vorzeichen-Kipp `+4,5 %` (n=5k) → `−1,8 %` (n=20k) erklären oder
-als Artefakt der Evaluation ausweisen. Ohne stabile Referenz keine weiteren Claims.
+**Status:** R1/R3/R5 ✅ · N-robust Bootstrap ✅ · Harrell-Davis / Rang-Kohärenz = Intent  
+**Ziel (erreicht für Referenz):** Vorzeichen-Kipp `+4,5 %` (n=5k) → `−1,8 %` (n=20k)
+als **Holdout-n-Effekt** ausgewiesen; Primär-Referenz eingefroren.
 
 | Schritt | Prüfung | Isoliert |
 |---------|---------|----------|
@@ -362,8 +362,28 @@ als Artefakt der Evaluation ausweisen. Ohne stabile Referenz keine weiteren Clai
 | R4 Feature-Diff | Perzentile Holdout 5k vs 20k (Latenz, Slip, Oracle, …) | Feature-Shift |
 | R5 Sim-Skalierung | Identisches Modell, Holdout n=1000 vs 4000 | Sim-n-Effekt |
 
-**Gesperrt bis R1–R3 grün oder Ursache dokumentiert:** weitere Feature-Kopplung,
-Public-Ingest-Re-Train als Erfolg, DEFAULT_ON.
+**Gesperrt bis bewusste neue Referenz:** weitere Feature-Kopplung,
+Public-Ingest-Re-Train als Erfolg, DEFAULT_ON (Cutover bleibt Default OFF).
+
+##### Prefilter-Evaluierung & Holdout-N-Stabilisierung (formal)
+
+- **Holdout-N-Invarianz (Fixed-Size Bootstrapping) — implementiert:**  
+  Metrik-Berechnung über **B=40** Bootstrap-Ziehungen fester Referenzgröße
+  **n₀=1000** (`queue_metric_n_robust`, stratifiziert risky/non-risky).  
+  Entkoppelt Cross-N-Vergleiche von schwankendem Holdout-N (R5).  
+  Primär-Claims bleiben **raw** `improvement_vs_fifo` @ Holdout=1000.
+- **Quantil-Robustheit (Harrell-Davis) — Intent:**  
+  Tail-Metriken (P95/P99 der Wartezeit) als beta-gewichtete Ordnungstatistiken —
+  noch nicht im Runner; erst bei Bedarf an Wait-Quantilen, nicht Pflicht für Cutover.
+- **Gepaarte Rang-Kohärenz — Intent (Label-ehrlich):**  
+  Relative Priorisierungsgüte vs. **`severity_proxy`** (Sortier-Approximation des
+  Gates) — **nicht** vs. Live-Z3/BHO-Ground-Truth (wäre Zirkel / falscher Claim).  
+  Modell approximiert Gate-Verdict zum Sortieren; prognostiziert kein Marktrisiko.
+- **Invarianz-Schwelle für künftige Cutover-Diskussion:**  
+  Prefilter-Variante vs. FIFO-Fallback erst freigabefähig diskutieren, wenn
+  Bootstrap-Streuung der robusten Metrik **σ_robust < 0,02** (über Seeds/Boots)
+  dokumentiert ist — **zusätzlich** zu den bestehenden Cutover-Tests
+  (`GATEWAY_CUTOVER_PASS` / Fallback) und Default OFF. Kein Automatismus.
 
 Runner: `scripts/diagnose_prefilter_reference.py` · `make raas-prefilter-reference-diagnosis`  
 Artefakt: `models/prefilter/prefilter_reference_diagnosis.json`.
@@ -410,7 +430,7 @@ Artefakt: `models/prefilter/prefilter_n_robust_metric.json` ·
 `make raas-prefilter-n-robust-metric`  
 **Claims:** weiter raw @ Holdout=1000. **Cross-N-Vergleiche:** robust n₀.
 
-Runner: `make raas-prefilter-r5-train-vs-holdout`
+Runner: `make raas-prefilter-r5-train-vs-holdout` · `make raas-prefilter-n-robust-metric`
 
 **Reihenfolge (bindend):** Gate-Map (§4.2/§4.3) → Seed-Spread-Check →
 Sondierungs-Skript → Generator. Nicht umgekehrt. **Kalibrierung erst nach §4.3.1.**
