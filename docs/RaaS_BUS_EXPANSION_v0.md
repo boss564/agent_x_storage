@@ -557,6 +557,7 @@ DEFAULT_ON weiter gesperrt.
 | Broadcast-Subjects als Steuerpfad | **gesperrt** (Serie + `forbid_broadcast`) |
 | „Echtzeit-Insolvenz“ in Pitch/Map | **erlaubt nur mit Live-Zahlen** (p50≈1,2 ms wall, 2026-08-27) — nicht Mock |
 | Multi-Schwarm-Schiedsrichter (v3) | Map ✅ · M1 Proto **gebaut** (Screen+E2E PASS) · DEFAULT_ON weiter gesperrt · M2 abgelehnt |
+| Paper-Trading Setup (RaaS) | Map ✅ · Proto **gebaut** (`prototypes/raas_paper_trading/`) · Smoke · 30-Tage **gesperrt** bis Manifest |
 | Multi-Chain Liquidity Sub-Schwarm | **zurückgestellt** bis Kundenbedarf Cross-Chain |
 | 9 neue Remap-Microservices | **abgelehnt** (v1/v2) |
 | Libp2p Inter-Swarm | Intent only |

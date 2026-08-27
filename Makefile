@@ -336,6 +336,9 @@ raas-prefilter-m1-e2e: ## M1 Proto §3.4 — path · envelope · WORM
 raas-b2b-exporter-smoke: ## B2B P9 gutachten JSON/PDF/Merkle (core untouched)
 	PYTHONPATH=. python3 scripts/test_raas_b2b_exporter.py
 
+raas-paper-trading-smoke: ## Paper setup — feed·ledger·WORM·envelope hit-rate (no order send)
+	PYTHONPATH=. python3 scripts/test_raas_paper_trading.py
+
 raas-gateway-prefilter-cutover: ## Phase 4A backlog priority cutover (no core skip)
 	PYTHONPATH=. python3 scripts/test_gateway_prefilter_cutover.py
 
