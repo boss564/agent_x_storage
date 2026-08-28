@@ -413,6 +413,9 @@ raas-regime-lease-failover-forensic: ## Drill 2 lease timeline (kind shadow, pos
 raas-chaos-g1-harness: ## G1 chaos matrix offline harness (gate_core, 9 fixtures)
 	PYTHONPATH=. python3 scripts/chaos_engineering_g1_harness.py
 
+raas-chaos-g2-harness: ## G2 chaos matrix HTTP harness (fail-closed-gate /v1/evaluate)
+	PYTHONPATH=. python3 scripts/chaos_engineering_g2_harness.py
+
 raas-flash-crash-retro: ## Option 5 — Z3-Gate risk layer vs historical klines (MAP v0)
 	PYTHONPATH=. python3 scripts/raas_flash_crash_retrospective.py --days 14
 
