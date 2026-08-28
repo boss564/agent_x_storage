@@ -20,6 +20,16 @@ Implementierung: `prototypes/raas_paper_trading/regime_swarm/`
 
 **Charter:** A8 schlägt Anpassungen nur als `advisory_only` vor. Kein Leverage-, kein Live-Order-Send.
 
+### Pre-Reg-Patch-Matrix (vertikale Upgrades v1)
+
+| Agent | Upgrade | Funktion |
+|-------|---------|----------|
+| **A4** | Autokorrelations-Monitor | Lag-1 ρ auf `r2_cubed` (überlappende 3er-Blöcke), `n_eff`, `is_iid_violation` wenn `n_eff/n < 0.5` |
+| **A7** | i.i.d.-Override-Engine | Bei >2× + i.i.d.-Verletzung + `ρ > 0.3`: `DRIFT_IID_UNRELIABLE`, **`regime_flag` bleibt** (1/2), nur `allow_amendment=False` |
+| **A8** | Sperrklinke | Advisory nur wenn `allow_amendment=True`; sonst `PARAMETER_UNCHANGED` + Audit-Grund |
+
+Audit-Feld `pre_reg_intervention` (A9) dokumentiert AMENDMENT_BLOCKED gemäß Line 74.
+
 ## Offene Hypothese
 
 > Können zwei-Stichproben-Tests (KS + 1D-Wasserstein) auf Tick-Features einen

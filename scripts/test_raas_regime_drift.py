@@ -18,6 +18,17 @@ from prototypes.raas_paper_trading.regime_drift import (  # noqa: E402
     wasserstein_1d,
 )
 from prototypes.raas_paper_trading.regime_swarm import RegimeSwarmOrchestrator  # noqa: E402
+from prototypes.raas_paper_trading.regime_swarm.agents import (  # noqa: E402
+    DriftClassifierAgent,
+    StrategyAdapterAgent,
+    build_r2_cubed_series,
+    calculate_iid_violation_flag,
+)
+from prototypes.raas_paper_trading.regime_swarm.types import (  # noqa: E402
+    FeatureMatrix,
+    KSFeatureResult,
+    WassersteinResult,
+)
 
 
 def _write_worm(path: Path, prices: list[float]) -> None:
@@ -89,7 +100,11 @@ def main() -> int:
         audit = Path(tmp) / "audit.jsonl"
         _write_worm(worm_stable, stable)
         _write_worm(worm_crash, crash)
-        orch = RegimeSwarmOrchestrator(audit_path=audit, seed=42)
+        orch = RegimeSwarmOrchestrator(
+            audit_path=audit,
+            cooling_path=Path(tmp) / "cooling.jsonl",
+            seed=42,
+        )
 
         r_stable = orch.run_cycle(worm_path=worm_stable, symbol="TEST", write_audit=False)
         if r_stable.get("status") != "COMPLETE":
@@ -122,6 +137,57 @@ def main() -> int:
             failed += 1
         else:
             print("  PASS  A8 advisory_only")
+
+    # --- A4 i.i.d. monitor + A7 override + A8 interlock (unit) ---
+    ar_returns = [0.2]
+    for _ in range(80):
+        ar_returns.append(0.92 * ar_returns[-1])
+    r2_series = build_r2_cubed_series(ar_returns)
+    iid = calculate_iid_violation_flag(r2_series)
+    if not iid.is_iid_violation or iid.rho <= 0.3:
+        print(f"  FAIL  AR(1) r2_cubed should trigger iid violation (rho={iid.rho})")
+        failed += 1
+    else:
+        print("  PASS  A4 iid violation on autocorrelated r2_cubed")
+
+    matrix = FeatureMatrix(
+        names=["log_return_pct"],
+        baseline={"log_return_pct": [0.01 + (i % 3) * 0.001 for i in range(40)]},
+        current={"log_return_pct": ar_returns[-40:]},
+    )
+    ks_hit = [
+        KSFeatureResult(feature="log_return_pct", d_stat=0.5, p_value=0.001, drift_detected=True)
+    ]
+    w_res = WassersteinResult(mean_w1=0.5, max_w1=0.5, per_feature={"log_return_pct": 0.5})
+    clf = DriftClassifierAgent()
+    classification, _meta, intervention = clf.run(
+        ks_hit, w_res, matrix, iid_status=iid
+    )
+    if not classification.iid_unreliable or classification.allow_amendment:
+        print("  FAIL  A7 should block amendment when iid unreliable")
+        failed += 1
+    elif classification.regime_flag < 1:
+        print("  FAIL  A7 must preserve regime_flag on iid unreliable path")
+        failed += 1
+    else:
+        print("  PASS  A7 iid-unreliable override (flag preserved)")
+    if classification.classified_regime != "DRIFT_IID_UNRELIABLE":
+        print(f"  FAIL  A7 regime label (got {classification.classified_regime})")
+        failed += 1
+    else:
+        print("  PASS  A7 DRIFT_IID_UNRELIABLE label")
+    if intervention is None or not intervention.triggered:
+        print("  FAIL  A7 pre_reg intervention missing")
+        failed += 1
+    else:
+        print("  PASS  A7 pre_reg intervention")
+
+    adv, a8_meta = StrategyAdapterAgent().run(classification)
+    if not a8_meta.get("amendment_skipped") or a8_meta.get("final_action") != "PARAMETER_UNCHANGED":
+        print("  FAIL  A8 interlock should NOP when amendment blocked")
+        failed += 1
+    else:
+        print("  PASS  A8 interlock NOP")
 
     print("=" * 60)
     if failed:

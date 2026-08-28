@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import uuid
+import statistics
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -21,7 +22,6 @@ from prototypes.raas_paper_trading.regime_swarm.agents import (
 from prototypes.raas_paper_trading.regime_swarm.types import (
     COOLING_OFF_CYCLES,
     SWARM_SCHEMA,
-    DriftClassification,
     SwarmCycleResult,
 )
 
@@ -87,34 +87,16 @@ class RegimeSwarmOrchestrator:
                 "agents": agent_log,
             }
 
-        agent_log["A4"] = self.a4.run(matrix)
+        agent_log["A4"], iid_status = self.a4.run(matrix)
         ks_results, ks_meta = self.a5.run(matrix)
         agent_log["A5"] = ks_meta
 
-        p_min = ks_meta["ks_p_value_min"]
         w_result, w_meta = self.a6.run(matrix)
         agent_log["A6"] = w_meta
 
-        # Resource gate: skip deep classify only if clearly stable
-        if p_min > 0.05 and w_result.mean_w1 < 1e-8:
-            classification_meta = {
-                "agent": "A7_DriftClassifier",
-                "regime_shift_index": 10.0,
-                "regime_flag": 0,
-                "classified_regime": "STABLE_SIDEWAYS",
-                "skipped_deep_path": True,
-            }
-            classification = DriftClassification(
-                regime_shift_index=10.0,
-                regime_flag=0,
-                classified_regime="STABLE_SIDEWAYS",
-                drift_type="none",
-                ks_p_value_min=p_min,
-                anomaly_count=0,
-                mean_shift_sigma=0.0,
-            )
-        else:
-            classification, classification_meta = self.a7.run(ks_results, w_result, matrix)
+        classification, classification_meta, pre_reg = self.a7.run(
+            ks_results, w_result, matrix, iid_status=iid_status
+        )
         agent_log["A7"] = classification_meta
 
         advisory, a8_meta = self.a8.run(classification)
@@ -134,22 +116,41 @@ class RegimeSwarmOrchestrator:
             if classification.ks_p_value_min < 0.01
             else f"α ≥ {0.01:.2f} (nicht kritisch)"
         )
-        deviation = (
-            f"Verteilung weicht ab (KS p_min={classification.ks_p_value_min:.4f}, "
-            f"W₁ mean={w_result.mean_w1:.4f}, RSI={classification.regime_shift_index:.1f})."
-            if classification.regime_flag > 0
-            else "Keine signifikante Abweichung zur Referenz-Baseline."
-        )
+        if classification.iid_unreliable:
+            deviation = (
+                f"Drift signalisiert (flag={classification.regime_flag}), aber Raten-Vergleich "
+                f"gegen i.i.d.-Tabelle unzuverlässig (ρ={iid_status.rho:.2f}, "
+                f"n_eff={iid_status.n_eff:.1f}, W₁_std={classification.standardized_drift:.2f})."
+            )
+        elif classification.regime_flag > 0:
+            deviation = (
+                f"Verteilung weicht ab (KS p_min={classification.ks_p_value_min:.4f}, "
+                f"W₁ mean={w_result.mean_w1:.4f}, RSI={classification.regime_shift_index:.1f})."
+            )
+        else:
+            deviation = "Keine signifikante Abweichung zur Referenz-Baseline."
+
+        ref_ret = matrix.baseline.get("log_return_pct", [])
+        baseline_std = statistics.pstdev(ref_ret) if len(ref_ret) > 1 else 1e-12
+        if baseline_std < 1e-12:
+            baseline_std = 1e-12
 
         drift_summary = {
             "ks_p_value_min": classification.ks_p_value_min,
             "wasserstein_distance": w_result.mean_w1,
+            "baseline_std": round(baseline_std, 8),
+            "standardized_drift": round(classification.standardized_drift, 4),
             "regime_shift_index": classification.regime_shift_index,
             "classified_regime": classification.classified_regime,
             "drift_type": classification.drift_type,
             "affected_features": affected,
             "regime_flag": classification.regime_flag,
+            "allow_amendment": classification.allow_amendment,
+            "iid_unreliable": classification.iid_unreliable,
         }
+
+        pre_reg_dict = pre_reg.to_dict() if pre_reg else {"triggered": False}
+        final_action = a8_meta.get("final_action", "PARAMETER_UNCHANGED")
 
         result = SwarmCycleResult(
             cycle_id=cid,
@@ -164,6 +165,8 @@ class RegimeSwarmOrchestrator:
             cooling_off_cycles_seen=streak,
             regime_flag_confirmed=confirmed,
             hash_checksum="",
+            pre_reg_intervention=pre_reg_dict,
+            final_action=final_action,
             agents=agent_log,
         )
         audit_entry = result.to_audit_dict()
@@ -171,7 +174,10 @@ class RegimeSwarmOrchestrator:
         audit_entry["worm_path"] = str(worm_path)
         audit_entry["status"] = "COMPLETE"
 
-        if write_audit and alert_level != "OK":
+        write_audit_now = write_audit and (
+            alert_level != "OK" or pre_reg_dict.get("triggered")
+        )
+        if write_audit_now:
             a9_out = self.a9.run(audit_entry)
             agent_log["A9"] = a9_out
             result.hash_checksum = a9_out["hash_checksum"]
@@ -186,6 +192,8 @@ class RegimeSwarmOrchestrator:
         out["status"] = "COMPLETE"
         out["definition_hash"] = definition_hash()
         out["worm_path"] = str(worm_path)
+        out["final_action"] = final_action
+        out["pre_reg_intervention"] = pre_reg_dict
         return out
 
     def run_worm_dir(

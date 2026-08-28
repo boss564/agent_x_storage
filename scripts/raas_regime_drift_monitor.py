@@ -57,7 +57,7 @@ def main(argv: List[str] | None = None) -> int:
 
     if not paths:
         result = {
-            "schema": "raas_regime_swarm_v0",
+            "schema": "raas_regime_swarm_v1",
             "verdict": "RAAS_REGIME_DRIFT_EMPTY",
             "worm_count": 0,
             "definition_hash": definition_hash(),
