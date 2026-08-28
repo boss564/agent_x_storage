@@ -6,6 +6,7 @@ Runs C-01…C-04 + T-S1a (ordinal) + T-S2a (pause) and writes JSON report.
 from __future__ import annotations
 
 import json
+import os
 import re
 import subprocess
 import sys
@@ -53,15 +54,23 @@ def _metric_is_leader(container: str, port: int) -> int:
         return -1
 
 
-def _wait_healthy(timeout_s: int = 90) -> None:
-    deadline = time.time() + timeout_s
+def _health_timeout_s(default: int = 90) -> int:
+    raw = os.environ.get("SHADOW_CHAOS_HEALTH_TIMEOUT_S")
+    if raw is None or not str(raw).strip():
+        return default
+    return max(30, int(raw))
+
+
+def _wait_healthy(timeout_s: int | None = None) -> None:
+    limit = timeout_s if timeout_s is not None else _health_timeout_s()
+    deadline = time.time() + limit
     while time.time() < deadline:
         h0 = _run(["docker", "exec", LEADER, "test", "-f", "/tmp/swarm_heartbeat"], check=False)
         h1 = _run(["docker", "exec", STANDBY, "test", "-f", "/tmp/swarm_heartbeat"], check=False)
         if h0.returncode == 0 and h1.returncode == 0:
             return
         time.sleep(3)
-    raise RuntimeError("containers not healthy within timeout")
+    raise RuntimeError(f"containers not healthy within {limit}s timeout")
 
 
 def _docker_logs(name: str, tail: int = 200) -> str:
@@ -87,7 +96,7 @@ def run_battery() -> Dict[str, Any]:
 
     _compose("build", check=True)
     _compose("up", "-d", check=True)
-    _wait_healthy()
+    _wait_healthy(_health_timeout_s(180))
 
     # Baseline — leader vs standby metrics
     try:

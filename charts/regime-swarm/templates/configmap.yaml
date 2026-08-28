@@ -8,3 +8,9 @@ data:
   {{- range $key, $value := .Values.config }}
   {{ $key }}: {{ $value | quote }}
   {{- end }}
+  {{- if .Values.infrastructureGates.enabled }}
+  SWARM_INFRA_GATES_ENABLED: "true"
+  SWARM_G0_MAX_PRICE_CHANGE_PCT: {{ .Values.infrastructureGates.G0_MAX_PRICE_CHANGE_PCT | quote }}
+  SWARM_G0_MAX_SPREAD_PCT: {{ .Values.infrastructureGates.G0_MAX_SPREAD_PCT | quote }}
+  SWARM_G25_MAX_LATENCY_MS: {{ .Values.infrastructureGates.G25_MAX_LATENCY_MS | quote }}
+  {{- end }}

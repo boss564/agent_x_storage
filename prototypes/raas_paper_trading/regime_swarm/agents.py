@@ -131,14 +131,44 @@ class DataIngestorAgent:
     def load_prices(self, worm_path: Path) -> List[float]:
         return load_signal_prices(worm_path)
 
+    def load_transport_meta(self, worm_path: Path) -> Dict[str, Any]:
+        """Extract optional transport fields from the latest SIGNAL row."""
+        if not worm_path.is_file():
+            return {}
+        last_signal: Optional[Dict[str, Any]] = None
+        for line in worm_path.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            row = json.loads(line)
+            if row.get("action") == "SIGNAL":
+                last_signal = row
+        if not last_signal:
+            return {}
+        explicit = last_signal.get("transport_meta")
+        if isinstance(explicit, dict) and explicit:
+            return dict(explicit)
+        meta: Dict[str, Any] = {}
+        if last_signal.get("m7_latency_ms") is not None:
+            meta["latency_ms"] = float(last_signal["m7_latency_ms"])
+        if last_signal.get("seq_num") is not None:
+            meta["seq_num"] = int(last_signal["seq_num"])
+        if last_signal.get("raw_bytes") is not None:
+            meta["raw_bytes"] = last_signal["raw_bytes"]
+        return meta
+
     def run(self, worm_path: Path) -> Dict[str, Any]:
         prices = self.load_prices(worm_path)
-        return {
+        transport_meta = self.load_transport_meta(worm_path)
+        out: Dict[str, Any] = {
             "agent": self.name,
             "worm_path": str(worm_path),
             "n_ticks": len(prices),
             "source": "worm_signal_mark_price",
         }
+        if transport_meta:
+            out["transport_meta"] = transport_meta
+        return out
 
 
 # --- A3 Feature-Engineer ------------------------------------------------------
