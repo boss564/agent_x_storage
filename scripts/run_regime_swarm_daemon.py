@@ -51,6 +51,7 @@ _metrics: Dict[str, Any] = {
     "drift_counter": {},  # (regime, type) -> int
     "gate_block_counter": {"A0": 0, "A2.5": 0},
     "risk_multiplier": 1.0,
+    "ticks_last_cycle": 0,
 }
 
 
@@ -64,6 +65,7 @@ def reset_metrics() -> None:
     _metrics["drift_counter"] = {}
     _metrics["gate_block_counter"] = {"A0": 0, "A2.5": 0}
     _metrics["risk_multiplier"] = 1.0
+    _metrics["ticks_last_cycle"] = 0
 
 
 def _prom_label(value: str) -> str:
@@ -131,6 +133,9 @@ def render_metrics_text() -> str:
         "# HELP swarm_symbols_processed Last cycle symbol count",
         "# TYPE swarm_symbols_processed gauge",
         f"swarm_symbols_processed {_metrics['symbols_processed']}",
+        "# HELP swarm_ticks_last_cycle WebSocket ticks ingested during the last leader cycle",
+        "# TYPE swarm_ticks_last_cycle gauge",
+        f"swarm_ticks_last_cycle {_metrics['ticks_last_cycle']}",
         "# HELP swarm_up Daemon heartbeat",
         "# TYPE swarm_up gauge",
         f"swarm_up {1 if HEARTBEAT.is_file() else 0}",
@@ -279,8 +284,14 @@ def _start_metrics_server(port: int) -> ThreadingHTTPServer:
 
 
 class RegimeSwarmDaemon:
-    def __init__(self, config: Dict[str, Any]) -> None:
+    def __init__(
+        self,
+        config: Dict[str, Any],
+        *,
+        live_bridge: Optional[Any] = None,
+    ) -> None:
         self.config = config
+        self._live_bridge = live_bridge
         self.interval = float(config["cycle_interval_seconds"])
         self.worm_dir = Path(config["worm_dir"])
         self.report_path = Path(config["report_path"])
@@ -397,6 +408,35 @@ class RegimeSwarmDaemon:
         for sym, mult in (data.get("soft_multipliers") or {}).items():
             self.orch.a8._soft._current[str(sym)] = float(mult)
 
+    def _maybe_run_position_sizing(self, symbol: str, report: Dict[str, Any]) -> None:
+        from prototypes.raas_paper_trading.position_sizing.integration import (
+            run_sizing_if_enabled,
+        )
+
+        ingest = (report.get("agents") or {}).get("A2") or {}
+        n_ticks = ingest.get("n_ticks") or 0
+        if n_ticks < 1:
+            return
+        worm_path = report.get("worm_path") or ingest.get("worm_path")
+        if not worm_path:
+            return
+        try:
+            from prototypes.raas_paper_trading.regime_swarm.agents import DataIngestorAgent
+
+            prices = DataIngestorAgent().load_prices(Path(worm_path))
+            if not prices:
+                return
+            mark = float(prices[-1])
+        except (OSError, ValueError, TypeError):
+            return
+        sizing = run_sizing_if_enabled(
+            symbol=symbol,
+            mark_price=mark,
+            data_root=_data_root(),
+        )
+        if sizing is not None:
+            print(json.dumps({"event": "sizing_boundary", **sizing.get("sizing_envelope", {})}), flush=True)
+
     async def run_standby_tick(self) -> None:
         """Standby pod — heartbeat + metrics only; no A1/A7/A8 mutations."""
         self._sync_from_leader_snapshot()
@@ -438,6 +478,7 @@ class RegimeSwarmDaemon:
             _emit_stdout_audit(report)
             self._append_cycle_log(report)
             self._maybe_alert(report)
+            self._maybe_run_position_sizing(sym, report)
 
         summary = {
             "schema": SWARM_SCHEMA,
@@ -518,6 +559,11 @@ class RegimeSwarmDaemon:
         )
         try:
             while not self._shutdown.is_set():
+                tick_base = (
+                    int(self._live_bridge.ticks_written)
+                    if self._live_bridge is not None
+                    else 0
+                )
                 started = time.perf_counter()
                 try:
                     await self.run_cycle()
@@ -532,7 +578,29 @@ class RegimeSwarmDaemon:
                 try:
                     await asyncio.wait_for(self._shutdown.wait(), timeout=sleep_s)
                 except asyncio.TimeoutError:
-                    continue
+                    pass
+                ticks_this_cycle = (
+                    int(self._live_bridge.ticks_written) - tick_base
+                    if self._live_bridge is not None
+                    else 0
+                )
+                _metrics["ticks_last_cycle"] = ticks_this_cycle
+                if self.is_leader:
+                    print(
+                        json.dumps(
+                            {
+                                "event": "cycle_complete",
+                                "schema": SWARM_SCHEMA,
+                                "ticks_this_cycle": ticks_this_cycle,
+                                "cycles_total": _metrics["cycles_total"],
+                                "live_feed_enabled": bool(self.config.get("live_feed_enabled")),
+                                "ts": _now(),
+                            }
+                        ),
+                        flush=True,
+                    )
+                if self._shutdown.is_set():
+                    break
         finally:
             if lease_task is not None:
                 lease_task.cancel()
@@ -559,9 +627,11 @@ class RegimeSwarmDaemon:
         self._shutdown.set()
 
 
-def _start_live_feed_thread(cfg: Dict[str, Any], stop: asyncio.Event) -> Optional[threading.Thread]:
+def _start_live_feed_thread(
+    cfg: Dict[str, Any], stop: asyncio.Event
+) -> tuple[Optional[threading.Thread], Optional[Any]]:
     if not cfg.get("live_feed_enabled"):
-        return None
+        return None, None
     from prototypes.raas_paper_trading.paper_runner import LivePaperBridge
 
     bridge = LivePaperBridge.from_env(worm_dir=Path(cfg["worm_dir"]))
@@ -573,7 +643,7 @@ def _start_live_feed_thread(cfg: Dict[str, Any], stop: asyncio.Event) -> Optiona
         stop_flag.set()
 
     threading.Thread(target=_watch, name="live-feed-stop-watch", daemon=True).start()
-    return bridge.start_background(stop=stop_flag)
+    return bridge.start_background(stop=stop_flag), bridge
 
 
 async def _amain(config_path: Optional[Path]) -> int:
@@ -586,7 +656,8 @@ async def _amain(config_path: Optional[Path]) -> int:
 
     daemon = RegimeSwarmDaemon(cfg)
     loop = asyncio.get_running_loop()
-    _start_live_feed_thread(cfg, daemon._shutdown)
+    _, live_bridge = _start_live_feed_thread(cfg, daemon._shutdown)
+    daemon._live_bridge = live_bridge
 
     def _on_signal(signum: int) -> None:
         print(json.dumps({"event": "signal", "signum": signum, "ts": _now()}), flush=True)

@@ -12,6 +12,9 @@ on:
       - 'scripts/raas_regime_drift_monitor.py'
       - 'scripts/test_raas_regime_drift.py'
       - 'scripts/test_live_feed_prometheus.py'
+      - 'scripts/test_position_sizing_subswarm.py'
+      - 'prototypes/raas_paper_trading/position_sizing/**'
+      - 'docs/POSITION_SIZING_SUBSWARM.md'
       - 'scripts/run_regime_swarm_daemon.py'
       - 'docs/RaaS_REGIME_DRIFT_PREREG.md'
       - 'Makefile'
@@ -24,6 +27,9 @@ on:
       - 'scripts/raas_regime_drift_monitor.py'
       - 'scripts/test_raas_regime_drift.py'
       - 'scripts/test_live_feed_prometheus.py'
+      - 'scripts/test_position_sizing_subswarm.py'
+      - 'prototypes/raas_paper_trading/position_sizing/**'
+      - 'docs/POSITION_SIZING_SUBSWARM.md'
       - 'scripts/run_regime_swarm_daemon.py'
       - 'docs/RaaS_REGIME_DRIFT_PREREG.md'
       - 'Makefile'
@@ -52,3 +58,6 @@ jobs:
 
       - name: Live feed + Prometheus counters (mock WS)
         run: make raas-live-feed-prometheus-smoke
+
+      - name: Position sizing sub-swarm (B0–B8 boundary)
+        run: make raas-position-sizing-smoke
