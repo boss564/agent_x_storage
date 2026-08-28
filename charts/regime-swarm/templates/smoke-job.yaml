@@ -1,0 +1,71 @@
+{{- if .Values.smokeTest.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "regime-swarm.fullname" . }}-smoke
+  labels:
+    {{- include "regime-swarm.labels" . | nindent 4 }}
+    app.kubernetes.io/component: regime-drift-smoke
+  annotations:
+    helm.sh/hook: test
+    helm.sh/hook-weight: "5"
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: {{ .Values.smokeTest.ttlSecondsAfterFinished }}
+  template:
+    metadata:
+      labels:
+        {{- include "regime-swarm.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: regime-drift-smoke
+    spec:
+      restartPolicy: Never
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if or .Values.serviceAccount.create .Values.serviceAccount.name }}
+      serviceAccountName: {{ include "regime-swarm.serviceAccountName" . }}
+      {{- end }}
+      containers:
+        - name: smoke
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "regime-swarm.fullname" . }}-config
+            {{- if .Values.secrets.enabled }}
+            - secretRef:
+                name: {{ include "regime-swarm.fullname" . }}-secrets
+            {{- end }}
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: SWARM_SMOKE_WORM_DIR
+              value: {{ .Values.smokeTest.wormDir | quote }}
+            - name: SWARM_SMOKE_AUDIT_DIR
+              value: {{ .Values.smokeTest.auditDir | quote }}
+            - name: HELM_POD_SMOKE_SUMMARY
+              value: {{ .Values.smokeTest.summaryPath | quote }}
+            - name: HELM_POD_SMOKE_THRESHOLD_TEST
+              value: {{ .Values.smokeTest.thresholdTest | quote }}
+            - name: PYTHONPATH
+              value: /app
+          command:
+            - python3
+            - scripts/helm_pod_smoke.py
+          volumeMounts:
+            - name: smoke-data
+              mountPath: /data
+          resources:
+            {{- toYaml .Values.smokeTest.resources | nindent 12 }}
+      volumes:
+        - name: smoke-data
+          emptyDir: {}
+{{- end }}
