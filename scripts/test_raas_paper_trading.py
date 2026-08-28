@@ -34,7 +34,7 @@ from prototypes.raas_paper_trading.feed import (  # noqa: E402
     ReplayFeed,
     assert_no_order_urls,
 )
-from prototypes.raas_paper_trading.ledger import PaperLedger  # noqa: E402
+from prototypes.raas_paper_trading.ledger import PaperLedger, ledger_from_config  # noqa: E402
 from prototypes.raas_paper_trading.runner import PaperTradingRunner  # noqa: E402
 from prototypes.raas_paper_trading.worm_log import PaperWormLog  # noqa: E402
 from services.fail_closed_gate.d_suite_enforcer import (  # noqa: E402
@@ -135,6 +135,25 @@ def run_unit_smokes(*, data_root: Path) -> int:
         failed += 1
     else:
         print("  PASS  PAPER_LEDGER sim_buy + fees · order_send_count=0")
+
+    try:
+        from prototypes.raas_paper_trading.config_loader import PaperTradingSettings
+
+        cfg = PaperTradingSettings.from_file()
+        if cfg.taker_rate != Decimal("0.00075"):
+            print("  FAIL  config taker fee expected 0.00075")
+            failed += 1
+        else:
+            print(f"  PASS  config fees VIP1 0.075% hash={cfg.config_hash[:12]}…")
+        cfg_led = ledger_from_config(cfg)
+        if cfg_led.fee_schedule.taker_bps != Decimal("7.5"):
+            print("  FAIL  ledger_from_config fees")
+            failed += 1
+        else:
+            print("  PASS  ledger_from_config")
+    except Exception as exc:  # noqa: BLE001
+        print(f"  FAIL  paper_trading_config: {exc}")
+        failed += 1
 
     pf = led.diagnostic_profit_factor()
     if pf.get("diagnostic_only") is not True:

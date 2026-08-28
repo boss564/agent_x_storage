@@ -1,0 +1,21 @@
+{
+  "exchange": {
+    "name": "binance",
+    "vip_tier": 1,
+    "fees": {
+      "maker": 0.00075,
+      "taker": 0.00075,
+      "currency": "percent"
+    },
+    "notes": "VIP-Tier 1: 0.075% Maker/Taker (10% Discount with BNB) — snapshot 2026-08-28"
+  },
+  "slippage": {
+    "mode": "dynamic",
+    "fallback_percent": 0.001,
+    "orderbook_depth_levels": 10
+  },
+  "paper_trading": {
+    "initial_balance_eur": 1000.0,
+    "live_execution": false
+  }
+}

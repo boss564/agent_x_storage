@@ -339,6 +339,9 @@ raas-b2b-exporter-smoke: ## B2B P9 gutachten JSON/PDF/Merkle (core untouched)
 raas-paper-trading-smoke: ## Paper setup — feed·ledger·WORM·envelope hit-rate (no order send)
 	PYTHONPATH=. python3 scripts/test_raas_paper_trading.py
 
+raas-paper-slippage-compare: ## P3 fixed vs dynamic slippage (diagnostic only)
+	PYTHONPATH=. python3 scripts/raas_paper_slippage_compare.py
+
 raas-paper-report: ## Paper WORM → exports/reports/paper_trades_latest.md (no sample fills)
 	PYTHONPATH=. python3 services/exporter/agent_x_raas_exporter.py --mode paper_trading --format markdown
 
