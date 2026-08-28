@@ -395,8 +395,8 @@ raas-regime-leader-z3: ## P6 — Z3/BFS leader invariant proofs (I1)
 raas-regime-shadow-up: ## Shadow cluster (2 replicas, chaos drills)
 	bash scripts/regime_swarm_shadow_cluster.sh up
 
-raas-regime-shadow-chaos: ## Shadow C-01 — delete leader pod-0
-	bash scripts/regime_swarm_shadow_cluster.sh chaos-delete-leader
+raas-regime-shadow-chaos: ## Shadow chaos battery (C-01…C-04, T-S1a/T-S2a ordinal)
+	PYTHONPATH=. python3 scripts/regime_swarm_shadow_chaos.py
 
 raas-flash-crash-retro: ## Option 5 — Z3-Gate risk layer vs historical klines (MAP v0)
 	PYTHONPATH=. python3 scripts/raas_flash_crash_retrospective.py --days 14

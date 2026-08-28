@@ -85,6 +85,7 @@ def _load_config(path: Optional[Path]) -> Dict[str, Any]:
                         defaults[key] = loaded[key]
         except (json.JSONDecodeError, OSError):
             pass
+    defaults["metrics_port"] = int(os.environ.get("SWARM_METRICS_PORT", defaults["metrics_port"]))
     return defaults
 
 

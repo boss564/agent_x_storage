@@ -1,0 +1,76 @@
+# Shadow HA drill — 2 replicas (ordinal leader), Compose fallback when no Helm/K8s
+# Usage:
+#   docker compose -f docker-compose.regime-swarm-shadow.yml build
+#   docker compose -f docker-compose.regime-swarm-shadow.yml up -d
+#   PYTHONPATH=. python3 scripts/regime_swarm_shadow_chaos.py
+
+services:
+  regime-swarm-0:
+    build:
+      context: .
+      dockerfile: Dockerfile.regime-swarm
+    container_name: regime-swarm-shadow-0
+    restart: unless-stopped
+    ports:
+      - "18080:8080"
+    environment:
+      POD_NAME: regime-swarm-shadow-0
+      SWARM_LEADER_ELECTION_ENABLED: "true"
+      SWARM_LEADER_ORDINAL: "0"
+      CYCLE_INTERVAL_SECONDS: "5"
+      SWARM_METRICS_PORT: "8080"
+      SWARM_DATA_ROOT: /data
+      SWARM_CONFIG: /app/config/regime_swarm.json
+      SWARM_METRICS_ENABLED: "true"
+    volumes:
+      - shadow_data_0:/data
+      - ./logs/worm/paper_runs:/data/worm/paper_runs:ro
+    networks:
+      - shadow-net
+    healthcheck:
+      test: ["CMD", "test", "-f", "/tmp/swarm_heartbeat"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  regime-swarm-1:
+    build:
+      context: .
+      dockerfile: Dockerfile.regime-swarm
+    container_name: regime-swarm-shadow-1
+    restart: unless-stopped
+    ports:
+      - "18081:8081"
+    environment:
+      POD_NAME: regime-swarm-shadow-1
+      SWARM_LEADER_ELECTION_ENABLED: "true"
+      SWARM_LEADER_ORDINAL: "0"
+      CYCLE_INTERVAL_SECONDS: "5"
+      SWARM_METRICS_PORT: "8081"
+      SWARM_DATA_ROOT: /data
+      SWARM_CONFIG: /app/config/regime_swarm.json
+      SWARM_METRICS_ENABLED: "true"
+    volumes:
+      - shadow_data_1:/data
+      - ./logs/worm/paper_runs:/data/worm/paper_runs:ro
+    networks:
+      - shadow-net
+    healthcheck:
+      test: ["CMD", "test", "-f", "/tmp/swarm_heartbeat"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    deploy:
+      resources:
+        limits:
+          memory: 384M
+
+networks:
+  shadow-net:
+    driver: bridge
+
+volumes:
+  shadow_data_0:
+  shadow_data_1:

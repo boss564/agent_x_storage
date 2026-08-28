@@ -226,7 +226,8 @@ Leader-Modus:     ordinal_0_static (SWARM_LEADER_ELECTION_ENABLED)
 Lease-API:        GATE CLOSED — wartet auf §6 Freigabe
 P6 Z3-Entwurf:    docs/INFRA_GUARDIAN_P6_Z3_ENTWURF.md · scripts/test_regime_leader_z3.py
 Shadow-Cluster:   scripts/regime_swarm_shadow_cluster.sh · values-shadow.yaml
-Nächster Schritt: P2/P5 Chaos auf Shadow-Cluster → §6 PASS → Lease-Code
+Shadow-Chaos:     docs/INFRA_GUARDIAN_SHADOW_CHAOS_ERGEBNIS.md · 8/8 PASS (ordinal)
+Nächster Schritt: K8s-Helm-Shadow (optional) → Lease-Code nach Lease-T-S1a PASS
 ```
 
 ---

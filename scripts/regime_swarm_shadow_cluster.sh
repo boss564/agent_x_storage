@@ -18,22 +18,19 @@ VALUES="${CHART}/values-shadow.yaml"
 log() { printf '[shadow] %s\n' "$*"; }
 
 cmd_up() {
-  if ! command -v kubectl >/dev/null 2>&1; then
-    log "kubectl not found — install kubectl or use Docker Compose for local dev"
-    exit 1
+  if command -v helm >/dev/null 2>&1 && kubectl config current-context >/dev/null 2>&1; then
+    kubectl create namespace "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
+    log "namespace $NAMESPACE ready (helm)"
+    helm upgrade --install "$RELEASE" "$CHART" \
+      -n "$NAMESPACE" \
+      -f "$VALUES" \
+      --wait --timeout 5m
+    kubectl get pods -n "$NAMESPACE" -o wide
+    return
   fi
-  if ! command -v helm >/dev/null 2>&1; then
-    log "helm not found — install helm 3.x"
-    exit 1
-  fi
-  kubectl create namespace "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
-  log "namespace $NAMESPACE ready"
-  helm upgrade --install "$RELEASE" "$CHART" \
-    -n "$NAMESPACE" \
-    -f "$VALUES" \
-    --wait --timeout 5m
-  log "release $RELEASE installed (replicaCount=2, ordinal leader)"
-  kubectl get pods -n "$NAMESPACE" -o wide
+  log "helm/k8s unavailable — using docker compose shadow stack"
+  docker compose -f "${ROOT}/docker-compose.regime-swarm-shadow.yml" up -d --build
+  docker compose -f "${ROOT}/docker-compose.regime-swarm-shadow.yml" ps
 }
 
 cmd_status() {
@@ -49,14 +46,16 @@ cmd_status() {
 }
 
 cmd_chaos_delete_leader() {
-  # C-01 prep: delete ordinal-0, expect K8s recreate (no Lease failover yet)
-  leader_pod="$RELEASE-0"
-  log "C-01: deleting $leader_pod (expect StatefulSet recreate)"
-  kubectl delete pod -n "$NAMESPACE" "$leader_pod" --wait=false
-  sleep 5
-  kubectl get pods -n "$NAMESPACE"
-  log "check standby $RELEASE-1 for standby_tick in logs"
-  kubectl logs -n "$NAMESPACE" "$RELEASE-1" --tail=10 2>/dev/null | grep -E 'standby_tick|is_leader' || true
+  if kubectl get pod -n "$NAMESPACE" "${RELEASE}-0" >/dev/null 2>&1; then
+    leader_pod="${RELEASE}-0"
+    log "C-01 (k8s): deleting $leader_pod"
+    kubectl delete pod -n "$NAMESPACE" "$leader_pod" --wait=false
+    sleep 5
+    kubectl get pods -n "$NAMESPACE"
+    return
+  fi
+  log "C-01 (compose): full chaos battery"
+  PYTHONPATH="$ROOT" python3 "${ROOT}/scripts/regime_swarm_shadow_chaos.py"
 }
 
 cmd_down() {

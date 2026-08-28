@@ -38,3 +38,6 @@ jobs:
 
       - name: P6 leader Z3 smoke
         run: PYTHONPATH=. python3 scripts/test_regime_leader_z3.py
+
+      - name: P2/P5 shadow chaos (compose)
+        run: PYTHONPATH=. python3 scripts/regime_swarm_shadow_chaos.py
