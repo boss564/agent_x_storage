@@ -239,6 +239,10 @@ kubectl delete job regime-swarm-smoke -n trading --ignore-not-found=true
 | 2026-08-28 | 20 % | PASS | infra OK (enforced) | ✅ kind-regime-shadow |
 | 2026-08-28 | 10 % | PASS | BLOCK (enforced) | ✅ Override wirksam |
 
+### CI (optional)
+
+Scheduled Kind regression: `.github/workflows/cluster-smoke-cron.yml` (weekly + `workflow_dispatch`). Uses `scripts/run_regime_swarm_cluster_smoke.sh full` and uploads `logs/cluster_smoke/` artifacts.
+
 ## Code layout
 
 ```

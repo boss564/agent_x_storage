@@ -1,0 +1,73 @@
+name: Cluster Smoke (Kind)
+
+on:
+  schedule:
+    # Weekly: Sunday 02:00 UTC
+    - cron: "0 2 * * 0"
+  workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/cluster-smoke-cron.yml"
+      - "scripts/run_regime_swarm_cluster_smoke.sh"
+      - "charts/regime-swarm/**"
+      - "Dockerfile.regime-swarm"
+      - "scripts/helm_pod_smoke.py"
+
+concurrency:
+  group: cluster-smoke-kind
+  cancel-in-progress: false
+
+jobs:
+  kind-smoke:
+    name: Kind cluster smoke (baseline + override)
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build regime-swarm image
+        run: docker build -f Dockerfile.regime-swarm -t local/regime-swarm:latest .
+
+      - name: Create Kind cluster
+        uses: helm/kind-action@v1
+        with:
+          version: v0.26.0
+          cluster_name: kind
+          node_image: kindest/node:v1.31.2
+          wait: 180s
+
+      - name: Load image into Kind
+        run: kind load docker-image local/regime-swarm:latest --name kind
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.14.4
+
+      - name: Run cluster smoke (full)
+        env:
+          IMAGE_REPO: local/regime-swarm
+          IMAGE_TAG: latest
+          OUT_DIR: ${{ github.workspace }}/logs/cluster_smoke
+          HELM_TEST_TIMEOUT: 5m
+        run: |
+          chmod +x scripts/run_regime_swarm_cluster_smoke.sh
+          ./scripts/run_regime_swarm_cluster_smoke.sh full
+
+      - name: Collect cluster events
+        if: always()
+        run: |
+          mkdir -p logs/cluster_smoke
+          kubectl get events -n trading --sort-by=.lastTimestamp > logs/cluster_smoke/events.log || true
+          kubectl get pods,statefulset,job -n trading -o wide > logs/cluster_smoke/resources.log || true
+
+      - name: Upload smoke artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kind-cluster-smoke-${{ github.run_id }}
+          path: logs/cluster_smoke/
+          retention-days: 14
