@@ -198,7 +198,7 @@ class RegimeSwarmOrchestrator:
         agent_log["A3"] = self.a3.run(prices)
         matrix = self.a3.build_matrix(prices)
         if matrix is None:
-            return {
+            out = {
                 "schema": SWARM_SCHEMA,
                 "cycle_id": cid,
                 "symbol": symbol,
@@ -207,6 +207,12 @@ class RegimeSwarmOrchestrator:
                 "definition_hash": definition_hash(),
                 "agents": agent_log,
             }
+            if infrastructure is not None:
+                out["infrastructure"] = {
+                    **infrastructure,
+                    "infrastructure_healthy": True,
+                }
+            return out
 
         agent_log["A4"], iid_status = self.a4.run(matrix, symbol=symbol)
         ks_results, ks_meta = self.a5.run(matrix)

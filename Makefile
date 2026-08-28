@@ -410,6 +410,9 @@ raas-regime-swarm-ha-smoke: ## HA leader ordinal + lease fallback smoke
 raas-regime-swarm-infra-gates: ## A0/A2.5 infrastructure gate smoke (INFRASTRUCTURE_GATES_PASS/FAIL)
 	PYTHONPATH=. python3 scripts/test_infrastructure_gates.py
 
+raas-regime-swarm-infra-smoke: ## E2E WORM→A0/A2.5 smoke + audit JSON (REGIME_SWARM_INFRA_SMOKE_PASS/FAIL)
+	PYTHONPATH=. python3 scripts/run_regime_swarm_infra_smoke.py
+
 raas-regime-lease-failover-forensic: ## Drill 2 lease timeline (kind shadow, post-release fix)
 	PYTHONPATH=. python3 scripts/regime_swarm_lease_failover_forensic.py
 
