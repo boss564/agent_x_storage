@@ -18,9 +18,11 @@ Helm-Overlay: [`charts/regime-swarm/values-live-shadow.yaml`](../charts/regime-s
 ```bash
 docker build -f Dockerfile.regime-swarm -t agentx-regime-swarm:live-shadow .
 
-# Kind / Minikube (Beispiel)
+# Kind (Live-Shadow-Cluster `kind-regime-shadow`) — bevorzugt
 kind load docker-image agentx-regime-swarm:live-shadow --name kind-regime-shadow
 ```
+
+Für **Code-Updates auf einem laufenden Cluster** ohne PVC-Re-Create siehe [§9 Strang D](#9-strang-d--image-update-pvc-sicher-post-pr-22).
 
 ## 2. Helm installieren (Shadow-Overlay)
 
@@ -87,7 +89,7 @@ Ohne `SWARM_LIVE_EXECUTION` in der ConfigMap gilt weiterhin Ebene 2 (Code-WORM-G
 ```bash
 kubectl port-forward -n trading statefulset/regime-swarm 8080:8080 &
 curl -s http://localhost:8080/health
-curl -s http://localhost:8080/metrics | grep -E '^drift_counter|^risk_multiplier|^gate_block_counter|^swarm_cycles_total'
+curl -s http://localhost:8080/metrics | grep -E '^drift_counter|^risk_multiplier|^gate_block_counter|^swarm_cycles_total|^sizing_'
 ```
 
 | Metrik | Erwartung (1–2 Tage Shadow) |
@@ -96,6 +98,9 @@ curl -s http://localhost:8080/metrics | grep -E '^drift_counter|^risk_multiplier
 | `drift_counter{regime,type}` | Bewegt sich bei Regime-Klassifikation (nicht bei jedem Tick) |
 | `risk_multiplier` | A8-Advisory-Multiplikator (Default 1.0, Soft-Adapt bei Unreliable) |
 | `gate_block_counter{gate="A0"}` | Nur bei Flash/Spread-Verletzung — **nicht** dauerhaft >0 bei normalen Ticks |
+| `sizing_gamma_current` | Serien vorhanden; **0 / `regime=none`** solange `POSITION_SIZING_ENABLED=false` (Strang D) |
+| `sizing_regime_trigger_total` | Placeholder `0` bis Strang B (`enabled=true`, ≥50 Fills) |
+| `sizing_gate_block_total` | Placeholder `0` bis Strang B |
 | `swarm_up` | `1` solange Heartbeat frisch |
 
 ## 5. WORM-Live-Archiv
@@ -173,6 +178,67 @@ PYTHONPATH=. python3 scripts/run_regime_swarm_daemon.py \
   --config config/regime_swarm.json
 ```
 
+## 9. Strang D — Image-Update (PVC-sicher, Post PR #22)
+
+Nach Merge von **PR #22** (γ-Map, Trigger `regime_flag>=1`, `sizing_*`-Metriken im Daemon): neuen Code ins Cluster bringen, **ohne** Position Sizing zu aktivieren.
+
+| Ziel | Detail |
+|------|--------|
+| Code | Daemon mit B0-Integration + Prometheus `sizing_*` |
+| Config | `POSITION_SIZING_ENABLED=false` (explizit in `values-live-shadow.yaml`) |
+| Metriken | `sizing_*` erscheinen in `/metrics`, bleiben bei **0** bis **Strang B** |
+
+### 9.1 Image bauen und in Kind laden
+
+```bash
+git checkout main && git pull
+docker build -f Dockerfile.regime-swarm -t agentx-regime-swarm:live-shadow .
+kind load docker-image agentx-regime-swarm:live-shadow --name kind-regime-shadow
+```
+
+### 9.2 Rollout (PVC-sicher — ohne `helm upgrade` bei PVC-Drift)
+
+Wenn `helm upgrade` an **immutable `volumeClaimTemplates`** scheitert (z. B. bestehendes PVC 10Gi vs. Chart 5Gi), Image per `kubectl` setzen:
+
+```bash
+kubectl set image statefulset/regime-swarm -n trading \
+  regime-swarm=agentx-regime-swarm:live-shadow
+kubectl rollout restart statefulset/regime-swarm -n trading
+kubectl rollout status statefulset/regime-swarm -n trading --timeout=180s
+```
+
+Container-Name prüfen falls abweichend:
+
+```bash
+kubectl get statefulset regime-swarm -n trading -o jsonpath='{.spec.template.spec.containers[*].name}'
+```
+
+### 9.3 ConfigMap-Env (optional, wenn Helm ohne PVC-Fehler)
+
+Nur wenn `helm upgrade` durchläuft — sonst Env manuell patchen oder beim nächsten Cluster-Neuaufbau:
+
+```bash
+helm upgrade regime-swarm charts/regime-swarm -n trading \
+  -f charts/regime-swarm/values-dev.yaml \
+  -f charts/regime-swarm/values-live-shadow.yaml \
+  --set image.repository=agentx-regime-swarm \
+  --set image.tag=live-shadow \
+  --reuse-values
+```
+
+### 9.4 Verifikation
+
+```bash
+kubectl exec -n trading regime-swarm-0 -- env | grep POSITION_SIZING
+# Erwartung: POSITION_SIZING_ENABLED=false
+
+kubectl port-forward -n trading statefulset/regime-swarm 8080:8080 &
+curl -s http://localhost:8080/metrics | grep -E '^sizing_'
+# Erwartung: sizing_gamma_current{regime="none"} 0, sizing_*_total{...} 0
+```
+
+**Nächster Schritt:** [Strang B](POSITION_SIZING_REGIME_MAPPING.md#nach-implementierung) — `POSITION_SIZING_ENABLED=true`, wenn Paper-Ledger ≥50 Fills hat.
+
 ## Erfolgskriterien (Zusammenfassung)
 
 | Kriterium | Erwartung |
@@ -187,4 +253,5 @@ PYTHONPATH=. python3 scripts/run_regime_swarm_daemon.py \
 
 - [`docs/REGIME_SWARM_INFRA_GATES.md`](REGIME_SWARM_INFRA_GATES.md) — A0/A2.5, Cluster-Smoke
 - [`prototypes/raas_paper_trading/regime_swarm/README.md`](../prototypes/raas_paper_trading/regime_swarm/README.md) — Architektur
+- [`docs/POSITION_SIZING_REGIME_MAPPING.md`](POSITION_SIZING_REGIME_MAPPING.md) — γ-Map, Strang B/D
 - [`docs/RaaS_REGIME_DRIFT_PREREG.md`](RaaS_REGIME_DRIFT_PREREG.md) — Pre-Reg v2

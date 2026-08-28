@@ -128,11 +128,13 @@ Option **A** aus §3.1: Sizing bei `regime_flag >= 1` (Warnung + Trend), nicht n
 | **Env-JSON** | `POSITION_SIZING_GAMMA_MAP` in ConfigMap (Helm `config:`) — Override ohne Image-Rebuild |
 | Default | Built-in Map aus §2, wenn Env leer |
 
-Entwurf: [`charts/regime-swarm/values-live-shadow.yaml`](../charts/regime-swarm/values-live-shadow.yaml) (auskommentiert, bis `POSITION_SIZING_ENABLED=true`).
+Entwurf: [`charts/regime-swarm/values-live-shadow.yaml`](../charts/regime-swarm/values-live-shadow.yaml) (`POSITION_SIZING_ENABLED=false`, γ-Map explizit — Strang D).
 
 ---
 
 ## 7. Freigabe-Kriterien — **abgeschlossen**
+
+Siehe auch [§6 Review-Entscheidungen](#6-review-entscheidungen-decided-2026-08-28) (γ-Tabelle, Trigger, IID, Charter, Helm-Override).
 
 - [x] γ-Tabelle von Team abgenickt (§2) — **2026-08-28**
 - [x] Trigger-Option **A** (`regime_flag >= 1`) — **DECIDED** (§3.1, §6.2)
@@ -142,24 +144,27 @@ Entwurf: [`charts/regime-swarm/values-live-shadow.yaml`](../charts/regime-swarm/
 
 ---
 
-## 8. Implementierungs-Plan (nächster Code-PR)
+## 8. Implementierungs-Status
 
-| # | Komponente | Änderung |
-|---|------------|----------|
-| 1 | `position_sizing/config.py` | `DEFAULT_GAMMA_MAP` (§2), Parser `POSITION_SIZING_GAMMA_MAP` JSON |
-| 2 | `position_sizing/orchestrator.py` (B0/B3) | `resolve_gamma(classified_regime)` inkl. IID→0 |
-| 3 | `position_sizing/integration.py` | Trigger T2: `regime_flag >= 1`; Regime aus Report durchreichen |
-| 4 | `run_regime_swarm_daemon.py` | `drift_summary` → `run_sizing_if_enabled(..., regime=, regime_flag=)` |
-| 5 | `run_regime_swarm_daemon.py` | Prometheus: `sizing_gamma_current`, `sizing_gate_block_total`, `sizing_regime_trigger_total` |
-| 6 | Tests | γ-Lookup, Trigger skip bei flag 0, IID safe mode, Env-Override |
-| 7 | Helm | `POSITION_SIZING_GAMMA_MAP` in `values-live-shadow.yaml` (optional, auskommentiert) |
+**PR #22 merged** (2026-08-28) — Code vollständig:
+
+| # | Komponente | Status |
+|---|------------|--------|
+| 1 | `position_sizing/config.py` | ✅ `DEFAULT_GAMMA_MAP`, `POSITION_SIZING_GAMMA_MAP` |
+| 2 | `position_sizing/orchestrator.py` (B0/B3) | ✅ `resolve_gamma`, IID→0 |
+| 3 | `position_sizing/integration.py` | ✅ Trigger T2 `regime_flag >= 1` |
+| 4 | `run_regime_swarm_daemon.py` | ✅ `drift_summary` → sizing hook |
+| 5 | `run_regime_swarm_daemon.py` | ✅ Prometheus `sizing_*` |
+| 6 | Tests | ✅ `make raas-position-sizing-smoke` |
+| 7 | Helm | ✅ `values-live-shadow.yaml` (PR #23 — explizit `enabled=false`) |
 
 **Default unverändert:** `POSITION_SIZING_ENABLED=false`.
 
-### Nach Implementierung
+### Nach Implementierung (Betrieb)
 
-1. **Strang B:** `POSITION_SIZING_ENABLED=true` im Shadow-Cluster (≥50 Fills)  
-2. **Strang D:** Cluster-Image rebuild + Metriken in Runbook
+1. **Strang D:** Image-Rebuild + Cluster-Rollout — [`REGIME_SWARM_LIVE_SHADOW_RUNBOOK.md` §9](REGIME_SWARM_LIVE_SHADOW_RUNBOOK.md#9-strang-d--image-update-pvc-sicher-post-pr-22)  
+2. **Strang B:** `POSITION_SIZING_ENABLED=true` im Shadow-Cluster (≥50 Fills)  
+3. **Grafana (optional):** Dashboard für `sizing_*` — später PR #24
 
 ---
 
