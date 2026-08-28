@@ -37,7 +37,7 @@ Audit-Feld `pre_reg_intervention` (A9) dokumentiert AMENDMENT_BLOCKED gemäß Li
 | Adaptives Cooling | **A1** | Unreliable: 2 Zyklen `DRIFT_IID_UNRELIABLE` → `WARN_ONLY`; Real: 5× `HIGH_VOL_*` → `ADAPT` |
 | Bonferroni | **A7** | `α_eff = 0.05 / m` (m=4 Features); IID-Artefakt → `DRIFT_IID_UNRELIABLE`, flag=1, Amendment gesperrt |
 | Dynamisches Fenster | **A4** | ρ>0.4 → Fenster verdoppeln (max 60), sonst −5 zur Basis 15 |
-| Soft-Adapt | **A8** | Unreliable: +1,67 %/Zyklus (cap 30 % von Ziel 1.5); Full bei bestätigtem `ADAPT` |
+| Soft-Adapt | **A8** | Unreliable: +3,3 %/Zyklus (`SOFT_ADAPT_STEP=0.10` × 0,33; cap 30 % von Ziel 1,5); Full bei bestätigtem `ADAPT` |
 | Stuck-Telemetrie | **A9** | >4 h `DRIFT_IID_UNRELIABLE` → `REVIEW_REQUIRED` |
 
 Inter-Agent-Payload: `swarm_message` im Cycle-Output (classification, window_metadata, orchestrator_decision, strategy_state, compliance).
