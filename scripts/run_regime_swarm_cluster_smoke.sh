@@ -38,6 +38,7 @@ helm_install() {
     --set "image.tag=$IMAGE_TAG" \
     --set image.pullPolicy=IfNotPresent \
     --set smokeTest.enabled=true \
+    --set smokeTest.deleteHookOnSuccess=false \
     --set infrastructureGates.enabled=true \
     --set "infrastructureGates.G0_MAX_PRICE_CHANGE_PCT=$g0"
   kubectl rollout status "statefulset/$RELEASE" -n "$NAMESPACE" --timeout=180s
@@ -53,17 +54,12 @@ helm_test() {
   helm test "$RELEASE" -n "$NAMESPACE" --timeout "$TIMEOUT" >"$log_file" 2>&1 &
   local helm_pid=$!
 
+  kubectl wait --for=condition=complete "job/${RELEASE}-smoke" -n "$NAMESPACE" --timeout=300s 2>/dev/null || true
+
   local pod=""
-  for _ in $(seq 1 120); do
-    pod="$(kubectl get pod -n "$NAMESPACE" -l "job-name=${RELEASE}-smoke" -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)"
-    [[ -n "$pod" ]] && break
-    sleep 0.25
-  done
+  pod="$(kubectl get pod -n "$NAMESPACE" -l "job-name=${RELEASE}-smoke" -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)"
 
   if [[ -n "$pod" ]]; then
-    kubectl wait --for=condition=ready pod/"$pod" -n "$NAMESPACE" --timeout=120s 2>/dev/null || true
-    kubectl wait --for=jsonpath='{.status.phase}'=Succeeded pod/"$pod" -n "$NAMESPACE" --timeout=120s 2>/dev/null || \
-      kubectl wait --for=jsonpath='{.status.phase}'=Failed pod/"$pod" -n "$NAMESPACE" --timeout=120s 2>/dev/null || true
     kubectl logs -n "$NAMESPACE" "$pod" >>"$log_file" 2>&1 || true
     if kubectl cp "$NAMESPACE/$pod:/data/audit/pod_smoke_summary.json" "$out_json" 2>/dev/null; then
       log "copied pod_smoke_summary.json from $pod"
