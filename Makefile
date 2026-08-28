@@ -369,6 +369,9 @@ raas-regime-drift-smoke: ## Baustein 2 unit + 9-agent swarm smoke
 raas-live-feed-prometheus-smoke: ## Mock-WS → WORM → daemon Prometheus counters
 	PYTHONPATH=. python3 scripts/test_live_feed_prometheus.py
 
+raas-position-sizing-smoke: ## B0–B8 Kelly boundary sub-swarm (charter §4)
+	PYTHONPATH=. python3 scripts/test_position_sizing_subswarm.py
+
 raas-regime-swarm-build: ## Build regime swarm production image
 	docker build -f Dockerfile.regime-swarm -t agentx-regime-swarm .
 
