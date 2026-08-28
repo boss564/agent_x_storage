@@ -95,6 +95,7 @@ make raas-live-feed-prometheus-smoke
 make raas-regime-swarm-helm-lint
 make raas-regime-swarm-helm-pod-smoke      # lokal
 make raas-regime-swarm-cluster-smoke       # Kind-Cluster
+make raas-regime-swarm-live-shadow-install # Live Shadow (Helm-Overlay, siehe Runbook)
 ```
 
 Metriken (Daemon): `GET /metrics` auf `SWARM_METRICS_PORT` (Default 8080) — `swarm_cycles_total`, `drift_counter{regime,type}`, `risk_multiplier`, `gate_block_counter{gate}`.
@@ -105,6 +106,7 @@ Metriken (Daemon): `GET /metrics` auf `SWARM_METRICS_PORT` (Default 8080) — `s
 |----------|--------|
 | [`docs/RaaS_REGIME_DRIFT_PREREG.md`](../../../docs/RaaS_REGIME_DRIFT_PREREG.md) | Pre-Reg v0/v2, Bonferroni, Soft-Adapt v1→v2, 30-Tage-Eval |
 | [`docs/REGIME_SWARM_INFRA_GATES.md`](../../../docs/REGIME_SWARM_INFRA_GATES.md) | A0/A2.5, ConfigMap, Cluster-Runbook, Chaos-Mapping |
+| [`docs/REGIME_SWARM_LIVE_SHADOW_RUNBOOK.md`](../../../docs/REGIME_SWARM_LIVE_SHADOW_RUNBOOK.md) | Live Shadow (`LIVE_FEED_ENABLED`), Metriken, Rollback |
 | [`charts/regime-swarm/`](../../../charts/regime-swarm/) | Helm-Values, Smoke-Job, Infrastructure-Gates |
 
 ## Charter (kurz)

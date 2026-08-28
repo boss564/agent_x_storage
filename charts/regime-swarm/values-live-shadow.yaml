@@ -1,0 +1,48 @@
+# Live Shadow — WebSocket → WORM → Daemon (monitoring only)
+# Charter: live_execution=false · read-only · DEFENSIVE_CAUSAL_GROUNDING
+#
+# Usage:
+#   helm upgrade --install regime-swarm charts/regime-swarm -n trading \
+#     -f charts/regime-swarm/values-dev.yaml \
+#     -f charts/regime-swarm/values-live-shadow.yaml
+#
+# Requires cluster egress to wss://stream.binance.com (or set LIVE_FEED_WS_URL).
+
+replicaCount: 1
+
+leaderElection:
+  enabled: false
+
+lease:
+  enabled: false
+  runtimeEnabled: false
+
+smokeTest:
+  enabled: false
+
+config:
+  LIVE_FEED_ENABLED: "true"
+  LIVE_FEED_SYMBOL: "ETHUSDT"
+  LIVE_FEED_WORM_DIR: "/data/worm/live"
+  LIVE_FEED_WS_URL: "wss://stream.binance.com:9443/ws"
+  CYCLE_INTERVAL_SECONDS: "30"
+  SWARM_METRICS_ENABLED: "true"
+  SWARM_METRICS_PORT: "8080"
+
+infrastructureGates:
+  enabled: true
+  G0_MAX_PRICE_CHANGE_PCT: 20
+  G0_MAX_SPREAD_PCT: 5
+  G25_MAX_LATENCY_MS: 500
+
+persistence:
+  enabled: true
+  size: 5Gi
+
+resources:
+  requests:
+    cpu: 200m
+    memory: 512Mi
+  limits:
+    cpu: 1000m
+    memory: 1Gi
