@@ -167,7 +167,7 @@ Siehe auch [§6 Review-Entscheidungen](#6-review-entscheidungen-decided-2026-08-
 3. **Strang B:** `POSITION_SIZING_ENABLED=true` erst wenn **abgeschlossene Round-Trips ≥ 50** (`SELL` + `realized_pnl_eur` in WORM) **und** Ledger-Wiring  
 4. **Grafana (optional):** Dashboard für `sizing_*` — später PR
 
-**Hinweis (2026-08-28):** Live-Shadow erzeugt derzeit nur BUY (`break_price_below` unset). „≥50 SELL-Fills abwarten“ ist **strukturell nicht erreichbar** ohne Exit-PR — siehe Paper-Exit-Spec.
+**Hinweis (2026-08-28):** Live-Shadow erzeugte nur BUY (`break_price_below` unset). Exit **DECIDED: Option B** (feste Haltedauer k) — [`PAPER_EXIT_ROUNDTRIP_SPEC.md`](PAPER_EXIT_ROUNDTRIP_SPEC.md). Strang B nach Exit-PR + Ledger-Wiring + **≥50 SELL-Round-Trips**.
 
 ---
 
