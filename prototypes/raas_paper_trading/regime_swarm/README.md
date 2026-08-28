@@ -56,7 +56,7 @@ Beide Gates nutzen `services/fail_closed_gate/gate_core.py` — keine dupliziert
 | **Report** | `regime_drift_latest.json` | Aggregiertes letztes Ergebnis |
 | **State** | `regime_swarm_cooling.jsonl`, `SwarmStateStore` | Adaptives Cooling, Soft-Adapt, Leader-Persistenz |
 
-**Aktuell:** Feed-Quellen sind `ReplayFeed` und Binance-REST (`feed.py`). Geplant: WebSocket-Live-Feed → Runner → WORM → Daemon (read-only, gleiche Schnittstelle).
+**Live-Pfad:** `LIVE_FEED_ENABLED=true` startet `LivePaperBridge` (`paper_runner.py`) im Daemon-Prozess: Binance-WebSocket (oder Mock) → `PaperTradingRunner` → `{data_root}/worm/live/…/paper_trades.worm.jsonl`. Der Daemon liest dasselbe Verzeichnis im nächsten Zyklus. `live_execution` bleibt hardcodiert `false`. Tests: `make raas-live-feed-prometheus-smoke` (kein Netz).
 
 ## Modul-Landkarte
 
@@ -88,13 +88,16 @@ make raas-regime-swarm-infra-smoke
 export SWARM_WORM_ROOT=logs/worm
 make raas-regime-swarm-daemon
 
+# Live-Feed Mock + Prometheus-Counter (kein Netz)
+make raas-live-feed-prometheus-smoke
+
 # Helm / Cluster
 make raas-regime-swarm-helm-lint
 make raas-regime-swarm-helm-pod-smoke      # lokal
 make raas-regime-swarm-cluster-smoke       # Kind-Cluster
 ```
 
-Metriken (Daemon): `GET /metrics` auf `SWARM_METRICS_PORT` (Default 8080) — Zyklus-/Leader-Counter; Erweiterung `drift_counter`, `risk_multiplier`, `gate_block_counter` geplant.
+Metriken (Daemon): `GET /metrics` auf `SWARM_METRICS_PORT` (Default 8080) — `swarm_cycles_total`, `drift_counter{regime,type}`, `risk_multiplier`, `gate_block_counter{gate}`.
 
 ## Weiterführende Dokumentation
 

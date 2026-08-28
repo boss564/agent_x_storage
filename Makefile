@@ -366,6 +366,9 @@ raas-regime-drift-monitor: ## Baustein 2 — 9-Agent KS/Wasserstein Schwarm on p
 raas-regime-drift-smoke: ## Baustein 2 unit + 9-agent swarm smoke
 	PYTHONPATH=. python3 scripts/test_raas_regime_drift.py
 
+raas-live-feed-prometheus-smoke: ## Mock-WS → WORM → daemon Prometheus counters
+	PYTHONPATH=. python3 scripts/test_live_feed_prometheus.py
+
 raas-regime-swarm-build: ## Build regime swarm production image
 	docker build -f Dockerfile.regime-swarm -t agentx-regime-swarm .
 
