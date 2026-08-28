@@ -392,6 +392,14 @@ raas-regime-swarm-helm-install: ## Install/upgrade regime swarm in namespace tra
 	helm upgrade --install regime-swarm charts/regime-swarm -n trading --create-namespace \
 		-f charts/regime-swarm/values-dev.yaml
 
+raas-regime-swarm-live-shadow-install: ## Helm install with live-feed shadow overlay (IMAGE_REPO/TAG optional)
+	helm upgrade --install regime-swarm charts/regime-swarm -n trading --create-namespace \
+		-f charts/regime-swarm/values-dev.yaml \
+		-f charts/regime-swarm/values-live-shadow.yaml \
+		--set image.repository=$${IMAGE_REPO:-agentx-regime-swarm} \
+		--set image.tag=$${IMAGE_TAG:-live-shadow} \
+		--set image.pullPolicy=IfNotPresent
+
 raas-regime-leader-z3: ## P6 — Z3/BFS leader invariant proofs (I1)
 	PYTHONPATH=. python3 scripts/test_regime_leader_z3.py
 
