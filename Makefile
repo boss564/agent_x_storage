@@ -407,6 +407,9 @@ raas-regime-lease-t-s2b: ## T-S2b K8s Lease silent hang / renewal timeout
 raas-regime-swarm-ha-smoke: ## HA leader ordinal + lease fallback smoke
 	PYTHONPATH=. python3 scripts/test_regime_swarm_ha.py
 
+raas-regime-swarm-infra-gates: ## A0/A2.5 infrastructure gate smoke (INFRASTRUCTURE_GATES_PASS/FAIL)
+	PYTHONPATH=. python3 scripts/test_infrastructure_gates.py
+
 raas-regime-lease-failover-forensic: ## Drill 2 lease timeline (kind shadow, post-release fix)
 	PYTHONPATH=. python3 scripts/regime_swarm_lease_failover_forensic.py
 

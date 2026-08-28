@@ -22,6 +22,11 @@ from prototypes.raas_paper_trading.regime_swarm.agents import (
     WassersteinAgent,
     WindowManagerAgent,
 )
+from prototypes.raas_paper_trading.regime_swarm.gates import (
+    CoreSanityAdapter,
+    InfraGatesConfig,
+    TransportBoundaryGate,
+)
 from prototypes.raas_paper_trading.regime_swarm.types import (
     REAL_DRIFT_COOLING_THRESHOLD,
     SWARM_SCHEMA,
@@ -45,13 +50,102 @@ class RegimeSwarmOrchestrator:
     a7: DriftClassifierAgent = field(default_factory=DriftClassifierAgent)
     a8: StrategyAdapterAgent = field(default_factory=StrategyAdapterAgent)
     a9: AuditAlertAgent = field(default_factory=AuditAlertAgent)
+    infra_gates: InfraGatesConfig = field(default_factory=InfraGatesConfig.from_env)
     _cooling: Optional[AdaptiveCoolingOffManager] = field(default=None, repr=False)
     _stuck: StuckUnreliableTracker = field(default_factory=StuckUnreliableTracker)
+    infrastructure_healthy: bool = True
+    _a0: Optional[CoreSanityAdapter] = field(default=None, repr=False)
+    _a25: Optional[TransportBoundaryGate] = field(default=None, repr=False)
 
     def __post_init__(self) -> None:
         self.a5.seed = self.seed
         self.a9.audit_path = self.audit_path
         self._cooling = AdaptiveCoolingOffManager(path=self.cooling_path)
+        if self.infra_gates.enabled:
+            self._a0 = CoreSanityAdapter(
+                max_price_change_pct=self.infra_gates.g0_max_price_change_pct,
+                max_spread_pct=self.infra_gates.g0_max_spread_pct,
+            )
+            self._a25 = TransportBoundaryGate(
+                max_latency_ms=self.infra_gates.g25_max_latency_ms,
+            )
+
+    def _infra_audit_block(
+        self,
+        *,
+        cid: str,
+        symbol: str,
+        worm_path: Path,
+        agent_log: Dict[str, Any],
+        infrastructure: Dict[str, Any],
+        write_audit: bool,
+    ) -> Dict[str, Any]:
+        self.infrastructure_healthy = False
+        infrastructure["infrastructure_healthy"] = False
+        audit_entry: Dict[str, Any] = {
+            "schema": SWARM_SCHEMA,
+            "cycle_id": cid,
+            "symbol": symbol,
+            "status": "INFRASTRUCTURE_BLOCKED",
+            "infrastructure": infrastructure,
+            "drift_summary": "NOT_COMPUTED",
+            "definition_hash": definition_hash(),
+            "worm_path": str(worm_path),
+            "agents": agent_log,
+        }
+        if write_audit:
+            agent_log["A9"] = self.a9.run(audit_entry)
+        else:
+            agent_log["A9"] = {"agent": "A9_AuditAlert", "status": "INFRASTRUCTURE_FAILED"}
+        audit_entry["agents"] = agent_log
+        return audit_entry
+
+    def _run_infrastructure_gates(
+        self,
+        *,
+        prices: List[float],
+        ingest: Dict[str, Any],
+        agent_log: Dict[str, Any],
+    ) -> Optional[Dict[str, Any]]:
+        if not self.infra_gates.enabled or self._a0 is None:
+            return None
+
+        infrastructure: Dict[str, Any] = {
+            "g0_core_sanity": "SKIPPED",
+            "g25_transport_boundary": "SKIPPED",
+            "infrastructure_healthy": True,
+        }
+
+        if not prices:
+            infrastructure["g0_core_sanity"] = "SKIPPED (no prices)"
+            infrastructure["g25_transport_boundary"] = "SKIPPED (no data)"
+            agent_log["A0"] = infrastructure["g0_core_sanity"]
+            agent_log["A2.5"] = infrastructure["g25_transport_boundary"]
+            return infrastructure
+
+        ref_price = prices[-2] if len(prices) >= 2 else None
+        tick = {"price": prices[-1]}
+        a0_ok, a0_result = self._a0.validate_tick(tick, reference_price=ref_price)
+        agent_log["A0"] = a0_result.to_audit_dict()
+        infrastructure["g0_core_sanity"] = a0_result.message
+        if not a0_ok:
+            infrastructure["infrastructure_healthy"] = False
+            return infrastructure
+
+        transport_meta = ingest.get("transport_meta") or {}
+        if transport_meta and self._a25 is not None:
+            a25_ok, a25_result = self._a25.validate_frame(transport_meta)
+            agent_log["A2.5"] = a25_result.to_audit_dict()
+            infrastructure["g25_transport_boundary"] = a25_result.message
+            if not a25_ok:
+                infrastructure["infrastructure_healthy"] = False
+                return infrastructure
+        else:
+            agent_log["A2.5"] = "SKIPPED (no transport metadata in WORM)"
+            infrastructure["g25_transport_boundary"] = agent_log["A2.5"]
+
+        self.infrastructure_healthy = True
+        return infrastructure
 
     def run_cycle(
         self,
@@ -68,8 +162,24 @@ class RegimeSwarmOrchestrator:
         ingest = self.a2.run(worm_path)
         agent_log["A2"] = ingest
         prices = self.a2.load_prices(worm_path)
+
+        infrastructure = self._run_infrastructure_gates(
+            prices=prices,
+            ingest=ingest,
+            agent_log=agent_log,
+        )
+        if infrastructure is not None and not infrastructure.get("infrastructure_healthy", True):
+            return self._infra_audit_block(
+                cid=cid,
+                symbol=symbol,
+                worm_path=worm_path,
+                agent_log=agent_log,
+                infrastructure=infrastructure,
+                write_audit=write_audit,
+            )
+
         if len(prices) < 2 * 30:
-            return {
+            out: Dict[str, Any] = {
                 "schema": SWARM_SCHEMA,
                 "cycle_id": cid,
                 "symbol": symbol,
@@ -78,6 +188,9 @@ class RegimeSwarmOrchestrator:
                 "definition_hash": definition_hash(),
                 "agents": agent_log,
             }
+            if infrastructure is not None:
+                out["infrastructure"] = infrastructure
+            return out
 
         agent_log["A3"] = self.a3.run(prices)
         matrix = self.a3.build_matrix(prices)
@@ -215,6 +328,11 @@ class RegimeSwarmOrchestrator:
         audit_entry["worm_path"] = str(worm_path)
         audit_entry["status"] = "COMPLETE"
         audit_entry["swarm_message"] = swarm_message
+        if infrastructure is not None:
+            audit_entry["infrastructure"] = {
+                **infrastructure,
+                "infrastructure_healthy": True,
+            }
         audit_entry = self.a9.enrich_compliance(audit_entry, compliance=compliance)
 
         write_audit_now = write_audit and (
@@ -241,6 +359,11 @@ class RegimeSwarmOrchestrator:
         out["pre_reg_intervention"] = pre_reg_dict
         out["swarm_message"] = swarm_message
         out["cooling_off"]["unreliable_threshold"] = UNRELIABLE_COOLING_THRESHOLD
+        if infrastructure is not None:
+            out["infrastructure"] = {
+                **infrastructure,
+                "infrastructure_healthy": True,
+            }
         return out
 
     def run_worm_dir(

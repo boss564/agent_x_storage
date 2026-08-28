@@ -77,6 +77,12 @@ config:
   LOG_LEVEL: INFO
   TZ: UTC
 
+infrastructureGates:
+  enabled: true
+  G0_MAX_PRICE_CHANGE_PCT: 20
+  G0_MAX_SPREAD_PCT: 5
+  G25_MAX_LATENCY_MS: 500
+
 secrets:
   enabled: false
   slackWebhookUrl: ""
