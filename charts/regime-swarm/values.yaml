@@ -24,6 +24,13 @@ leaderElection:
   enabled: true
   leaderOrdinal: 0
 
+lease:
+  enabled: false
+  runtimeEnabled: false
+  name: regime-swarm-leader
+  leaseDurationSeconds: 15
+  renewIntervalSeconds: 5
+
 service:
   headless:
     enabled: true
@@ -111,7 +118,7 @@ lifecycle:
       command:
         - /bin/sh
         - -c
-        - sleep 10
+        - kill -TERM 1 2>/dev/null || true; sleep 20
 
 podAnnotations: {}
 podLabels: {}

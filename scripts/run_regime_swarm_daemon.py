@@ -29,7 +29,10 @@ if str(_ROOT) not in sys.path:
 from prototypes.raas_paper_trading.regime_drift import definition_hash, discover_worm_files  # noqa: E402
 from prototypes.raas_paper_trading.regime_swarm import RegimeSwarmOrchestrator  # noqa: E402
 from prototypes.raas_paper_trading.regime_swarm.state_store import SwarmStateStore  # noqa: E402
-from prototypes.raas_paper_trading.regime_swarm.leader import resolve_pod_identity  # noqa: E402
+from prototypes.raas_paper_trading.regime_swarm.leader import (  # noqa: E402
+    KubernetesLeaseLeader,
+    resolve_leader_with_lease,
+)
 from prototypes.raas_paper_trading.regime_swarm.types import SWARM_SCHEMA  # noqa: E402
 
 SCOPE = "DEFENSIVE_CAUSAL_GROUNDING"
@@ -188,7 +191,15 @@ class RegimeSwarmDaemon:
         self.slack_url = os.environ.get("SLACK_WEBHOOK_URL", "").strip()
         self.pagerduty_key = os.environ.get("PAGERDUTY_INTEGRATION_KEY", "").strip()
         self._shutdown = asyncio.Event()
-        self.pod_name, self.pod_ordinal, self.is_leader = resolve_pod_identity()
+        self._leader_identity, self._lease_leader = resolve_leader_with_lease()
+        self.pod_name = self._leader_identity.pod_name
+        self.pod_ordinal = self._leader_identity.pod_ordinal
+        self.is_leader = self._leader_identity.is_leader
+        self.leader_mode = self._leader_identity.mode
+        self._lease_renew_interval = float(
+            os.environ.get("SWARM_LEASE_RENEW_INTERVAL_SECONDS", "5")
+        )
+        self._lease_release_done = False
         _metrics["pod_name"] = self.pod_name
         _metrics["pod_ordinal"] = self.pod_ordinal
         _metrics["is_leader"] = 1 if self.is_leader else 0
@@ -199,6 +210,8 @@ class RegimeSwarmDaemon:
         self.state_store.apply_stuck_state(self.orch._stuck)
 
     def _persist_state(self) -> None:
+        if not self.is_leader:
+            return
         self.state_store.capture_soft_state(self.orch.a8._soft)
         self.state_store.capture_stuck_state(self.orch._stuck)
         self.state_store.save()
@@ -210,6 +223,8 @@ class RegimeSwarmDaemon:
             f.write(json.dumps(row, default=str) + "\n")
 
     def _maybe_alert(self, report: Dict[str, Any]) -> None:
+        if not self.is_leader:
+            return
         level = str(report.get("alert_level", "OK"))
         if level in ("OK",):
             compliance = (report.get("swarm_message") or {}).get("compliance") or report.get(
@@ -358,8 +373,25 @@ class RegimeSwarmDaemon:
                 )
             ).get("alert_level", "OK")
 
+    async def _lease_renewal_loop(self) -> None:
+        while not self._shutdown.is_set():
+            if self._lease_leader is not None:
+                self.is_leader = self._lease_leader.renew()
+                _metrics["is_leader"] = 1 if self.is_leader else 0
+            try:
+                await asyncio.wait_for(
+                    self._shutdown.wait(),
+                    timeout=self._lease_renew_interval,
+                )
+                break
+            except asyncio.TimeoutError:
+                continue
+
     async def main_loop(self) -> None:
         self._restore_state()
+        lease_task: Optional[asyncio.Task[None]] = None
+        if self._lease_leader is not None:
+            lease_task = asyncio.create_task(self._lease_renewal_loop())
         print(
             json.dumps(
                 {
@@ -372,30 +404,51 @@ class RegimeSwarmDaemon:
                     "pod_name": self.pod_name,
                     "pod_ordinal": self.pod_ordinal,
                     "is_leader": self.is_leader,
+                    "leader_mode": self.leader_mode,
                 }
             ),
             flush=True,
         )
-        while not self._shutdown.is_set():
-            started = time.perf_counter()
-            try:
-                await self.run_cycle()
-            except Exception as exc:
-                _metrics["errors_total"] += 1
-                print(
-                    json.dumps({"event": "cycle_error", "error": str(exc), "ts": _now()}),
-                    flush=True,
-                )
-            elapsed = time.perf_counter() - started
-            sleep_s = max(0.0, self.interval - elapsed)
-            try:
-                await asyncio.wait_for(self._shutdown.wait(), timeout=sleep_s)
-            except asyncio.TimeoutError:
-                continue
+        try:
+            while not self._shutdown.is_set():
+                started = time.perf_counter()
+                try:
+                    await self.run_cycle()
+                except Exception as exc:
+                    _metrics["errors_total"] += 1
+                    print(
+                        json.dumps({"event": "cycle_error", "error": str(exc), "ts": _now()}),
+                        flush=True,
+                    )
+                elapsed = time.perf_counter() - started
+                sleep_s = max(0.0, self.interval - elapsed)
+                try:
+                    await asyncio.wait_for(self._shutdown.wait(), timeout=sleep_s)
+                except asyncio.TimeoutError:
+                    continue
+        finally:
+            if lease_task is not None:
+                lease_task.cancel()
+                try:
+                    await lease_task
+                except asyncio.CancelledError:
+                    pass
+            self._release_lease_if_holder()
         self._persist_state()
         print(json.dumps({"event": "swarm_daemon_shutdown", "ts": _now()}), flush=True)
 
+    def _release_lease_if_holder(self) -> None:
+        """Release Lease immediately on SIGTERM — do not wait for main_loop finally."""
+        if self._lease_release_done or self._lease_leader is None:
+            return
+        if self._lease_leader.is_holder:
+            self._lease_leader.release()
+            self.is_leader = False
+            _metrics["is_leader"] = 0
+        self._lease_release_done = True
+
     def request_shutdown(self) -> None:
+        self._release_lease_if_holder()
         self._shutdown.set()
 
 

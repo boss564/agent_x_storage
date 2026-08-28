@@ -35,8 +35,8 @@ spec:
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- if .Values.serviceAccount.name }}
-      serviceAccountName: {{ .Values.serviceAccount.name }}
+      {{- if or .Values.serviceAccount.create .Values.serviceAccount.name }}
+      serviceAccountName: {{ include "regime-swarm.serviceAccountName" . }}
       {{- end }}
       terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
       containers:
@@ -63,6 +63,16 @@ spec:
               value: {{ .Values.leaderElection.enabled | quote }}
             - name: SWARM_LEADER_ORDINAL
               value: {{ .Values.leaderElection.leaderOrdinal | quote }}
+            {{- if .Values.lease.runtimeEnabled }}
+            - name: SWARM_LEASE_ENABLED
+              value: "true"
+            - name: SWARM_LEASE_NAME
+              value: {{ .Values.lease.name | quote }}
+            - name: SWARM_LEASE_DURATION_SECONDS
+              value: {{ .Values.lease.leaseDurationSeconds | quote }}
+            - name: SWARM_LEASE_RENEW_INTERVAL_SECONDS
+              value: {{ .Values.lease.renewIntervalSeconds | quote }}
+            {{- end }}
           ports:
             - name: metrics
               containerPort: {{ .Values.config.SWARM_METRICS_PORT | int }}

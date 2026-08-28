@@ -1,0 +1,13 @@
+{{- if and .Values.serviceAccount.create .Values.lease.runtimeEnabled }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "regime-swarm.fullname" . }}-lease
+  labels:
+    {{- include "regime-swarm.labels" . | nindent 4 }}
+rules:
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    resourceNames: [{{ .Values.lease.name | quote }}]
+    verbs: ["get", "update", "patch", "create"]
+{{- end }}
