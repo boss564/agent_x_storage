@@ -35,6 +35,7 @@ jobs:
         uses: helm/kind-action@v1
         with:
           version: v0.26.0
+          cluster_name: kind
           node_image: kindest/node:v1.31.2
           wait: 180s
 
