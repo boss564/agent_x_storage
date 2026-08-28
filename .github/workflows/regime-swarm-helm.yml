@@ -38,10 +38,13 @@ jobs:
           ls -la chart-artifacts
 
       - name: Install Z3 solver (P6 smoke)
-        run: pip install 'z3-solver>=4.13.0'
+        run: pip install 'z3-solver>=4.13.0' 'numpy>=1.26.0'
 
       - name: P6 leader Z3 smoke
         run: PYTHONPATH=. python3 scripts/test_regime_leader_z3.py
+
+      - name: A0/A2.5 infrastructure gates smoke
+        run: PYTHONPATH=. python3 scripts/test_infrastructure_gates.py
 
       - name: P2/P5 shadow chaos (compose)
         run: PYTHONPATH=. python3 scripts/regime_swarm_shadow_chaos.py

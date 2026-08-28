@@ -22,11 +22,7 @@ from prototypes.raas_paper_trading.regime_swarm.agents import (
     WassersteinAgent,
     WindowManagerAgent,
 )
-from prototypes.raas_paper_trading.regime_swarm.gates import (
-    CoreSanityAdapter,
-    InfraGatesConfig,
-    TransportBoundaryGate,
-)
+from prototypes.raas_paper_trading.regime_swarm.gates.config import InfraGatesConfig
 from prototypes.raas_paper_trading.regime_swarm.types import (
     REAL_DRIFT_COOLING_THRESHOLD,
     SWARM_SCHEMA,
@@ -54,14 +50,21 @@ class RegimeSwarmOrchestrator:
     _cooling: Optional[AdaptiveCoolingOffManager] = field(default=None, repr=False)
     _stuck: StuckUnreliableTracker = field(default_factory=StuckUnreliableTracker)
     infrastructure_healthy: bool = True
-    _a0: Optional[CoreSanityAdapter] = field(default=None, repr=False)
-    _a25: Optional[TransportBoundaryGate] = field(default=None, repr=False)
+    _a0: Any = field(default=None, repr=False)
+    _a25: Any = field(default=None, repr=False)
 
     def __post_init__(self) -> None:
         self.a5.seed = self.seed
         self.a9.audit_path = self.audit_path
         self._cooling = AdaptiveCoolingOffManager(path=self.cooling_path)
         if self.infra_gates.enabled:
+            from prototypes.raas_paper_trading.regime_swarm.gates.core_sanity_adapter import (
+                CoreSanityAdapter,
+            )
+            from prototypes.raas_paper_trading.regime_swarm.gates.transport_boundary import (
+                TransportBoundaryGate,
+            )
+
             self._a0 = CoreSanityAdapter(
                 max_price_change_pct=self.infra_gates.g0_max_price_change_pct,
                 max_spread_pct=self.infra_gates.g0_max_spread_pct,

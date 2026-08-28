@@ -36,5 +36,8 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Install gate_core dependency (numpy via kanten_ledger)
+        run: pip install 'numpy>=1.26.0'
+
       - name: Regime drift swarm smoke (17/17)
         run: make raas-regime-drift-smoke
