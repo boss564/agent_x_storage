@@ -1,16 +1,19 @@
 """A1 Orchestrator — 9-agent regime drift swarm (monitoring only)."""
 from __future__ import annotations
 
-import uuid
 import statistics
+import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from prototypes.raas_paper_trading.regime_drift import definition_hash
+from prototypes.raas_paper_trading.regime_swarm.adaptive import (
+    AdaptiveCoolingOffManager,
+    StuckUnreliableTracker,
+)
 from prototypes.raas_paper_trading.regime_swarm.agents import (
     AuditAlertAgent,
-    CoolingOffTracker,
     DataIngestorAgent,
     DriftClassifierAgent,
     FeatureEngineerAgent,
@@ -20,8 +23,9 @@ from prototypes.raas_paper_trading.regime_swarm.agents import (
     WindowManagerAgent,
 )
 from prototypes.raas_paper_trading.regime_swarm.types import (
-    COOLING_OFF_CYCLES,
+    REAL_DRIFT_COOLING_THRESHOLD,
     SWARM_SCHEMA,
+    UNRELIABLE_COOLING_THRESHOLD,
     SwarmCycleResult,
 )
 
@@ -41,12 +45,13 @@ class RegimeSwarmOrchestrator:
     a7: DriftClassifierAgent = field(default_factory=DriftClassifierAgent)
     a8: StrategyAdapterAgent = field(default_factory=StrategyAdapterAgent)
     a9: AuditAlertAgent = field(default_factory=AuditAlertAgent)
-    _cooling: Optional[CoolingOffTracker] = field(default=None, repr=False)
+    _cooling: Optional[AdaptiveCoolingOffManager] = field(default=None, repr=False)
+    _stuck: StuckUnreliableTracker = field(default_factory=StuckUnreliableTracker)
 
     def __post_init__(self) -> None:
         self.a5.seed = self.seed
         self.a9.audit_path = self.audit_path
-        self._cooling = CoolingOffTracker(self.cooling_path)
+        self._cooling = AdaptiveCoolingOffManager(path=self.cooling_path)
 
     def run_cycle(
         self,
@@ -87,7 +92,7 @@ class RegimeSwarmOrchestrator:
                 "agents": agent_log,
             }
 
-        agent_log["A4"], iid_status = self.a4.run(matrix)
+        agent_log["A4"], iid_status = self.a4.run(matrix, symbol=symbol)
         ks_results, ks_meta = self.a5.run(matrix)
         agent_log["A5"] = ks_meta
 
@@ -99,10 +104,25 @@ class RegimeSwarmOrchestrator:
         )
         agent_log["A7"] = classification_meta
 
-        advisory, a8_meta = self.a8.run(classification)
+        cooling_decision = self._cooling.update(
+            symbol,
+            regime_flag=classification.regime_flag,
+            classified_regime=classification.classified_regime,
+        )
+        agent_log["A1"] = {"orchestrator_decision": cooling_decision}
+
+        advisory, a8_meta = self.a8.run(
+            classification,
+            symbol=symbol,
+            cooling_decision=cooling_decision,
+        )
         agent_log["A8"] = a8_meta
 
-        streak, confirmed = self._cooling.update(symbol, classification.regime_flag)
+        confirmed = bool(cooling_decision.get("confirmed"))
+        streak = int(
+            cooling_decision.get("real_drift_counter", 0)
+            or cooling_decision.get("unreliable_counter", 0)
+        )
 
         affected = [r.feature for r in ks_results if r.drift_detected]
         alert_level = "OK"
@@ -135,6 +155,8 @@ class RegimeSwarmOrchestrator:
         if baseline_std < 1e-12:
             baseline_std = 1e-12
 
+        window_meta = (agent_log.get("A4") or {}).get("window_metadata", {})
+
         drift_summary = {
             "ks_p_value_min": classification.ks_p_value_min,
             "wasserstein_distance": w_result.mean_w1,
@@ -147,10 +169,29 @@ class RegimeSwarmOrchestrator:
             "regime_flag": classification.regime_flag,
             "allow_amendment": classification.allow_amendment,
             "iid_unreliable": classification.iid_unreliable,
+            "bonferroni_hit": classification.bonferroni_hit,
+            "bonferroni_alpha_used": round(classification.effective_alpha_used, 6),
+            "pre_reg_caveat_active": classification.pre_reg_caveat_active,
         }
 
         pre_reg_dict = pre_reg.to_dict() if pre_reg else {"triggered": False}
         final_action = a8_meta.get("final_action", "PARAMETER_UNCHANGED")
+        compliance = self._stuck.evaluate(symbol, classification.classified_regime)
+
+        swarm_message = {
+            "cycle_id": cid,
+            "classification": {
+                "regime_flag": classification.regime_flag,
+                "classified_regime": classification.classified_regime,
+                "allow_amendment": classification.allow_amendment,
+                "bonferroni_alpha_used": round(classification.effective_alpha_used, 6),
+                "pre_reg_caveat_active": classification.pre_reg_caveat_active,
+            },
+            "window_metadata": window_meta,
+            "orchestrator_decision": cooling_decision,
+            "strategy_state": a8_meta.get("strategy_state", {}),
+            "compliance": compliance,
+        }
 
         result = SwarmCycleResult(
             cycle_id=cid,
@@ -161,7 +202,7 @@ class RegimeSwarmOrchestrator:
             deviation_from_backtest=deviation,
             adaptive_action=advisory.to_dict(),
             alert_level=alert_level,
-            cooling_off_cycles_required=COOLING_OFF_CYCLES,
+            cooling_off_cycles_required=REAL_DRIFT_COOLING_THRESHOLD,
             cooling_off_cycles_seen=streak,
             regime_flag_confirmed=confirmed,
             hash_checksum="",
@@ -173,9 +214,13 @@ class RegimeSwarmOrchestrator:
         audit_entry["definition_hash"] = definition_hash()
         audit_entry["worm_path"] = str(worm_path)
         audit_entry["status"] = "COMPLETE"
+        audit_entry["swarm_message"] = swarm_message
+        audit_entry = self.a9.enrich_compliance(audit_entry, compliance=compliance)
 
         write_audit_now = write_audit and (
-            alert_level != "OK" or pre_reg_dict.get("triggered")
+            alert_level != "OK"
+            or pre_reg_dict.get("triggered")
+            or compliance.get("compliance_alert") == "REVIEW_REQUIRED"
         )
         if write_audit_now:
             a9_out = self.a9.run(audit_entry)
@@ -194,6 +239,8 @@ class RegimeSwarmOrchestrator:
         out["worm_path"] = str(worm_path)
         out["final_action"] = final_action
         out["pre_reg_intervention"] = pre_reg_dict
+        out["swarm_message"] = swarm_message
+        out["cooling_off"]["unreliable_threshold"] = UNRELIABLE_COOLING_THRESHOLD
         return out
 
     def run_worm_dir(
@@ -206,12 +253,12 @@ class RegimeSwarmOrchestrator:
 
         reports: List[Dict[str, Any]] = []
         for path in discover_worm_files(root):
-            symbol = "UNKNOWN"
+            sym = "UNKNOWN"
             for suffix in ("btcusdc", "ethusdc", "solusdc"):
                 if suffix in path.as_posix().lower():
-                    symbol = suffix.upper()
+                    sym = suffix.upper()
                     break
             reports.append(
-                self.run_cycle(worm_path=path, symbol=symbol, write_audit=write_audit)
+                self.run_cycle(worm_path=path, symbol=sym, write_audit=write_audit)
             )
         return reports

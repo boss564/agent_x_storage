@@ -7,16 +7,28 @@ from typing import Any, Dict, List, Optional
 SCOPE = "DEFENSIVE_CAUSAL_GROUNDING"
 
 # Frozen v0 swarm parameters
-SWARM_SCHEMA = "raas_regime_swarm_v1"
-COOLING_OFF_CYCLES = 3
-KS_SCREEN_ALPHA = 0.05  # A5 screen before A6 (resource gate)
+SWARM_SCHEMA = "raas_regime_swarm_v2"
+COOLING_OFF_CYCLES = 3  # legacy alias; adaptive cooling uses thresholds below
+UNRELIABLE_COOLING_THRESHOLD = 2
+REAL_DRIFT_COOLING_THRESHOLD = 5
+KS_SCREEN_ALPHA = 0.05  # A5 screen; Bonferroni divides by m features
 CRITICAL_ALPHA = 0.01
 RSI_STABLE_MAX = 30
 RSI_CRITICAL_MIN = 70
-STANDARDIZED_DRIFT_THRESHOLD = 2.0  # >2× Pre-Reg amendment reference
-AUTOCORR_RHO_THRESHOLD = 0.3  # A7 pseudo-drift gate (Line 74)
-N_EFF_RATIO_THRESHOLD = 0.5  # A4: n_eff/n below → i.i.d. violation
+STANDARDIZED_DRIFT_THRESHOLD = 2.0
+STANDARDIZED_DRIFT_MID = 1.5
+AUTOCORR_RHO_THRESHOLD = 0.3
+N_EFF_RATIO_THRESHOLD = 0.5
 R2_CUBED_BLOCK = 3
+WINDOW_BASE_SIZE = 15
+WINDOW_MAX_SIZE = 60
+WINDOW_RHO_STRETCH = 0.4
+WINDOW_SHRINK_STEP = 5
+TARGET_RISK_MULTIPLIER = 1.5
+SOFT_ADAPT_STEP = 0.05
+SOFT_ADAPT_UNRELIABLE_FACTOR = 0.33
+SOFT_ADAPT_UNRELIABLE_CAP_FRAC = 0.3
+STUCK_UNRELIABLE_HOURS = 4.0
 
 
 @dataclass
@@ -101,6 +113,9 @@ class DriftClassification:
     allow_amendment: bool = False
     iid_unreliable: bool = False
     pre_reg_reason: Optional[str] = None
+    bonferroni_hit: bool = False
+    effective_alpha_used: float = KS_SCREEN_ALPHA
+    pre_reg_caveat_active: bool = False
 
     def to_dict(self) -> Dict[str, Any]:
         out: Dict[str, Any] = {
@@ -114,6 +129,9 @@ class DriftClassification:
             "standardized_drift": round(self.standardized_drift, 4),
             "allow_amendment": self.allow_amendment,
             "iid_unreliable": self.iid_unreliable,
+            "bonferroni_hit": self.bonferroni_hit,
+            "bonferroni_alpha_used": round(self.effective_alpha_used, 6),
+            "pre_reg_caveat_active": self.pre_reg_caveat_active,
         }
         if self.pre_reg_reason:
             out["pre_reg_reason"] = self.pre_reg_reason

@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import sys
 import tempfile
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 _ROOT = Path(__file__).resolve().parents[1]
@@ -18,6 +19,11 @@ from prototypes.raas_paper_trading.regime_drift import (  # noqa: E402
     wasserstein_1d,
 )
 from prototypes.raas_paper_trading.regime_swarm import RegimeSwarmOrchestrator  # noqa: E402
+from prototypes.raas_paper_trading.regime_swarm.adaptive import (  # noqa: E402
+    AdaptiveCoolingOffManager,
+    DynamicWindowManager,
+    StuckUnreliableTracker,
+)
 from prototypes.raas_paper_trading.regime_swarm.agents import (  # noqa: E402
     DriftClassifierAgent,
     StrategyAdapterAgent,
@@ -182,12 +188,76 @@ def main() -> int:
     else:
         print("  PASS  A7 pre_reg intervention")
 
-    adv, a8_meta = StrategyAdapterAgent().run(classification)
+    adv, a8_meta = StrategyAdapterAgent().run(
+        classification,
+        symbol="TEST",
+        cooling_decision={"action": "WARN_ONLY", "confirmed": True},
+    )
     if not a8_meta.get("amendment_skipped") or a8_meta.get("final_action") != "PARAMETER_UNCHANGED":
         print("  FAIL  A8 interlock should NOP when amendment blocked")
         failed += 1
     else:
         print("  PASS  A8 interlock NOP")
+
+    # --- Scenario 15: Bonferroni + high rho → IID unreliable, window stretch ---
+    walk = [0.0]
+    for _ in range(99):
+        walk.append(walk[-1] + 0.15)
+    dwm = DynamicWindowManager()
+    wmeta = dwm.adapt_window("S15", walk)
+    iid15 = calculate_iid_violation_flag(build_r2_cubed_series(ar_returns))
+    ks15 = [
+        KSFeatureResult("log_return_pct", 0.4, 0.001, True),
+        KSFeatureResult("abs_return_pct", 0.2, 0.1, False),
+        KSFeatureResult("down_move_pct", 0.2, 0.1, False),
+        KSFeatureResult("rolling_vol_pct", 0.2, 0.1, False),
+    ]
+    m15 = FeatureMatrix(
+        names=["log_return_pct", "abs_return_pct", "down_move_pct", "rolling_vol_pct"],
+        baseline={"log_return_pct": [0.01] * 40, "abs_return_pct": [0.01] * 40,
+                  "down_move_pct": [0.0] * 40, "rolling_vol_pct": [0.01] * 40},
+        current={"log_return_pct": ar_returns[-40:], "abs_return_pct": [0.05] * 40,
+                 "down_move_pct": [0.02] * 40, "rolling_vol_pct": [0.03] * 40},
+    )
+    c15, _, _ = DriftClassifierAgent().run(
+        ks15, WassersteinResult(0.5, 0.5, {}), m15, iid_status=iid15
+    )
+    if (
+        c15.regime_flag != 1
+        or c15.classified_regime != "DRIFT_IID_UNRELIABLE"
+        or not wmeta.get("was_stretched")
+        or c15.allow_amendment
+    ):
+        print("  FAIL  scenario 15 bonferroni+iid+window stretch")
+        failed += 1
+    else:
+        print("  PASS  scenario 15 bonferroni+iid+window stretch")
+
+    # --- Scenario 16: 5 real-drift cycles → ADAPT ---
+    with tempfile.TemporaryDirectory() as tmp16:
+        cool_path = Path(tmp16) / "cool.jsonl"
+        mgr = AdaptiveCoolingOffManager(path=cool_path)
+        last = {}
+        for _ in range(5):
+            last = mgr.update("S16", regime_flag=2, classified_regime="HIGH_VOL_TREND")
+        if last.get("action") != "ADAPT" or not last.get("confirmed"):
+            print(f"  FAIL  scenario 16 adaptive cooling (got {last})")
+            failed += 1
+        else:
+            print("  PASS  scenario 16 adaptive cooling ADAPT at cycle 5")
+
+    # --- Scenario 17: stuck unreliable >4h → REVIEW_REQUIRED ---
+    t0 = datetime(2026, 8, 28, 10, 0, tzinfo=timezone.utc)
+    tracker = StuckUnreliableTracker()
+    tracker.now_fn = lambda: t0  # type: ignore[method-assign]
+    tracker.evaluate("S17", "DRIFT_IID_UNRELIABLE")
+    tracker.now_fn = lambda: t0 + timedelta(hours=5)  # type: ignore[method-assign]
+    comp = tracker.evaluate("S17", "DRIFT_IID_UNRELIABLE")
+    if comp.get("compliance_alert") != "REVIEW_REQUIRED":
+        print("  FAIL  scenario 17 stuck unreliable telemetry")
+        failed += 1
+    else:
+        print("  PASS  scenario 17 stuck unreliable REVIEW_REQUIRED")
 
     print("=" * 60)
     if failed:

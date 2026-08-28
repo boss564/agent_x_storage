@@ -4,7 +4,7 @@ from __future__ import annotations
 import hashlib
 import json
 import statistics
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
@@ -18,21 +18,22 @@ from prototypes.raas_paper_trading.regime_drift import (
     prices_to_feature_rows,
     wasserstein_1d,
 )
+from prototypes.raas_paper_trading.regime_swarm.adaptive import DynamicWindowManager, SoftStrategyState
 from prototypes.raas_paper_trading.regime_swarm.types import (
     AUTOCORR_RHO_THRESHOLD,
     CRITICAL_ALPHA,
-    COOLING_OFF_CYCLES,
-    AdaptiveAdvisory,
-    DriftClassification,
-    FeatureMatrix,
-    IidStatus,
     KSFeatureResult,
     KS_SCREEN_ALPHA,
     N_EFF_RATIO_THRESHOLD,
     PreRegIntervention,
     R2_CUBED_BLOCK,
+    STANDARDIZED_DRIFT_MID,
     STANDARDIZED_DRIFT_THRESHOLD,
     WassersteinResult,
+    AdaptiveAdvisory,
+    DriftClassification,
+    FeatureMatrix,
+    IidStatus,
 )
 
 
@@ -198,14 +199,21 @@ class FeatureEngineerAgent:
 
 @dataclass
 class WindowManagerAgent:
-    """A4 — reference/current windows + autocorrelation monitor (r2_cubed)."""
+    """A4 — windows + autocorrelation monitor + dynamic stretch."""
 
     name: str = "A4_WindowManager"
+    _dynamic: DynamicWindowManager = field(default_factory=DynamicWindowManager)
 
-    def run(self, matrix: FeatureMatrix) -> Tuple[Dict[str, Any], IidStatus]:
+    def run(
+        self,
+        matrix: FeatureMatrix,
+        *,
+        symbol: str,
+    ) -> Tuple[Dict[str, Any], IidStatus]:
         log_current = matrix.current.get("log_return_pct", [])
         r2_series = build_r2_cubed_series(log_current)
         iid = calculate_iid_violation_flag(r2_series)
+        window_meta = self._dynamic.adapt_window(symbol, log_current)
         meta = {
             "agent": self.name,
             "ref_frac": REF_FRAC,
@@ -215,6 +223,7 @@ class WindowManagerAgent:
             "n_baseline": {k: len(v) for k, v in matrix.baseline.items()},
             "n_current": {k: len(v) for k, v in matrix.current.items()},
             "iid_monitor": iid.to_dict(),
+            "window_metadata": window_meta,
         }
         return meta, iid
 
@@ -284,31 +293,20 @@ class WassersteinAgent:
 
 @dataclass
 class DriftClassifierAgent:
-    """A7 — aggregate KS + Wasserstein → RSI; i.i.d.-override (Pre-Reg Line 74)."""
+    """A7 — Bonferroni + standardized drift + Pre-Reg i.i.d. caveat (Line 74)."""
 
     name: str = "A7_DriftClassifier"
     critical_alpha: float = CRITICAL_ALPHA
     drift_threshold: float = STANDARDIZED_DRIFT_THRESHOLD
     rho_threshold: float = AUTOCORR_RHO_THRESHOLD
 
-    def _base_classify(
-        self,
-        ks_results: Sequence[KSFeatureResult],
-        w_result: WassersteinResult,
-        matrix: FeatureMatrix,
-        *,
-        standardized_drift: float,
-    ) -> DriftClassification:
-        p_min = min((r.p_value for r in ks_results), default=1.0)
-        anomaly_count = sum(1 for r in ks_results if r.drift_detected)
-
+    def _mean_shift_stats(self, matrix: FeatureMatrix) -> Tuple[float, float, float, float]:
         ref_ret = matrix.baseline.get("log_return_pct", [])
         cur_ret = matrix.current.get("log_return_pct", [])
         mean_a = statistics.fmean(ref_ret) if ref_ret else 0.0
         mean_b = statistics.fmean(cur_ret) if cur_ret else 0.0
         std_a = statistics.pstdev(ref_ret) if len(ref_ret) > 1 else 1e-12
-        mean_shift_sigma = abs(mean_b - mean_a) / std_a
-
+        mean_shift_sigma = abs(mean_b - mean_a) / std_a if std_a > 1e-12 else 0.0
         ref_vol = matrix.baseline.get("abs_return_pct", []) or ref_ret
         cur_vol = matrix.current.get("abs_return_pct", []) or cur_ret
         vol_ratio = (
@@ -316,78 +314,7 @@ class DriftClassifierAgent:
             if ref_vol and statistics.fmean(ref_vol) > 0
             else 1.0
         )
-
-        if p_min > KS_SCREEN_ALPHA and w_result.mean_w1 < 1e-6:
-            rsi, flag, regime, drift_type = 10.0, 0, "STABLE_SIDEWAYS", "none"
-        elif p_min < self.critical_alpha and w_result.mean_w1 > 0.01:
-            rsi = min(100.0, 70.0 + 30.0 * min(1.0, w_result.mean_w1 / 0.05))
-            flag = 2
-            if mean_b < mean_a and vol_ratio > 1.2:
-                regime, drift_type = "HIGH_VOL_TREND_BEARISH", "covariate_shift"
-            elif vol_ratio > 1.2:
-                regime, drift_type = "HIGH_VOL_TREND", "covariate_shift"
-            else:
-                regime, drift_type = "LOW_VOL_DRIFT", "prior_shift"
-        else:
-            rsi, flag, regime, drift_type = 50.0, 1, "LOW_VOL_DRIFT", "concept_drift_suspected"
-
-        allow = flag >= 1
-        return DriftClassification(
-            regime_shift_index=rsi,
-            regime_flag=flag,
-            classified_regime=regime,
-            drift_type=drift_type,
-            ks_p_value_min=p_min,
-            anomaly_count=anomaly_count,
-            mean_shift_sigma=mean_shift_sigma,
-            standardized_drift=standardized_drift,
-            allow_amendment=allow,
-            iid_unreliable=False,
-        )
-
-    def _apply_pre_reg_override(
-        self,
-        classification: DriftClassification,
-        iid: IidStatus,
-    ) -> Tuple[DriftClassification, Optional[PreRegIntervention]]:
-        if classification.regime_flag < 1:
-            return classification, None
-        if not (
-            classification.standardized_drift > self.drift_threshold
-            and iid.is_iid_violation
-            and iid.rho > self.rho_threshold
-            and classification.ks_p_value_min < KS_SCREEN_ALPHA
-        ):
-            return classification, None
-
-        reason = (
-            "Drift erkannt, aber Raten-Vergleich gegen i.i.d.-Tabelle nicht verlässlich "
-            "(überlappende Fenster / Autokorrelation) – Amendment gesperrt, Alarm bleibt."
-        )
-        overridden = DriftClassification(
-            regime_shift_index=classification.regime_shift_index,
-            regime_flag=classification.regime_flag,
-            classified_regime="DRIFT_IID_UNRELIABLE",
-            drift_type="iid_rate_unreliable",
-            ks_p_value_min=classification.ks_p_value_min,
-            anomaly_count=classification.anomaly_count,
-            mean_shift_sigma=classification.mean_shift_sigma,
-            standardized_drift=classification.standardized_drift,
-            allow_amendment=False,
-            iid_unreliable=True,
-            pre_reg_reason=reason,
-        )
-        intervention = PreRegIntervention(
-            triggered=True,
-            autocorrelation_rho_for_r2_cubed=iid.rho,
-            effective_sample_size=iid.n_eff,
-            raw_sample_size=iid.n_raw,
-            decision=(
-                "AMENDMENT_BLOCKED – Rate nicht gegen i.i.d.-Tabelle prüfbar; "
-                f"regime_flag={classification.regime_flag} bleibt für Cooling-Off/Alert."
-            ),
-        )
-        return overridden, intervention
+        return mean_a, mean_b, mean_shift_sigma, vol_ratio
 
     def run(
         self,
@@ -397,16 +324,115 @@ class DriftClassifierAgent:
         *,
         iid_status: IidStatus,
     ) -> Tuple[DriftClassification, Dict[str, Any], Optional[PreRegIntervention]]:
+        raw_p = [r.p_value for r in ks_results]
+        m = max(1, len(raw_p))
+        effective_alpha = KS_SCREEN_ALPHA / m
+        bonferroni_hit = any(p < effective_alpha for p in raw_p)
+        p_min = min(raw_p, default=1.0)
+        anomaly_count = sum(1 for r in ks_results if r.drift_detected)
+
         ref_ret = matrix.baseline.get("log_return_pct", [])
         baseline_std = statistics.pstdev(ref_ret) if len(ref_ret) > 1 else 1e-12
         if baseline_std < 1e-12:
             baseline_std = 1e-12
         standardized_drift = w_result.mean_w1 / baseline_std
 
-        classification = self._base_classify(
-            ks_results, w_result, matrix, standardized_drift=standardized_drift
-        )
-        classification, intervention = self._apply_pre_reg_override(classification, iid_status)
+        mean_a, mean_b, mean_shift_sigma, vol_ratio = self._mean_shift_stats(matrix)
+        is_iid_artifact = iid_status.is_iid_violation and iid_status.rho > self.rho_threshold
+        intervention: Optional[PreRegIntervention] = None
+
+        if not bonferroni_hit and standardized_drift < STANDARDIZED_DRIFT_MID:
+            classification = DriftClassification(
+                regime_shift_index=10.0,
+                regime_flag=0,
+                classified_regime="STABLE",
+                drift_type="none",
+                ks_p_value_min=p_min,
+                anomaly_count=anomaly_count,
+                mean_shift_sigma=mean_shift_sigma,
+                standardized_drift=standardized_drift,
+                allow_amendment=False,
+                bonferroni_hit=False,
+                effective_alpha_used=effective_alpha,
+            )
+        elif bonferroni_hit and is_iid_artifact:
+            reason = (
+                "Signifikant unter Bonferroni, aber ρ > 0.3 – i.i.d. verletzt; "
+                "Amendment gesperrt, Alarm bleibt."
+            )
+            classification = DriftClassification(
+                regime_shift_index=50.0,
+                regime_flag=1,
+                classified_regime="DRIFT_IID_UNRELIABLE",
+                drift_type="iid_rate_unreliable",
+                ks_p_value_min=p_min,
+                anomaly_count=anomaly_count,
+                mean_shift_sigma=mean_shift_sigma,
+                standardized_drift=standardized_drift,
+                allow_amendment=False,
+                iid_unreliable=True,
+                pre_reg_reason=reason,
+                bonferroni_hit=True,
+                effective_alpha_used=effective_alpha,
+                pre_reg_caveat_active=True,
+            )
+            intervention = PreRegIntervention(
+                triggered=True,
+                autocorrelation_rho_for_r2_cubed=iid_status.rho,
+                effective_sample_size=iid_status.n_eff,
+                raw_sample_size=iid_status.n_raw,
+                decision=(
+                    "AMENDMENT_BLOCKED – Rate nicht gegen i.i.d.-Tabelle prüfbar; "
+                    "regime_flag=1 bleibt für Alert/Cooling-Off."
+                ),
+            )
+        elif bonferroni_hit and standardized_drift >= self.drift_threshold:
+            rsi = min(100.0, 70.0 + 30.0 * min(1.0, w_result.mean_w1 / 0.05))
+            if mean_b < mean_a and vol_ratio > 1.2:
+                regime = "HIGH_VOL_TREND_BEARISH"
+            else:
+                regime = "HIGH_VOL_TREND"
+            classification = DriftClassification(
+                regime_shift_index=rsi,
+                regime_flag=2,
+                classified_regime=regime,
+                drift_type="covariate_shift",
+                ks_p_value_min=p_min,
+                anomaly_count=anomaly_count,
+                mean_shift_sigma=mean_shift_sigma,
+                standardized_drift=standardized_drift,
+                allow_amendment=True,
+                bonferroni_hit=True,
+                effective_alpha_used=effective_alpha,
+            )
+        elif bonferroni_hit:
+            classification = DriftClassification(
+                regime_shift_index=40.0,
+                regime_flag=1,
+                classified_regime="LOW_LEVEL_DRIFT",
+                drift_type="concept_drift_suspected",
+                ks_p_value_min=p_min,
+                anomaly_count=anomaly_count,
+                mean_shift_sigma=mean_shift_sigma,
+                standardized_drift=standardized_drift,
+                allow_amendment=False,
+                bonferroni_hit=True,
+                effective_alpha_used=effective_alpha,
+            )
+        else:
+            classification = DriftClassification(
+                regime_shift_index=25.0,
+                regime_flag=0,
+                classified_regime="STABLE_SIDEWAYS",
+                drift_type="none",
+                ks_p_value_min=p_min,
+                anomaly_count=anomaly_count,
+                mean_shift_sigma=mean_shift_sigma,
+                standardized_drift=standardized_drift,
+                allow_amendment=False,
+                bonferroni_hit=False,
+                effective_alpha_used=effective_alpha,
+            )
 
         meta = {
             "agent": self.name,
@@ -423,15 +449,31 @@ class DriftClassifierAgent:
 
 @dataclass
 class StrategyAdapterAgent:
-    """A8 — diagnostic suggestions; interlock on allow_amendment (never executed)."""
+    """A8 — soft gradual adapt + interlock on allow_amendment (never executed)."""
 
     name: str = "A8_StrategyAdapter"
+    _soft: SoftStrategyState = field(default_factory=SoftStrategyState)
 
-    def run(self, classification: DriftClassification) -> Tuple[AdaptiveAdvisory, Dict[str, Any]]:
+    def run(
+        self,
+        classification: DriftClassification,
+        *,
+        symbol: str,
+        cooling_decision: Dict[str, Any],
+    ) -> Tuple[AdaptiveAdvisory, Dict[str, Any]]:
+        soft = self._soft.apply(
+            symbol,
+            classified_regime=classification.classified_regime,
+            allow_amendment=classification.allow_amendment,
+            cooling_decision=cooling_decision,
+        )
+
         if not classification.allow_amendment:
             reason = classification.pre_reg_reason or "allow_amendment=False"
             advisory = AdaptiveAdvisory(
-                risk_multiplier_suggestion="unchanged (1.0)",
+                risk_multiplier_suggestion=(
+                    f"soft-advisory: multiplier → {soft['new_multiplier']:.3f} (not executed)"
+                ),
                 max_position_size_suggestion="unchanged",
                 strategy_mode_suggestion="unchanged",
                 amendment_skipped=True,
@@ -439,17 +481,22 @@ class StrategyAdapterAgent:
             )
             meta = advisory.to_dict()
             meta["skip_reason"] = f"AMENDMENT_SKIPPED: {reason}"
+            meta["soft_action"] = soft
+            meta["strategy_state"] = {
+                "risk_multiplier": soft["new_multiplier"],
+                "adaption_mode": soft.get("adaption_mode", "SOFT"),
+                "target_multiplier": soft.get("target_multiplier", 1.5),
+            }
             return advisory, meta
 
-        flag = classification.regime_flag
-        if flag == 0:
+        if soft.get("action_taken") == "FULL_ADAPT":
             advisory = AdaptiveAdvisory(
-                risk_multiplier_suggestion="unchanged (1.0)",
-                max_position_size_suggestion="unchanged",
-                strategy_mode_suggestion="unchanged",
-                final_action="PARAMETER_UNCHANGED",
+                risk_multiplier_suggestion="advisory: 1.0 → 1.5 (not executed)",
+                max_position_size_suggestion="advisory: reduce ~40% (paper shadow only)",
+                strategy_mode_suggestion="advisory: confirmed real drift — review momentum bias",
+                final_action="PARAMETER_ADVISORY",
             )
-        elif flag == 1:
+        elif classification.regime_flag == 1:
             advisory = AdaptiveAdvisory(
                 risk_multiplier_suggestion="advisory: consider 1.0 → 1.25 if drift persists",
                 max_position_size_suggestion="advisory: reduce shadow notional ~20% in replay",
@@ -458,12 +505,19 @@ class StrategyAdapterAgent:
             )
         else:
             advisory = AdaptiveAdvisory(
-                risk_multiplier_suggestion="advisory: 1.0 → 1.5 (not executed)",
-                max_position_size_suggestion="advisory: reduce ~40% (paper shadow only)",
-                strategy_mode_suggestion="advisory: MeanReversion → caution / momentum-bias review",
-                final_action="PARAMETER_ADVISORY",
+                risk_multiplier_suggestion="unchanged (1.0)",
+                max_position_size_suggestion="unchanged",
+                strategy_mode_suggestion="unchanged",
+                final_action="PARAMETER_UNCHANGED",
             )
-        return advisory, advisory.to_dict()
+        meta = advisory.to_dict()
+        meta["soft_action"] = soft
+        meta["strategy_state"] = {
+            "risk_multiplier": soft["new_multiplier"],
+            "adaption_mode": soft.get("adaption_mode", "HOLD"),
+            "target_multiplier": soft.get("target_multiplier", 1.5),
+        }
+        return advisory, meta
 
 
 # --- A9 Audit- & Alerting-Agent -----------------------------------------------
@@ -471,7 +525,7 @@ class StrategyAdapterAgent:
 
 @dataclass
 class AuditAlertAgent:
-    """A9 — append-only audit with hash checksum."""
+    """A9 — append-only audit with hash checksum + stuck-unreliable telemetry."""
 
     name: str = "A9_AuditAlert"
     audit_path: Path = Path("logs/worm/regime_drift_audit.jsonl")
@@ -479,6 +533,17 @@ class AuditAlertAgent:
     def _checksum(self, payload: Dict[str, Any]) -> str:
         blob = json.dumps(payload, sort_keys=True, default=str)
         return hashlib.sha256(blob.encode("utf-8")).hexdigest()
+
+    def enrich_compliance(
+        self,
+        entry: Dict[str, Any],
+        *,
+        compliance: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        entry["compliance"] = compliance
+        if compliance.get("compliance_alert") == "REVIEW_REQUIRED":
+            entry["alert_level"] = "REVIEW_REQUIRED"
+        return entry
 
     def run(
         self,
@@ -502,42 +567,22 @@ class AuditAlertAgent:
         }
 
 
-# --- Cooling-off state --------------------------------------------------------
-
-
+# Legacy alias — use AdaptiveCoolingOffManager in orchestrator (v2).
 class CoolingOffTracker:
-    """A1 sub-component — regime_flag=2 must repeat COOLING_OFF_CYCLES times."""
+    """Deprecated: kept for import compatibility."""
 
     def __init__(self, path: Path) -> None:
-        self.path = path
-        self._counts: Dict[str, int] = {}
-        if path.is_file():
-            for line in path.read_text(encoding="utf-8").splitlines():
-                if not line.strip():
-                    continue
-                row = json.loads(line)
-                sym = str(row.get("symbol", ""))
-                self._counts[sym] = int(row.get("streak", 0))
+        from prototypes.raas_paper_trading.regime_swarm.adaptive import (
+            AdaptiveCoolingOffManager,
+        )
+
+        self._inner = AdaptiveCoolingOffManager(path=path)
 
     def update(self, symbol: str, regime_flag: int) -> Tuple[int, bool]:
-        if regime_flag >= 2:
-            self._counts[symbol] = self._counts.get(symbol, 0) + 1
-        else:
-            self._counts[symbol] = 0
-        streak = self._counts[symbol]
-        confirmed = streak >= COOLING_OFF_CYCLES
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        with self.path.open("a", encoding="utf-8") as f:
-            f.write(
-                json.dumps(
-                    {
-                        "symbol": symbol,
-                        "regime_flag": regime_flag,
-                        "streak": streak,
-                        "confirmed": confirmed,
-                        "ts": _now(),
-                    }
-                )
-                + "\n"
-            )
+        regime = "HIGH_VOL_TREND" if regime_flag >= 2 else "STABLE"
+        decision = self._inner.update(
+            symbol, regime_flag=regime_flag, classified_regime=regime
+        )
+        streak = int(decision.get("real_drift_counter", 0))
+        confirmed = bool(decision.get("confirmed"))
         return streak, confirmed
