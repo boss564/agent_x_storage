@@ -71,7 +71,7 @@ Die Merkmale stammen aus derselben Preisreihe (`log_return` → `abs_return`, `d
 | `regime_flag = 2` (CRITICAL-Roh) | `p_min < 0.01` **und** `W₁_mean > 0.01` | effektiv **r₂ ≈ 3–8 %** pro Zyklus (unter H₀, abhängig von W₁-Null) |
 | **Bestätigt** (`regime_flag_confirmed`, 3× flag≥2) | ≈ **r₂³** (i.i.d.-Näherung) | bei **r₂ = 10 %** → **0,1 %** ≈ **1 / 1.000 Zyklen** (~6 Wochen bei stündlichem Takt) |
 
-Diese Zahlen sind **vorab festgehalten** (Pre-Reg), nicht nachträglich aus Läufen rekonstruiert. Nach 30-Tage-Collect: beobachtete Alarmrate vs. Tabelle berichten; Abweichung >2× löst Pre-Reg-Amendment aus, keine stille Schwellenanpassung.
+Diese Zahlen sind **vorab festgehalten** (Pre-Reg), nicht nachträglich aus Läufen rekonstruiert. Nach 30-Tage-Collect: beobachtete Alarmrate vs. Tabelle berichten; Abweichung >2× löst Pre-Reg-Amendment aus, keine stille Schwellenanpassung — **ausgenommen**, wenn die Abweichung allein aus der i.i.d.-Näherung für `r₂³` folgt (überlappende Fenster / autokorrelierte Märkte machen aufeinanderfolgende Treffer wahrscheinlicher, ohne dass Schwellen falsch wären).
 
 **Hinweis:** Permutation-KS pro Feature nutzt denselben `seed=42`; die Tests sind damit nicht stochastisch unabhängig — die Unabhängigkeits-Obergrenze bleibt eine **konservative** Worst-Case-Schranke.
 
