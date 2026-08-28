@@ -170,10 +170,26 @@ def _assert_charter_live_execution_off() -> None:
         raise SystemExit("SWARM_LIVE_EXECUTION must be false (monitoring-only charter)")
 
 
+def _apply_env_overrides(cfg: Dict[str, Any], *, root: Path) -> None:
+    """ConfigMap/env wins over baked JSON defaults (Helm operational overlay)."""
+    if os.environ.get("CYCLE_INTERVAL_SECONDS", "").strip():
+        cfg["cycle_interval_seconds"] = int(os.environ["CYCLE_INTERVAL_SECONDS"])
+    if os.environ.get("SWARM_METRICS_PORT", "").strip():
+        cfg["metrics_port"] = int(os.environ["SWARM_METRICS_PORT"])
+    cfg["live_feed_enabled"] = _env_bool("LIVE_FEED_ENABLED", cfg.get("live_feed_enabled", False))
+    if cfg["live_feed_enabled"]:
+        cfg["worm_dir"] = os.environ.get(
+            "LIVE_FEED_WORM_DIR", str(root / "worm" / "live")
+        )
+    elif os.environ.get("SWARM_WORM_DIR", "").strip():
+        cfg["worm_dir"] = os.environ["SWARM_WORM_DIR"]
+    cfg["live_execution"] = False
+
+
 def _load_config(path: Optional[Path]) -> Dict[str, Any]:
     root = _data_root()
     defaults: Dict[str, Any] = {
-        "cycle_interval_seconds": int(os.environ.get("CYCLE_INTERVAL_SECONDS", "60")),
+        "cycle_interval_seconds": 60,
         "worm_dir": str(root / "worm" / "paper_runs"),
         "audit_path": str(root / "audit" / "regime_drift_audit.jsonl"),
         "cooling_path": str(root / "state" / "regime_swarm_cooling.jsonl"),
@@ -182,23 +198,19 @@ def _load_config(path: Optional[Path]) -> Dict[str, Any]:
         "cycle_log_path": str(root / "audit" / "regime_swarm_cycles.jsonl"),
         "leader_snapshot_path": str(root / "state" / "leader_snapshot.json"),
         "live_execution": False,
-        "metrics_port": int(os.environ.get("SWARM_METRICS_PORT", "8080")),
-        "live_feed_enabled": _env_bool("LIVE_FEED_ENABLED", False),
+        "metrics_port": 8080,
+        "live_feed_enabled": False,
     }
-    if defaults["live_feed_enabled"]:
-        live_worm = os.environ.get("LIVE_FEED_WORM_DIR", str(root / "worm" / "live"))
-        defaults["worm_dir"] = live_worm
     if path and path.is_file():
         try:
             loaded = json.loads(path.read_text(encoding="utf-8"))
             if isinstance(loaded, dict):
-                for key in ("cycle_interval_seconds", "live_execution", "metrics_port"):
+                for key in ("cycle_interval_seconds", "live_execution", "metrics_port", "worm_dir"):
                     if key in loaded:
                         defaults[key] = loaded[key]
         except (json.JSONDecodeError, OSError):
             pass
-    defaults["metrics_port"] = int(os.environ.get("SWARM_METRICS_PORT", defaults["metrics_port"]))
-    defaults["live_execution"] = False
+    _apply_env_overrides(defaults, root=root)
     return defaults
 
 
@@ -494,6 +506,7 @@ class RegimeSwarmDaemon:
                     "worm_dir": str(self.worm_dir),
                     "definition_hash": definition_hash(),
                     "live_execution": False,
+                    "live_feed_enabled": bool(self.config.get("live_feed_enabled")),
                     "swarm_live_execution_env": os.environ.get("SWARM_LIVE_EXECUTION", ""),
                     "pod_name": self.pod_name,
                     "pod_ordinal": self.pod_ordinal,

@@ -170,10 +170,36 @@ def test_charter_live_execution_env_blocks() -> None:
         os.environ.pop("SWARM_LIVE_EXECUTION", None)
 
 
+def test_env_overrides_json_file() -> None:
+    os.environ["CYCLE_INTERVAL_SECONDS"] = "30"
+    os.environ["LIVE_FEED_ENABLED"] = "true"
+    os.environ["LIVE_FEED_WORM_DIR"] = "/data/worm/live"
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            json_path = Path(tmp) / "regime_swarm.json"
+            json_path.write_text(
+                '{"cycle_interval_seconds": 60, "metrics_port": 8080, "live_execution": false}',
+                encoding="utf-8",
+            )
+            from scripts.run_regime_swarm_daemon import _load_config
+
+            cfg = _load_config(json_path)
+            if cfg["cycle_interval_seconds"] != 30:
+                _fail(f"env must override JSON interval, got {cfg['cycle_interval_seconds']}")
+            if cfg["worm_dir"] != "/data/worm/live":
+                _fail(f"live worm_dir expected, got {cfg['worm_dir']}")
+            if not cfg["live_feed_enabled"]:
+                _fail("live_feed_enabled expected true")
+    finally:
+        for key in ("CYCLE_INTERVAL_SECONDS", "LIVE_FEED_ENABLED", "LIVE_FEED_WORM_DIR"):
+            os.environ.pop(key, None)
+
+
 def main() -> int:
     test_parse_and_url_guards()
     test_mock_feed_to_worm()
     test_charter_live_execution_env_blocks()
+    test_env_overrides_json_file()
     test_feed_worm_daemon_counters()
     test_gate_block_counter()
     print("LIVE_FEED_PROMETHEUS_PASS")

@@ -49,7 +49,7 @@ kubectl get pods -n trading -l app.kubernetes.io/name=regime-swarm
 kubectl logs -n trading regime-swarm-0 -f | grep -E 'swarm_daemon_start|cycle_error|INFRASTRUCTURE'
 ```
 
-Erwartung im Start-Log: `"live_execution": false`, `swarm_live_execution_env: "false"`, `worm_dir` zeigt auf `/data/worm/live`.
+Erwartung im Start-Log: `"live_execution": false`, `"live_feed_enabled": true`, `"interval_s": 30`, `"worm_dir": "/data/worm/live"`, `"swarm_live_execution_env": "false"`.
 
 ### Charter-Check (4. Signal — vor Metriken)
 
@@ -79,6 +79,8 @@ kubectl exec -n trading regime-swarm-0 -- \
 | WORM-Zeile | `"live_execution": false`, `"order_send": false` |
 
 Ohne `SWARM_LIVE_EXECUTION` in der ConfigMap gilt weiterhin Ebene 2 (Code-WORM-Gate) — der Pod läuft, aber die Deklaration ist im Env nicht sichtbar.
+
+**Config-Priorität (ab Daemon-Fix):** ConfigMap/Env **schlägt** `/app/config/regime_swarm.json` für `CYCLE_INTERVAL_SECONDS`, `LIVE_FEED_*`, `SWARM_METRICS_PORT`. Kein JSON-Volume-Override nötig.
 
 ## 4. Metriken (Checkliste)
 
