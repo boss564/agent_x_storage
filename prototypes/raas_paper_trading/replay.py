@@ -8,6 +8,14 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Union
 
 from prototypes.raas_paper_trading.config_loader import PaperTradingSettings
+from prototypes.raas_paper_trading.depth_snapshot import (
+    AGE_STRATA_5_30,
+    AGE_STRATA_GT_30,
+    AGE_STRATA_LT_5,
+    AGE_STRATA_UNKNOWN,
+    age_stratum,
+    snapshot_age_seconds,
+)
 from prototypes.raas_paper_trading.feed import parse_orderbook_snapshot
 from prototypes.raas_paper_trading.ledger import FeeSchedule, SlippageSettings
 from prototypes.raas_paper_trading.slippage import (
@@ -38,6 +46,8 @@ class FillTuple:
     worm_line_hash: Optional[str] = None
     orderbook: Optional[OrderBook] = None
     depth_source: Optional[str] = None
+    snapshot_ts: Optional[str] = None
+    snapshot_age_s: Optional[float] = None
 
     def to_dict(self) -> Dict[str, str]:
         base = {
@@ -51,6 +61,10 @@ class FillTuple:
         }
         if self.depth_source:
             base["depth_source"] = self.depth_source
+        if self.snapshot_ts:
+            base["snapshot_ts"] = self.snapshot_ts
+        if self.snapshot_age_s is not None:
+            base["snapshot_age_s"] = str(self.snapshot_age_s)
         return base
 
 
@@ -92,6 +106,17 @@ def load_fills_from_worm(path: Path) -> List[FillTuple]:
                 ob = parse_orderbook_snapshot(snap)
             except ValueError:
                 ob = None
+        age_raw = row.get("snapshot_age_s")
+        age_s: Optional[float]
+        if age_raw is not None and age_raw != "":
+            age_s = float(age_raw)
+        elif row.get("snapshot_ts") and row.get("ts"):
+            try:
+                age_s = snapshot_age_seconds(str(row["ts"]), str(row["snapshot_ts"]))
+            except ValueError:
+                age_s = None
+        else:
+            age_s = None
         fills.append(
             FillTuple(
                 side=side,
@@ -103,6 +128,8 @@ def load_fills_from_worm(path: Path) -> List[FillTuple]:
                 worm_line_hash=str(row.get("hash") or ""),
                 orderbook=ob,
                 depth_source=str(depth_source) if depth_source else None,
+                snapshot_ts=str(row["snapshot_ts"]) if row.get("snapshot_ts") else None,
+                snapshot_age_s=age_s,
             )
         )
     return fills
@@ -261,6 +288,40 @@ def per_fill_cost(
     }
 
 
+def _empty_age_strata() -> Dict[str, Dict[str, Any]]:
+    base = {
+        "fill_count": 0,
+        "slippage_cost_delta_eur": Decimal("0"),
+        "fee_delta_eur": Decimal("0"),
+    }
+    return {
+        AGE_STRATA_LT_5: dict(base),
+        AGE_STRATA_5_30: dict(base),
+        AGE_STRATA_GT_30: dict(base),
+        AGE_STRATA_UNKNOWN: dict(base),
+    }
+
+
+def _strata_to_report(strata: Dict[str, Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
+    out: Dict[str, Dict[str, Any]] = {}
+    labels = {
+        AGE_STRATA_LT_5: "< 5 s",
+        AGE_STRATA_5_30: "5–30 s",
+        AGE_STRATA_GT_30: "> 30 s",
+        AGE_STRATA_UNKNOWN: "unknown",
+    }
+    for key, bucket in strata.items():
+        out[key] = {
+            "label": labels.get(key, key),
+            "fill_count": bucket["fill_count"],
+            "slippage_cost_delta_eur": str(
+                Decimal(bucket["slippage_cost_delta_eur"]).quantize(TWOPLACES)
+            ),
+            "fee_delta_eur": str(Decimal(bucket["fee_delta_eur"]).quantize(TWOPLACES)),
+        }
+    return out
+
+
 def replay_slippage_ab(
     fills: Sequence[FillTuple],
     *,
@@ -280,6 +341,7 @@ def replay_slippage_ab(
     multi_level_fills = 0
     fills_with_snapshot = 0
     fills_live_depth = 0
+    age_strata = _empty_age_strata()
 
     for fill in fills:
         if fill.qty > Decimal(str(qty_per_level)):
@@ -313,13 +375,21 @@ def replay_slippage_ab(
         sum_fee_dynamic += fee_d
         sum_slip_fixed += slip_f
         sum_slip_dynamic += slip_d
+        slip_delta = (slip_d - slip_f).quantize(TWOPLACES)
+        fee_delta = (fee_d - fee_f).quantize(TWOPLACES)
+        stratum = age_stratum(fill.snapshot_age_s)
+        age_strata[stratum]["fill_count"] += 1
+        age_strata[stratum]["slippage_cost_delta_eur"] += slip_delta
+        age_strata[stratum]["fee_delta_eur"] += fee_delta
         rows.append(
             {
                 "fill": fill.to_dict(),
                 "fixed": fixed,
                 "dynamic": dynamic,
-                "fee_delta_eur": str((fee_d - fee_f).quantize(TWOPLACES)),
-                "slippage_cost_delta_eur": str((slip_d - slip_f).quantize(TWOPLACES)),
+                "fee_delta_eur": str(fee_delta),
+                "slippage_cost_delta_eur": str(slip_delta),
+                "age_stratum": stratum,
+                "snapshot_age_s": fill.snapshot_age_s,
             }
         )
 
@@ -327,7 +397,7 @@ def replay_slippage_ab(
     total_slip_delta = (sum_slip_dynamic - sum_slip_fixed).quantize(TWOPLACES)
 
     return {
-        "schema": "raas_paper_slippage_replay_v0",
+        "schema": "raas_paper_slippage_replay_v1",
         "fill_count": len(rows),
         "protocol": "fixed_tuple_ab",
         "metrics": {
@@ -338,6 +408,7 @@ def replay_slippage_ab(
             "slippage_fixed_total_eur": str(sum_slip_fixed.quantize(TWOPLACES)),
             "slippage_dynamic_total_eur": str(sum_slip_dynamic.quantize(TWOPLACES)),
         },
+        "snapshot_age_strata": _strata_to_report(age_strata),
         "synthetic_book": {
             "spread_bps": spread_bps,
             "qty_per_level": qty_per_level,

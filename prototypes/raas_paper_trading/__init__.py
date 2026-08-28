@@ -18,6 +18,13 @@ from prototypes.raas_paper_trading.feed import (
     orderbook_to_snapshot,
     parse_orderbook_snapshot,
 )
+from prototypes.raas_paper_trading.depth_snapshot import (
+    DepthSnapshot,
+    age_stratum,
+    make_live_depth_fetcher,
+    make_worm_depth_fetcher,
+    snapshot_age_seconds,
+)
 from prototypes.raas_paper_trading.depth_worm import DepthWormLog
 from prototypes.raas_paper_trading.ledger import (
     FeeSchedule,
@@ -57,7 +64,12 @@ __all__ = [
     "SYNTHETIC_SPREAD_BPS",
     "calculate_dynamic_slippage",
     "config_manifest_hash",
+    "DepthSnapshot",
     "DepthWormLog",
+    "age_stratum",
+    "make_live_depth_fetcher",
+    "make_worm_depth_fetcher",
+    "snapshot_age_seconds",
     "assert_no_order_urls",
     "fetch_binance_depth",
     "fetch_binance_rest_sample",

@@ -67,3 +67,55 @@ class DepthWormLog:
             f.write(json.dumps(row, default=str) + "\n")
         self._prev = digest
         return row
+
+
+def iter_depth_rows(path: Optional[Path] = None) -> List[Dict[str, Any]]:
+    p = depth_worm_path(path)
+    if not p.is_file():
+        return []
+    rows: List[Dict[str, Any]] = []
+    for line in p.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if line:
+            rows.append(json.loads(line))
+    return rows
+
+
+def latest_depth_row(
+    symbol: str,
+    *,
+    fill_ts: Optional[str] = None,
+    path: Optional[Path] = None,
+) -> Optional[Dict[str, Any]]:
+    """Latest DEPTH_SNAPSHOT for symbol with ts <= fill_ts (or latest if fill_ts empty)."""
+    sym = symbol.upper()
+    candidates: List[Dict[str, Any]] = []
+    for row in iter_depth_rows(path):
+        if row.get("action") != "DEPTH_SNAPSHOT":
+            continue
+        if str(row.get("symbol", "")).upper() != sym:
+            continue
+        candidates.append(row)
+    if not candidates:
+        return None
+    if not fill_ts:
+        return candidates[-1]
+    fill_dt = _parse_iso(fill_ts)
+    best: Optional[Dict[str, Any]] = None
+    best_ts = None
+    for row in candidates:
+        row_ts = _parse_iso(str(row["ts"]))
+        if row_ts <= fill_dt and (best_ts is None or row_ts > best_ts):
+            best = row
+            best_ts = row_ts
+    return best if best is not None else candidates[-1]
+
+
+def _parse_iso(ts: str) -> datetime:
+    text = ts.strip()
+    if text.endswith("Z"):
+        text = text[:-1] + "+00:00"
+    dt = datetime.fromisoformat(text)
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)

@@ -40,6 +40,12 @@ from prototypes.raas_paper_trading.feed import (  # noqa: E402
 )
 from prototypes.raas_paper_trading.ledger import PaperLedger, ledger_from_config  # noqa: E402
 from prototypes.raas_paper_trading.runner import PaperTradingRunner  # noqa: E402
+from prototypes.raas_paper_trading.depth_snapshot import (  # noqa: E402
+    AGE_STRATA_GT_30,
+    DepthSnapshot,
+    age_stratum,
+    snapshot_age_seconds,
+)
 from prototypes.raas_paper_trading.slippage import synthetic_orderbook  # noqa: E402
 from prototypes.raas_paper_trading.worm_log import PaperWormLog  # noqa: E402
 from services.fail_closed_gate.d_suite_enforcer import (  # noqa: E402
@@ -170,6 +176,16 @@ def run_unit_smokes(*, data_root: Path) -> int:
     else:
         print("  PASS  DepthWormLog append")
 
+    age = snapshot_age_seconds(
+        "2026-08-28T10:01:00+00:00",
+        "2026-08-28T10:00:20+00:00",
+    )
+    if abs(age - 40.0) > 0.01 or age_stratum(age) != AGE_STRATA_GT_30:
+        print("  FAIL  snapshot_age_seconds / age_stratum")
+        failed += 1
+    else:
+        print("  PASS  snapshot_age_s strata (40s → gt_30s)")
+
     led = PaperLedger(starting_balance_eur=Decimal("1000.00"))
     buy = led.sim_buy(Decimal("0.1"), Decimal("2000"), signal_id="t0")
     if not buy or led.fees_paid_eur <= 0 or led.order_send_count != 0:
@@ -214,8 +230,11 @@ def run_unit_smokes(*, data_root: Path) -> int:
         if rep.get("fill_count") != 1 or "slippage_cost_delta_eur" not in rep.get("metrics", {}):
             print("  FAIL  replay_slippage_ab")
             failed += 1
+        elif "snapshot_age_strata" not in rep:
+            print("  FAIL  replay missing snapshot_age_strata")
+            failed += 1
         else:
-            print("  PASS  replay_slippage_ab fixed-tuple A/B")
+            print("  PASS  replay_slippage_ab fixed-tuple A/B + age strata")
     except Exception as exc:  # noqa: BLE001
         print(f"  FAIL  replay_slippage_ab: {exc}")
         failed += 1
@@ -311,8 +330,13 @@ def run_five_dry_runs(enforcer: DSuiteEnforcer) -> int:
     paper_cfg = PaperTradingSettings.from_file()
     fill_snapshots = 0
 
-    def _shadow_depth(_symbol: str, mid: float):
-        return synthetic_orderbook(mid, qty_per_level=0.05)
+    def _shadow_depth(_symbol: str, mid: float, fill_ts: str) -> DepthSnapshot:
+        return DepthSnapshot(
+            orderbook=synthetic_orderbook(mid, qty_per_level=0.05),
+            snapshot_ts=fill_ts,
+            source="shadow_synthetic",
+            snapshot_age_s=0.0,
+        )
 
     for run_idx in range(N_RUNS):
         symbol = MARKETS[run_idx % len(MARKETS)]
@@ -326,7 +350,6 @@ def run_five_dry_runs(enforcer: DSuiteEnforcer) -> int:
             shadow_notional_eur=paper_cfg.shadow_notional_eur,
             attach_orderbook=paper_cfg.attach_orderbook,
             depth_fetcher=_shadow_depth,
-            depth_source="shadow_synthetic",
         )
         summary = runner.run(ReplayFeed(ticks))
 
@@ -336,8 +359,14 @@ def run_five_dry_runs(enforcer: DSuiteEnforcer) -> int:
                 if not line.strip():
                     continue
                 ev = json.loads(line)
-                if ev.get("action") == "SIM_FILL" and ev.get("orderbook_snapshot"):
+                if ev.get("action") != "SIM_FILL":
+                    continue
+                if ev.get("orderbook_snapshot"):
                     fill_snapshots += 1
+                if ev.get("snapshot_age_s") is None or ev.get("snapshot_ts") is None:
+                    print("  FAIL  SIM_FILL missing snapshot_ts/snapshot_age_s")
+                    failed += 1
+                    break
 
         if summary.get("live_execution") is not False:
             print(f"  FAIL  run {run_idx + 1} live_execution")
@@ -438,7 +467,10 @@ def run_five_dry_runs(enforcer: DSuiteEnforcer) -> int:
                     print("  FAIL  SIM_FILL missing orderbook_snapshot")
                     failed += 1
                 else:
-                    print(f"  PASS  SIM_FILL orderbook_snapshot ({fill_snapshots} fills)")
+                    print(
+                        f"  PASS  SIM_FILL provenance "
+                        f"({fill_snapshots} fills, snapshot_age_s present)"
+                    )
 
     return failed
 

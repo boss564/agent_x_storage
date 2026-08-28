@@ -1,4 +1,4 @@
-# RaaS Paper Depth Ingest & Shadow-Fills (Paket 2) v0
+# RaaS Paper Depth Ingest & Shadow-Fills (Paket 2 + 2.1) v0
 
 **Scope:** `DEFENSIVE_CAUSAL_GROUNDING` · `live_execution=false` · **no order send**
 
@@ -26,35 +26,38 @@ On each `SIM_FILL`, when `shadow_fill.attach_orderbook=true`:
 | WORM field | Content |
 |------------|---------|
 | `orderbook_snapshot` | `{bids, asks}` top-N levels at fill time |
-| `depth_source` | `binance_rest_depth` \| `shadow_synthetic` |
+| `depth_source` | `binance_rest_depth` \| `shadow_synthetic` \| `depth_worm` |
+| `snapshot_ts` | ISO time of depth row used (Paket 2.1) |
+| `snapshot_age_s` | fill `ts` − `snapshot_ts` in seconds (Paket 2.1) |
+| `depth_snapshot_hash` | WORM hash when book from ingest log |
 | `mark_price` / `qty` | Fixed tuple for replay A/B |
 
-Smoke dry-run uses `shadow_synthetic` (offline). Production paper loop should set
-`depth_fetcher=fetch_binance_depth` and `depth_source=binance_rest_depth`.
+Smoke dry-run uses `shadow_synthetic` with `snapshot_age_s=0`. Production:
+
+- `make_live_depth_fetcher()` — fetch at fill (age ≈ API latency)
+- `make_worm_depth_fetcher(path)` — latest ingest row (age up to `interval_s`)
 
 Sizing remains **fixed EUR notional** (`shadow_fill.notional_eur`, default 100 €) — no equity feedback.
 
+### Snapshot age bias (Paket 2.1)
+
+`depth_ingest.interval_s=60` → fills can use books up to ~60 s old. In flash-crash conditions
+**stale depth is systematically deeper than at fill time** → replay **understates** slippage
+(directional bias). `snapshot_age_s` on every `SIM_FILL` makes freshness reconstructable later.
+
 ## Phase 3 — Replay
 
-`replay.py` uses `orderbook_snapshot` on each fill when present; falls back to synthetic book otherwise.
+`replay.py` uses `orderbook_snapshot` when present; schema `raas_paper_slippage_replay_v1`.
 
-Report fields: `fills_with_orderbook_snapshot`, `fills_binance_rest_depth`, `fills_past_level_1`.
+| Metric / report | Meaning |
+|-----------------|---------|
+| `slippage_cost_delta_eur` | Σ (dynamic − fixed) per fill |
+| `fee_delta_eur` | Σ fee delta per fill |
+| `snapshot_age_strata` | Buckets `< 5 s` · `5–30 s` · `> 30 s` · `unknown` with per-stratum slipΔ |
 
-## Planned (Paket 2.1 — before production stress replay)
+Interpret strata before citing aggregate slipΔ — crash fills in `> 30 s` need explicit caveat.
 
-`depth_ingest.interval_s=60` means a fill may use a book up to ~60 s old. In flash-crash
-conditions stale depth is systematically **deeper than at fill time** → replay **understates**
-slippage (directional bias, not noise).
-
-| Field | Purpose |
-|-------|---------|
-| `snapshot_ts` | ISO time of depth row used |
-| `snapshot_age_s` | fill `ts` − snapshot `ts` |
-| Report strata | `< 5 s` · `5–30 s` · `> 30 s` per fill |
-
-Without `snapshot_age_s`, freshness at fill time cannot be reconstructed later.
-
-## Not in scope (Paket 2)
+## Not in scope
 
 - Phase A historical backfill
 - Live order send (Map violation)
@@ -65,4 +68,4 @@ Without `snapshot_age_s`, freshness at fill time cannot be reconstructed later.
 Depth + shadow parameters are in `config/paper_trading_config.json` → `config_manifest_hash()`.
 Change requires amendment note before gated 30-day eval.
 
-Parent: `docs/PAPER_TRADING_SETUP_v0.md` · slippage replay: `docs/RaaS_PAPER_FEES_SLIPPAGE_v0.md`
+Parent: `docs/PAPER_TRADING_SETUP_v0.md` · slippage: `docs/RaaS_PAPER_FEES_SLIPPAGE_v0.md`

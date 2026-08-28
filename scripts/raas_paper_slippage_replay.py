@@ -131,6 +131,12 @@ def main(argv: list[str] | None = None) -> int:
     )
     print(f"  slippage_cost_delta (dyn−fix): {m['slippage_cost_delta_eur']} €")
     print(f"  fee_delta (dyn−fix):           {m['fee_delta_eur']} €")
+    for key, bucket in (result.get("snapshot_age_strata") or {}).items():
+        if bucket.get("fill_count", 0) > 0:
+            print(
+                f"  strata {bucket.get('label')}: n={bucket['fill_count']} "
+                f"slipΔ={bucket['slippage_cost_delta_eur']}€"
+            )
     for line in result.get("interpretation", replay_interpretation(
         spread_bps=args.spread_bps,
         fallback_percent=settings.fallback_percent,

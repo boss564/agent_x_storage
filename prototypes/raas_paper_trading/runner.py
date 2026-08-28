@@ -1,23 +1,22 @@
 """Paper trading runner — signals + sim fills + WORM; never order send."""
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from decimal import Decimal
-from typing import Any, Callable, Dict, Iterable, List, Optional
+from typing import Any, Dict, Iterable, List, Optional
 from uuid import uuid4
 
-from prototypes.raas_paper_trading.envelope_score import (
-    EnvelopeHitStats,
-    score_envelope_hits,
-)
+from prototypes.raas_paper_trading.depth_snapshot import DepthFetcher, DepthSnapshot
+from prototypes.raas_paper_trading.envelope_score import score_envelope_hits
 from prototypes.raas_paper_trading.feed import PaperTick, orderbook_to_snapshot
 from prototypes.raas_paper_trading.ledger import PaperLedger
-from prototypes.raas_paper_trading.slippage import OrderBook
 from prototypes.raas_paper_trading.worm_log import PaperWormLog
 
 SCOPE = "DEFENSIVE_CAUSAL_GROUNDING"
 
-# (symbol, mark_price) -> OrderBook — Phase C shadow depth at fill time
-DepthFetcher = Callable[[str, float], OrderBook]
+
+def _fill_ts(tick: PaperTick) -> str:
+    return tick.ts or datetime.now(timezone.utc).isoformat()
 
 
 class PaperTradingRunner:
@@ -54,11 +53,19 @@ class PaperTradingRunner:
             return False
         return float(tick.price) < float(self.break_price_below)
 
-    def _resolve_orderbook(self, tick: PaperTick) -> tuple[Optional[OrderBook], Optional[str]]:
+    def _resolve_depth(self, tick: PaperTick) -> Optional[DepthSnapshot]:
         if not self.attach_orderbook or self.depth_fetcher is None:
-            return None, None
-        book = self.depth_fetcher(tick.symbol, float(tick.price))
-        return book, self.depth_source
+            return None
+        result = self.depth_fetcher(tick.symbol, float(tick.price), _fill_ts(tick))
+        if result.source == "shadow" and self.depth_source:
+            return DepthSnapshot(
+                orderbook=result.orderbook,
+                snapshot_ts=result.snapshot_ts,
+                source=self.depth_source,
+                snapshot_age_s=result.snapshot_age_s,
+                depth_snapshot_hash=result.depth_snapshot_hash,
+            )
+        return result
 
     def on_tick(self, tick: PaperTick) -> Dict[str, Any]:
         self._tick_n += 1
@@ -66,6 +73,7 @@ class PaperTradingRunner:
         cid = f"price_floor@{self._tick_n}"
         predicted = self._predict_break(tick)
         self.predictions.append({"condition_id": cid, "break": predicted})
+        fill_ts = _fill_ts(tick)
 
         self.worm.append(
             {
@@ -77,12 +85,14 @@ class PaperTradingRunner:
                 "source": tick.source,
                 "predicted_break": predicted,
                 "m7_latency_ms": None,
+                "ts": fill_ts,
             }
         )
 
         fill = None
         mark = Decimal(str(tick.price))
-        orderbook, depth_src = self._resolve_orderbook(tick)
+        depth = self._resolve_depth(tick)
+        orderbook = depth.orderbook if depth else None
 
         if self._tick_n == 1 and self.ledger.position_qty == 0:
             qty = (self.shadow_notional_eur / mark).quantize(Decimal("0.0001"))
@@ -98,21 +108,28 @@ class PaperTradingRunner:
             snap = self.ledger.snapshot(mark)
             worm_row: Dict[str, Any] = {
                 **fill,
+                "ts": fill_ts,
                 "symbol": tick.symbol,
                 "cash_eur": snap["cash_eur"],
                 "equity_eur": snap["equity_eur"],
                 "qty": fill["qty"],
                 "mark_price": str(tick.price),
             }
-            if orderbook is not None and depth_src:
-                worm_row["orderbook_snapshot"] = orderbook_to_snapshot(orderbook)
-                worm_row["depth_source"] = depth_src
+            if depth is not None:
+                worm_row["orderbook_snapshot"] = orderbook_to_snapshot(depth.orderbook)
+                worm_row["depth_source"] = depth.source
+                worm_row["snapshot_ts"] = depth.snapshot_ts
+                if depth.snapshot_age_s is not None:
+                    worm_row["snapshot_age_s"] = round(float(depth.snapshot_age_s), 3)
+                if depth.depth_snapshot_hash:
+                    worm_row["depth_snapshot_hash"] = depth.depth_snapshot_hash
             self.worm.append(worm_row)
         else:
             self.worm.append(
                 {
                     "action": "SIM_SKIP",
                     "signal_id": signal_id,
+                    "ts": fill_ts,
                     "mark_price": str(tick.price),
                     "symbol": tick.symbol,
                     "cash_eur": self.ledger.snapshot(mark)["cash_eur"],
