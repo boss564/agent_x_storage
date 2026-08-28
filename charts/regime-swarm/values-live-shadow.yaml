@@ -28,6 +28,7 @@ config:
   CYCLE_INTERVAL_SECONDS: "30"
   SWARM_METRICS_ENABLED: "true"
   SWARM_METRICS_PORT: "8080"
+  SWARM_LIVE_EXECUTION: "false"
 
 infrastructureGates:
   enabled: true

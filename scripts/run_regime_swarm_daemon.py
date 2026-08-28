@@ -164,6 +164,12 @@ def _data_root() -> Path:
     return Path(os.environ.get("SWARM_DATA_ROOT", "/data"))
 
 
+def _assert_charter_live_execution_off() -> None:
+    """Ebene 1 (ConfigMap) + Ebene 2 (Code): monitoring-only, no order send."""
+    if _env_bool("SWARM_LIVE_EXECUTION", False):
+        raise SystemExit("SWARM_LIVE_EXECUTION must be false (monitoring-only charter)")
+
+
 def _load_config(path: Optional[Path]) -> Dict[str, Any]:
     root = _data_root()
     defaults: Dict[str, Any] = {
@@ -488,6 +494,7 @@ class RegimeSwarmDaemon:
                     "worm_dir": str(self.worm_dir),
                     "definition_hash": definition_hash(),
                     "live_execution": False,
+                    "swarm_live_execution_env": os.environ.get("SWARM_LIVE_EXECUTION", ""),
                     "pod_name": self.pod_name,
                     "pod_ordinal": self.pod_ordinal,
                     "is_leader": self.is_leader,
@@ -557,6 +564,7 @@ def _start_live_feed_thread(cfg: Dict[str, Any], stop: asyncio.Event) -> Optiona
 
 
 async def _amain(config_path: Optional[Path]) -> int:
+    _assert_charter_live_execution_off()
     cfg = _load_config(config_path)
     if cfg.get("live_execution") is True:
         raise SystemExit("live_execution must be false")

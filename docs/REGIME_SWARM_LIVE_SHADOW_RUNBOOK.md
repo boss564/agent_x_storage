@@ -49,7 +49,36 @@ kubectl get pods -n trading -l app.kubernetes.io/name=regime-swarm
 kubectl logs -n trading regime-swarm-0 -f | grep -E 'swarm_daemon_start|cycle_error|INFRASTRUCTURE'
 ```
 
-Erwartung im Start-Log: `"live_execution": false`, `worm_dir` zeigt auf `/data/worm/live`.
+Erwartung im Start-Log: `"live_execution": false`, `swarm_live_execution_env: "false"`, `worm_dir` zeigt auf `/data/worm/live`.
+
+### Charter-Check (4. Signal — vor Metriken)
+
+Ebene 1 = Deklaration (ConfigMap/JSON), Ebene 2 = Durchsetzung (Code + WORM).
+
+```bash
+# ConfigMap → Pod-Env (soll SWARM_LIVE_EXECUTION=false zeigen)
+kubectl exec -n trading regime-swarm-0 -- env | grep -E 'SWARM_LIVE_EXECUTION|LIVE_FEED_ENABLED'
+
+# Image-JSON (Fallback-Deklaration im Container)
+kubectl exec -n trading regime-swarm-0 -- cat /app/config/regime_swarm.json
+
+# Start-Log (Code-Durchsetzung)
+kubectl logs -n trading regime-swarm-0 | grep swarm_daemon_start | tail -1
+
+# WORM-Zeile (jede SIGNAL-Zeile muss live_execution=false tragen)
+kubectl exec -n trading regime-swarm-0 -- \
+  tail -1 /data/worm/live/live/paper/runs/ethusdt/paper_trades.worm.jsonl \
+  | grep -E '"live_execution": false|"order_send": false'
+```
+
+| Check | Erwartung |
+|-------|-----------|
+| `SWARM_LIVE_EXECUTION` | `false` (Pod startet nicht bei `true`) |
+| `regime_swarm.json` | `"live_execution": false` |
+| Start-Log | `"live_execution": false` |
+| WORM-Zeile | `"live_execution": false`, `"order_send": false` |
+
+Ohne `SWARM_LIVE_EXECUTION` in der ConfigMap gilt weiterhin Ebene 2 (Code-WORM-Gate) — der Pod läuft, aber die Deklaration ist im Env nicht sichtbar.
 
 ## 4. Metriken (Checkliste)
 
