@@ -360,6 +360,12 @@ raas-paper-collect: ## Long paper loop — live depth at fill (no order send; de
 raas-paper-collect-smoke: ## Paper collect smoke — 2 ticks, live depth (network)
 	PYTHONPATH=. python3 scripts/raas_paper_collect.py --depth-mode live --max-ticks 2 --duration-s 30
 
+raas-regime-drift-monitor: ## Baustein 2 — 9-Agent KS/Wasserstein Schwarm on paper WORMs
+	PYTHONPATH=. python3 scripts/raas_regime_drift_monitor.py
+
+raas-regime-drift-smoke: ## Baustein 2 unit + 9-agent swarm smoke
+	PYTHONPATH=. python3 scripts/test_raas_regime_drift.py
+
 raas-flash-crash-retro: ## Option 5 — Z3-Gate risk layer vs historical klines (MAP v0)
 	PYTHONPATH=. python3 scripts/raas_flash_crash_retrospective.py --days 14
 
