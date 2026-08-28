@@ -17,5 +17,15 @@
   "paper_trading": {
     "initial_balance_eur": 1000.0,
     "live_execution": false
+  },
+  "depth_ingest": {
+    "symbols": ["ETHUSDC", "BTCUSDC"],
+    "rest_limit": 10,
+    "worm_path": "logs/worm/depth_snapshots.jsonl",
+    "interval_s": 60
+  },
+  "shadow_fill": {
+    "notional_eur": 100.0,
+    "attach_orderbook": true
   }
 }

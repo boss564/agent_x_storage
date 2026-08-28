@@ -29,13 +29,18 @@ if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
 from prototypes.raas_paper_trading.envelope_score import score_envelope_hits  # noqa: E402
+from prototypes.raas_paper_trading.config_loader import PaperTradingSettings  # noqa: E402
+from prototypes.raas_paper_trading.depth_worm import DepthWormLog  # noqa: E402
 from prototypes.raas_paper_trading.feed import (  # noqa: E402
     PaperTick,
     ReplayFeed,
     assert_no_order_urls,
+    orderbook_to_snapshot,
+    parse_orderbook_snapshot,
 )
 from prototypes.raas_paper_trading.ledger import PaperLedger, ledger_from_config  # noqa: E402
 from prototypes.raas_paper_trading.runner import PaperTradingRunner  # noqa: E402
+from prototypes.raas_paper_trading.slippage import synthetic_orderbook  # noqa: E402
 from prototypes.raas_paper_trading.worm_log import PaperWormLog  # noqa: E402
 from services.fail_closed_gate.d_suite_enforcer import (  # noqa: E402
     DSuiteEnforcer,
@@ -140,6 +145,30 @@ def run_unit_smokes(*, data_root: Path) -> int:
         failed += 1
     except RuntimeError:
         print("  PASS  PAPER_FEED order URL refused")
+
+    try:
+        assert_no_order_urls("https://api.binance.com/api/v3/depth?symbol=ETHUSDC")
+        print("  PASS  depth URL allowed (read-only)")
+    except RuntimeError:
+        print("  FAIL  depth URL should be allowed")
+        failed += 1
+
+    book = synthetic_orderbook(2500.0, qty_per_level=0.05)
+    snap = orderbook_to_snapshot(book)
+    roundtrip = parse_orderbook_snapshot(snap)
+    if len(roundtrip["asks"]) != len(book["asks"]):
+        print("  FAIL  orderbook snapshot roundtrip")
+        failed += 1
+    else:
+        print("  PASS  orderbook snapshot roundtrip")
+
+    depth_path = data_root / "depth_test.jsonl"
+    row = DepthWormLog(depth_path).append_snapshot(symbol="ETHUSDC", orderbook=book)
+    if row.get("action") != "DEPTH_SNAPSHOT" or row.get("live_execution") is not False:
+        print("  FAIL  DepthWormLog")
+        failed += 1
+    else:
+        print("  PASS  DepthWormLog append")
 
     led = PaperLedger(starting_balance_eur=Decimal("1000.00"))
     buy = led.sim_buy(Decimal("0.1"), Decimal("2000"), signal_id="t0")
@@ -279,6 +308,11 @@ def run_five_dry_runs(enforcer: DSuiteEnforcer) -> int:
     bases = {"ETHUSDC": 2500.0, "BTCUSDC": 65000.0}
     prev = "0" * 64
     written = 0
+    paper_cfg = PaperTradingSettings.from_file()
+    fill_snapshots = 0
+
+    def _shadow_depth(_symbol: str, mid: float):
+        return synthetic_orderbook(mid, qty_per_level=0.05)
 
     for run_idx in range(N_RUNS):
         symbol = MARKETS[run_idx % len(MARKETS)]
@@ -289,8 +323,21 @@ def run_five_dry_runs(enforcer: DSuiteEnforcer) -> int:
             tenant_id="paper_dry_run",
             run_id=run_id,
             break_price_below=floor,
+            shadow_notional_eur=paper_cfg.shadow_notional_eur,
+            attach_orderbook=paper_cfg.attach_orderbook,
+            depth_fetcher=_shadow_depth,
+            depth_source="shadow_synthetic",
         )
         summary = runner.run(ReplayFeed(ticks))
+
+        worm_file = Path(summary.get("worm_path", ""))
+        if worm_file.is_file():
+            for line in worm_file.read_text(encoding="utf-8").splitlines():
+                if not line.strip():
+                    continue
+                ev = json.loads(line)
+                if ev.get("action") == "SIM_FILL" and ev.get("orderbook_snapshot"):
+                    fill_snapshots += 1
 
         if summary.get("live_execution") is not False:
             print(f"  FAIL  run {run_idx + 1} live_execution")
@@ -387,6 +434,11 @@ def run_five_dry_runs(enforcer: DSuiteEnforcer) -> int:
                     f"  PASS  audit JSONL ({N_RUNS} lines) → {AUDIT_PATH.relative_to(_ROOT)}"
                 )
                 print(f"  PASS  markets in audit: {sorted(markets_seen)}")
+                if fill_snapshots < 1:
+                    print("  FAIL  SIM_FILL missing orderbook_snapshot")
+                    failed += 1
+                else:
+                    print(f"  PASS  SIM_FILL orderbook_snapshot ({fill_snapshots} fills)")
 
     return failed
 

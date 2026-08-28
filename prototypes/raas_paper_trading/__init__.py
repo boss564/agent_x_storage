@@ -9,7 +9,16 @@ from prototypes.raas_paper_trading.config_loader import (
     config_manifest_hash,
 )
 from prototypes.raas_paper_trading.envelope_score import EnvelopeHitStats, score_envelope_hits
-from prototypes.raas_paper_trading.feed import PaperTick, ReplayFeed, fetch_binance_rest_sample
+from prototypes.raas_paper_trading.feed import (
+    PaperTick,
+    ReplayFeed,
+    assert_no_order_urls,
+    fetch_binance_depth,
+    fetch_binance_rest_sample,
+    orderbook_to_snapshot,
+    parse_orderbook_snapshot,
+)
+from prototypes.raas_paper_trading.depth_worm import DepthWormLog
 from prototypes.raas_paper_trading.ledger import (
     FeeSchedule,
     PaperLedger,
@@ -48,7 +57,12 @@ __all__ = [
     "SYNTHETIC_SPREAD_BPS",
     "calculate_dynamic_slippage",
     "config_manifest_hash",
+    "DepthWormLog",
+    "assert_no_order_urls",
+    "fetch_binance_depth",
     "fetch_binance_rest_sample",
+    "orderbook_to_snapshot",
+    "parse_orderbook_snapshot",
     "ledger_from_config",
     "score_envelope_hits",
     "synthetic_orderbook",

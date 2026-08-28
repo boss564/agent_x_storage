@@ -1,0 +1,12 @@
+[Unit]
+Description=RaaS passive Binance depth ingest (60s)
+After=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/ABS/PFAD/agent_x_storage
+Environment=PYTHONPATH=.
+ExecStart=/ABS/PFAD/agent_x_storage/scripts/raas_depth_ingest.sh
+
+[Install]
+WantedBy=multi-user.target

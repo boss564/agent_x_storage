@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Union
 
 from prototypes.raas_paper_trading.config_loader import PaperTradingSettings
+from prototypes.raas_paper_trading.feed import parse_orderbook_snapshot
 from prototypes.raas_paper_trading.ledger import FeeSchedule, SlippageSettings
 from prototypes.raas_paper_trading.slippage import (
     OrderBook,
@@ -35,9 +36,11 @@ class FillTuple:
     ts: str
     run_id: str
     worm_line_hash: Optional[str] = None
+    orderbook: Optional[OrderBook] = None
+    depth_source: Optional[str] = None
 
     def to_dict(self) -> Dict[str, str]:
-        return {
+        base = {
             "side": self.side,
             "qty": str(self.qty),
             "mark_price": str(self.mark_price),
@@ -46,6 +49,9 @@ class FillTuple:
             "run_id": self.run_id,
             "worm_line_hash": self.worm_line_hash or "",
         }
+        if self.depth_source:
+            base["depth_source"] = self.depth_source
+        return base
 
 
 def iter_jsonl(path: Path) -> Iterable[Dict[str, Any]]:
@@ -78,6 +84,14 @@ def load_fills_from_worm(path: Path) -> List[FillTuple]:
         qty = _d(row.get("qty", "0"))
         if qty <= 0:
             continue
+        ob: Optional[OrderBook] = None
+        depth_source = row.get("depth_source")
+        snap = row.get("orderbook_snapshot")
+        if snap:
+            try:
+                ob = parse_orderbook_snapshot(snap)
+            except ValueError:
+                ob = None
         fills.append(
             FillTuple(
                 side=side,
@@ -87,6 +101,8 @@ def load_fills_from_worm(path: Path) -> List[FillTuple]:
                 ts=str(row.get("ts", "")),
                 run_id=str(row.get("run_id") or run_id),
                 worm_line_hash=str(row.get("hash") or ""),
+                orderbook=ob,
+                depth_source=str(depth_source) if depth_source else None,
             )
         )
     return fills
@@ -222,7 +238,7 @@ def per_fill_cost(
         settings=settings,
         spread_bps=spread_bps,
         qty_per_level=qty_per_level,
-        orderbook=orderbook,
+        orderbook=orderbook if orderbook is not None else fill.orderbook,
     )
     side = fill.side.lower()
     exec_px, slip_pct, used_mode = slip.apply(
@@ -262,10 +278,16 @@ def replay_slippage_ab(
     sum_slip_fixed = Decimal("0")
     sum_slip_dynamic = Decimal("0")
     multi_level_fills = 0
+    fills_with_snapshot = 0
+    fills_live_depth = 0
 
     for fill in fills:
         if fill.qty > Decimal(str(qty_per_level)):
             multi_level_fills += 1
+        if fill.orderbook is not None:
+            fills_with_snapshot += 1
+            if fill.depth_source == "binance_rest_depth":
+                fills_live_depth += 1
         fixed = per_fill_cost(
             fill,
             slippage_mode="fixed",
@@ -281,6 +303,7 @@ def replay_slippage_ab(
             fees=fees,
             spread_bps=spread_bps,
             qty_per_level=qty_per_level,
+            orderbook=fill.orderbook,
         )
         fee_f = Decimal(fixed["fee_eur"])
         fee_d = Decimal(dynamic["fee_eur"])
@@ -319,15 +342,18 @@ def replay_slippage_ab(
             "spread_bps": spread_bps,
             "qty_per_level": qty_per_level,
             "fills_past_level_1": multi_level_fills,
+            "fills_with_orderbook_snapshot": fills_with_snapshot,
+            "fills_binance_rest_depth": fills_live_depth,
         },
+        "dynamic_book_note": (
+            "Dynamic replay uses orderbook_snapshot on each SIM_FILL when present; "
+            "otherwise synthetic_orderbook from mark_price "
+            f"(spread_bps={spread_bps}, qty_per_level={qty_per_level})."
+        ),
         "interpretation": replay_interpretation(
             spread_bps=spread_bps,
             fallback_percent=cfg.fallback_percent,
             qty_per_level=qty_per_level,
-        ),
-        "dynamic_book_note": (
-            "No historical depth in WORM — dynamic mode uses synthetic_orderbook "
-            f"from mark_price (spread_bps={spread_bps}, qty_per_level={qty_per_level})."
         ),
         "rows": rows,
         "diagnostic_only": True,

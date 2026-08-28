@@ -5,7 +5,11 @@ import json
 import urllib.request
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Iterator, List, Optional, Sequence
+from typing import Dict, Iterator, List, Optional, Sequence, Tuple, Union
+
+from prototypes.raas_paper_trading.slippage import OrderBook
+
+Level = Tuple[Union[float, str], Union[float, str]]
 
 
 @dataclass(frozen=True)
@@ -71,3 +75,44 @@ def assert_no_order_urls(url: str) -> None:
     for b in banned:
         if b.lower() in low:
             raise RuntimeError(f"order_send_forbidden: refused URL containing {b!r}")
+
+
+def parse_orderbook_snapshot(raw: object) -> OrderBook:
+    """Normalize WORM/API depth into bids/asks float tuples."""
+    if not isinstance(raw, dict):
+        raise ValueError("orderbook_snapshot must be a dict")
+    out: OrderBook = {"bids": [], "asks": []}
+    for side in ("bids", "asks"):
+        for item in raw.get(side) or []:
+            if not isinstance(item, (list, tuple)) or len(item) < 2:
+                continue
+            price, qty = float(item[0]), float(item[1])
+            if price > 0 and qty > 0:
+                out[side].append((price, qty))
+    if not out["bids"] or not out["asks"]:
+        raise ValueError("orderbook_snapshot needs non-empty bids and asks")
+    return out
+
+
+def orderbook_to_snapshot(book: OrderBook) -> Dict[str, List[List[str]]]:
+    """JSON-serializable depth for WORM lines."""
+    return {
+        "bids": [[str(p), str(q)] for p, q in book.get("bids") or []],
+        "asks": [[str(p), str(q)] for p, q in book.get("asks") or []],
+    }
+
+
+def fetch_binance_depth(
+    symbol: str,
+    *,
+    limit: int = 10,
+    timeout_s: float = 10.0,
+) -> OrderBook:
+    """Read-only public depth — no API key, no order path (Paket 2 / Phase B)."""
+    sym = symbol.upper()
+    url = f"https://api.binance.com/api/v3/depth?symbol={sym}&limit={int(limit)}"
+    assert_no_order_urls(url)
+    req = urllib.request.Request(url, headers={"User-Agent": "agent-x-paper/0"})
+    with urllib.request.urlopen(req, timeout=timeout_s) as resp:
+        raw = json.loads(resp.read().decode("utf-8"))
+    return parse_orderbook_snapshot(raw)

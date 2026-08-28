@@ -1,0 +1,11 @@
+[Unit]
+Description=Timer for RaaS depth ingest (every 60s)
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=60
+Persistent=true
+Unit=raas-depth-ingest.service
+
+[Install]
+WantedBy=timers.target

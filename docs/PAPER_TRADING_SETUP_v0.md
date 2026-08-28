@@ -149,7 +149,8 @@ Binance WS / Pyth (read-only)
 |--------|--------|
 | Diese Map | ✅ |
 | WS-Feed-Adapter + Ledger + Paper-WORM | ✅ Smoke (`make raas-paper-trading-smoke`) · Live-WS optional · 30-Tage gesperrt |
-| Gebühren/Slippage P3 | ✅ Config + Screen `make raas-paper-slippage-compare` · Replay `make raas-paper-slippage-replay` · MAP `docs/RaaS_PAPER_FEES_SLIPPAGE_v0.md` |
+| Gebühren/Slippage P3 | ✅ Config + Screen + Replay · MAP `docs/RaaS_PAPER_FEES_SLIPPAGE_v0.md` |
+| Depth + Shadow-Fills (Paket 2) | ✅ `make raas-depth-ingest` · `SIM_FILL.orderbook_snapshot` · MAP `docs/RaaS_PAPER_DEPTH_INGEST_v0.md` |
 | Paper-Report aus WORM (`exports/reports/`) | ✅ `make raas-paper-report` — **keine Sample-Fills**; Audit muss existieren |
 | Option 5 Flash-Crash-Retrospective | ✅ MAP `docs/RaaS_FLASH_CRASH_RETROSPECTIVE_v0.md` · `make raas-flash-crash-retro` (14d Smoke) / `--days 180` |
 | 30-Tage-Lauf | **gesperrt** bis Fee/Slippage-Manifest gehasht + Startsignal |

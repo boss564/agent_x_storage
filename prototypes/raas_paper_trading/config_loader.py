@@ -54,6 +54,12 @@ class PaperTradingSettings:
     orderbook_depth_levels: int
     initial_balance_eur: Decimal
     exchange_name: str
+    depth_symbols: tuple[str, ...]
+    depth_rest_limit: int
+    depth_worm_path: str
+    depth_interval_s: int
+    shadow_notional_eur: Decimal
+    attach_orderbook: bool
     config_hash: str
     config_path: str
 
@@ -64,10 +70,13 @@ class PaperTradingSettings:
         fees = raw.get("exchange", {}).get("fees", {})
         slip = raw.get("slippage", {})
         paper = raw.get("paper_trading", {})
+        depth = raw.get("depth_ingest", {})
+        shadow = raw.get("shadow_fill", {})
         if paper.get("live_execution") is True:
             raise ValueError("paper_trading.live_execution must be false")
         maker = Decimal(str(fees.get("maker", "0.00075")))
         taker = Decimal(str(fees.get("taker", "0.00075")))
+        symbols = depth.get("symbols") or ["ETHUSDC", "BTCUSDC"]
         return cls(
             maker_rate=maker,
             taker_rate=taker,
@@ -76,6 +85,12 @@ class PaperTradingSettings:
             orderbook_depth_levels=int(slip.get("orderbook_depth_levels", 10)),
             initial_balance_eur=Decimal(str(paper.get("initial_balance_eur", "1000.0"))),
             exchange_name=str(raw.get("exchange", {}).get("name", "binance")),
+            depth_symbols=tuple(str(s).upper() for s in symbols),
+            depth_rest_limit=int(depth.get("rest_limit", 10)),
+            depth_worm_path=str(depth.get("worm_path", "logs/worm/depth_snapshots.jsonl")),
+            depth_interval_s=int(depth.get("interval_s", 60)),
+            shadow_notional_eur=Decimal(str(shadow.get("notional_eur", "100.0"))),
+            attach_orderbook=bool(shadow.get("attach_orderbook", True)),
             config_hash=config_manifest_hash(p),
             config_path=str(p),
         )

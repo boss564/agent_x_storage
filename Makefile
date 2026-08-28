@@ -345,6 +345,12 @@ raas-paper-slippage-compare: ## P3 fixed vs dynamic slippage wiring screen (not 
 raas-paper-slippage-replay: ## P3 WORM SIM_FILL replay — fixed-tuple A/B (diagnostic)
 	PYTHONPATH=. python3 scripts/raas_paper_slippage_replay.py
 
+raas-depth-ingest: ## Phase B — passive Binance depth → logs/worm/depth_snapshots.jsonl
+	PYTHONPATH=. python3 scripts/raas_depth_ingest.py
+
+raas-depth-ingest-dry: ## Depth fetch smoke (no WORM append)
+	PYTHONPATH=. python3 scripts/raas_depth_ingest.py --dry-run
+
 raas-paper-report: ## Paper WORM → exports/reports/paper_trades_latest.md (no sample fills)
 	PYTHONPATH=. python3 services/exporter/agent_x_raas_exporter.py --mode paper_trading --format markdown
 
