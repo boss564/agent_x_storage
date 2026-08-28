@@ -7,6 +7,11 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 Level = Tuple[Union[float, Decimal], Union[float, Decimal]]
 OrderBook = Dict[str, List[Level]]
 
+# Synthetic book defaults (replay/compare when no live depth).
+# Spread is price-proportional (bps); depth per level is absolute coin qty.
+SYNTHETIC_SPREAD_BPS = 5.0
+SYNTHETIC_QTY_PER_LEVEL = 0.1  # ETH/USDC-like; >0.1 coin walks past level 1
+
 
 def _f(x: Union[float, Decimal]) -> float:
     return float(x)
@@ -104,11 +109,16 @@ def calculate_dynamic_slippage(
 def synthetic_orderbook(
     mid: float,
     *,
-    spread_bps: float = 5.0,
+    spread_bps: float = SYNTHETIC_SPREAD_BPS,
     depth_levels: int = 10,
-    qty_per_level: float = 1.0,
+    qty_per_level: float = SYNTHETIC_QTY_PER_LEVEL,
 ) -> OrderBook:
-    """Deterministic book for smoke/compare when no live depth feed."""
+    """Deterministic book for smoke/compare when no live depth feed.
+
+    Note: spread_bps is relative to mid; qty_per_level is absolute base-asset units.
+    Orders that fit entirely in level 1 see constant dynamic slippage (~spread_bps/2),
+    independent of size — multi-level walk only when order_size > qty_per_level.
+    """
     half = mid * (spread_bps / 10000.0) / 2.0
     asks: List[Level] = []
     bids: List[Level] = []

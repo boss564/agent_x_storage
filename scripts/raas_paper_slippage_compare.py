@@ -27,7 +27,11 @@ from prototypes.raas_paper_trading.ledger import (  # noqa: E402
     SlippageSettings,
     ledger_from_config,
 )
-from prototypes.raas_paper_trading.slippage import synthetic_orderbook  # noqa: E402
+from prototypes.raas_paper_trading.slippage import (  # noqa: E402
+    SYNTHETIC_QTY_PER_LEVEL,
+    SYNTHETIC_SPREAD_BPS,
+    synthetic_orderbook,
+)
 
 SCOPE = "DEFENSIVE_CAUSAL_GROUNDING"
 
@@ -77,9 +81,9 @@ def compare(*, sizes: List[float], mid: float = 2500.0) -> Dict[str, Any]:
     settings = PaperTradingSettings.from_file()
     book = synthetic_orderbook(
         mid,
-        spread_bps=5.0,
+        spread_bps=SYNTHETIC_SPREAD_BPS,
         depth_levels=settings.orderbook_depth_levels,
-        qty_per_level=0.05,
+        qty_per_level=SYNTHETIC_QTY_PER_LEVEL,
     )
     rows: List[Dict[str, Any]] = []
     for size in sizes:
@@ -123,9 +127,9 @@ def compare(*, sizes: List[float], mid: float = 2500.0) -> Dict[str, Any]:
         "fee_taker": str(settings.taker_rate),
         "rows": rows,
         "note": (
-            "Screen only — direction determined by fallback_percent vs synthetic book spread; "
-            "not an empirical estimate. First informative measurement = WORM replay with fixed "
-            "(side, qty, mark_price) tuples. Do not cite equity_delta as slippage tendency."
+            "Screen only — direction determined by spread_bps vs fallback_percent and "
+            "qty_per_level vs order sizes; not an empirical estimate. "
+            "First informative measurement = WORM replay with fixed tuples."
         ),
     }
 

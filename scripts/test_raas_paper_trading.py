@@ -45,6 +45,7 @@ from services.fail_closed_gate.d_suite_enforcer import (  # noqa: E402
 )
 
 AUDIT_PATH = _ROOT / "logs" / "worm" / "paper_trading_audit.jsonl"
+PERSIST_WORM_ROOT = _ROOT / "logs" / "worm" / "paper_runs"
 MARKETS = ("ETHUSDC", "BTCUSDC")
 N_RUNS = 5
 SCOPE = "DEFENSIVE_CAUSAL_GROUNDING"
@@ -52,6 +53,18 @@ SCOPE = "DEFENSIVE_CAUSAL_GROUNDING"
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _persist_worm(run_id: str, worm_path: str) -> Path | None:
+    """Copy per-run WORM into logs/worm/paper_runs for slippage replay."""
+    src = Path(worm_path)
+    if not src.is_file():
+        return None
+    dest = PERSIST_WORM_ROOT / run_id / "paper_trades.worm.jsonl"
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(src, dest)
+    return dest
+
 
 
 def _market_ticks(symbol: str, *, base: float, run_idx: int) -> List[PaperTick]:
@@ -153,6 +166,29 @@ def run_unit_smokes(*, data_root: Path) -> int:
             print("  PASS  ledger_from_config")
     except Exception as exc:  # noqa: BLE001
         print(f"  FAIL  paper_trading_config: {exc}")
+        failed += 1
+
+    try:
+        from prototypes.raas_paper_trading.replay import FillTuple, replay_slippage_ab
+
+        sample = [
+            FillTuple(
+                side="BUY",
+                qty=Decimal("0.04"),
+                mark_price=Decimal("2500"),
+                signal_id="replay-smoke",
+                ts="2026-08-28T00:00:00Z",
+                run_id="smoke",
+            )
+        ]
+        rep = replay_slippage_ab(sample)
+        if rep.get("fill_count") != 1 or "slippage_cost_delta_eur" not in rep.get("metrics", {}):
+            print("  FAIL  replay_slippage_ab")
+            failed += 1
+        else:
+            print("  PASS  replay_slippage_ab fixed-tuple A/B")
+    except Exception as exc:  # noqa: BLE001
+        print(f"  FAIL  replay_slippage_ab: {exc}")
         failed += 1
 
     pf = led.diagnostic_profit_factor()
@@ -308,9 +344,12 @@ def run_five_dry_runs(enforcer: DSuiteEnforcer) -> int:
 
         prev = _append_audit_line(AUDIT_PATH, stamped, prev_hash=prev)
         written += 1
+        worm_src = (summary.get("worm_path") or "")
+        persisted = _persist_worm(run_id, worm_src)
+        worm_note = f" worm→{persisted.name}" if persisted else ""
         print(
             f"  PASS  run {run_idx + 1}/{N_RUNS} {symbol} "
-            f"anchor={stamped['_worm_anchor_sha256'][:12]}…"
+            f"anchor={stamped['_worm_anchor_sha256'][:12]}…{worm_note}"
         )
 
     if written != N_RUNS:
@@ -372,6 +411,24 @@ def main() -> int:
     print("-" * 60)
     print("Five dry-runs + DSuiteEnforcer (D1–D4)")
     failed += run_five_dry_runs(enforcer)
+
+    if failed == 0 and PERSIST_WORM_ROOT.is_dir():
+        try:
+            from prototypes.raas_paper_trading.replay import load_all_fills, replay_slippage_ab
+
+            fills = load_all_fills(persist_dir=PERSIST_WORM_ROOT)
+            if fills:
+                rep = replay_slippage_ab(fills)
+                m = rep["metrics"]
+                print(
+                    f"  PASS  slippage replay {len(fills)} fills "
+                    f"slipΔ={m['slippage_cost_delta_eur']}€ feeΔ={m['fee_delta_eur']}€"
+                )
+            else:
+                print("  WARN  slippage replay: no persisted SIM_FILL rows")
+        except Exception as exc:  # noqa: BLE001
+            print(f"  FAIL  slippage replay: {exc}")
+            failed += 1
 
     # D3 quarantine smoke: shell must not hit arbitrary targets
     try:

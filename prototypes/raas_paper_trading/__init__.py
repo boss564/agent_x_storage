@@ -16,8 +16,18 @@ from prototypes.raas_paper_trading.ledger import (
     SlippageSettings,
     ledger_from_config,
 )
-from prototypes.raas_paper_trading.runner import PaperTradingRunner
-from prototypes.raas_paper_trading.slippage import calculate_dynamic_slippage, synthetic_orderbook
+from prototypes.raas_paper_trading.replay import (
+    FillTuple,
+    load_all_fills,
+    load_fills_from_worm,
+    replay_slippage_ab,
+)
+from prototypes.raas_paper_trading.slippage import (
+    SYNTHETIC_QTY_PER_LEVEL,
+    SYNTHETIC_SPREAD_BPS,
+    calculate_dynamic_slippage,
+    synthetic_orderbook,
+)
 from prototypes.raas_paper_trading.worm_log import PaperWormLog
 
 __all__ = [
@@ -26,10 +36,16 @@ __all__ = [
     "PaperLedger",
     "PaperTradingSettings",
     "PaperTick",
+    "FillTuple",
+    "load_all_fills",
+    "load_fills_from_worm",
+    "replay_slippage_ab",
     "PaperTradingRunner",
     "PaperWormLog",
     "ReplayFeed",
     "SlippageSettings",
+    "SYNTHETIC_QTY_PER_LEVEL",
+    "SYNTHETIC_SPREAD_BPS",
     "calculate_dynamic_slippage",
     "config_manifest_hash",
     "fetch_binance_rest_sample",
