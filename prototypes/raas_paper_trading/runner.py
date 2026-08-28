@@ -34,6 +34,8 @@ class PaperTradingRunner:
         attach_orderbook: bool = True,
         depth_fetcher: Optional[DepthFetcher] = None,
         depth_source: str = "shadow",
+        volatility_profile: Optional[str] = None,
+        pair_manifest_hash: Optional[str] = None,
     ) -> None:
         self.tenant_id = tenant_id
         self.run_id = run_id or str(uuid4())
@@ -44,6 +46,8 @@ class PaperTradingRunner:
         self.attach_orderbook = attach_orderbook
         self.depth_fetcher = depth_fetcher
         self.depth_source = depth_source
+        self.volatility_profile = volatility_profile
+        self.pair_manifest_hash = pair_manifest_hash
         self.predictions: List[Dict[str, Any]] = []
         self.observations: List[Dict[str, Any]] = []
         self._tick_n = 0
@@ -115,6 +119,10 @@ class PaperTradingRunner:
                 "qty": fill["qty"],
                 "mark_price": str(tick.price),
             }
+            if self.volatility_profile:
+                worm_row["volatility_profile"] = self.volatility_profile
+            if self.pair_manifest_hash:
+                worm_row["pair_manifest_hash"] = self.pair_manifest_hash
             if depth is not None:
                 worm_row["orderbook_snapshot"] = orderbook_to_snapshot(depth.orderbook)
                 worm_row["depth_source"] = depth.source

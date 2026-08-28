@@ -57,6 +57,42 @@ Sizing remains **fixed EUR notional** (`shadow_fill.notional_eur`, default 100 �
 
 Interpret strata before citing aggregate slipΔ — crash fills in `> 30 s` need explicit caveat.
 
+## Empirical collection (Sammellauf)
+
+Long-running loop: live ticks + `make_live_depth_fetcher()` at each fill (no order send).
+
+```bash
+make raas-paper-collect              # default 24h, depth-mode live
+make raas-paper-collect-smoke        # 2 ticks, network smoke
+```
+
+Manifest: `logs/worm/paper_collect_manifest.jsonl` · PID: `logs/paper_collect.pid` ·
+per-symbol WORM copies under `logs/worm/paper_runs/<run_id>-<symbol>/`.
+
+For worm latency profile (`5–30 s` / `> 30 s` strata), run `make raas-depth-ingest` in parallel
+and a second collect with `--depth-mode worm`.
+
+### Shadow pairs (BTC / ETH / SOL)
+
+`config/paper_trading_config.json` → `pairs[]`: per-symbol `notional_eur` (fixed, no equity
+feedback) and `volatility_profile` (`low` / `medium` / `high`). `depth_ingest` and collect
+derive symbols from `pairs` when present. Replay reports `by_symbol` with profile labels —
+analyze pairs separately before citing aggregates.
+
+### Manifest hashes (`config_hash` vs `pair_manifest_hash`)
+
+| Hash | Scope | Use |
+|------|-------|-----|
+| `config_manifest_hash` | Entire `paper_trading_config.json` | Run freeze, 30-day eval amendment |
+| `pair_manifest_hash` | Per symbol: fees, slippage, `notional_eur`, `attach_orderbook` | Fill-comparable across runs |
+
+`volatility_profile` and other pairs are **excluded** from `pair_manifest_hash` — adding SOL does
+not invalidate BTC/ETH replay buckets. `SIM_FILL` rows carry `pair_manifest_hash`; replay
+`by_symbol.manifests[]` refuses silent cross-hash aggregation (`manifest_split` + warnings).
+
+Full-file `config_hash` still differs between the 2-pair and 3-pair collect runs — cite it per
+run window, but merge BTC fills across those runs only when `pair_manifest_hash` matches.
+
 ## Not in scope
 
 - Phase A historical backfill

@@ -354,6 +354,12 @@ raas-depth-ingest-dry: ## Depth fetch smoke (no WORM append)
 raas-paper-report: ## Paper WORM → exports/reports/paper_trades_latest.md (no sample fills)
 	PYTHONPATH=. python3 services/exporter/agent_x_raas_exporter.py --mode paper_trading --format markdown
 
+raas-paper-collect: ## Long paper loop — live depth at fill (no order send; default 24h)
+	bash scripts/raas_paper_collect_start.sh
+
+raas-paper-collect-smoke: ## Paper collect smoke — 2 ticks, live depth (network)
+	PYTHONPATH=. python3 scripts/raas_paper_collect.py --depth-mode live --max-ticks 2 --duration-s 30
+
 raas-flash-crash-retro: ## Option 5 — Z3-Gate risk layer vs historical klines (MAP v0)
 	PYTHONPATH=. python3 scripts/raas_flash_crash_retrospective.py --days 14
 

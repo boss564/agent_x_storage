@@ -43,6 +43,9 @@ class FillTuple:
     signal_id: str
     ts: str
     run_id: str
+    symbol: Optional[str] = None
+    volatility_profile: Optional[str] = None
+    pair_manifest_hash: Optional[str] = None
     worm_line_hash: Optional[str] = None
     orderbook: Optional[OrderBook] = None
     depth_source: Optional[str] = None
@@ -65,7 +68,21 @@ class FillTuple:
             base["snapshot_ts"] = self.snapshot_ts
         if self.snapshot_age_s is not None:
             base["snapshot_age_s"] = str(self.snapshot_age_s)
+        if self.symbol:
+            base["symbol"] = self.symbol
+        if self.volatility_profile:
+            base["volatility_profile"] = self.volatility_profile
+        if self.pair_manifest_hash:
+            base["pair_manifest_hash"] = self.pair_manifest_hash
         return base
+
+
+def _infer_symbol_from_run_id(run_id: str) -> Optional[str]:
+    lower = run_id.lower()
+    for suffix in ("btcusdc", "ethusdc", "solusdc"):
+        if lower.endswith(suffix):
+            return suffix.upper()
+    return None
 
 
 def iter_jsonl(path: Path) -> Iterable[Dict[str, Any]]:
@@ -117,6 +134,9 @@ def load_fills_from_worm(path: Path) -> List[FillTuple]:
                 age_s = None
         else:
             age_s = None
+        symbol = str(row.get("symbol") or "").upper() or None
+        if not symbol:
+            symbol = _infer_symbol_from_run_id(str(row.get("run_id") or run_id))
         fills.append(
             FillTuple(
                 side=side,
@@ -125,6 +145,13 @@ def load_fills_from_worm(path: Path) -> List[FillTuple]:
                 signal_id=str(row.get("signal_id", "")),
                 ts=str(row.get("ts", "")),
                 run_id=str(row.get("run_id") or run_id),
+                symbol=symbol,
+                volatility_profile=str(row["volatility_profile"])
+                if row.get("volatility_profile")
+                else None,
+                pair_manifest_hash=str(row["pair_manifest_hash"])
+                if row.get("pair_manifest_hash")
+                else None,
                 worm_line_hash=str(row.get("hash") or ""),
                 orderbook=ob,
                 depth_source=str(depth_source) if depth_source else None,
@@ -322,6 +349,75 @@ def _strata_to_report(strata: Dict[str, Dict[str, Any]]) -> Dict[str, Dict[str, 
     return out
 
 
+def _summarize_rows(rows: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
+    slip_d = sum(Decimal(r["slippage_cost_delta_eur"]) for r in rows)
+    fee_d = sum(Decimal(r["fee_delta_eur"]) for r in rows)
+    return {
+        "fill_count": len(rows),
+        "slippage_cost_delta_eur": str(slip_d.quantize(TWOPLACES)),
+        "fee_delta_eur": str(fee_d.quantize(TWOPLACES)),
+    }
+
+
+def _build_by_symbol_report(
+    rows: Sequence[Dict[str, Any]],
+    *,
+    settings: PaperTradingSettings,
+) -> tuple[Dict[str, Dict[str, Any]], List[str]]:
+    """Group by symbol, then pair_manifest_hash — no silent cross-manifest merge."""
+    symbol_rows: Dict[str, List[Dict[str, Any]]] = {}
+    for row in rows:
+        sym = str(row.get("symbol") or row["fill"].get("symbol") or "unknown")
+        symbol_rows.setdefault(sym, []).append(row)
+
+    by_symbol: Dict[str, Dict[str, Any]] = {}
+    warnings: List[str] = []
+    for sym, sym_rows in sorted(symbol_rows.items()):
+        manifest_rows: Dict[str, List[Dict[str, Any]]] = {}
+        for row in sym_rows:
+            pmh = row.get("pair_manifest_hash") or row["fill"].get("pair_manifest_hash")
+            key = str(pmh) if pmh else "unknown"
+            manifest_rows.setdefault(key, []).append(row)
+
+        manifests = []
+        for pmh, bucket_rows in sorted(manifest_rows.items()):
+            summary = _summarize_rows(bucket_rows)
+            manifests.append(
+                {
+                    "pair_manifest_hash": None if pmh == "unknown" else pmh,
+                    **summary,
+                }
+            )
+
+        profile = next(
+            (
+                r.get("volatility_profile") or r["fill"].get("volatility_profile")
+                for r in sym_rows
+                if r.get("volatility_profile") or r["fill"].get("volatility_profile")
+            ),
+            None,
+        )
+        if not profile and sym != "unknown":
+            profile = settings.volatility_profile_for(sym)
+
+        manifest_split = len(manifests) > 1
+        entry: Dict[str, Any] = {
+            "symbol": sym,
+            "volatility_profile": profile,
+            "manifest_split": manifest_split,
+            "manifests": manifests,
+        }
+        if manifest_split:
+            warnings.append(
+                f"{sym}: {len(manifests)} pair_manifest_hash values — "
+                "do not aggregate across manifests"
+            )
+        elif manifests:
+            entry.update(manifests[0])
+        by_symbol[sym] = entry
+    return by_symbol, warnings
+
+
 def replay_slippage_ab(
     fills: Sequence[FillTuple],
     *,
@@ -390,11 +486,16 @@ def replay_slippage_ab(
                 "slippage_cost_delta_eur": str(slip_delta),
                 "age_stratum": stratum,
                 "snapshot_age_s": fill.snapshot_age_s,
+                "symbol": fill.symbol,
+                "volatility_profile": fill.volatility_profile,
+                "pair_manifest_hash": fill.pair_manifest_hash,
             }
         )
 
     total_fee_delta = (sum_fee_dynamic - sum_fee_fixed).quantize(TWOPLACES)
     total_slip_delta = (sum_slip_dynamic - sum_slip_fixed).quantize(TWOPLACES)
+
+    by_symbol, manifest_warnings = _build_by_symbol_report(rows, settings=cfg)
 
     return {
         "schema": "raas_paper_slippage_replay_v1",
@@ -409,6 +510,8 @@ def replay_slippage_ab(
             "slippage_dynamic_total_eur": str(sum_slip_dynamic.quantize(TWOPLACES)),
         },
         "snapshot_age_strata": _strata_to_report(age_strata),
+        "by_symbol": by_symbol,
+        "manifest_warnings": manifest_warnings,
         "synthetic_book": {
             "spread_bps": spread_bps,
             "qty_per_level": qty_per_level,

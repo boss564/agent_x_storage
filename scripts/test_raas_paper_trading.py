@@ -203,6 +203,73 @@ def run_unit_smokes(*, data_root: Path) -> int:
             failed += 1
         else:
             print(f"  PASS  config fees VIP1 0.075% hash={cfg.config_hash[:12]}…")
+        expected_pairs = ("BTCUSDC", "ETHUSDC", "SOLUSDC")
+        if tuple(cfg.depth_symbols) != expected_pairs:
+            print(f"  FAIL  depth_symbols expected {expected_pairs} got {cfg.depth_symbols}")
+            failed += 1
+        elif len(cfg.pairs) != 3:
+            print(f"  FAIL  pairs count expected 3 got {len(cfg.pairs)}")
+            failed += 1
+        elif cfg.notional_for("SOLUSDC") != Decimal("100"):
+            print("  FAIL  SOLUSDC notional_eur")
+            failed += 1
+        elif cfg.volatility_profile_for("BTCUSDC") != "low":
+            print("  FAIL  BTC volatility_profile")
+            failed += 1
+        else:
+            print("  PASS  shadow pairs BTC/ETH/SOL + per-pair notional")
+        btc_pair_hash = cfg.pair_manifest_hash_for("BTCUSDC")
+        if len(btc_pair_hash) != 64:
+            print("  FAIL  pair_manifest_hash format")
+            failed += 1
+        else:
+            print(f"  PASS  pair_manifest_hash BTC={btc_pair_hash[:12]}…")
+        try:
+            from prototypes.raas_paper_trading.config_loader import pair_manifest_hash as pmh_fn
+
+            base_cfg = {
+                "exchange": {
+                    "name": "binance",
+                    "fees": {"maker": 0.00075, "taker": 0.00075},
+                },
+                "slippage": {
+                    "mode": "dynamic",
+                    "fallback_percent": 0.001,
+                    "orderbook_depth_levels": 10,
+                },
+                "paper_trading": {"live_execution": False, "initial_balance_eur": 1000},
+                "shadow_fill": {"notional_eur": 100.0, "attach_orderbook": True},
+                "pairs": [
+                    {"symbol": "BTCUSDC", "notional_eur": 100, "volatility_profile": "low"},
+                    {"symbol": "ETHUSDC", "notional_eur": 100, "volatility_profile": "medium"},
+                ],
+            }
+            three_pair = {
+                **base_cfg,
+                "pairs": [
+                    *base_cfg["pairs"],
+                    {"symbol": "SOLUSDC", "notional_eur": 100, "volatility_profile": "high"},
+                ],
+            }
+            if pmh_fn("BTCUSDC", raw=base_cfg) != pmh_fn("BTCUSDC", raw=three_pair):
+                print("  FAIL  BTC pair_manifest_hash changed when only SOL added")
+                failed += 1
+            else:
+                print("  PASS  pair_manifest_hash stable across pair-list expansion")
+            full_two = hashlib.sha256(
+                json.dumps(base_cfg, sort_keys=True, separators=(",", ":")).encode()
+            ).hexdigest()
+            full_three = hashlib.sha256(
+                json.dumps(three_pair, sort_keys=True, separators=(",", ":")).encode()
+            ).hexdigest()
+            if full_two == full_three:
+                print("  FAIL  full config hash should change when SOL added")
+                failed += 1
+            else:
+                print("  PASS  config_manifest_hash splits on SOL add (expected)")
+        except Exception as exc:  # noqa: BLE001
+            print(f"  FAIL  pair_manifest_hash isolation: {exc}")
+            failed += 1
         cfg_led = ledger_from_config(cfg)
         if cfg_led.fee_schedule.taker_bps != Decimal("7.5"):
             print("  FAIL  ledger_from_config fees")
@@ -233,8 +300,11 @@ def run_unit_smokes(*, data_root: Path) -> int:
         elif "snapshot_age_strata" not in rep:
             print("  FAIL  replay missing snapshot_age_strata")
             failed += 1
+        elif "by_symbol" not in rep:
+            print("  FAIL  replay missing by_symbol")
+            failed += 1
         else:
-            print("  PASS  replay_slippage_ab fixed-tuple A/B + age strata")
+            print("  PASS  replay_slippage_ab fixed-tuple A/B + age strata + by_symbol")
     except Exception as exc:  # noqa: BLE001
         print(f"  FAIL  replay_slippage_ab: {exc}")
         failed += 1

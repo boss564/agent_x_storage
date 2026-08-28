@@ -137,6 +137,23 @@ def main(argv: list[str] | None = None) -> int:
                 f"  strata {bucket.get('label')}: n={bucket['fill_count']} "
                 f"slipΔ={bucket['slippage_cost_delta_eur']}€"
             )
+    for sym, bucket in (result.get("by_symbol") or {}).items():
+        if bucket.get("manifest_split"):
+            for manifest in bucket.get("manifests") or []:
+                pmh = manifest.get("pair_manifest_hash") or "unknown"
+                print(
+                    f"  pair {sym} manifest={pmh[:12]}…: n={manifest['fill_count']} "
+                    f"slipΔ={manifest['slippage_cost_delta_eur']}€"
+                )
+        elif bucket.get("fill_count", 0) > 0:
+            profile = bucket.get("volatility_profile") or "—"
+            pmh = bucket.get("pair_manifest_hash") or "—"
+            print(
+                f"  pair {sym} ({profile}) manifest={str(pmh)[:12]}…: "
+                f"n={bucket['fill_count']} slipΔ={bucket['slippage_cost_delta_eur']}€"
+            )
+    for warning in result.get("manifest_warnings") or []:
+        print(f"  WARN  {warning}")
     for line in result.get("interpretation", replay_interpretation(
         spread_bps=args.spread_bps,
         fallback_percent=settings.fallback_percent,

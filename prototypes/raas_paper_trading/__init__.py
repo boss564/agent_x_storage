@@ -7,6 +7,7 @@ Never sends orders. Primary metric = envelope hit-rate, not profit factor.
 from prototypes.raas_paper_trading.config_loader import (
     PaperTradingSettings,
     config_manifest_hash,
+    pair_manifest_hash,
 )
 from prototypes.raas_paper_trading.envelope_score import EnvelopeHitStats, score_envelope_hits
 from prototypes.raas_paper_trading.feed import (
@@ -64,6 +65,7 @@ __all__ = [
     "SYNTHETIC_SPREAD_BPS",
     "calculate_dynamic_slippage",
     "config_manifest_hash",
+    "pair_manifest_hash",
     "DepthSnapshot",
     "DepthWormLog",
     "age_stratum",

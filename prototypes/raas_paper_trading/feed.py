@@ -102,6 +102,23 @@ def orderbook_to_snapshot(book: OrderBook) -> Dict[str, List[List[str]]]:
     }
 
 
+def fetch_binance_ticker(
+    symbol: str,
+    *,
+    timeout_s: float = 10.0,
+) -> PaperTick:
+    """Read-only last price — no API key, no order path."""
+    sym = symbol.upper()
+    url = f"https://api.binance.com/api/v3/ticker/price?symbol={sym}"
+    assert_no_order_urls(url)
+    req = urllib.request.Request(url, headers={"User-Agent": "agent-x-paper/0"})
+    with urllib.request.urlopen(req, timeout=timeout_s) as resp:
+        raw = json.loads(resp.read().decode("utf-8"))
+    price = float(raw["price"])
+    ts = datetime.now(timezone.utc).isoformat()
+    return PaperTick(symbol=sym, ts=ts, price=price, source="binance_rest_ticker")
+
+
 def fetch_binance_depth(
     symbol: str,
     *,

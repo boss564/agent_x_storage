@@ -9,6 +9,23 @@
     },
     "notes": "VIP-Tier 1: 0.075% Maker/Taker (10% Discount with BNB) — snapshot 2026-08-28"
   },
+  "pairs": [
+    {
+      "symbol": "BTCUSDC",
+      "notional_eur": 100.0,
+      "volatility_profile": "low"
+    },
+    {
+      "symbol": "ETHUSDC",
+      "notional_eur": 100.0,
+      "volatility_profile": "medium"
+    },
+    {
+      "symbol": "SOLUSDC",
+      "notional_eur": 100.0,
+      "volatility_profile": "high"
+    }
+  ],
   "slippage": {
     "mode": "dynamic",
     "fallback_percent": 0.001,
@@ -19,7 +36,7 @@
     "live_execution": false
   },
   "depth_ingest": {
-    "symbols": ["ETHUSDC", "BTCUSDC"],
+    "symbols": ["BTCUSDC", "ETHUSDC", "SOLUSDC"],
     "rest_limit": 10,
     "worm_path": "logs/worm/depth_snapshots.jsonl",
     "interval_s": 60
