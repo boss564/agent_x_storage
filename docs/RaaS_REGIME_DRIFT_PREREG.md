@@ -65,37 +65,45 @@ Der **9-Agent-Schwarm** (A5/A7) entscheidet über **m = 4** korrelierte KS-Tests
 
 Kein Live-Loop — offline auf `paper_trades.worm.jsonl` oder nach Collect-Ende.
 
-## Multiplizität — `p_min` über korrelierte Merkmale (v0, dokumentiert)
+## Multiplizität — `p_min` / Bonferroni über m = 4 korrelierte Merkmale
 
-**Entscheidungsvariable:** A7 nutzt `p_min = min(p₁,…,p_m)` über alle Features der Feature-Matrix (Schwarm: **m = 4**).
-Es gibt **keine** Holm-/Bonferroni-Korrektur in v0 — bewusst, um den Drift-Detektor nicht zusätzlich zu dämpfen.
-Stattdessen: **Cooling-Off** (3 aufeinanderfolgende Zyklen mit `regime_flag ≥ 2`) als Run-Length-Filter für bestätigte CRITICAL-Alerts.
+**Entscheidungsvariable (Schwarm):** A7 wertet alle m = 4 Features aus (`log_return`, `abs_return`, `down_move`, `rolling_vol`).
 
-**Problem:** Das Minimum von m p-Werten ist unter H₀ nicht α-verteilt. Bei unabhängigen Tests gilt:
+Das Minimum von m p-Werten ist unter H₀ nicht α-verteilt. Bei unabhängigen Tests gilt:
 
 \[
 P(\min_i p_i < \alpha \mid H_0) = 1 - (1-\alpha)^m
 \]
 
-Die Merkmale stammen aus derselben Preisreihe (`log_return` → `abs_return`, `down_move`, `rolling_vol`) und sind **positiv korreliert**. Die effektive Rate liegt daher zwischen dem Einzeltest und der Unabhängigkeits-Obergrenze — nicht exakt ablesbar ohne Kalibrierlauf.
+Die Merkmale stammen aus derselben Preisreihe und sind **positiv korreliert** — die effektive Rate liegt zwischen Einzeltest und Unabhängigkeits-Obergrenze.
 
-| Schwelle | Einzeltest (m=1, perfekte Korrelation) | Obergrenze unabhängig (m=4) |
-|----------|----------------------------------------|-----------------------------|
-| Screen `KS_SCREEN_ALPHA = 0.05` | 5,0 % | 1 − 0,95⁴ ≈ **18,5 %** |
-| Kritisch `CRITICAL_ALPHA = 0.01` | 1,0 % | 1 − 0,99⁴ ≈ **3,9 %** |
+### Zwei Planungsstände (v1 vs v2)
 
-**Planungshaltung v0 (vor Live-Monitor, unter H₀):**
+| | **v1** (historisch, bis 2026-08-28) | **v2** (geltend ab 2026-08-28, Commit `c3b26645`) |
+|---|--------------------------------------|---------------------------------------------------|
+| Schema | `raas_regime_swarm_v1` | `raas_regime_swarm_v2` |
+| Screen-Regel | `p_min < 0.05` (unkorrigiert) | **Bonferroni:** ∃ Feature mit `p < α_eff`, `α_eff = 0.05/m = **0.0125**` |
+| Einzeltest (m=1) | 5,0 % | 1,25 % (= α_eff) |
+| Obergrenze unabhängig (m=4) | 1 − 0,95⁴ ≈ **18,5 %** | 1 − (1 − 0,0125)⁴ ≈ **4,9 %** |
+| **Planwert Screen/Zyklus** (Korrelation, Annahme) | **~10 %** | **~3 %** |
+| bei 24 Zyklen/Tag | **~2–3** Screen-Ereignisse/Tag | **~0,7** (~1/Tag) |
+| Cooling bestätigt | 3× `regime_flag ≥ 2` (Run-Length) | A1 adaptiv: 2× Unreliable / 5× Real-Drift |
+| `r₂³`-Näherung (bestätigt, i.i.d.) | bei r₂≈10 % → **~0,1 %** (~1/1.000 Zyklen) | niedriger (Bonferroni dämpft Screen); separat in 30-Tage-Eval |
 
-| Größe | Formel / Annahme | Größenordnung |
-|-------|------------------|---------------|
-| Screen-Treffer (`p_min < 0.05`, mind. ein Feature) | zwischen 5 % und 18,5 %; **Planwert ~10 %** pro Zyklus (Korrelation) | bei 24 Zyklen/Tag ≈ **2–3** Screen-Ereignisse/Tag |
-| `regime_flag = 1` (WARNING) | Zweig wenn nicht stabil und nicht kritisch (inkl. W₁-Gate) | Audit-Eintrag, kein bestätigter Stopp |
-| `regime_flag = 2` (CRITICAL-Roh) | `p_min < 0.01` **und** `W₁_mean > 0.01` | effektiv **r₂ ≈ 3–8 %** pro Zyklus (unter H₀, abhängig von W₁-Null) |
-| **Bestätigt** (`regime_flag_confirmed`, 3× flag≥2) | ≈ **r₂³** (i.i.d.-Näherung) | bei **r₂ = 10 %** → **0,1 %** ≈ **1 / 1.000 Zyklen** (~6 Wochen bei stündlichem Takt) |
+**v1:** Keine Bonferroni-Korrektur — bewusst empfindlich; Cooling-Off als Run-Length-Filter.
 
-Diese Zahlen sind **vorab festgehalten** (Pre-Reg), nicht nachträglich aus Läufen rekonstruiert. Nach 30-Tage-Collect: beobachtete Alarmrate vs. Tabelle berichten; Abweichung >2× löst Pre-Reg-Amendment aus, keine stille Schwellenanpassung — **ausgenommen**, wenn die Abweichung allein aus der i.i.d.-Näherung für `r₂³` folgt (überlappende Fenster / autokorrelierte Märkte machen aufeinanderfolgende Treffer wahrscheinlicher, ohne dass Schwellen falsch wären).
+**v2:** Bonferroni in A7 — gleiche Pre-Reg-Philosophie (Alarm bleibt bei `DRIFT_IID_UNRELIABLE`, nur Amendment gesperrt), aber **weniger Screen-Fehlalarme**.
 
-**Hinweis:** Permutation-KS pro Feature nutzt denselben `seed=42`; die Tests sind damit nicht stochastisch unabhängig — die Unabhängigkeits-Obergrenze bleibt eine **konservative** Worst-Case-Schranke.
+### 30-Tage-Eval & >2×-Regel
+
+Diese Zahlen sind **vorab festgehalten** (Pre-Reg), nicht nachträglich rekonstruiert.
+
+- **Vergleichsbasis:** immer die Zeile der **laufenden Schema-Version** (`swarm_message` / Report-`schema`).
+- **>2×-Amendment:** beobachtete Rate vs. **v2-Planwert** (ab 2026-08-28); Abweichung >2× → Pre-Reg-Amendment, keine stille Schwellenanpassung.
+- **Versionswechsel v1→v2** ist **kein** >2×-Datenbefund (erwartete Screen-Rate fällt von ~10 % auf ~3 %) — dokumentierter Code-Stand, nicht Kalibrierung an Livedaten.
+- **Ausnahme i.i.d.:** Abweichung allein aus `r₂³`-Näherung (überlappende Fenster / Autokorrelation) löst kein Amendment aus.
+
+**Hinweis:** Permutation-KS pro Feature nutzt `seed=42`; Unabhängigkeits-Obergrenze bleibt konservative Worst-Case-Schranke.
 
 ## Fenster
 
@@ -111,7 +119,7 @@ Diese Zahlen sind **vorab festgehalten** (Pre-Reg), nicht nachträglich aus Läu
 | Wasserstein-1D | `drift_wasserstein` wenn D > 99%-Quantil der Null (within-run shuffle) |
 | **Regime drift** | OR über Features |
 
-**α = 0.01** (einseitig: beobachtetes KS ≥ permutiert) · Schwarm-A7 nutzt zusätzlich `p_min` über m Merkmale (siehe Multiplizität).
+**α = 0.01** (Legacy `regime_drift.assess_price_series`) · Schwarm-A7 v2: Bonferroni `α_eff = KS_SCREEN_ALPHA/m` (siehe Multiplizität).
 
 `definition_hash()` friert Parameter ein (`prototypes/raas_paper_trading/regime_drift.py`).
 

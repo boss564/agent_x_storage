@@ -1,0 +1,40 @@
+# Baustein 2 — Regime-Drift-Schwarm smoke (17 checks, Bonferroni v2 plan)
+name: RaaS Regime Drift Smoke
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'prototypes/raas_paper_trading/regime_drift.py'
+      - 'prototypes/raas_paper_trading/regime_swarm/**'
+      - 'scripts/raas_regime_drift_monitor.py'
+      - 'scripts/test_raas_regime_drift.py'
+      - 'docs/RaaS_REGIME_DRIFT_PREREG.md'
+      - 'Makefile'
+  pull_request:
+    paths:
+      - 'prototypes/raas_paper_trading/regime_drift.py'
+      - 'prototypes/raas_paper_trading/regime_swarm/**'
+      - 'scripts/raas_regime_drift_monitor.py'
+      - 'scripts/test_raas_regime_drift.py'
+      - 'docs/RaaS_REGIME_DRIFT_PREREG.md'
+      - 'Makefile'
+  workflow_dispatch:
+
+jobs:
+  regime-drift-smoke:
+    name: make raas-regime-drift-smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Regime drift swarm smoke (17/17)
+        run: make raas-regime-drift-smoke
