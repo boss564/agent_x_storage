@@ -12,6 +12,7 @@ on:
       - "charts/regime-swarm/**"
       - "Dockerfile.regime-swarm"
       - "scripts/run_regime_swarm_daemon.py"
+      - ".github/workflows/regime-swarm-helm.yml"
 
 jobs:
   helm-lint:
@@ -35,6 +36,9 @@ jobs:
           mkdir -p chart-artifacts
           helm package charts/regime-swarm --destination chart-artifacts
           ls -la chart-artifacts
+
+      - name: Install Z3 solver (P6 smoke)
+        run: pip install 'z3-solver>=4.13.0'
 
       - name: P6 leader Z3 smoke
         run: PYTHONPATH=. python3 scripts/test_regime_leader_z3.py
