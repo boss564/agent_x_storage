@@ -1,0 +1,27 @@
+# One-shot infra-gate smoke (A0/A2.5) — not a long-running daemon.
+#
+#   docker compose -f docker-compose.regime-swarm-smoke.yml build
+#   docker compose -f docker-compose.regime-swarm-smoke.yml run --rm swarm-smoke
+
+services:
+  swarm-smoke:
+    build:
+      context: .
+      dockerfile: Dockerfile.regime-swarm
+    container_name: regime-swarm-infra-smoke
+    environment:
+      SWARM_ENV: smoke
+      SWARM_DATA_ROOT: /data
+      SWARM_INFRA_GATES_ENABLED: "true"
+      SWARM_G0_MAX_PRICE_CHANGE_PCT: "20"
+      SWARM_G0_MAX_SPREAD_PCT: "5"
+      SWARM_G25_MAX_LATENCY_MS: "500"
+      SWARM_SMOKE_WORM_DIR: /data/worm/smoke
+      SWARM_SMOKE_AUDIT_DIR: /data/audit/smoke
+      LOG_LEVEL: INFO
+      PYTHONPATH: /app
+    volumes:
+      - ./data/worm/smoke:/data/worm/smoke
+      - ./logs/worm/smoke_audit:/data/audit/smoke
+    entrypoint: ["python3", "scripts/run_regime_swarm_infra_smoke.py"]
+    restart: "no"

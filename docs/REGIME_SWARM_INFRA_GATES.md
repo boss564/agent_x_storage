@@ -73,9 +73,14 @@ Legacy aliases `G0_*` / `G25_*` / `INFRA_GATES_ENABLED` are also read by `InfraG
 ```bash
 PYTHONPATH=. python3 scripts/test_infrastructure_gates.py
 # INFRASTRUCTURE_GATES_PASS
+
+make raas-regime-swarm-infra-smoke
+# REGIME_SWARM_INFRA_SMOKE_PASS — writes logs/worm/smoke_audit/*.json
+
+docker compose -f docker-compose.regime-swarm-smoke.yml run --rm swarm-smoke
 ```
 
-WORM fixture: 69 stable ticks + −50% flash on the last tick → A0 blocks; optional `m7_latency_ms: 600` on last SIGNAL → A2.5 blocks (M7 path).
+WORM format: JSONL `action=SIGNAL` + `mark_price` (not CSV). Flash fixture: 69 stable ticks + crash tick (−50% at G0=20%).
 
 ## Code layout
 

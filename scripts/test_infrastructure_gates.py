@@ -13,25 +13,11 @@ if str(_ROOT) not in sys.path:
 
 from prototypes.raas_paper_trading.regime_swarm.gates.config import InfraGatesConfig  # noqa: E402
 from prototypes.raas_paper_trading.regime_swarm.orchestrator import RegimeSwarmOrchestrator  # noqa: E402
-
-
-def _write_worm(path: Path, prices: list[float], *, transport_meta: dict | None = None) -> None:
-    lines: list[str] = []
-    for i, price in enumerate(prices):
-        row = {
-            "action": "SIGNAL",
-            "signal_id": f"sig-{i}",
-            "mark_price": str(price),
-            "symbol": "BTCUSDC",
-        }
-        if transport_meta is not None and i == len(prices) - 1:
-            row.update(transport_meta)
-        lines.append(json.dumps(row))
-    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-
-
-def _stable_prices(n: int, base: float = 100.0) -> list[float]:
-    return [base + (i % 5) * 0.01 for i in range(n)]
+from prototypes.raas_paper_trading.regime_swarm.worm_fixtures import (  # noqa: E402
+    ensure_smoke_worms,
+    stable_prices,
+    write_signal_worm,
+)
 
 
 def main() -> int:
@@ -47,8 +33,8 @@ def main() -> int:
         root = Path(tmp)
 
         crash_path = root / "flash_crash.jsonl"
-        crash_prices = _stable_prices(69, 100.0) + [50.0]
-        _write_worm(crash_path, crash_prices)
+        crash_prices = stable_prices(69, 100.0) + [50.0]
+        write_signal_worm(crash_path, crash_prices)
         crash_result = RegimeSwarmOrchestrator(infra_gates=cfg).run_cycle(
             worm_path=crash_path,
             symbol="BTCUSDC",
@@ -67,7 +53,7 @@ def main() -> int:
             print("PASS A0 flash crash blocks before A3–A8")
 
         ok_path = root / "stable.jsonl"
-        _write_worm(ok_path, _stable_prices(70))
+        write_signal_worm(ok_path, stable_prices(70))
         ok_result = RegimeSwarmOrchestrator(infra_gates=cfg).run_cycle(
             worm_path=ok_path,
             symbol="BTCUSDC",
@@ -83,9 +69,9 @@ def main() -> int:
             print(f"PASS stable worm status={ok_result.get('status')}")
 
         lat_path = root / "latency.jsonl"
-        _write_worm(
+        write_signal_worm(
             lat_path,
-            _stable_prices(70),
+            stable_prices(70),
             transport_meta={"m7_latency_ms": 600, "seq_num": 1},
         )
         lat_result = RegimeSwarmOrchestrator(infra_gates=cfg).run_cycle(

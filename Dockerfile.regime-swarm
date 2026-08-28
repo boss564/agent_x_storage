@@ -23,6 +23,7 @@ COPY agents_b2g/__init__.py ./agents_b2g/
 COPY agents_b2g/emergence/ ./agents_b2g/emergence/
 COPY prototypes/raas_paper_trading/ ./prototypes/raas_paper_trading/
 COPY scripts/run_regime_swarm_daemon.py ./scripts/
+COPY scripts/run_regime_swarm_infra_smoke.py ./scripts/
 COPY config/regime_swarm.json ./config/
 
 RUN mkdir -p /data/audit /data/state /data/reports /data/worm/paper_runs
