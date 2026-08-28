@@ -99,7 +99,7 @@ curl -s http://localhost:8080/metrics | grep -E '^drift_counter|^risk_multiplier
 | `risk_multiplier` | A8-Advisory-Multiplikator (Default 1.0, Soft-Adapt bei Unreliable) |
 | `gate_block_counter{gate="A0"}` | Nur bei Flash/Spread-Verletzung — **nicht** dauerhaft >0 bei normalen Ticks |
 | `sizing_gamma_current` | Serien vorhanden; **0 / `regime=none`** solange `POSITION_SIZING_ENABLED=false` (Strang D) |
-| `sizing_regime_trigger_total` | Placeholder `0` bis Strang B (`enabled=true`, ≥50 Fills) |
+| `sizing_regime_trigger_total` | Placeholder `0` bis Strang B (nach [Paper-Exit-Spec](PAPER_EXIT_ROUNDTRIP_SPEC.md)) |
 | `sizing_gate_block_total` | Placeholder `0` bis Strang B |
 | `swarm_up` | `1` solange Heartbeat frisch |
 
@@ -237,7 +237,7 @@ curl -s http://localhost:8080/metrics | grep -E '^sizing_'
 # Erwartung: sizing_gamma_current{regime="none"} 0, sizing_*_total{...} 0
 ```
 
-**Nächster Schritt:** [Strang B](POSITION_SIZING_REGIME_MAPPING.md#nach-implementierung) — `POSITION_SIZING_ENABLED=true`, wenn Paper-Ledger ≥50 Fills hat.
+**Nächster Schritt:** [Paper Exit](PAPER_EXIT_ROUNDTRIP_SPEC.md) (Round-Trip-Gate) → dann [Strang B](POSITION_SIZING_REGIME_MAPPING.md#nach-implementierung) (`POSITION_SIZING_ENABLED=true`).
 
 ## Erfolgskriterien (Zusammenfassung)
 
@@ -253,5 +253,6 @@ curl -s http://localhost:8080/metrics | grep -E '^sizing_'
 
 - [`docs/REGIME_SWARM_INFRA_GATES.md`](REGIME_SWARM_INFRA_GATES.md) — A0/A2.5, Cluster-Smoke
 - [`prototypes/raas_paper_trading/regime_swarm/README.md`](../prototypes/raas_paper_trading/regime_swarm/README.md) — Architektur
+- [`docs/PAPER_EXIT_ROUNDTRIP_SPEC.md`](PAPER_EXIT_ROUNDTRIP_SPEC.md) — Exit-Voraussetzung für B2 / Strang B
 - [`docs/POSITION_SIZING_REGIME_MAPPING.md`](POSITION_SIZING_REGIME_MAPPING.md) — γ-Map, Strang B/D
 - [`docs/RaaS_REGIME_DRIFT_PREREG.md`](RaaS_REGIME_DRIFT_PREREG.md) — Pre-Reg v2
