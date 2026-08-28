@@ -156,9 +156,24 @@ def test_gate_block_counter() -> None:
             _fail(f"A0 counter not incremented\n{body}")
 
 
+def test_charter_live_execution_env_blocks() -> None:
+    os.environ["SWARM_LIVE_EXECUTION"] = "true"
+    try:
+        from scripts.run_regime_swarm_daemon import _assert_charter_live_execution_off
+
+        try:
+            _assert_charter_live_execution_off()
+            _fail("SWARM_LIVE_EXECUTION=true must exit")
+        except SystemExit:
+            pass
+    finally:
+        os.environ.pop("SWARM_LIVE_EXECUTION", None)
+
+
 def main() -> int:
     test_parse_and_url_guards()
     test_mock_feed_to_worm()
+    test_charter_live_execution_env_blocks()
     test_feed_worm_daemon_counters()
     test_gate_block_counter()
     print("LIVE_FEED_PROMETHEUS_PASS")

@@ -80,6 +80,7 @@ config:
   LIVE_FEED_SYMBOL: "ETHUSDT"
   LIVE_FEED_WS_URL: "wss://stream.binance.com:9443/ws"
   LIVE_FEED_WORM_DIR: "/data/worm/live"
+  SWARM_LIVE_EXECUTION: "false"
 
 infrastructureGates:
   enabled: true
