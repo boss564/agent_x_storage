@@ -16,8 +16,15 @@ if str(_ROOT) not in sys.path:
 from prototypes.raas_paper_trading.ledger import PaperLedger
 from prototypes.raas_paper_trading.position_sizing.agents import TradeStatisticAggregator
 from prototypes.raas_paper_trading.position_sizing.audit_log import SizingAuditLog
-from prototypes.raas_paper_trading.position_sizing.config import position_sizing_enabled
-from prototypes.raas_paper_trading.position_sizing.integration import run_sizing_if_enabled
+from prototypes.raas_paper_trading.position_sizing.config import (
+    load_gamma_map,
+    position_sizing_enabled,
+    resolve_gamma,
+)
+from prototypes.raas_paper_trading.position_sizing.integration import (
+    run_sizing_if_enabled,
+    should_run_sizing,
+)
 from prototypes.raas_paper_trading.position_sizing.orchestrator import PositionSizingOrchestrator
 from prototypes.raas_paper_trading.position_sizing.types import (
     FORBIDDEN_EXPORT_KEYS,
@@ -151,6 +158,75 @@ def test_envelope_no_forbidden_keys() -> None:
         _fail("allowed keys misclassified")
 
 
+def test_resolve_gamma_iid_safe_mode() -> None:
+    gamma, source = resolve_gamma("DRIFT_IID_UNRELIABLE")
+    if gamma != 0.0 or source != "iid_safe_mode":
+        _fail(f"IID must force gamma=0 got {gamma} {source}")
+
+
+def test_resolve_gamma_regime_map() -> None:
+    gamma, source = resolve_gamma("HIGH_VOL_TREND")
+    if gamma != 0.40 or source != "regime_map":
+        _fail(f"HIGH_VOL_TREND gamma {gamma} {source}")
+
+
+def test_gamma_map_env_override() -> None:
+    os.environ["POSITION_SIZING_GAMMA_MAP"] = '{"STABLE": 0.99}'
+    try:
+        gmap = load_gamma_map()
+        if gmap["STABLE"] != 0.99:
+            _fail("env override STABLE")
+        if gmap["HIGH_VOL_TREND"] != 0.40:
+            _fail("defaults must remain for non-overridden regimes")
+    finally:
+        os.environ.pop("POSITION_SIZING_GAMMA_MAP", None)
+
+
+def test_trigger_skip_flag_zero() -> None:
+    os.environ["POSITION_SIZING_ENABLED"] = "true"
+    try:
+        if should_run_sizing(regime_flag=0):
+            _fail("flag 0 must not trigger")
+        out = run_sizing_if_enabled(
+            symbol="ETHUSDT",
+            mark_price=2500.0,
+            classified_regime="STABLE",
+            regime_flag=0,
+        )
+        if out is None or not out.get("skipped"):
+            _fail(f"expected skipped dict got {out}")
+        if out.get("reason") != "regime_flag_below_threshold":
+            _fail(f"reason {out.get('reason')}")
+    finally:
+        os.environ.pop("POSITION_SIZING_ENABLED", None)
+
+
+def test_orchestrator_regime_gamma_in_row() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        audit = Path(tmp) / "position_sizing.jsonl"
+        orch = PositionSizingOrchestrator(audit_path=audit, window_size=50, min_trades=50)
+        led = _ledger_with_sells(5)
+        out = orch.run_cycle(
+            ledger=led,
+            mark_price=Decimal("2500"),
+            symbol="ETHUSDT",
+            classified_regime="DRIFT_IID_UNRELIABLE",
+            regime_flag=1,
+            swarm_cycle_id="SWARM-TEST-1",
+        )
+        if out.get("gamma") != 0.0:
+            _fail(f"IID gamma {out.get('gamma')}")
+        if out.get("gamma_source") != "iid_safe_mode":
+            _fail(f"gamma_source {out.get('gamma_source')}")
+        if out.get("classified_regime") != "DRIFT_IID_UNRELIABLE":
+            _fail("classified_regime missing")
+        if out.get("linked_swarm_cycle_id") != "SWARM-TEST-1":
+            _fail("linked_swarm_cycle_id missing")
+        row = json.loads(audit.read_text(encoding="utf-8").strip().split("\n")[0])
+        if row.get("gamma_source") != "iid_safe_mode":
+            _fail("audit row missing gamma_source")
+
+
 def main() -> int:
     test_insufficient_history_hard_block()
     test_limit_exceeded_notional()
@@ -158,6 +234,11 @@ def main() -> int:
     test_audit_charter_stamps()
     test_feature_flag_default_off()
     test_envelope_no_forbidden_keys()
+    test_resolve_gamma_iid_safe_mode()
+    test_resolve_gamma_regime_map()
+    test_gamma_map_env_override()
+    test_trigger_skip_flag_zero()
+    test_orchestrator_regime_gamma_in_row()
     print("POSITION_SIZING_SUBSWARM_PASS")
     return 0
 
