@@ -1,0 +1,129 @@
+# Regime Swarm — StatefulSet (monitoring only; Active-Passive via leader ordinal 0)
+
+nameOverride: ""
+fullnameOverride: ""
+
+# 1 = active only; 2 = active (ordinal 0) + standby (ordinal 1)
+replicaCount: 1
+
+image:
+  repository: agentx-regime-swarm
+  pullPolicy: IfNotPresent
+  tag: ""
+
+imagePullSecrets: []
+
+statefulSet:
+  podManagementPolicy: OrderedReady
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      partition: 0
+
+leaderElection:
+  enabled: true
+  leaderOrdinal: 0
+
+service:
+  headless:
+    enabled: true
+  metrics:
+    enabled: true
+    type: ClusterIP
+    port: 8080
+    annotations:
+      prometheus.io/scrape: "true"
+      prometheus.io/port: "8080"
+      prometheus.io/path: "/metrics"
+
+ingress:
+  enabled: false
+  className: nginx
+  annotations: {}
+  hosts:
+    - host: regime-swarm.internal.example.com
+      paths:
+        - path: /metrics
+          pathType: Prefix
+  tls: []
+
+persistence:
+  enabled: true
+  storageClassName: ""
+  accessModes:
+    - ReadWriteOnce
+  size: 10Gi
+
+wormPersistence:
+  enabled: false
+  existingClaim: ""
+  mountPath: /data/worm/paper_runs
+  readOnly: true
+
+config:
+  SWARM_ENV: production
+  SWARM_DATA_ROOT: /data
+  SWARM_CONFIG: /app/config/regime_swarm.json
+  SWARM_METRICS_ENABLED: "true"
+  SWARM_METRICS_PORT: "8080"
+  CYCLE_INTERVAL_SECONDS: "60"
+  LOG_LEVEL: INFO
+  TZ: UTC
+
+secrets:
+  enabled: false
+  slackWebhookUrl: ""
+  pagerdutyIntegrationKey: ""
+
+resources:
+  limits:
+    cpu: 1000m
+    memory: 2Gi
+  requests:
+    cpu: 500m
+    memory: 1Gi
+
+terminationGracePeriodSeconds: 90
+
+livenessProbe:
+  exec:
+    command:
+      - /bin/sh
+      - -c
+      - test -f /tmp/swarm_heartbeat && find /tmp/swarm_heartbeat -mmin -2 | grep -q .
+  initialDelaySeconds: 30
+  periodSeconds: 30
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /health
+    port: metrics
+  initialDelaySeconds: 10
+  periodSeconds: 10
+  timeoutSeconds: 3
+  failureThreshold: 3
+
+lifecycle:
+  preStop:
+    exec:
+      command:
+        - /bin/sh
+        - -c
+        - sleep 10
+
+podAnnotations: {}
+podLabels: {}
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+serviceAccount:
+  create: false
+  name: ""
+
+podDisruptionBudget:
+  enabled: false
+  minAvailable: 1

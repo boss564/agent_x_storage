@@ -1,0 +1,16 @@
+apiVersion: v2
+name: regime-swarm
+description: >-
+  9-Agent Regime-Drift Schwarm (Baustein 2) — monitoring only, Pre-Reg konform,
+  DEFENSIVE_CAUSAL_GROUNDING / live_execution=false
+type: application
+version: 0.1.0
+appVersion: "2.0.0"
+keywords:
+  - agent-x
+  - regime-drift
+  - monitoring
+  - kubernetes
+maintainers:
+  - name: Agent X Quant-Ops
+    email: ops@agent-x.local

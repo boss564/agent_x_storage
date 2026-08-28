@@ -366,6 +366,38 @@ raas-regime-drift-monitor: ## Baustein 2 — 9-Agent KS/Wasserstein Schwarm on p
 raas-regime-drift-smoke: ## Baustein 2 unit + 9-agent swarm smoke
 	PYTHONPATH=. python3 scripts/test_raas_regime_drift.py
 
+raas-regime-swarm-build: ## Build regime swarm production image
+	docker build -f Dockerfile.regime-swarm -t agentx-regime-swarm .
+
+raas-regime-swarm-up: ## Start regime swarm daemon (compose, detached)
+	docker compose -f docker-compose.regime-swarm.yml up -d regime-swarm
+
+raas-regime-swarm-logs: ## Follow regime swarm container logs
+	docker compose -f docker-compose.regime-swarm.yml logs -f regime-swarm
+
+raas-regime-swarm-daemon: ## Run regime swarm daemon locally (foreground)
+	mkdir -p logs/audit logs/state logs/reports logs/worm/paper_runs
+	SWARM_DATA_ROOT=./logs PYTHONPATH=. python3 scripts/run_regime_swarm_daemon.py --config config/regime_swarm.json
+
+raas-regime-swarm-helm-lint: ## Lint regime swarm Helm chart
+	helm lint charts/regime-swarm
+
+raas-regime-swarm-helm-template: ## Render regime swarm manifests (dry-run)
+	helm template regime-swarm charts/regime-swarm -f charts/regime-swarm/values-dev.yaml
+
+raas-regime-swarm-helm-install: ## Install/upgrade regime swarm in namespace trading
+	helm upgrade --install regime-swarm charts/regime-swarm -n trading --create-namespace \
+		-f charts/regime-swarm/values-dev.yaml
+
+raas-regime-leader-z3: ## P6 — Z3/BFS leader invariant proofs (I1)
+	PYTHONPATH=. python3 scripts/test_regime_leader_z3.py
+
+raas-regime-shadow-up: ## Shadow cluster (2 replicas, chaos drills)
+	bash scripts/regime_swarm_shadow_cluster.sh up
+
+raas-regime-shadow-chaos: ## Shadow chaos battery (C-01…C-04, T-S1a/T-S2a ordinal)
+	PYTHONPATH=. python3 scripts/regime_swarm_shadow_chaos.py
+
 raas-flash-crash-retro: ## Option 5 — Z3-Gate risk layer vs historical klines (MAP v0)
 	PYTHONPATH=. python3 scripts/raas_flash_crash_retrospective.py --days 14
 

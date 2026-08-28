@@ -1,0 +1,23 @@
+Regime Swarm StatefulSet deployed (monitoring only — live_execution=false).
+
+  Release:     {{ .Release.Name }}
+  Namespace:   {{ .Release.Namespace }}
+  Replicas:    {{ .Values.replicaCount }}
+  Leader:      ordinal {{ .Values.leaderElection.leaderOrdinal }} (when leaderElection.enabled)
+  Headless:    {{ include "regime-swarm.headlessServiceName" . }}
+
+Pods:
+  kubectl get pods -n {{ .Release.Namespace }} -l app.kubernetes.io/instance={{ .Release.Name }}
+
+Metrics:
+  kubectl port-forward svc/{{ include "regime-swarm.fullname" . }} {{ .Values.service.metrics.port }}:{{ .Values.service.metrics.port }} -n {{ .Release.Namespace }}
+  curl -s http://127.0.0.1:{{ .Values.service.metrics.port }}/metrics | grep swarm_is_leader
+
+Active-Passive (2 replicas):
+  helm upgrade {{ .Release.Name }} charts/regime-swarm -n {{ .Release.Namespace }} --set replicaCount=2
+
+NOTE: Each pod has its own PVC (data-<sts>-0, data-<sts>-1).
+Standby pods skip A1/A7/A8; leader writes leader_snapshot.json on its PVC only.
+For automatic failover promotion use Kubernetes Lease API (future).
+
+Paper WORMs: mount or sync into /data/worm/paper_runs on the leader PVC.

@@ -70,6 +70,24 @@ class HealthResponse(BaseModel):
     version: str = ""
 
 
+class RegimeLeaderProofRequest(BaseModel):
+    """P6 — Infra-Guardian leader invariant (I1)."""
+    mode: str = Field(default="all", description="all | ordinal_z3 | lease_mutex_z3 | lease_bfs")
+    max_replicas: int = Field(default=2, ge=1, le=4)
+    leader_ordinal: int = Field(default=0, ge=0)
+    max_depth: int = Field(default=14, ge=1, le=32)
+
+
+class RegimeLeaderProofResponse(BaseModel):
+    schema: str = "infra_guardian_p6_z3_v0"
+    invariant: str
+    gate: str
+    failed_count: int
+    proofs: list
+    charter: str = "DEFENSIVE_CAUSAL_GROUNDING"
+    live_execution: bool = False
+
+
 # =============================================================================
 # Z3 Proof Engine
 # =============================================================================
@@ -174,6 +192,32 @@ async def prove_bho_invariant(req: BHOCheckRequest):
                 f"(Z3 SAT — Gegenbeispiel existiert)"
             ),
         )
+
+
+@app.post("/prove_regime_leader_invariant", response_model=RegimeLeaderProofResponse)
+async def prove_regime_leader_invariant_endpoint(req: RegimeLeaderProofRequest):
+    """
+    P6 — Beweist I1 (leaders_count <= 1) für Ordinal- und Lease-FSM-Entwurf.
+
+    gate=PASS → kein Split-Brain unter modellierten Übergängen.
+    Lease-Runtime-Code bleibt gate-closed bis Infra-Guardian §6 PASS.
+    """
+    from prototypes.raas_paper_trading.regime_swarm.leader_fsm_z3 import (
+        prove_regime_leader_invariant,
+    )
+
+    report = prove_regime_leader_invariant(
+        mode=req.mode,
+        max_replicas=req.max_replicas,
+        leader_ordinal=req.leader_ordinal,
+        max_depth=req.max_depth,
+    )
+    if report["gate"] != "PASS":
+        raise HTTPException(
+            status_code=422,
+            detail=report,
+        )
+    return RegimeLeaderProofResponse(**report)
 
 
 # =============================================================================
