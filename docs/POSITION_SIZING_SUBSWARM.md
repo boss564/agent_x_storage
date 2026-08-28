@@ -256,6 +256,7 @@ Items 1–2 blockieren PR nicht für v0, wenn Default γ=0.25 und Trigger=„jed
 
 ## Siehe auch
 
+- [`docs/POSITION_SIZING_REGIME_MAPPING.md`](POSITION_SIZING_REGIME_MAPPING.md) — Strang C: γ-Map & A7-Trigger (Review)
 - [`docs/REGIME_SWARM_LIVE_SHADOW_RUNBOOK.md`](REGIME_SWARM_LIVE_SHADOW_RUNBOOK.md)
 - [`services/fail_closed_gate/d_suite_enforcer.py`](../services/fail_closed_gate/d_suite_enforcer.py) — D1
 - [`prototypes/raas_paper_trading/ledger.py`](../prototypes/raas_paper_trading/ledger.py) — B1-Quelle
