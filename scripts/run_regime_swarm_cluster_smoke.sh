@@ -51,13 +51,14 @@ helm_test() {
   mkdir -p "$OUT_DIR"
 
   log "helm test $RELEASE (timeout $TIMEOUT)"
-  helm test "$RELEASE" -n "$NAMESPACE" --timeout "$TIMEOUT" >"$log_file" 2>&1 &
-  local helm_pid=$!
-
-  kubectl wait --for=condition=complete "job/${RELEASE}-smoke" -n "$NAMESPACE" --timeout=300s 2>/dev/null || true
+  if ! helm test "$RELEASE" -n "$NAMESPACE" --timeout "$TIMEOUT" 2>&1 | tee "$log_file"; then
+    die "helm test failed — see $log_file"
+  fi
 
   local pod=""
-  pod="$(kubectl get pod -n "$NAMESPACE" -l "job-name=${RELEASE}-smoke" -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)"
+  pod="$(kubectl get pod -n "$NAMESPACE" -l "job-name=${RELEASE}-smoke" \
+    --sort-by=.metadata.creationTimestamp \
+    -o jsonpath='{.items[-1].metadata.name}' 2>/dev/null || true)"
 
   if [[ -n "$pod" ]]; then
     kubectl logs -n "$NAMESPACE" "$pod" >>"$log_file" 2>&1 || true
@@ -65,8 +66,6 @@ helm_test() {
       log "copied pod_smoke_summary.json from $pod"
     fi
   fi
-
-  wait "$helm_pid" || die "helm test failed — see $log_file"
 
   if [[ ! -f "$out_json" ]]; then
     log "extract summary JSON from captured logs"
