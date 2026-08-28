@@ -1,6 +1,6 @@
 # Position Sizing — γ-Regime-Map & A7-Trigger (Strang C)
 
-**Status:** REVIEW (2026-08-28) · **Dokument only** — keine Code-Änderung in diesem PR  
+**Status:** **DECIDED** (2026-08-28) · Follow-up zu PR #20 · Implementierung in separatem Code-PR  
 **Parent:** [`docs/POSITION_SIZING_SUBSWARM.md`](POSITION_SIZING_SUBSWARM.md) (§4 freigegeben, PR #19 merged)  
 **Scope:** `DEFENSIVE_CAUSAL_GROUNDING` · `POSITION_SIZING_ENABLED=false` (Default bis Freigabe)
 
@@ -51,7 +51,7 @@ Voraussetzungen **kumulativ**:
 |---|-----------|-----------|
 | T0 | `POSITION_SIZING_ENABLED=true` | sonst: kein B-Zyklus, kein Audit |
 | T1 | Regime-Zyklus abgeschlossen (A7 `classified_regime` vorhanden) | B0 bekommt Regime-Kontext |
-| T2 | **`regime_flag >= 1`** (Vorschlag) | Sizing nur bei Drift / Unreliable / Trend — nicht bei reinem `STABLE`/`STABLE_SIDEWAYS` mit flag 0 |
+| T2 | **`regime_flag >= 1`** (**DECIDED**) | Sizing nur bei Drift / Unreliable / Trend — nicht bei `STABLE`/`STABLE_SIDEWAYS` (flag 0) |
 | T3 | Ledger ≥ **50** SELL-Roundtrips (B2 `min_trades`) | sonst: `INSUFFICIENT_HISTORY` (hard block, kein Fallback-p) |
 
 ### 3.1 Trigger-Alternativen (Review)
@@ -62,7 +62,7 @@ Voraussetzungen **kumulativ**:
 | B | Jeder Leader-Zyklus | Maximale Observability | Viele `INSUFFICIENT_HISTORY`-Zeilen ohne Fills |
 | C | Nur `regime_flag >= 2` | Nur Trend-Phasen | `LOW_LEVEL_DRIFT` unsichtbar für Sizing |
 
-**Review-Default:** Option **A**, bis Shadow-Daten Gegenargument liefern.
+**Entscheidung:** Option **A** (`regime_flag >= 1`) — **DECIDED** 2026-08-28.
 
 ### 3.2 `POSITION_SIZING_ENABLED=false`
 
@@ -106,44 +106,60 @@ Kein Helm in Phase 2-PR nötig — Env reicht (`POSITION_SIZING_GAMMA_*` oder JS
 
 ---
 
-## 6. Offene Review-Fragen
+## 6. Review-Entscheidungen (**DECIDED** 2026-08-28)
 
-### 6.1 `DRIFT_IID_UNRELIABLE`: γ = 0,00 oder Hold?
+### 6.1 `DRIFT_IID_UNRELIABLE`: γ = 0,00 — **DECIDED**
 
-| Option | Verhalten | Empfehlung |
-|--------|-----------|------------|
-| **Zero (Vorschlag)** | γ=0 → `hypothetical_notional=0`, Gate meist LIMIT_OK | Konsistent mit „Statistik nicht vertrauenswürdig“ |
-| Hold last γ | γ bleibt vom vorherigen Regime | Risiko: veralteter Trend in Unreliable-Phase |
+| Option | Verhalten | Entscheidung |
+|--------|-----------|--------------|
+| **Zero** | γ=0 → `hypothetical_notional=0`, Gate meist LIMIT_OK | **Gewählt** — charter-konservativ, kein Vertrauen in p/b |
+| Hold last γ | γ bleibt vom vorherigen Regime | Verworfen |
 
-**Vorschlag:** **Zero** + Audit-Feld `gamma_source: iid_safe_mode`.
+Audit: `gamma_source: iid_safe_mode` wenn `classified_regime=DRIFT_IID_UNRELIABLE`.
 
-### 6.2 Trigger: flag 1 oder nur flag 2?
+### 6.2 Trigger: flag ≥ 1 — **DECIDED**
 
-Siehe §3.1 — Default **flag ≥ 1**, damit `LOW_LEVEL_DRIFT` und `DRIFT_IID_UNRELIABLE` sichtbar bleiben (Safe Mode vs. moderate Schranke).
+Option **A** aus §3.1: Sizing bei `regime_flag >= 1` (Warnung + Trend), nicht nur flag 2.
 
-### 6.3 ConfigMap / Helm-Override für γ?
+### 6.3 γ-Override via Helm/ConfigMap — **DECIDED**
 
-| Option | Beschreibung |
-|--------|--------------|
-| **Env-JSON** (Vorschlag v1) | `POSITION_SIZING_GAMMA_MAP='{"LOW_LEVEL_DRIFT":0.2,...}'` |
-| Helm `config:` | Erst wenn Sizing in Cluster aktiv (≥50 Fills, Strang B) |
+| Mechanismus | Beschreibung |
+|-------------|--------------|
+| **Env-JSON** | `POSITION_SIZING_GAMMA_MAP` in ConfigMap (Helm `config:`) — Override ohne Image-Rebuild |
+| Default | Built-in Map aus §2, wenn Env leer |
 
----
-
-## 7. Freigabe-Kriterien (vor Implementierungs-PR)
-
-- [ ] γ-Tabelle von Team abgenickt (§2)
-- [ ] Trigger-Option A/B/C entschieden (§3.1)
-- [ ] `DRIFT_IID_UNRELIABLE`-Policy entschieden (§6.1)
-- [ ] Charter-Check: weiterhin nur Schranken-Export ([§4 Parent-Doc](POSITION_SIZING_SUBSWARM.md))
+Entwurf: [`charts/regime-swarm/values-live-shadow.yaml`](../charts/regime-swarm/values-live-shadow.yaml) (auskommentiert, bis `POSITION_SIZING_ENABLED=true`).
 
 ---
 
-## 8. Nächste Schritte nach Merge dieses Docs
+## 7. Freigabe-Kriterien — **abgeschlossen**
 
-1. **Implementierungs-PR:** γ-Lookup + A7-Trigger in `PositionSizingOrchestrator` + Daemon-Übergabe  
-2. **Strang B:** `POSITION_SIZING_ENABLED=true` im Shadow-Cluster (≥50 Fills)  
-3. **Strang D:** Prometheus §5 + optional Helm-Map  
+- [x] γ-Tabelle von Team abgenickt (§2) — **2026-08-28**
+- [x] Trigger-Option **A** (`regime_flag >= 1`) — **DECIDED** (§3.1, §6.2)
+- [x] `DRIFT_IID_UNRELIABLE` → γ=0 — **DECIDED** (§6.1)
+- [x] Charter-Check: weiterhin nur Schranken-Export ([§4 Parent-Doc](POSITION_SIZING_SUBSWARM.md))
+- [x] Helm γ-Override via `POSITION_SIZING_GAMMA_MAP` — **DECIDED** (§6.3)
+
+---
+
+## 8. Implementierungs-Plan (nächster Code-PR)
+
+| # | Komponente | Änderung |
+|---|------------|----------|
+| 1 | `position_sizing/config.py` | `DEFAULT_GAMMA_MAP` (§2), Parser `POSITION_SIZING_GAMMA_MAP` JSON |
+| 2 | `position_sizing/orchestrator.py` (B0/B3) | `resolve_gamma(classified_regime)` inkl. IID→0 |
+| 3 | `position_sizing/integration.py` | Trigger T2: `regime_flag >= 1`; Regime aus Report durchreichen |
+| 4 | `run_regime_swarm_daemon.py` | `drift_summary` → `run_sizing_if_enabled(..., regime=, regime_flag=)` |
+| 5 | `run_regime_swarm_daemon.py` | Prometheus: `sizing_gamma_current`, `sizing_gate_block_total`, `sizing_regime_trigger_total` |
+| 6 | Tests | γ-Lookup, Trigger skip bei flag 0, IID safe mode, Env-Override |
+| 7 | Helm | `POSITION_SIZING_GAMMA_MAP` in `values-live-shadow.yaml` (optional, auskommentiert) |
+
+**Default unverändert:** `POSITION_SIZING_ENABLED=false`.
+
+### Nach Implementierung
+
+1. **Strang B:** `POSITION_SIZING_ENABLED=true` im Shadow-Cluster (≥50 Fills)  
+2. **Strang D:** Cluster-Image rebuild + Metriken in Runbook
 
 ---
 
