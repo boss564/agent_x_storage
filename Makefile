@@ -410,6 +410,9 @@ raas-regime-swarm-ha-smoke: ## HA leader ordinal + lease fallback smoke
 raas-regime-lease-failover-forensic: ## Drill 2 lease timeline (kind shadow, post-release fix)
 	PYTHONPATH=. python3 scripts/regime_swarm_lease_failover_forensic.py
 
+raas-chaos-g1-harness: ## G1 chaos matrix offline harness (gate_core, 9 fixtures)
+	PYTHONPATH=. python3 scripts/chaos_engineering_g1_harness.py
+
 raas-flash-crash-retro: ## Option 5 — Z3-Gate risk layer vs historical klines (MAP v0)
 	PYTHONPATH=. python3 scripts/raas_flash_crash_retrospective.py --days 14
 
