@@ -217,6 +217,12 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _touch_heartbeat() -> None:
+    """Update liveness file — must run before first cycle completes (K8s probe)."""
+    HEARTBEAT.parent.mkdir(parents=True, exist_ok=True)
+    HEARTBEAT.write_text(_now(), encoding="utf-8")
+
+
 def _env_bool(name: str, default: bool = False) -> bool:
     raw = os.environ.get(name)
     if raw is None:
@@ -518,8 +524,7 @@ class RegimeSwarmDaemon:
     async def run_standby_tick(self) -> None:
         """Standby pod — heartbeat + metrics only; no A1/A7/A8 mutations."""
         self._sync_from_leader_snapshot()
-        HEARTBEAT.parent.mkdir(parents=True, exist_ok=True)
-        HEARTBEAT.write_text(_now(), encoding="utf-8")
+        _touch_heartbeat()
         row = {
             "event": "standby_tick",
             "schema": SWARM_SCHEMA,
@@ -581,8 +586,7 @@ class RegimeSwarmDaemon:
             json.dumps(summary, indent=2) + "\n",
             "utf-8",
         )
-        HEARTBEAT.parent.mkdir(parents=True, exist_ok=True)
-        HEARTBEAT.write_text(_now(), encoding="utf-8")
+        _touch_heartbeat()
         self._persist_state()
         self._write_leader_snapshot()
 
@@ -635,6 +639,7 @@ class RegimeSwarmDaemon:
             ),
             flush=True,
         )
+        _touch_heartbeat()
         try:
             while not self._shutdown.is_set():
                 tick_base = (
@@ -647,6 +652,7 @@ class RegimeSwarmDaemon:
                     await self.run_cycle()
                 except Exception as exc:
                     _metrics["errors_total"] += 1
+                    _touch_heartbeat()
                     print(
                         json.dumps({"event": "cycle_error", "error": str(exc), "ts": _now()}),
                         flush=True,
