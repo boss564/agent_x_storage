@@ -1,4 +1,4 @@
-# Shadow cluster overlay — namespace regime-swarm-shadow (Chaos P2/P5, no Lease code)
+# Shadow cluster overlay — namespace regime-swarm-shadow (Chaos P2/P5 + Lease runtime)
 # Usage: scripts/regime_swarm_shadow_cluster.sh up
 
 replicaCount: 2
@@ -6,6 +6,16 @@ replicaCount: 2
 leaderElection:
   enabled: true
   leaderOrdinal: 0
+
+lease:
+  enabled: true
+  runtimeEnabled: true
+  name: regime-swarm-leader
+  leaseDurationSeconds: 15
+  renewIntervalSeconds: 5
+
+serviceAccount:
+  create: true
 
 image:
   pullPolicy: IfNotPresent

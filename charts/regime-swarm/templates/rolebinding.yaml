@@ -1,0 +1,16 @@
+{{- if and .Values.serviceAccount.create .Values.lease.runtimeEnabled }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "regime-swarm.fullname" . }}-lease
+  labels:
+    {{- include "regime-swarm.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "regime-swarm.fullname" . }}-lease
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "regime-swarm.serviceAccountName" . }}
+    namespace: {{ .Release.Namespace }}
+{{- end }}

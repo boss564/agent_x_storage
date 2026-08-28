@@ -398,6 +398,18 @@ raas-regime-shadow-up: ## Shadow cluster (2 replicas, chaos drills)
 raas-regime-shadow-chaos: ## Shadow chaos battery (C-01…C-04, T-S1a/T-S2a ordinal)
 	PYTHONPATH=. python3 scripts/regime_swarm_shadow_chaos.py
 
+raas-regime-lease-t-s1a: ## T-S1a K8s Lease split-brain (requires kind-regime-shadow)
+	PYTHONPATH=. python3 scripts/regime_swarm_lease_t_s1a.py
+
+raas-regime-lease-t-s2b: ## T-S2b K8s Lease silent hang / renewal timeout
+	PYTHONPATH=. python3 scripts/regime_swarm_lease_t_s2b.py
+
+raas-regime-swarm-ha-smoke: ## HA leader ordinal + lease fallback smoke
+	PYTHONPATH=. python3 scripts/test_regime_swarm_ha.py
+
+raas-regime-lease-failover-forensic: ## Drill 2 lease timeline (kind shadow, post-release fix)
+	PYTHONPATH=. python3 scripts/regime_swarm_lease_failover_forensic.py
+
 raas-flash-crash-retro: ## Option 5 — Z3-Gate risk layer vs historical klines (MAP v0)
 	PYTHONPATH=. python3 scripts/raas_flash_crash_retrospective.py --days 14
 

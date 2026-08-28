@@ -37,3 +37,11 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- define "regime-swarm.headlessServiceName" -}}
 {{- printf "%s-headless" (include "regime-swarm.fullname" .) }}
 {{- end }}
+
+{{- define "regime-swarm.serviceAccountName" -}}
+{{- if .Values.serviceAccount.create }}
+{{- default (include "regime-swarm.fullname" .) .Values.serviceAccount.name }}
+{{- else }}
+{{- default "default" .Values.serviceAccount.name }}
+{{- end }}
+{{- end }}
