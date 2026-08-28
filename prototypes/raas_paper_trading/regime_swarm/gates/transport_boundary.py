@@ -1,4 +1,9 @@
-"""A2.5 — transport boundary (latency / frame / sequence → evaluate_gate)."""
+"""A2.5 — transport boundary (latency / frame / sequence → evaluate_gate).
+
+Chaos mapping (services.fail_closed_gate.gate_core):
+  CHAOS-02 → latency_spike on GateInput → M7_LATENCY_POISON
+  CHAOS-05/06/07 → oracle_ok=False → SIGNAL_INVALID
+"""
 from __future__ import annotations
 
 import hashlib

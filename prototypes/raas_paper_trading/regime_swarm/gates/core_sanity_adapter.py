@@ -1,4 +1,9 @@
-"""A0 — core sanity adapter (tick → GateInput → evaluate_gate)."""
+"""A0 — core sanity adapter (tick → GateInput → evaluate_gate).
+
+Chaos mapping (services.fail_closed_gate.gate_core):
+  CHAOS-01/08 → oracle_ok/scenario_ok → SIGNAL_INVALID
+  CHAOS-03/04 → exec_risk/cascade_risk elevation → P3_EXEC_RISK / P8_CASCADE_RISK
+"""
 from __future__ import annotations
 
 import math
