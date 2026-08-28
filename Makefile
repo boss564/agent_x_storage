@@ -419,6 +419,10 @@ raas-regime-swarm-helm-pod-smoke: ## Pod-style smoke (ConfigMap env + threshold 
 raas-regime-swarm-helm-test: ## helm test infra smoke Job (cluster; smokeTest.enabled=true)
 	helm test regime-swarm -n trading --timeout 5m
 
+raas-regime-swarm-cluster-smoke: ## Full cluster runbook: baseline G0=20 + override G0=10 (needs cluster)
+	chmod +x scripts/run_regime_swarm_cluster_smoke.sh
+	./scripts/run_regime_swarm_cluster_smoke.sh full
+
 raas-regime-lease-failover-forensic: ## Drill 2 lease timeline (kind shadow, post-release fix)
 	PYTHONPATH=. python3 scripts/regime_swarm_lease_failover_forensic.py
 

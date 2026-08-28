@@ -84,7 +84,7 @@ WORM format: JSONL `action=SIGNAL` + `mark_price` (not CSV). Flash fixture: 69 s
 
 ## Helm pod smoke (cluster)
 
-Runs the same three WORM scenarios inside the cluster image, reads ConfigMap thresholds from env, and optionally proves threshold reconfiguration with a borderline −15% flash (blocks at G0=10%, passes at G0=20%).
+Runs the same three WORM scenarios inside the cluster image, reads ConfigMap thresholds from env, and verifies **G0 propagation**: a −15% borderline tick must block or pass according to `infra_gates.g0_max_price_change_pct` (no internal threshold override).
 
 ```bash
 helm upgrade --install regime-swarm charts/regime-swarm -n trading \
@@ -102,11 +102,19 @@ make raas-regime-swarm-helm-pod-smoke
 # VERDICT: HELM_POD_SMOKE_PASS
 ```
 
-ConfigMap threshold override (example):
+ConfigMap threshold override (smoke Job reads **ConfigMap**, not Deployment env):
 
 ```bash
-kubectl set env deployment/regime-swarm -n trading SWARM_G0_MAX_PRICE_CHANGE_PCT=10
-# wait for rollout, then re-run helm test
+helm upgrade regime-swarm charts/regime-swarm -n trading --reuse-values \
+  --set infrastructureGates.G0_MAX_PRICE_CHANGE_PCT=10
+helm test regime-swarm -n trading
+```
+
+Or run the full runbook script:
+
+```bash
+chmod +x scripts/run_regime_swarm_cluster_smoke.sh
+IMAGE_REPO=local/regime-swarm IMAGE_TAG=latest ./scripts/run_regime_swarm_cluster_smoke.sh full
 ```
 
 Helm values (`smokeTest`):
@@ -114,9 +122,122 @@ Helm values (`smokeTest`):
 | Key | Default | Purpose |
 |-----|---------|---------|
 | `enabled` | `false` | Renders `templates/smoke-job.yaml` as `helm.sh/hook: test` |
-| `thresholdTest` | `true` | Borderline −15% flash at G0=10 vs G0=20 |
+| `thresholdTest` | `true` | `propagation_test`: −15% tick enforced via ConfigMap G0 |
 | `wormDir` | `/data/worm/smoke` | WORM fixtures written at Job start |
 | `summaryPath` | `/data/audit/pod_smoke_summary.json` | Machine-readable summary |
+| `deleteHookOnSuccess` | `true` | `false` keeps smoke Job pod until `ttlSecondsAfterFinished` (debug) |
+| `ttlSecondsAfterFinished` | `600` | Job TTL after completion |
+
+## Cluster-Test-Runbook (manuell)
+
+Voraussetzungen: laufender Cluster (Minikube/Kind/Remote), `kubectl`, Helm 3.x, Image gebaut und im Cluster ladbar.
+
+### 1. Image bereitstellen
+
+```bash
+docker build -f Dockerfile.regime-swarm -t local/regime-swarm:latest .
+minikube image load local/regime-swarm:latest          # Minikube
+# kind load docker-image local/regime-swarm:latest     # Kind
+```
+
+### 2. Installieren (G0=20 %)
+
+```bash
+kubectl create namespace trading --dry-run=client -o yaml | kubectl apply -f -
+
+helm upgrade --install regime-swarm charts/regime-swarm -n trading \
+  --set image.repository=local/regime-swarm \
+  --set image.tag=latest \
+  --set image.pullPolicy=IfNotPresent \
+  --set smokeTest.enabled=true \
+  --set infrastructureGates.enabled=true \
+  --set infrastructureGates.G0_MAX_PRICE_CHANGE_PCT=20
+
+kubectl rollout status deployment/regime-swarm -n trading
+```
+
+### 3. Baseline `helm test`
+
+```bash
+helm test regime-swarm -n trading --timeout 5m
+SMOKE_POD=$(kubectl get pod -n trading -l job-name=regime-swarm-smoke -o jsonpath='{.items[0].metadata.name}')
+kubectl logs -n trading "$SMOKE_POD"
+kubectl cp trading/"$SMOKE_POD":/data/audit/pod_smoke_summary.json ./smoke_summary_baseline.json
+```
+
+**Erwartung (Baseline):** `VERDICT: HELM_POD_SMOKE_PASS` in Logs; `pod_smoke_summary.json` mit `"status": "PASS"`.
+
+| Szenario | Erwartung bei G0=20 % |
+|----------|------------------------|
+| `flash_crash` (−50 %) | infra block (`A0_BLOCKED`) |
+| `valid_ticks` | infra OK (`INSUFFICIENT_WINDOWS`, pipeline partial) |
+| `latency_spike` (600 ms) | infra block (`A25_BLOCKED`) |
+| `propagation_test` (−15 %) | infra OK (enforced) |
+
+Beispiel-Ausschnitt `pod_smoke_summary.json` (Baseline G0=20):
+
+```json
+{
+  "schema": "regime_swarm_helm_pod_smoke_v1",
+  "status": "PASS",
+  "propagation_test": {
+    "passed": true,
+    "g0_max_price_change_pct": 20.0,
+    "borderline_drop_pct": 15.0,
+    "expect_infra_block": false,
+    "detail": "propagation: G0=20.0 -15% → infra_ok (enforced)"
+  }
+}
+```
+
+Override (G0=10) — gleicher Test, andere Durchsetzung:
+
+```json
+"propagation_test": {
+  "passed": true,
+  "g0_max_price_change_pct": 10.0,
+  "expect_infra_block": true,
+  "status": "INFRASTRUCTURE_BLOCKED",
+  "detail": "propagation: G0=10.0 -15% → BLOCK (enforced)"
+}
+```
+
+### 4. ConfigMap-Override (G0=10 %)
+
+**Wichtig:** Der Smoke-**Job** liest Schwellwerte aus der **ConfigMap** (`envFrom.configMapRef`), nicht aus dem Deployment. Override daher per `helm upgrade` oder `kubectl patch configmap`, nicht nur `kubectl set env deployment/...`.
+
+```bash
+helm upgrade regime-swarm charts/regime-swarm -n trading --reuse-values \
+  --set infrastructureGates.G0_MAX_PRICE_CHANGE_PCT=10
+kubectl rollout status deployment/regime-swarm -n trading
+
+helm test regime-swarm -n trading --timeout 5m
+SMOKE_POD=$(kubectl get pod -n trading -l job-name=regime-swarm-smoke -o jsonpath='{.items[0].metadata.name}')
+kubectl cp trading/"$SMOKE_POD":/data/audit/pod_smoke_summary.json ./smoke_summary_override.json
+```
+
+**Erwartung (Override):** `HELM_POD_SMOKE_PASS`; `propagation_test.expect_infra_block: true`; `status: INFRASTRUCTURE_BLOCKED` für −15 %.
+
+### 5. Automatisierung (optional)
+
+```bash
+./scripts/run_regime_swarm_cluster_smoke.sh full
+# Artefakte: logs/cluster_smoke/smoke_summary_baseline.json, smoke_summary_override.json
+```
+
+### 6. Aufräumen
+
+```bash
+helm uninstall regime-swarm -n trading
+kubectl delete job regime-swarm-smoke -n trading --ignore-not-found=true
+```
+
+### Cluster-Validierung (nach erfolgreichem Lauf eintragen)
+
+| Datum | G0 (ConfigMap) | helm test | propagation −15 % | Fazit |
+|-------|----------------|-----------|-------------------|-------|
+| 2026-08-28 | 20 % | PASS | infra OK (enforced) | ✅ kind-regime-shadow |
+| 2026-08-28 | 10 % | PASS | BLOCK (enforced) | ✅ Override wirksam |
 
 ## Code layout
 

@@ -2,8 +2,8 @@
 """Helm pod smoke — infra gates E2E inside cluster (ConfigMap env + audit).
 
 Runs in the regime-swarm image (Job / helm test hook). Wraps
-scripts/run_regime_swarm_infra_smoke.run_smoke() and optionally verifies
-G0 threshold sensitivity (-15% blocks at G0=10, passes at G0=20).
+scripts/run_regime_swarm_infra_smoke.run_smoke() and verifies ConfigMap G0
+propagation: −15% borderline tick must block or pass per infra_gates.g0_max_price_change_pct.
 
 Charter: DEFENSIVE_CAUSAL_GROUNDING · live_execution=false
 """
@@ -72,37 +72,50 @@ def _prepare_paths() -> Tuple[Path, Path]:
     return worm_dir, audit_dir
 
 
-def _run_threshold_sensitivity(worm_dir: Path) -> Tuple[bool, str]:
-    """−15% tick: block at G0=10, infra-ok at G0=20 (same WORM)."""
+_BORDERLINE_DROP_PCT = 0.15
+
+
+def _run_configmap_propagation(worm_dir: Path) -> Tuple[bool, str, Dict[str, Any]]:
+    """−15% tick enforced via ConfigMap G0 (no internal threshold override)."""
+    cfg = InfraGatesConfig.from_env()
+    g0 = cfg.g0_max_price_change_pct
+    drop_pct = _BORDERLINE_DROP_PCT
+    expect_block = drop_pct * 100.0 > g0
+
     borderline = worm_dir / "borderline_15pct.jsonl"
-    write_signal_worm(borderline, borderline_flash_prices(drop_pct=0.15))
+    write_signal_worm(borderline, borderline_flash_prices(drop_pct=drop_pct))
 
-    saved_g0 = os.environ.get("SWARM_G0_MAX_PRICE_CHANGE_PCT")
-    os.environ["SWARM_G0_MAX_PRICE_CHANGE_PCT"] = "10"
-    strict = RegimeSwarmOrchestrator(infra_gates=InfraGatesConfig.from_env())
-    strict_result = strict.run_cycle(
+    orch = RegimeSwarmOrchestrator(infra_gates=cfg)
+    result = orch.run_cycle(
         worm_path=borderline,
         symbol="BTCUSDC",
-        cycle_id="POD-SMOKE-G0-10",
+        cycle_id="POD-SMOKE-G0-PROP",
         write_audit=False,
     )
-    if strict_result.get("status") != "INFRASTRUCTURE_BLOCKED":
-        return False, f"G0=10: expected BLOCK, got {strict_result.get('status')}"
+    status = result.get("status")
+    infra = result.get("infrastructure") or {}
+    infra_ok = bool(infra.get("infrastructure_healthy"))
+    blocked = status == "INFRASTRUCTURE_BLOCKED"
 
-    os.environ["SWARM_G0_MAX_PRICE_CHANGE_PCT"] = "20"
-    lenient = RegimeSwarmOrchestrator(infra_gates=InfraGatesConfig.from_env())
-    lenient_result = lenient.run_cycle(
-        worm_path=borderline,
-        symbol="BTCUSDC",
-        cycle_id="POD-SMOKE-G0-20",
-        write_audit=False,
-    )
-    if lenient_result.get("status") == "INFRASTRUCTURE_BLOCKED":
-        return False, "G0=20: unexpected BLOCK for -15% borderline worm"
+    meta: Dict[str, Any] = {
+        "g0_max_price_change_pct": g0,
+        "borderline_drop_pct": drop_pct * 100.0,
+        "expect_infra_block": expect_block,
+        "status": status,
+        "infrastructure_healthy": infra_ok,
+        "g0_core_sanity": infra.get("g0_core_sanity"),
+    }
 
-    if saved_g0 is not None:
-        os.environ["SWARM_G0_MAX_PRICE_CHANGE_PCT"] = saved_g0
-    return True, "borderline -15%: block@G0=10 pass@G0=20"
+    if expect_block:
+        if not blocked:
+            return False, f"G0={g0}: expected INFRASTRUCTURE_BLOCKED for -{drop_pct*100:.0f}%", meta
+        detail = f"propagation: G0={g0} -{drop_pct*100:.0f}% → BLOCK (enforced)"
+    else:
+        if blocked:
+            return False, f"G0={g0}: unexpected INFRASTRUCTURE_BLOCKED for -{drop_pct*100:.0f}%", meta
+        detail = f"propagation: G0={g0} -{drop_pct*100:.0f}% → infra_ok (enforced)"
+
+    return True, detail, meta
 
 
 def main() -> int:
@@ -121,11 +134,11 @@ def main() -> int:
     if smoke_summary_path.is_file():
         smoke_summary = json.loads(smoke_summary_path.read_text(encoding="utf-8"))
 
-    threshold: Dict[str, Any] = {"skipped": True}
-    if _env_bool("HELM_POD_SMOKE_THRESHOLD_TEST", True):
-        ok, detail = _run_threshold_sensitivity(worm_dir)
-        threshold = {"skipped": False, "passed": ok, "detail": detail}
-        print(f"{'PASS' if ok else 'FAIL'} threshold_sensitivity — {detail}")
+    propagation: Dict[str, Any] = {"skipped": True}
+    if _env_bool("HELM_POD_SMOKE_PROPAGATION_TEST", _env_bool("HELM_POD_SMOKE_THRESHOLD_TEST", True)):
+        ok, detail, meta = _run_configmap_propagation(worm_dir)
+        propagation = {"skipped": False, "passed": ok, "detail": detail, **meta}
+        print(f"{'PASS' if ok else 'FAIL'} configmap_propagation — {detail}")
         if not ok:
             failed += 1
 
@@ -136,7 +149,8 @@ def main() -> int:
         "live_execution": False,
         "config": config,
         "smoke_summary": smoke_summary,
-        "threshold_test": threshold,
+        "propagation_test": propagation,
+        "threshold_test": propagation,  # legacy alias
         "failed": failed,
         "status": "PASS" if failed == 0 else "FAIL",
     }
