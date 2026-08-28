@@ -18,8 +18,8 @@ Helm-Overlay: [`charts/regime-swarm/values-live-shadow.yaml`](../charts/regime-s
 ```bash
 docker build -f Dockerfile.regime-swarm -t agentx-regime-swarm:live-shadow .
 
-# Kind (Live-Shadow-Cluster `kind-regime-shadow`) — bevorzugt
-kind load docker-image agentx-regime-swarm:live-shadow --name kind-regime-shadow
+# Kind: Cluster-NAME ist regime-shadow (kubectl context: kind-regime-shadow)
+kind load docker-image agentx-regime-swarm:live-shadow --name regime-shadow
 ```
 
 Für **Code-Updates auf einem laufenden Cluster** ohne PVC-Re-Create siehe [§9 Strang D](#9-strang-d--image-update-pvc-sicher-post-pr-22).
@@ -193,7 +193,7 @@ Nach Merge von **PR #22** (γ-Map, Trigger `regime_flag>=1`, `sizing_*`-Metriken
 ```bash
 git checkout main && git pull
 docker build -f Dockerfile.regime-swarm -t agentx-regime-swarm:live-shadow .
-kind load docker-image agentx-regime-swarm:live-shadow --name kind-regime-shadow
+kind load docker-image agentx-regime-swarm:live-shadow --name regime-shadow
 ```
 
 ### 9.2 Rollout (PVC-sicher — ohne `helm upgrade` bei PVC-Drift)
