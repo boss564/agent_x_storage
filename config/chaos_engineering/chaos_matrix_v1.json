@@ -1,0 +1,187 @@
+{
+  "schema": "chaos_matrix_config_v1",
+  "experiment_id": "REGATTA_FUZZ_2026",
+  "charter": "DEFENSIVE_CAUSAL_GROUNDING",
+  "live_execution": false,
+  "p6_layer": "P6-Trading",
+  "shadow_pipeline": {
+    "gate_evaluate_url": "http://fail-closed-gate-shadow:8080/v1/evaluate",
+    "gate_reset_url": "http://fail-closed-gate-shadow:8080/v1/reset",
+    "human_gate_default_closed": true
+  },
+  "run_policy": {
+    "complete_matrix": true,
+    "fail_if_any_case_fails": true,
+    "reset_between_cases": true,
+    "cycle_timeout_ms": 50,
+    "max_probe_latency_ms": 10
+  },
+  "probe_contract_ref": "docs/CHAOS_ENGINEERING_PREREG.md#1-probe-contract-a5",
+  "cases": [
+    {
+      "id": "CHAOS-01",
+      "enabled": true,
+      "fault_type": "ORDERBOOK_GAP",
+      "fixture_ref": "fixtures/CHAOS-01.json",
+      "injection": { "drivers": ["A2", "A3"], "network_faults": [] },
+      "expect": {
+        "injection_active": true,
+        "probe_status": "OK",
+        "decision": "BLOCKED",
+        "order_send": false,
+        "required_reasons_any": ["SIGNAL_INVALID"],
+        "allowed_reasons_only": ["SIGNAL_INVALID", "HUMAN_GATE_CLOSED"]
+      },
+      "tags": ["continuity", "orderbook"]
+    },
+    {
+      "id": "CHAOS-02",
+      "enabled": true,
+      "fault_type": "LATENCY_SPIKE",
+      "fixture_ref": "fixtures/CHAOS-02.json",
+      "injection": { "drivers": ["A3", "A4"], "network_faults": ["LATENCY_SPIKE"] },
+      "expect": {
+        "injection_active": true,
+        "probe_status": "OK",
+        "decision": "BLOCKED",
+        "order_send": false,
+        "required_reasons_any": ["M7_LATENCY_POISON"],
+        "allowed_reasons_only": ["M7_LATENCY_POISON", "HUMAN_GATE_CLOSED"]
+      },
+      "tags": ["network", "stale_data"]
+    },
+    {
+      "id": "CHAOS-03",
+      "enabled": true,
+      "fault_type": "FLASH_CRASH_MINUS_15",
+      "fixture_ref": "fixtures/CHAOS-03.json",
+      "injection": { "drivers": ["A2", "A3"], "network_faults": [] },
+      "expect": {
+        "injection_active": true,
+        "probe_status": "OK",
+        "decision": "BLOCKED",
+        "order_send": false,
+        "required_reasons_any": ["P8_CASCADE_RISK", "P3_EXEC_RISK", "SIGNAL_INVALID"],
+        "allowed_reasons_only": [
+          "P8_CASCADE_RISK",
+          "P3_EXEC_RISK",
+          "Z3_CASCADE_UNSAFE",
+          "SIGNAL_INVALID",
+          "HUMAN_GATE_CLOSED"
+        ]
+      },
+      "tags": ["outlier", "price"]
+    },
+    {
+      "id": "CHAOS-04",
+      "enabled": true,
+      "fault_type": "FLASH_CRASH_PLUS_25",
+      "fixture_ref": "fixtures/CHAOS-04.json",
+      "injection": { "drivers": ["A2", "A3"], "network_faults": [] },
+      "expect": {
+        "injection_active": true,
+        "probe_status": "OK",
+        "decision": "BLOCKED",
+        "order_send": false,
+        "required_reasons_any": ["P8_CASCADE_RISK", "P3_EXEC_RISK", "SIGNAL_INVALID"],
+        "allowed_reasons_only": [
+          "P8_CASCADE_RISK",
+          "P3_EXEC_RISK",
+          "Z3_CASCADE_UNSAFE",
+          "SIGNAL_INVALID",
+          "HUMAN_GATE_CLOSED"
+        ]
+      },
+      "tags": ["outlier", "price"]
+    },
+    {
+      "id": "CHAOS-05",
+      "enabled": true,
+      "fault_type": "FRAME_CHECKSUM_ERROR",
+      "fixture_ref": "fixtures/CHAOS-05.json",
+      "injection": { "drivers": ["A3", "A4"], "network_faults": ["FRAME_CORRUPT"] },
+      "expect": {
+        "injection_active": true,
+        "probe_status": "OK",
+        "decision": "BLOCKED",
+        "order_send": false,
+        "required_reasons_any": ["SIGNAL_INVALID"],
+        "allowed_reasons_only": ["SIGNAL_INVALID", "HUMAN_GATE_CLOSED"]
+      },
+      "tags": ["deserialize", "websocket"]
+    },
+    {
+      "id": "CHAOS-06",
+      "enabled": true,
+      "fault_type": "FRAME_TRUNCATE",
+      "fixture_ref": "fixtures/CHAOS-06.json",
+      "injection": { "drivers": ["A3", "A4"], "network_faults": ["FRAME_TRUNCATE"] },
+      "expect": {
+        "injection_active": true,
+        "probe_status": "OK",
+        "decision": "BLOCKED",
+        "order_send": false,
+        "required_reasons_any": ["SIGNAL_INVALID"],
+        "allowed_reasons_only": ["SIGNAL_INVALID", "HUMAN_GATE_CLOSED"]
+      },
+      "tags": ["parse", "websocket"]
+    },
+    {
+      "id": "CHAOS-07",
+      "enabled": true,
+      "fault_type": "SEQUENCE_GAP",
+      "fixture_ref": "fixtures/CHAOS-07.json",
+      "injection": { "drivers": ["A3", "A4"], "network_faults": ["SEQUENCE_GAP"] },
+      "expect": {
+        "injection_active": true,
+        "probe_status": "OK",
+        "decision": "BLOCKED",
+        "order_send": false,
+        "required_reasons_any": ["SIGNAL_INVALID"],
+        "allowed_reasons_only": ["SIGNAL_INVALID", "HUMAN_GATE_CLOSED"]
+      },
+      "tags": ["orderbook", "sequence"]
+    },
+    {
+      "id": "CHAOS-08",
+      "enabled": true,
+      "fault_type": "ZERO_PRICE",
+      "fixture_ref": "fixtures/CHAOS-08.json",
+      "injection": { "drivers": ["A2", "A3"], "network_faults": [] },
+      "expect": {
+        "injection_active": true,
+        "probe_status": "OK",
+        "decision": "BLOCKED",
+        "order_send": false,
+        "required_reasons_any": ["SIGNAL_INVALID"],
+        "allowed_reasons_only": ["SIGNAL_INVALID", "HUMAN_GATE_CLOSED"]
+      },
+      "tags": ["price", "sanity"]
+    },
+    {
+      "id": "CHAOS-09",
+      "enabled": true,
+      "fault_type": "VOLUME_SPIKE",
+      "fixture_ref": "fixtures/CHAOS-09.json",
+      "injection": { "drivers": ["A2", "A3"], "network_faults": [] },
+      "expect": {
+        "injection_active": true,
+        "probe_status": "OK",
+        "decision": "BLOCKED",
+        "order_send": false,
+        "required_reasons_any": ["P3_EXEC_RISK", "P8_CASCADE_RISK"],
+        "allowed_reasons_only": [
+          "P3_EXEC_RISK",
+          "P8_CASCADE_RISK",
+          "Z3_CASCADE_UNSAFE",
+          "HUMAN_GATE_CLOSED"
+        ]
+      },
+      "tags": ["volume", "liquidity"]
+    }
+  ],
+  "alerting": {
+    "audit_path": "/data/audit/chaos_engineering.jsonl",
+    "on_case_failure": "both"
+  }
+}

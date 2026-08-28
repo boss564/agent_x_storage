@@ -1,0 +1,25 @@
+{
+  "schema": "chaos_fixture_v1",
+  "id": "CHAOS-06",
+  "fault_type": "FRAME_TRUNCATE",
+  "injection_active": true,
+  "description": "Truncated WebSocket frame — parse error at injection boundary.",
+  "gate_input": {
+    "signal": {
+      "signal_id": "chaos-06-truncate",
+      "source": "P4",
+      "notional_eur": 0.0,
+      "stress_score": 0.0,
+      "oracle_ok": false,
+      "scenario_ok": false
+    },
+    "exec_risk": 0.0,
+    "cascade_risk": 0.0,
+    "latency_spike": null,
+    "bho_delta": 0.0
+  },
+  "injection_meta": {
+    "frame_fault": "truncate",
+    "pre_a3_note": "Future: dedicated FRAME_PARSE_ERROR reason when A3 adapter lands"
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "schema": "chaos_fixture_v1",
+  "id": "CHAOS-07",
+  "fault_type": "SEQUENCE_GAP",
+  "injection_active": true,
+  "description": "Sequence jump 100→200 — orderbook inconsistency.",
+  "gate_input": {
+    "signal": {
+      "signal_id": "chaos-07-seq-gap",
+      "source": "P4",
+      "notional_eur": 1000.0,
+      "stress_score": 0.3,
+      "oracle_ok": true,
+      "scenario_ok": false
+    },
+    "exec_risk": 0.2,
+    "cascade_risk": 0.2,
+    "latency_spike": null,
+    "bho_delta": 0.0
+  },
+  "injection_meta": {
+    "sequence_from": 100,
+    "sequence_to": 200,
+    "expected_mapping": "scenario_ok=false → SIGNAL_INVALID"
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "schema": "chaos_fixture_v1",
+  "id": "CHAOS-01",
+  "fault_type": "ORDERBOOK_GAP",
+  "injection_active": true,
+  "description": "Missing orderbook ticks — continuity break before gate evaluate.",
+  "gate_input": {
+    "signal": {
+      "signal_id": "chaos-01-gap",
+      "source": "P4",
+      "notional_eur": 1000.0,
+      "stress_score": 0.2,
+      "oracle_ok": false,
+      "scenario_ok": false
+    },
+    "exec_risk": 0.1,
+    "cascade_risk": 0.1,
+    "latency_spike": null,
+    "bho_delta": 0.0
+  },
+  "injection_meta": {
+    "tick_gap_ms": 5000,
+    "expected_mapping": "oracle_ok=false → SIGNAL_INVALID"
+  }
+}

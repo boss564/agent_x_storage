@@ -1,0 +1,25 @@
+{
+  "schema": "chaos_fixture_v1",
+  "id": "CHAOS-05",
+  "fault_type": "FRAME_CHECKSUM_ERROR",
+  "injection_active": true,
+  "description": "Corrupted WebSocket frame — mapped to invalid signal at gate boundary.",
+  "gate_input": {
+    "signal": {
+      "signal_id": "chaos-05-corrupt",
+      "source": "P4",
+      "notional_eur": 0.0,
+      "stress_score": 0.0,
+      "oracle_ok": false,
+      "scenario_ok": false
+    },
+    "exec_risk": 0.0,
+    "cascade_risk": 0.0,
+    "latency_spike": null,
+    "bho_delta": 0.0
+  },
+  "injection_meta": {
+    "frame_fault": "bit_flip",
+    "pre_a3_note": "A3 maps deserialize failure → oracle_ok=false before evaluate"
+  }
+}

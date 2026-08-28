@@ -1,0 +1,25 @@
+{
+  "schema": "chaos_fixture_v1",
+  "id": "CHAOS-02",
+  "fault_type": "LATENCY_SPIKE",
+  "injection_active": true,
+  "description": "Latency spike >500ms — M7 mad_gate_reject path.",
+  "gate_input": {
+    "signal": {
+      "signal_id": "chaos-02-latency",
+      "source": "P4",
+      "notional_eur": 1000.0,
+      "stress_score": 0.15,
+      "oracle_ok": true,
+      "scenario_ok": true
+    },
+    "exec_risk": 0.1,
+    "cascade_risk": 0.1,
+    "latency_spike": 600.0,
+    "bho_delta": 0.0
+  },
+  "injection_meta": {
+    "delay_ms": 600,
+    "expected_mapping": "latency_spike=600 → M7_LATENCY_POISON"
+  }
+}

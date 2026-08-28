@@ -1,0 +1,230 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-x.local/schemas/chaos_matrix_config_v1.json",
+  "title": "Chaos Engineering Matrix Config v1",
+  "description": "ConfigMap-loadable chaos matrix for P6-Trading shadow gate (fail_closed_gate / gate_core). Pre-Reg: docs/CHAOS_ENGINEERING_PREREG.md",
+  "type": "object",
+  "required": [
+    "schema",
+    "experiment_id",
+    "charter",
+    "live_execution",
+    "p6_layer",
+    "run_policy",
+    "probe_contract_ref",
+    "cases"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema": {
+      "const": "chaos_matrix_config_v1"
+    },
+    "experiment_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "charter": {
+      "const": "DEFENSIVE_CAUSAL_GROUNDING"
+    },
+    "live_execution": {
+      "const": false
+    },
+    "p6_layer": {
+      "const": "P6-Trading",
+      "description": "Distinct from Infra-Guardian P6-Infra (leader I1 Z3)."
+    },
+    "shadow_pipeline": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "gate_evaluate_url": {
+          "type": "string",
+          "format": "uri",
+          "default": "http://fail-closed-gate-shadow:8080/v1/evaluate"
+        },
+        "gate_reset_url": {
+          "type": "string",
+          "format": "uri"
+        },
+        "human_gate_default_closed": {
+          "type": "boolean",
+          "const": true
+        }
+      }
+    },
+    "run_policy": {
+      "type": "object",
+      "required": ["complete_matrix", "fail_if_any_case_fails", "reset_between_cases"],
+      "additionalProperties": false,
+      "properties": {
+        "complete_matrix": {
+          "type": "boolean",
+          "const": true,
+          "description": "Always run all enabled cases; never abort early (A7 isolation per case)."
+        },
+        "fail_if_any_case_fails": {
+          "type": "boolean",
+          "const": true,
+          "description": "Overall verdict FAIL if any case fails; first run remains informative."
+        },
+        "reset_between_cases": {
+          "type": "boolean",
+          "const": true,
+          "description": "A7 resets shadow gate state between cases."
+        },
+        "cycle_timeout_ms": {
+          "type": "number",
+          "minimum": 1,
+          "default": 50
+        },
+        "max_probe_latency_ms": {
+          "type": "number",
+          "minimum": 0,
+          "default": 10,
+          "description": "A8 upper bound on wall-clock probe latency (not gate internal)."
+        }
+      }
+    },
+    "probe_contract_ref": {
+      "type": "string",
+      "const": "docs/CHAOS_ENGINEERING_PREREG.md#1-probe-contract-a5"
+    },
+    "cases": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/chaos_case"
+      }
+    },
+    "alerting": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "audit_path": {
+          "type": "string",
+          "default": "/data/audit/chaos_engineering.jsonl"
+        },
+        "on_case_failure": {
+          "enum": ["log", "pagerduty", "both"]
+        }
+      }
+    }
+  },
+  "$defs": {
+    "gate_reason": {
+      "type": "string",
+      "enum": [
+        "SIGNAL_INVALID",
+        "P3_EXEC_RISK",
+        "P8_CASCADE_RISK",
+        "M7_LATENCY_POISON",
+        "Z3_CASCADE_UNSAFE",
+        "BHO_DELTA",
+        "HUMAN_GATE_CLOSED",
+        "HUMAN_GATE_OPEN",
+        "ALL_CHECKS_PASS"
+      ]
+    },
+    "probe_status": {
+      "type": "string",
+      "enum": ["OK", "PROBE_ERROR", "GATE_UNAVAILABLE", "DESERIALIZE_ERROR"]
+    },
+    "chaos_case": {
+      "type": "object",
+      "required": ["id", "enabled", "fault_type", "fixture_ref", "expect"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^CHAOS-[0-9]{2}$"
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "fault_type": {
+          "type": "string",
+          "minLength": 1
+        },
+        "fixture_ref": {
+          "type": "string",
+          "description": "Path relative to config/chaos_engineering/, e.g. fixtures/CHAOS-02.json"
+        },
+        "injection": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "drivers": {
+              "type": "array",
+              "items": {
+                "enum": ["A2", "A3", "A4"]
+              }
+            },
+            "network_faults": {
+              "type": "array",
+              "items": {
+                "enum": [
+                  "LATENCY_SPIKE",
+                  "FRAME_CORRUPT",
+                  "FRAME_TRUNCATE",
+                  "SEQUENCE_GAP"
+                ]
+              }
+            }
+          }
+        },
+        "expect": {
+          "type": "object",
+          "required": [
+            "injection_active",
+            "probe_status",
+            "decision",
+            "order_send",
+            "required_reasons_any"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "injection_active": {
+              "const": true
+            },
+            "probe_status": {
+              "const": "OK"
+            },
+            "decision": {
+              "const": "BLOCKED"
+            },
+            "order_send": {
+              "const": false,
+              "description": "Derived: decision != RELEASED. Must match gate_core semantics."
+            },
+            "required_reasons_any": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "$ref": "#/$defs/gate_reason"
+              },
+              "description": "At least one listed reason must appear in gate_verdict.reasons (fail-closed path, not crash)."
+            },
+            "allowed_reasons_only": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "$ref": "#/$defs/gate_reason"
+              },
+              "description": "Every reason in verdict must be subset of this list (forbids crash/missing-reason passes)."
+            },
+            "max_probe_latency_ms": {
+              "type": "number",
+              "minimum": 0
+            }
+          }
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}
