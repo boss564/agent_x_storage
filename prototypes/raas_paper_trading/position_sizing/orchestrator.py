@@ -18,6 +18,7 @@ from prototypes.raas_paper_trading.position_sizing.agents import (
     TradeStatisticAggregator,
 )
 from prototypes.raas_paper_trading.position_sizing.audit_log import SizingAuditLog
+from prototypes.raas_paper_trading.position_sizing.config import load_gamma_map, resolve_gamma
 from prototypes.raas_paper_trading.position_sizing.types import (
     GATE_INSUFFICIENT_HISTORY,
     GATE_LIMIT_EXCEEDED,
@@ -36,10 +37,12 @@ class PositionSizingOrchestrator:
         *,
         audit_path: Path,
         gamma: float = 0.25,
+        gamma_map: Optional[Dict[str, float]] = None,
         window_size: int = 50,
         min_trades: Optional[int] = None,
         risk_limit_fraction: float = 0.02,
     ) -> None:
+        self.gamma_map = gamma_map if gamma_map is not None else load_gamma_map()
         self.capital = CapitalManager()
         self.stats = TradeStatisticAggregator(
             window_size=window_size,
@@ -59,6 +62,9 @@ class PositionSizingOrchestrator:
         mark_price: Decimal,
         symbol: str,
         cycle_id: Optional[str] = None,
+        classified_regime: Optional[str] = None,
+        regime_flag: Optional[int] = None,
+        swarm_cycle_id: Optional[str] = None,
         stats_override: Optional[TradeStatisticAggregator] = None,
         write_audit: bool = True,
     ) -> Dict[str, Any]:
@@ -66,6 +72,9 @@ class PositionSizingOrchestrator:
         price = Decimal(str(mark_price))
         if price <= 0:
             raise ValueError("mark_price must be positive")
+
+        gamma, gamma_source = resolve_gamma(classified_regime, self.gamma_map)
+        self.kelly.gamma = gamma
 
         capital_eur = self.capital.total_capital_eur(ledger, price)
         max_notional = self.risk.max_notional_before_limit_breach_eur(capital_eur)
@@ -101,6 +110,10 @@ class PositionSizingOrchestrator:
             "schema": SIZING_SCHEMA,
             "cycle_id": cid,
             "symbol": symbol.upper(),
+            "classified_regime": classified_regime,
+            "regime_flag": regime_flag,
+            "gamma_source": gamma_source,
+            "linked_swarm_cycle_id": swarm_cycle_id,
             "capital_eur": float(capital_eur),
             "capital_source": "paper_ledger.mark_equity",
             "price_eur": float(price),

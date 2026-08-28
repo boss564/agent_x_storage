@@ -52,6 +52,10 @@ _metrics: Dict[str, Any] = {
     "gate_block_counter": {"A0": 0, "A2.5": 0},
     "risk_multiplier": 1.0,
     "ticks_last_cycle": 0,
+    "sizing_gamma_current": 0.0,
+    "sizing_gamma_regime": "none",
+    "sizing_gate_block_total": {},
+    "sizing_regime_trigger_total": {},
 }
 
 
@@ -66,6 +70,32 @@ def reset_metrics() -> None:
     _metrics["gate_block_counter"] = {"A0": 0, "A2.5": 0}
     _metrics["risk_multiplier"] = 1.0
     _metrics["ticks_last_cycle"] = 0
+    _metrics["sizing_gamma_current"] = 0.0
+    _metrics["sizing_gamma_regime"] = "none"
+    _metrics["sizing_gate_block_total"] = {}
+    _metrics["sizing_regime_trigger_total"] = {}
+
+
+def record_sizing_metrics(sizing: Optional[Dict[str, Any]]) -> None:
+    """Prometheus counters/gauges from one B0 cycle (skipped runs omitted)."""
+    if sizing is None or sizing.get("skipped"):
+        return
+    regime = str(sizing.get("classified_regime") or "UNKNOWN")
+    flag = sizing.get("regime_flag")
+    flag_s = str(flag) if flag is not None else "none"
+    triggers: Dict[Any, int] = _metrics["sizing_regime_trigger_total"]
+    key = (regime, flag_s)
+    triggers[key] = int(triggers.get(key, 0)) + 1
+
+    gamma = sizing.get("gamma")
+    if gamma is not None:
+        _metrics["sizing_gamma_current"] = float(gamma)
+        _metrics["sizing_gamma_regime"] = regime
+
+    gate = str(sizing.get("sizing_gate_decision") or "")
+    if gate in ("INSUFFICIENT_HISTORY", "LIMIT_EXCEEDED"):
+        blocks: Dict[str, int] = _metrics["sizing_gate_block_total"]
+        blocks[gate] = int(blocks.get(gate, 0)) + 1
 
 
 def _prom_label(value: str) -> str:
@@ -150,7 +180,36 @@ def render_metrics_text() -> str:
         "# TYPE risk_multiplier gauge",
         f"risk_multiplier {float(_metrics['risk_multiplier'])}",
         *gate_lines,
+        "# HELP sizing_gamma_current Last B0 Kelly gamma (regime-mapped)",
+        "# TYPE sizing_gamma_current gauge",
+        (
+            f'sizing_gamma_current{{regime="{_prom_label(str(_metrics["sizing_gamma_regime"]))}"}} '
+            f'{float(_metrics["sizing_gamma_current"])}'
+        ),
     ]
+    sizing_trigger_lines = [
+        "# HELP sizing_regime_trigger_total B0 cycles triggered by regime_flag threshold",
+        "# TYPE sizing_regime_trigger_total counter",
+    ]
+    for (regime, flag_s), count in sorted(_metrics["sizing_regime_trigger_total"].items()):
+        sizing_trigger_lines.append(
+            f'sizing_regime_trigger_total{{regime="{_prom_label(str(regime))}",regime_flag="{_prom_label(str(flag_s))}"}} {int(count)}'
+        )
+    if len(sizing_trigger_lines) == 2:
+        sizing_trigger_lines.append('sizing_regime_trigger_total{regime="none",regime_flag="none"} 0')
+
+    sizing_block_lines = [
+        "# HELP sizing_gate_block_total B0 gate blocks by reason",
+        "# TYPE sizing_gate_block_total counter",
+    ]
+    for reason, count in sorted(_metrics["sizing_gate_block_total"].items()):
+        sizing_block_lines.append(
+            f'sizing_gate_block_total{{reason="{_prom_label(str(reason))}"}} {int(count)}'
+        )
+    if len(sizing_block_lines) == 2:
+        sizing_block_lines.append('sizing_gate_block_total{reason="none"} 0')
+
+    lines.extend([*sizing_trigger_lines, *sizing_block_lines])
     return "\n".join(lines) + "\n"
 
 
@@ -429,13 +488,32 @@ class RegimeSwarmDaemon:
             mark = float(prices[-1])
         except (OSError, ValueError, TypeError):
             return
+        summary = report.get("drift_summary") or {}
+        classified = summary.get("classified_regime")
+        flag_raw = summary.get("regime_flag")
+        if flag_raw is None:
+            return
+        try:
+            regime_flag = int(flag_raw)
+        except (TypeError, ValueError):
+            return
         sizing = run_sizing_if_enabled(
             symbol=symbol,
             mark_price=mark,
             data_root=_data_root(),
+            classified_regime=str(classified) if classified is not None else None,
+            regime_flag=regime_flag,
+            swarm_cycle_id=report.get("cycle_id"),
         )
         if sizing is not None:
-            print(json.dumps({"event": "sizing_boundary", **sizing.get("sizing_envelope", {})}), flush=True)
+            record_sizing_metrics(sizing)
+            if sizing.get("skipped"):
+                print(json.dumps({"event": "sizing_skipped", **sizing}), flush=True)
+            else:
+                print(
+                    json.dumps({"event": "sizing_boundary", **sizing.get("sizing_envelope", {})}),
+                    flush=True,
+                )
 
     async def run_standby_tick(self) -> None:
         """Standby pod — heartbeat + metrics only; no A1/A7/A8 mutations."""
