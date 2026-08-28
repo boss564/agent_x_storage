@@ -1,11 +1,18 @@
 """Read-only market ticks for paper trading — never order endpoints."""
 from __future__ import annotations
 
+import base64
+import hashlib
 import json
+import os
+import socket
+import ssl
+import struct
+import urllib.parse
 import urllib.request
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Dict, Iterator, List, Optional, Sequence, Tuple, Union
+from typing import Callable, Dict, Iterable, Iterator, List, Optional, Sequence, Tuple, Union
 
 from prototypes.raas_paper_trading.slippage import OrderBook
 
@@ -17,7 +24,7 @@ class PaperTick:
     symbol: str
     ts: str
     price: float
-    source: str  # binance_rest | replay | pyth_stub
+    source: str  # binance_rest | binance_ws | replay | pyth_stub | mock_ws
 
     def to_dict(self) -> dict:
         return {
@@ -117,6 +124,208 @@ def fetch_binance_ticker(
     price = float(raw["price"])
     ts = datetime.now(timezone.utc).isoformat()
     return PaperTick(symbol=sym, ts=ts, price=price, source="binance_rest_ticker")
+
+
+BINANCE_WS_HOST_DEFAULT = "wss://stream.binance.com:9443/ws"
+
+
+def binance_trade_ws_url(symbol: str, *, base: Optional[str] = None) -> str:
+    """Public Binance trade stream — no API key, subscribe-via-URL only."""
+    stream = f"{symbol.strip().lower()}@trade"
+    root = (base or os.environ.get("LIVE_FEED_WS_URL") or BINANCE_WS_HOST_DEFAULT).rstrip("/")
+    if root.endswith("@trade") or "/ws/" in root and "@" in root.split("/")[-1]:
+        # Full stream URL already provided
+        url = root
+    else:
+        url = f"{root}/{stream}" if root.endswith("/ws") else f"{root.rstrip('/')}/{stream}"
+    assert_no_order_urls(url)
+    if not url.startswith(("wss://", "ws://")):
+        raise RuntimeError("live_feed: only ws:// or wss:// URLs allowed")
+    return url
+
+
+def parse_binance_ws_message(payload: str, *, default_symbol: str = "ETHUSDT") -> Optional[PaperTick]:
+    """Parse a Binance trade/aggTrade JSON frame into PaperTick. Returns None if not a trade."""
+    try:
+        data = json.loads(payload)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(data, dict):
+        return None
+    inner = data.get("data") if isinstance(data.get("data"), dict) else data
+    event = str(inner.get("e") or "")
+    if event not in ("trade", "aggTrade"):
+        return None
+    try:
+        price = float(inner["p"])
+    except (KeyError, TypeError, ValueError):
+        return None
+    if price <= 0:
+        return None
+    symbol = str(inner.get("s") or default_symbol).upper()
+    ts_ms = inner.get("T") or inner.get("E")
+    if ts_ms is not None:
+        ts = datetime.fromtimestamp(int(ts_ms) / 1000.0, tz=timezone.utc).isoformat()
+    else:
+        ts = datetime.now(timezone.utc).isoformat()
+    return PaperTick(symbol=symbol, ts=ts, price=price, source="binance_ws")
+
+
+class MockWebSocketFeed:
+    """Deterministic JSON-frame source for tests — no network."""
+
+    def __init__(self, frames: Sequence[str], *, default_symbol: str = "ETHUSDT") -> None:
+        self._frames = list(frames)
+        self._default_symbol = default_symbol
+
+    def __iter__(self) -> Iterator[PaperTick]:
+        for raw in self._frames:
+            tick = parse_binance_ws_message(raw, default_symbol=self._default_symbol)
+            if tick is not None:
+                yield tick
+
+    def __len__(self) -> int:
+        return sum(
+            1
+            for raw in self._frames
+            if parse_binance_ws_message(raw, default_symbol=self._default_symbol) is not None
+        )
+
+
+def _ws_recv_text_frames(sock: socket.socket) -> Iterator[str]:
+    """Minimal RFC6455 text-frame reader (server → client, unmasked)."""
+    def _read_exact(n: int) -> bytes:
+        buf = b""
+        while len(buf) < n:
+            chunk = sock.recv(n - len(buf))
+            if not chunk:
+                raise ConnectionError("websocket closed")
+            buf += chunk
+        return buf
+
+    while True:
+        hdr = _read_exact(2)
+        opcode = hdr[0] & 0x0F
+        masked = (hdr[1] & 0x80) != 0
+        length = hdr[1] & 0x7F
+        if length == 126:
+            length = struct.unpack("!H", _read_exact(2))[0]
+        elif length == 127:
+            length = struct.unpack("!Q", _read_exact(8))[0]
+        mask_key = _read_exact(4) if masked else b""
+        payload = _read_exact(length)
+        if masked:
+            payload = bytes(b ^ mask_key[i % 4] for i, b in enumerate(payload))
+        if opcode == 0x8:  # close
+            return
+        if opcode == 0x9:  # ping → pong
+            _ws_send_frame(sock, payload, opcode=0xA)
+            continue
+        if opcode == 0x1:
+            yield payload.decode("utf-8")
+
+
+def _ws_send_frame(sock: socket.socket, payload: bytes, *, opcode: int) -> None:
+    """Client frames must be masked."""
+    mask = os.urandom(4)
+    masked = bytes(b ^ mask[i % 4] for i, b in enumerate(payload))
+    header = bytes([0x80 | opcode])
+    n = len(payload)
+    if n < 126:
+        header += bytes([0x80 | n])
+    elif n < 65536:
+        header += bytes([0x80 | 126]) + struct.pack("!H", n)
+    else:
+        header += bytes([0x80 | 127]) + struct.pack("!Q", n)
+    sock.sendall(header + mask + masked)
+
+
+def _open_ws_socket(url: str, *, timeout_s: float = 15.0) -> socket.socket:
+    parsed = urllib.parse.urlparse(url)
+    if parsed.scheme not in ("wss", "ws"):
+        raise RuntimeError("live_feed: only ws/wss allowed")
+    host = parsed.hostname or ""
+    port = parsed.port or (443 if parsed.scheme == "wss" else 80)
+    path = parsed.path or "/"
+    if parsed.query:
+        path = f"{path}?{parsed.query}"
+    raw = socket.create_connection((host, port), timeout=timeout_s)
+    sock: socket.socket
+    if parsed.scheme == "wss":
+        ctx = ssl.create_default_context()
+        sock = ctx.wrap_socket(raw, server_hostname=host)
+    else:
+        sock = raw
+    key = base64.b64encode(os.urandom(16)).decode("ascii")
+    req = (
+        f"GET {path} HTTP/1.1\r\n"
+        f"Host: {host}\r\n"
+        "Upgrade: websocket\r\n"
+        "Connection: Upgrade\r\n"
+        f"Sec-WebSocket-Key: {key}\r\n"
+        "Sec-WebSocket-Version: 13\r\n"
+        "User-Agent: agent-x-paper/0\r\n"
+        "\r\n"
+    )
+    sock.sendall(req.encode("ascii"))
+    buf = b""
+    while b"\r\n\r\n" not in buf:
+        chunk = sock.recv(4096)
+        if not chunk:
+            sock.close()
+            raise ConnectionError("websocket handshake failed")
+        buf += chunk
+    status_line = buf.split(b"\r\n", 1)[0].decode("ascii", errors="replace")
+    if "101" not in status_line:
+        sock.close()
+        raise ConnectionError(f"websocket handshake rejected: {status_line}")
+    expected = base64.b64encode(
+        hashlib.sha1((key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11").encode("ascii")).digest()
+    ).decode("ascii")
+    headers = buf.split(b"\r\n\r\n", 1)[0].decode("ascii", errors="replace").lower()
+    if expected.lower() not in headers:
+        sock.close()
+        raise ConnectionError("websocket accept mismatch")
+    sock.settimeout(None)
+    return sock
+
+
+class BinanceWebSocketFeed:
+    """Read-only Binance trade stream. Inject ``frames`` to skip the network (tests)."""
+
+    def __init__(
+        self,
+        url: str,
+        *,
+        frames: Optional[Iterable[str]] = None,
+        default_symbol: str = "ETHUSDT",
+        stop: Optional[Callable[[], bool]] = None,
+    ) -> None:
+        assert_no_order_urls(url)
+        if not url.startswith(("wss://", "ws://")):
+            raise RuntimeError("live_feed: only ws:// or wss:// URLs allowed")
+        self.url = url
+        self._frames = list(frames) if frames is not None else None
+        self._default_symbol = default_symbol
+        self._stop = stop
+
+    def __iter__(self) -> Iterator[PaperTick]:
+        if self._frames is not None:
+            yield from MockWebSocketFeed(self._frames, default_symbol=self._default_symbol)
+            return
+        sock = _open_ws_socket(self.url)
+        try:
+            for raw in _ws_recv_text_frames(sock):
+                if self._stop is not None and self._stop():
+                    break
+                tick = parse_binance_ws_message(raw, default_symbol=self._default_symbol)
+                if tick is not None:
+                    yield tick
+        finally:
+            try:
+                sock.close()
+            except OSError:
+                pass
 
 
 def fetch_binance_depth(

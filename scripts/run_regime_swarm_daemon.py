@@ -14,6 +14,7 @@ import json
 import os
 import signal
 import sys
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -47,7 +48,105 @@ _metrics: Dict[str, Any] = {
     "is_leader": 1,
     "pod_name": "local",
     "pod_ordinal": 0,
+    "drift_counter": {},  # (regime, type) -> int
+    "gate_block_counter": {"A0": 0, "A2.5": 0},
+    "risk_multiplier": 1.0,
 }
+
+
+def reset_metrics() -> None:
+    """Test helper — clear labeled counters and gauges."""
+    _metrics["cycles_total"] = 0
+    _metrics["errors_total"] = 0
+    _metrics["last_cycle_ts"] = ""
+    _metrics["symbols_processed"] = 0
+    _metrics["last_alert_level"] = "OK"
+    _metrics["drift_counter"] = {}
+    _metrics["gate_block_counter"] = {"A0": 0, "A2.5": 0}
+    _metrics["risk_multiplier"] = 1.0
+
+
+def _prom_label(value: str) -> str:
+    return str(value).replace("\\", "\\\\").replace('"', '\\"').replace("\n", " ")
+
+
+def record_report_metrics(report: Dict[str, Any]) -> None:
+    """Update drift / gate / risk gauges from one orchestrator report."""
+    status = str(report.get("status") or "")
+    infra = report.get("infrastructure") or {}
+    if status == "INFRASTRUCTURE_BLOCKED" or infra.get("infrastructure_healthy") is False:
+        g0 = str(infra.get("g0_core_sanity") or "")
+        g25 = str(infra.get("g25_transport_boundary") or "")
+        if "A0_BLOCKED" in g0 or (g0.startswith("A0") and "BLOCKED" in g0):
+            _metrics["gate_block_counter"]["A0"] = int(_metrics["gate_block_counter"].get("A0", 0)) + 1
+        if "A25_BLOCKED" in g25 or "A2.5" in g25 and "BLOCKED" in g25:
+            _metrics["gate_block_counter"]["A2.5"] = int(_metrics["gate_block_counter"].get("A2.5", 0)) + 1
+        if "A0_BLOCKED" not in g0 and "A25_BLOCKED" not in g25:
+            # fail-closed: count A0 if message mentions block without prefix
+            if "BLOCKED" in g0:
+                _metrics["gate_block_counter"]["A0"] = int(_metrics["gate_block_counter"].get("A0", 0)) + 1
+        return
+
+    summary = report.get("drift_summary")
+    if not isinstance(summary, dict):
+        return
+    regime = str(summary.get("classified_regime") or "UNKNOWN")
+    drift_type = str(summary.get("drift_type") or "unknown")
+    key = (regime, drift_type)
+    counters: Dict[Any, int] = _metrics["drift_counter"]
+    counters[key] = int(counters.get(key, 0)) + 1
+
+    swarm = report.get("swarm_message") or {}
+    state = swarm.get("strategy_state") or {}
+    if "risk_multiplier" in state:
+        _metrics["risk_multiplier"] = float(state["risk_multiplier"])
+
+
+def render_metrics_text() -> str:
+    drift_lines = [
+        "# HELP drift_counter A7 classified-regime observations",
+        "# TYPE drift_counter counter",
+    ]
+    for (regime, drift_type), count in sorted(_metrics["drift_counter"].items()):
+        drift_lines.append(
+            f'drift_counter{{regime="{_prom_label(regime)}",type="{_prom_label(drift_type)}"}} {int(count)}'
+        )
+    if len(drift_lines) == 2:
+        drift_lines.append('drift_counter{regime="none",type="none"} 0')
+
+    gate_lines = [
+        "# HELP gate_block_counter Infrastructure gate blocks (A0 / A2.5)",
+        "# TYPE gate_block_counter counter",
+    ]
+    for gate, count in sorted(_metrics["gate_block_counter"].items()):
+        gate_lines.append(f'gate_block_counter{{gate="{_prom_label(str(gate))}"}} {int(count)}')
+
+    lines = [
+        "# HELP swarm_cycles_total Completed daemon cycles",
+        "# TYPE swarm_cycles_total counter",
+        f"swarm_cycles_total {_metrics['cycles_total']}",
+        "# HELP swarm_cycle_errors_total Cycle exceptions",
+        "# TYPE swarm_cycle_errors_total counter",
+        f"swarm_cycle_errors_total {_metrics['errors_total']}",
+        "# HELP swarm_symbols_processed Last cycle symbol count",
+        "# TYPE swarm_symbols_processed gauge",
+        f"swarm_symbols_processed {_metrics['symbols_processed']}",
+        "# HELP swarm_up Daemon heartbeat",
+        "# TYPE swarm_up gauge",
+        f"swarm_up {1 if HEARTBEAT.is_file() else 0}",
+        "# HELP swarm_is_leader 1 if this pod runs the active decision cycle",
+        "# TYPE swarm_is_leader gauge",
+        f"swarm_is_leader {_metrics['is_leader']}",
+        "# HELP swarm_pod_ordinal StatefulSet ordinal",
+        "# TYPE swarm_pod_ordinal gauge",
+        f"swarm_pod_ordinal {_metrics['pod_ordinal']}",
+        *drift_lines,
+        "# HELP risk_multiplier A8 current advisory risk multiplier",
+        "# TYPE risk_multiplier gauge",
+        f"risk_multiplier {float(_metrics['risk_multiplier'])}",
+        *gate_lines,
+    ]
+    return "\n".join(lines) + "\n"
 
 
 def _now() -> str:
@@ -78,7 +177,11 @@ def _load_config(path: Optional[Path]) -> Dict[str, Any]:
         "leader_snapshot_path": str(root / "state" / "leader_snapshot.json"),
         "live_execution": False,
         "metrics_port": int(os.environ.get("SWARM_METRICS_PORT", "8080")),
+        "live_feed_enabled": _env_bool("LIVE_FEED_ENABLED", False),
     }
+    if defaults["live_feed_enabled"]:
+        live_worm = os.environ.get("LIVE_FEED_WORM_DIR", str(root / "worm" / "live"))
+        defaults["worm_dir"] = live_worm
     if path and path.is_file():
         try:
             loaded = json.loads(path.read_text(encoding="utf-8"))
@@ -89,13 +192,17 @@ def _load_config(path: Optional[Path]) -> Dict[str, Any]:
         except (json.JSONDecodeError, OSError):
             pass
     defaults["metrics_port"] = int(os.environ.get("SWARM_METRICS_PORT", defaults["metrics_port"]))
+    defaults["live_execution"] = False
     return defaults
 
 
 def _symbol_from_path(path: Path) -> str:
-    for suffix in ("btcusdc", "ethusdc", "solusdc"):
-        if suffix in path.as_posix().lower():
+    joined = path.as_posix().lower()
+    for suffix in ("btcusdc", "ethusdc", "solusdc", "ethusdt", "btcusdt"):
+        if suffix in joined:
             return suffix.upper()
+    if path.name == "paper_trades.worm.jsonl" and path.parent.name:
+        return path.parent.name.upper()[:16]
     return path.stem.upper()[:16]
 
 
@@ -139,26 +246,7 @@ class _MetricsHandler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(b"ok\n")
             return
-        lines = [
-            "# HELP swarm_cycles_total Completed daemon cycles",
-            "# TYPE swarm_cycles_total counter",
-            f"swarm_cycles_total {_metrics['cycles_total']}",
-            "# HELP swarm_cycle_errors_total Cycle exceptions",
-            "# TYPE swarm_cycle_errors_total counter",
-            f"swarm_cycle_errors_total {_metrics['errors_total']}",
-            "# HELP swarm_symbols_processed Last cycle symbol count",
-            "# TYPE swarm_symbols_processed gauge",
-            f"swarm_symbols_processed {_metrics['symbols_processed']}",
-            "# HELP swarm_up Daemon heartbeat",
-            "# TYPE swarm_up gauge",
-            f"swarm_up {1 if HEARTBEAT.is_file() else 0}",
-            "# HELP swarm_is_leader 1 if this pod runs the active decision cycle",
-            "# TYPE swarm_is_leader gauge",
-            f"swarm_is_leader {_metrics['is_leader']}",
-            "# HELP swarm_pod_ordinal StatefulSet ordinal",
-            "# TYPE swarm_pod_ordinal gauge",
-            f"swarm_pod_ordinal {_metrics['pod_ordinal']}",
-        ]
+        lines = render_metrics_text().rstrip("\n").split("\n")
         body = "\n".join(lines) + "\n"
         self.send_response(200)
         self.send_header("Content-Type", "text/plain; version=0.0.4")
@@ -168,8 +256,6 @@ class _MetricsHandler(BaseHTTPRequestHandler):
 
 def _start_metrics_server(port: int) -> ThreadingHTTPServer:
     server = ThreadingHTTPServer(("0.0.0.0", port), _MetricsHandler)
-    import threading
-
     threading.Thread(target=server.serve_forever, daemon=True).start()
     return server
 
@@ -330,6 +416,7 @@ class RegimeSwarmDaemon:
                 write_audit=True,
             )
             reports.append(report)
+            record_report_metrics(report)
             _emit_stdout_audit(report)
             self._append_cycle_log(report)
             self._maybe_alert(report)
@@ -452,13 +539,33 @@ class RegimeSwarmDaemon:
         self._shutdown.set()
 
 
+def _start_live_feed_thread(cfg: Dict[str, Any], stop: asyncio.Event) -> Optional[threading.Thread]:
+    if not cfg.get("live_feed_enabled"):
+        return None
+    from prototypes.raas_paper_trading.paper_runner import LivePaperBridge
+
+    bridge = LivePaperBridge.from_env(worm_dir=Path(cfg["worm_dir"]))
+    stop_flag = threading.Event()
+
+    def _watch() -> None:
+        while not stop.is_set() and not stop_flag.is_set():
+            time.sleep(0.2)
+        stop_flag.set()
+
+    threading.Thread(target=_watch, name="live-feed-stop-watch", daemon=True).start()
+    return bridge.start_background(stop=stop_flag)
+
+
 async def _amain(config_path: Optional[Path]) -> int:
     cfg = _load_config(config_path)
+    if cfg.get("live_execution") is True:
+        raise SystemExit("live_execution must be false")
     if _env_bool("SWARM_METRICS_ENABLED", True):
         _start_metrics_server(int(cfg.get("metrics_port", 8080)))
 
     daemon = RegimeSwarmDaemon(cfg)
     loop = asyncio.get_running_loop()
+    _start_live_feed_thread(cfg, daemon._shutdown)
 
     def _on_signal(signum: int) -> None:
         print(json.dumps({"event": "signal", "signum": signum, "ts": _now()}), flush=True)

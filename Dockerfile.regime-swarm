@@ -27,7 +27,7 @@ COPY scripts/run_regime_swarm_infra_smoke.py ./scripts/
 COPY scripts/helm_pod_smoke.py ./scripts/
 COPY config/regime_swarm.json ./config/
 
-RUN mkdir -p /data/audit /data/state /data/reports /data/worm/paper_runs
+RUN mkdir -p /data/audit /data/state /data/reports /data/worm/paper_runs /data/worm/live
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \

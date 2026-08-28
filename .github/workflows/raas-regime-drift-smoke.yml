@@ -7,16 +7,24 @@ on:
     paths:
       - 'prototypes/raas_paper_trading/regime_drift.py'
       - 'prototypes/raas_paper_trading/regime_swarm/**'
+      - 'prototypes/raas_paper_trading/feed.py'
+      - 'prototypes/raas_paper_trading/paper_runner.py'
       - 'scripts/raas_regime_drift_monitor.py'
       - 'scripts/test_raas_regime_drift.py'
+      - 'scripts/test_live_feed_prometheus.py'
+      - 'scripts/run_regime_swarm_daemon.py'
       - 'docs/RaaS_REGIME_DRIFT_PREREG.md'
       - 'Makefile'
   pull_request:
     paths:
       - 'prototypes/raas_paper_trading/regime_drift.py'
       - 'prototypes/raas_paper_trading/regime_swarm/**'
+      - 'prototypes/raas_paper_trading/feed.py'
+      - 'prototypes/raas_paper_trading/paper_runner.py'
       - 'scripts/raas_regime_drift_monitor.py'
       - 'scripts/test_raas_regime_drift.py'
+      - 'scripts/test_live_feed_prometheus.py'
+      - 'scripts/run_regime_swarm_daemon.py'
       - 'docs/RaaS_REGIME_DRIFT_PREREG.md'
       - 'Makefile'
   workflow_dispatch:
@@ -41,3 +49,6 @@ jobs:
 
       - name: Regime drift swarm smoke (17/17)
         run: make raas-regime-drift-smoke
+
+      - name: Live feed + Prometheus counters (mock WS)
+        run: make raas-live-feed-prometheus-smoke

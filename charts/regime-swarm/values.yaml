@@ -76,6 +76,10 @@ config:
   CYCLE_INTERVAL_SECONDS: "60"
   LOG_LEVEL: INFO
   TZ: UTC
+  LIVE_FEED_ENABLED: "false"
+  LIVE_FEED_SYMBOL: "ETHUSDT"
+  LIVE_FEED_WS_URL: "wss://stream.binance.com:9443/ws"
+  LIVE_FEED_WORM_DIR: "/data/worm/live"
 
 infrastructureGates:
   enabled: true
