@@ -1,0 +1,25 @@
+{
+  "schema": "chaos_fixture_v1",
+  "id": "CHAOS-08",
+  "fault_type": "ZERO_PRICE",
+  "injection_active": true,
+  "description": "Zero mark price — sanity failure at signal boundary.",
+  "gate_input": {
+    "signal": {
+      "signal_id": "chaos-08-zero-price",
+      "source": "P4",
+      "notional_eur": 0.0,
+      "stress_score": 1.0,
+      "oracle_ok": false,
+      "scenario_ok": false
+    },
+    "exec_risk": 0.0,
+    "cascade_risk": 0.0,
+    "latency_spike": null,
+    "bho_delta": 0.0
+  },
+  "injection_meta": {
+    "mark_price": 0.0,
+    "expected_mapping": "oracle_ok=false → SIGNAL_INVALID"
+  }
+}

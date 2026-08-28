@@ -1,0 +1,25 @@
+{
+  "schema": "chaos_fixture_v1",
+  "id": "CHAOS-03",
+  "fault_type": "FLASH_CRASH_MINUS_15",
+  "injection_active": true,
+  "description": "Single-tick -15% move — cascade / exec risk elevation.",
+  "gate_input": {
+    "signal": {
+      "signal_id": "chaos-03-flash-down",
+      "source": "P5",
+      "notional_eur": 50000.0,
+      "stress_score": 0.95,
+      "oracle_ok": true,
+      "scenario_ok": true
+    },
+    "exec_risk": 0.85,
+    "cascade_risk": 0.9,
+    "latency_spike": null,
+    "bho_delta": 0.0
+  },
+  "injection_meta": {
+    "price_delta_pct": -15.0,
+    "expected_mapping": "cascade_risk≥0.75 → P8_CASCADE_RISK; exec_risk≥0.80 → P3_EXEC_RISK"
+  }
+}

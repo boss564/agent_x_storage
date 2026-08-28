@@ -1,0 +1,25 @@
+{
+  "schema": "chaos_fixture_v1",
+  "id": "CHAOS-09",
+  "fault_type": "VOLUME_SPIKE",
+  "injection_active": true,
+  "description": "Volume >10× average — exec risk block.",
+  "gate_input": {
+    "signal": {
+      "signal_id": "chaos-09-volume",
+      "source": "P7",
+      "notional_eur": 250000.0,
+      "stress_score": 0.7,
+      "oracle_ok": true,
+      "scenario_ok": true
+    },
+    "exec_risk": 0.92,
+    "cascade_risk": 0.4,
+    "latency_spike": null,
+    "bho_delta": 0.0
+  },
+  "injection_meta": {
+    "volume_multiplier": 12.5,
+    "expected_mapping": "exec_risk≥0.80 → P3_EXEC_RISK"
+  }
+}
