@@ -6,12 +6,16 @@ on:
       - "charts/regime-swarm/**"
       - "Dockerfile.regime-swarm"
       - "scripts/run_regime_swarm_daemon.py"
+      - "scripts/helm_pod_smoke.py"
+      - "scripts/run_regime_swarm_infra_smoke.py"
       - ".github/workflows/regime-swarm-helm.yml"
   pull_request:
     paths:
       - "charts/regime-swarm/**"
       - "Dockerfile.regime-swarm"
       - "scripts/run_regime_swarm_daemon.py"
+      - "scripts/helm_pod_smoke.py"
+      - "scripts/run_regime_swarm_infra_smoke.py"
       - ".github/workflows/regime-swarm-helm.yml"
 
 jobs:
@@ -32,6 +36,9 @@ jobs:
       - name: Helm template (dev values)
         run: helm template regime-swarm charts/regime-swarm -f charts/regime-swarm/values-dev.yaml > /tmp/regime-swarm.yaml
 
+      - name: Helm template (smoke test hook)
+        run: helm template regime-swarm charts/regime-swarm --set smokeTest.enabled=true | grep -q "helm_pod_smoke.py"
+
       - name: Helm package
         run: |
           mkdir -p chart-artifacts
@@ -46,6 +53,13 @@ jobs:
 
       - name: A0/A2.5 infrastructure gates smoke
         run: PYTHONPATH=. python3 scripts/test_infrastructure_gates.py
+
+      - name: Helm pod smoke (local)
+        run: |
+          export SWARM_SMOKE_WORM_DIR=/tmp/worm-smoke-ci
+          export SWARM_SMOKE_AUDIT_DIR=/tmp/audit-smoke-ci
+          export HELM_POD_SMOKE_SUMMARY=/tmp/pod_smoke_summary_ci.json
+          PYTHONPATH=. python3 scripts/helm_pod_smoke.py
 
       - name: P2/P5 shadow chaos (compose)
         env:

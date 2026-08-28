@@ -82,6 +82,42 @@ docker compose -f docker-compose.regime-swarm-smoke.yml run --rm swarm-smoke
 
 WORM format: JSONL `action=SIGNAL` + `mark_price` (not CSV). Flash fixture: 69 stable ticks + crash tick (−50% at G0=20%).
 
+## Helm pod smoke (cluster)
+
+Runs the same three WORM scenarios inside the cluster image, reads ConfigMap thresholds from env, and optionally proves threshold reconfiguration with a borderline −15% flash (blocks at G0=10%, passes at G0=20%).
+
+```bash
+helm upgrade --install regime-swarm charts/regime-swarm -n trading \
+  --set smokeTest.enabled=true \
+  --set infrastructureGates.enabled=true
+
+helm test regime-swarm -n trading
+kubectl logs -n trading job/regime-swarm-smoke
+```
+
+Local pod-style run (no cluster):
+
+```bash
+make raas-regime-swarm-helm-pod-smoke
+# VERDICT: HELM_POD_SMOKE_PASS
+```
+
+ConfigMap threshold override (example):
+
+```bash
+kubectl set env deployment/regime-swarm -n trading SWARM_G0_MAX_PRICE_CHANGE_PCT=10
+# wait for rollout, then re-run helm test
+```
+
+Helm values (`smokeTest`):
+
+| Key | Default | Purpose |
+|-----|---------|---------|
+| `enabled` | `false` | Renders `templates/smoke-job.yaml` as `helm.sh/hook: test` |
+| `thresholdTest` | `true` | Borderline −15% flash at G0=10 vs G0=20 |
+| `wormDir` | `/data/worm/smoke` | WORM fixtures written at Job start |
+| `summaryPath` | `/data/audit/pod_smoke_summary.json` | Machine-readable summary |
+
 ## Code layout
 
 ```

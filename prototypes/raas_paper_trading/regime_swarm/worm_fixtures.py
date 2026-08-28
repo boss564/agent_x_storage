@@ -42,6 +42,16 @@ def write_signal_worm(
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
+def borderline_flash_prices(
+    n_stable: int = 69,
+    *,
+    base: float = 100.0,
+    drop_pct: float = 0.15,
+) -> List[float]:
+    """−drop_pct move on last tick (e.g. 15% crash from base)."""
+    return stable_prices(n_stable, base) + [base * (1.0 - drop_pct)]
+
+
 def ensure_smoke_worms(root: Path) -> Dict[str, Path]:
     """Write default smoke WORMs under *root* and return paths."""
     flash = root / "flash_crash.jsonl"

@@ -83,6 +83,21 @@ infrastructureGates:
   G0_MAX_SPREAD_PCT: 5
   G25_MAX_LATENCY_MS: 500
 
+smokeTest:
+  enabled: false
+  thresholdTest: true
+  wormDir: /data/worm/smoke
+  auditDir: /data/audit/smoke
+  summaryPath: /data/audit/pod_smoke_summary.json
+  ttlSecondsAfterFinished: 600
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 256Mi
+
 secrets:
   enabled: false
   slackWebhookUrl: ""

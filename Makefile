@@ -413,6 +413,12 @@ raas-regime-swarm-infra-gates: ## A0/A2.5 infrastructure gate smoke (INFRASTRUCT
 raas-regime-swarm-infra-smoke: ## E2E WORM→A0/A2.5 smoke + audit JSON (REGIME_SWARM_INFRA_SMOKE_PASS/FAIL)
 	PYTHONPATH=. python3 scripts/run_regime_swarm_infra_smoke.py
 
+raas-regime-swarm-helm-pod-smoke: ## Pod-style smoke (ConfigMap env + threshold test)
+	PYTHONPATH=. python3 scripts/helm_pod_smoke.py
+
+raas-regime-swarm-helm-test: ## helm test infra smoke Job (cluster; smokeTest.enabled=true)
+	helm test regime-swarm -n trading --timeout 5m
+
 raas-regime-lease-failover-forensic: ## Drill 2 lease timeline (kind shadow, post-release fix)
 	PYTHONPATH=. python3 scripts/regime_swarm_lease_failover_forensic.py
 
