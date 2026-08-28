@@ -163,8 +163,11 @@ Siehe auch [§6 Review-Entscheidungen](#6-review-entscheidungen-decided-2026-08-
 ### Nach Implementierung (Betrieb)
 
 1. **Strang D:** Image-Rebuild + Cluster-Rollout — [`REGIME_SWARM_LIVE_SHADOW_RUNBOOK.md` §9](REGIME_SWARM_LIVE_SHADOW_RUNBOOK.md#9-strang-d--image-update-pvc-sicher-post-pr-22)  
-2. **Strang B:** `POSITION_SIZING_ENABLED=true` im Shadow-Cluster (≥50 Fills)  
-3. **Grafana (optional):** Dashboard für `sizing_*` — später PR #24
+2. **Paper Exit (Voraussetzung):** [`PAPER_EXIT_ROUNDTRIP_SPEC.md`](PAPER_EXIT_ROUNDTRIP_SPEC.md) — Exit-Entscheidung + Round-Trip-Gate **vor** Strang B  
+3. **Strang B:** `POSITION_SIZING_ENABLED=true` erst wenn **abgeschlossene Round-Trips ≥ 50** (`SELL` + `realized_pnl_eur` in WORM) **und** Ledger-Wiring  
+4. **Grafana (optional):** Dashboard für `sizing_*` — später PR
+
+**Hinweis (2026-08-28):** Live-Shadow erzeugt derzeit nur BUY (`break_price_below` unset). „≥50 SELL-Fills abwarten“ ist **strukturell nicht erreichbar** ohne Exit-PR — siehe Paper-Exit-Spec.
 
 ---
 

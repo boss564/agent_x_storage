@@ -187,9 +187,11 @@ FALSCH (v0 Spec verworfen):
 | Parameter | Wert Review | Verhalten |
 |-----------|-------------|-----------|
 | `window_size` N | 50 | Ziel-Fenster |
-| `min_trades` N_min | **50** (gleich N) | `< N_min` → `INSUFFICIENT_HISTORY`, **kein** Kelly, **kein** p=0.5/b=1.0-Fallback |
+| `min_trades` N_min | **50** (gleich N) | `< N_min` **abgeschlossene Round-Trips** (SELL) → `INSUFFICIENT_HISTORY`, **kein** Kelly, **kein** p=0.5/b=1.0-Fallback |
 
 Begründung: Default-p=0.5 sieht aus wie Messung; bei dünnen Paper-WORMs wäre das der Normalfall.
+
+**Voraussetzung Paper-Pfad:** Live-Shadow ohne Exit-Policy erzeugt nur BUY — B2 bleibt leer. Siehe [`PAPER_EXIT_ROUNDTRIP_SPEC.md`](PAPER_EXIT_ROUNDTRIP_SPEC.md).
 
 ### 6.4 Kapital (B1)
 
