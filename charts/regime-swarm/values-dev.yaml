@@ -1,0 +1,28 @@
+# Dev/staging — local image, single active replica
+image:
+  repository: agentx-regime-swarm
+  tag: latest
+  pullPolicy: Never
+
+replicaCount: 1
+
+leaderElection:
+  enabled: false
+
+config:
+  CYCLE_INTERVAL_SECONDS: "30"
+
+persistence:
+  storageClassName: standard
+  size: 5Gi
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+secrets:
+  enabled: false

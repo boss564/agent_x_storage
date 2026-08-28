@@ -1,0 +1,37 @@
+name: Regime Swarm Helm
+
+on:
+  push:
+    paths:
+      - "charts/regime-swarm/**"
+      - "Dockerfile.regime-swarm"
+      - "scripts/run_regime_swarm_daemon.py"
+      - ".github/workflows/regime-swarm-helm.yml"
+  pull_request:
+    paths:
+      - "charts/regime-swarm/**"
+      - "Dockerfile.regime-swarm"
+      - "scripts/run_regime_swarm_daemon.py"
+
+jobs:
+  helm-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.14.4
+
+      - name: Helm lint
+        run: helm lint charts/regime-swarm
+
+      - name: Helm template (dev values)
+        run: helm template regime-swarm charts/regime-swarm -f charts/regime-swarm/values-dev.yaml > /tmp/regime-swarm.yaml
+
+      - name: Helm package
+        run: |
+          mkdir -p chart-artifacts
+          helm package charts/regime-swarm --destination chart-artifacts
+          ls -la chart-artifacts

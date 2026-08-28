@@ -22,8 +22,11 @@ from prototypes.raas_paper_trading.regime_swarm import RegimeSwarmOrchestrator  
 from prototypes.raas_paper_trading.regime_swarm.adaptive import (  # noqa: E402
     AdaptiveCoolingOffManager,
     DynamicWindowManager,
+    SoftStrategyState,
     StuckUnreliableTracker,
 )
+from prototypes.raas_paper_trading.regime_swarm.leader import is_leader_pod, pod_ordinal  # noqa: E402
+from prototypes.raas_paper_trading.regime_swarm.state_store import SwarmStateStore  # noqa: E402
 from prototypes.raas_paper_trading.regime_swarm.agents import (  # noqa: E402
     DriftClassifierAgent,
     StrategyAdapterAgent,
@@ -258,6 +261,45 @@ def main() -> int:
         failed += 1
     else:
         print("  PASS  scenario 17 stuck unreliable REVIEW_REQUIRED")
+
+    # --- Scenario 18: state store round-trip (container cold start) ---
+    with tempfile.TemporaryDirectory() as tmp18:
+        state_path = Path(tmp18) / "swarm_state.json"
+        soft = SoftStrategyState()
+        soft._current["BTCUSDC"] = 1.15
+        tracker18 = StuckUnreliableTracker()
+        tracker18._start["BTCUSDC"] = t0
+        store = SwarmStateStore(state_path)
+        store.capture_soft_state(soft)
+        store.capture_stuck_state(tracker18)
+        store.save()
+        soft2 = SoftStrategyState()
+        tracker2 = StuckUnreliableTracker()
+        store2 = SwarmStateStore(state_path)
+        store2.load()
+        store2.apply_soft_state(soft2)
+        store2.apply_stuck_state(tracker2)
+        if soft2.current("BTCUSDC") != 1.15 or tracker2._start.get("BTCUSDC") != t0:
+            print("  FAIL  scenario 18 state store round-trip")
+            failed += 1
+        else:
+            print("  PASS  scenario 18 state store round-trip")
+
+    # --- Scenario 19: StatefulSet leader election (ordinal 0 = active) ---
+    if pod_ordinal("regime-swarm-0") != 0 or pod_ordinal("regime-swarm-1") != 1:
+        print("  FAIL  scenario 19 pod ordinal parse")
+        failed += 1
+    elif not is_leader_pod("regime-swarm-0", election_enabled=True):
+        print("  FAIL  scenario 19 leader ordinal 0")
+        failed += 1
+    elif is_leader_pod("regime-swarm-1", election_enabled=True):
+        print("  FAIL  scenario 19 standby ordinal 1")
+        failed += 1
+    elif not is_leader_pod("regime-swarm-1", election_enabled=False):
+        print("  FAIL  scenario 19 election disabled")
+        failed += 1
+    else:
+        print("  PASS  scenario 19 leader election ordinals")
 
     print("=" * 60)
     if failed:

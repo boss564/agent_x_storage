@@ -1,0 +1,66 @@
+# Regime drift swarm — staging / production simulation (monitoring only)
+# Usage:
+#   cp config/regime_swarm.env.example config/regime_swarm.env
+#   docker compose -f docker-compose.regime-swarm.yml build
+#   docker compose -f docker-compose.regime-swarm.yml up -d
+#   docker compose -f docker-compose.regime-swarm.yml logs -f regime-swarm
+
+services:
+  regime-swarm:
+    build:
+      context: .
+      dockerfile: Dockerfile.regime-swarm
+    container_name: regime-swarm-9-agent
+    restart: unless-stopped
+    ports:
+      - "${SWARM_METRICS_PORT:-8080}:8080"
+    env_file:
+      - path: config/regime_swarm.env
+        required: false
+    environment:
+      CYCLE_INTERVAL_SECONDS: ${CYCLE_INTERVAL_SECONDS:-60}
+      SWARM_DATA_ROOT: /data
+      SWARM_CONFIG: /app/config/regime_swarm.json
+      SWARM_METRICS_ENABLED: ${SWARM_METRICS_ENABLED:-true}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL:-}
+      PAGERDUTY_INTEGRATION_KEY: ${PAGERDUTY_INTEGRATION_KEY:-}
+    volumes:
+      - regime_swarm_audit:/data/audit
+      - regime_swarm_state:/data/state
+      - regime_swarm_reports:/data/reports
+      - ./logs/worm/paper_runs:/data/worm/paper_runs:ro
+    networks:
+      - regime-swarm-net
+    healthcheck:
+      test: ["CMD", "test", "-f", "/tmp/swarm_heartbeat"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  redis:
+    image: redis:7.4-alpine
+    container_name: regime-swarm-redis
+    restart: unless-stopped
+    volumes:
+      - regime_swarm_redis:/data
+    networks:
+      - regime-swarm-net
+    profiles:
+      - redis
+
+networks:
+  regime-swarm-net:
+    driver: bridge
+
+volumes:
+  regime_swarm_audit:
+  regime_swarm_state:
+  regime_swarm_reports:
+  regime_swarm_redis:

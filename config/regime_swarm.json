@@ -1,0 +1,5 @@
+{
+  "cycle_interval_seconds": 60,
+  "live_execution": false,
+  "metrics_port": 8080
+}
