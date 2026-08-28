@@ -7,6 +7,7 @@ on:
       - "Dockerfile.regime-swarm"
       - "scripts/run_regime_swarm_daemon.py"
       - "scripts/helm_pod_smoke.py"
+      - "scripts/run_regime_swarm_cluster_smoke.sh"
       - "scripts/run_regime_swarm_infra_smoke.py"
       - ".github/workflows/regime-swarm-helm.yml"
   pull_request:
@@ -15,6 +16,7 @@ on:
       - "Dockerfile.regime-swarm"
       - "scripts/run_regime_swarm_daemon.py"
       - "scripts/helm_pod_smoke.py"
+      - "scripts/run_regime_swarm_cluster_smoke.sh"
       - "scripts/run_regime_swarm_infra_smoke.py"
       - ".github/workflows/regime-swarm-helm.yml"
 

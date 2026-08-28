@@ -86,6 +86,7 @@ infrastructureGates:
 smokeTest:
   enabled: false
   thresholdTest: true
+  deleteHookOnSuccess: true
   wormDir: /data/worm/smoke
   auditDir: /data/audit/smoke
   summaryPath: /data/audit/pod_smoke_summary.json

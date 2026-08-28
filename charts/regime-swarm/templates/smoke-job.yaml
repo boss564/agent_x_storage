@@ -9,7 +9,11 @@ metadata:
   annotations:
     helm.sh/hook: test
     helm.sh/hook-weight: "5"
+    {{- if .Values.smokeTest.deleteHookOnSuccess }}
     helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+    {{- else }}
+    helm.sh/hook-delete-policy: before-hook-creation
+    {{- end }}
 spec:
   backoffLimit: 0
   ttlSecondsAfterFinished: {{ .Values.smokeTest.ttlSecondsAfterFinished }}
@@ -53,6 +57,8 @@ spec:
               value: {{ .Values.smokeTest.auditDir | quote }}
             - name: HELM_POD_SMOKE_SUMMARY
               value: {{ .Values.smokeTest.summaryPath | quote }}
+            - name: HELM_POD_SMOKE_PROPAGATION_TEST
+              value: {{ .Values.smokeTest.thresholdTest | quote }}
             - name: HELM_POD_SMOKE_THRESHOLD_TEST
               value: {{ .Values.smokeTest.thresholdTest | quote }}
             - name: PYTHONPATH
