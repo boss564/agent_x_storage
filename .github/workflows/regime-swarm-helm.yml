@@ -35,3 +35,6 @@ jobs:
           mkdir -p chart-artifacts
           helm package charts/regime-swarm --destination chart-artifacts
           ls -la chart-artifacts
+
+      - name: P6 leader Z3 smoke
+        run: PYTHONPATH=. python3 scripts/test_regime_leader_z3.py

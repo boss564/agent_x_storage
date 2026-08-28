@@ -1,0 +1,34 @@
+# Shadow cluster overlay — namespace regime-swarm-shadow (Chaos P2/P5, no Lease code)
+# Usage: scripts/regime_swarm_shadow_cluster.sh up
+
+replicaCount: 2
+
+leaderElection:
+  enabled: true
+  leaderOrdinal: 0
+
+image:
+  pullPolicy: IfNotPresent
+
+persistence:
+  enabled: true
+  size: 2Gi
+  storageClassName: standard
+
+config:
+  CYCLE_INTERVAL_SECONDS: "30"
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+secrets:
+  enabled: false
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1

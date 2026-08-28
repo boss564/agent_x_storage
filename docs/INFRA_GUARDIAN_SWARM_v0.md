@@ -224,7 +224,9 @@ Regime-Schwarm:   19/19 smoke (scripts/test_raas_regime_drift.py)
 K8s-Basis:        charts/regime-swarm/ StatefulSet (feature/statefulset-ha)
 Leader-Modus:     ordinal_0_static (SWARM_LEADER_ELECTION_ENABLED)
 Lease-API:        GATE CLOSED — wartet auf §6 Freigabe
-Nächster Schritt: Shadow-Cluster + P6 Z3-Entwurf (nach Merge Map-Commit)
+P6 Z3-Entwurf:    docs/INFRA_GUARDIAN_P6_Z3_ENTWURF.md · scripts/test_regime_leader_z3.py
+Shadow-Cluster:   scripts/regime_swarm_shadow_cluster.sh · values-shadow.yaml
+Nächster Schritt: P2/P5 Chaos auf Shadow-Cluster → §6 PASS → Lease-Code
 ```
 
 ---

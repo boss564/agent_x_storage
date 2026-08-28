@@ -389,6 +389,15 @@ raas-regime-swarm-helm-install: ## Install/upgrade regime swarm in namespace tra
 	helm upgrade --install regime-swarm charts/regime-swarm -n trading --create-namespace \
 		-f charts/regime-swarm/values-dev.yaml
 
+raas-regime-leader-z3: ## P6 — Z3/BFS leader invariant proofs (I1)
+	PYTHONPATH=. python3 scripts/test_regime_leader_z3.py
+
+raas-regime-shadow-up: ## Shadow cluster (2 replicas, chaos drills)
+	bash scripts/regime_swarm_shadow_cluster.sh up
+
+raas-regime-shadow-chaos: ## Shadow C-01 — delete leader pod-0
+	bash scripts/regime_swarm_shadow_cluster.sh chaos-delete-leader
+
 raas-flash-crash-retro: ## Option 5 — Z3-Gate risk layer vs historical klines (MAP v0)
 	PYTHONPATH=. python3 scripts/raas_flash_crash_retrospective.py --days 14
 
