@@ -14,6 +14,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     tzdata \
     && rm -rf /var/lib/apt/lists/*
 
+# gate_core (A0/A2.5) → kanten_ledger → emergence/__init__ → measure (numpy)
+RUN pip install --no-cache-dir 'numpy>=1.26.0'
+
+COPY services/__init__.py ./services/
+COPY services/fail_closed_gate/ ./services/fail_closed_gate/
+COPY agents_b2g/__init__.py ./agents_b2g/
+COPY agents_b2g/emergence/ ./agents_b2g/emergence/
 COPY prototypes/raas_paper_trading/ ./prototypes/raas_paper_trading/
 COPY scripts/run_regime_swarm_daemon.py ./scripts/
 COPY config/regime_swarm.json ./config/
