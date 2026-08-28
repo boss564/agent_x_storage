@@ -89,6 +89,7 @@ Die Merkmale stammen aus derselben Preisreihe und sind **positiv korreliert** �
 | bei 24 Zyklen/Tag | **~2–3** Screen-Ereignisse/Tag | **~0,7** (~1/Tag) |
 | Cooling bestätigt | 3× `regime_flag ≥ 2` (Run-Length) | A1 adaptiv: 2× Unreliable / 5× Real-Drift |
 | `r₂³`-Näherung (bestätigt, i.i.d.) | bei r₂≈10 % → **~0,1 %** (~1/1.000 Zyklen) | niedriger (Bonferroni dämpft Screen); separat in 30-Tage-Eval |
+| **Soft-Adapt (A8)** | `SOFT_ADAPT_STEP` = **0,05** (+1,67 %/Zyklus IID-Pfad) | `SOFT_ADAPT_STEP` = **0,10** (+3,3 %/Zyklus IID-Pfad); geändert 2026-08-28 · Gap-Audit Schrittweite (`68edfe9b`) |
 
 **v1:** Keine Bonferroni-Korrektur — bewusst empfindlich; Cooling-Off als Run-Length-Filter.
 
@@ -101,6 +102,7 @@ Diese Zahlen sind **vorab festgehalten** (Pre-Reg), nicht nachträglich rekonstr
 - **Vergleichsbasis:** immer die Zeile der **laufenden Schema-Version** (`swarm_message` / Report-`schema`).
 - **>2×-Amendment:** beobachtete Rate vs. **v2-Planwert** (ab 2026-08-28); Abweichung >2× → Pre-Reg-Amendment, keine stille Schwellenanpassung.
 - **Versionswechsel v1→v2** ist **kein** >2×-Datenbefund (erwartete Screen-Rate fällt von ~10 % auf ~3 %) — dokumentierter Code-Stand, nicht Kalibrierung an Livedaten.
+- **`SOFT_ADAPT_STEP` v1→v2** (0,05 → 0,10, 2026-08-28): ebenfalls **kein** Datenbefund — dokumentierte Spec-Korrektur (Gap-Audit); Adaptionsgeschwindigkeit auf IID-Pfad verdoppelt sich von +1,67 % auf +3,3 %/Zyklus.
 - **Ausnahme i.i.d.:** Abweichung allein aus `r₂³`-Näherung (überlappende Fenster / Autokorrelation) löst kein Amendment aus.
 
 **Hinweis:** Permutation-KS pro Feature nutzt `seed=42`; Unabhängigkeits-Obergrenze bleibt konservative Worst-Case-Schranke.
