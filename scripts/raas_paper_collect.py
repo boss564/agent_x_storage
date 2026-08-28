@@ -13,8 +13,10 @@ import json
 import os
 import shutil
 import signal
+import subprocess
 import sys
 import time
+import traceback
 from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path
@@ -36,6 +38,7 @@ from prototypes.raas_paper_trading.runner import PaperTradingRunner  # noqa: E40
 SCOPE = "DEFENSIVE_CAUSAL_GROUNDING"
 PERSIST_ROOT = _ROOT / "logs" / "worm" / "paper_runs"
 MANIFEST = _ROOT / "logs" / "worm" / "paper_collect_manifest.jsonl"
+EVENTS = _ROOT / "logs" / "worm" / "paper_collect_events.jsonl"
 PID_FILE = _ROOT / "logs" / "paper_collect.pid"
 
 _stop = False
@@ -66,6 +69,25 @@ def _append_manifest(row: Dict[str, Any]) -> None:
         f.write(json.dumps(row, default=str) + "\n")
 
 
+def _log_event(row: Dict[str, Any]) -> None:
+    EVENTS.parent.mkdir(parents=True, exist_ok=True)
+    with EVENTS.open("a", encoding="utf-8") as f:
+        f.write(json.dumps({**row, "ts": _now()}, default=str) + "\n")
+
+
+def _git_head() -> Optional[str]:
+    try:
+        out = subprocess.check_output(
+            ["git", "rev-parse", "HEAD"],
+            cwd=_ROOT,
+            stderr=subprocess.DEVNULL,
+            text=True,
+        )
+        return out.strip() or None
+    except (OSError, subprocess.CalledProcessError):
+        return None
+
+
 def _make_runner(
     *,
     settings: PaperTradingSettings,
@@ -77,7 +99,10 @@ def _make_runner(
     if depth_mode == "worm":
         fetcher = make_worm_depth_fetcher(Path(settings.depth_worm_path))
     else:
-        fetcher = make_live_depth_fetcher(limit=settings.depth_rest_limit)
+        fetcher = make_live_depth_fetcher(
+            limit=settings.depth_rest_limit,
+            fallback_on_error=True,
+        )
     data_root = _ROOT / "data" / "raas"
     os.environ["RAAS_DATA_ROOT"] = str(data_root)
     worm_run_id = f"{run_id}-{symbol.lower()}"
@@ -92,7 +117,64 @@ def _make_runner(
         depth_fetcher=fetcher,
         volatility_profile=settings.volatility_profile_for(symbol),
         pair_manifest_hash=settings.pair_manifest_hash_for(symbol),
+        config_hash=settings.config_hash,
     )
+
+
+def _build_manifest(
+    *,
+    settings: PaperTradingSettings,
+    run_id: str,
+    depth_mode: str,
+    tick_total: int,
+    fill_count: int,
+    tick_errors: int,
+    started: float,
+    runners: Dict[str, PaperTradingRunner],
+    last_prices: Dict[str, float],
+    status: str,
+    error: Optional[str] = None,
+) -> Dict[str, Any]:
+    summaries: Dict[str, Dict[str, Any]] = {}
+    for sym, runner in runners.items():
+        mark = Decimal(str(last_prices.get(sym, 1.0)))
+        snap = runner.ledger.snapshot(mark)
+        persisted = _persist_worm(runner.run_id, str(runner.worm.path))
+        summaries[sym] = {
+            "run_id": runner.run_id,
+            "worm_path": str(runner.worm.path),
+            "persisted_path": str(persisted) if persisted else None,
+            "fills": len(runner.ledger.fills),
+            "equity_eur": snap["equity_eur"],
+            "pair_manifest_hash": settings.pair_manifest_hash_for(sym),
+            "volatility_profile": settings.volatility_profile_for(sym),
+        }
+
+    manifest: Dict[str, Any] = {
+        "schema": "raas_paper_collect_v1",
+        "scope": SCOPE,
+        "live_execution": False,
+        "order_send": False,
+        "not_investment_advice": True,
+        "run_id": run_id,
+        "status": status,
+        "depth_mode": depth_mode,
+        "tick_total": tick_total,
+        "fill_count": fill_count,
+        "tick_errors": tick_errors,
+        "duration_s": round(time.monotonic() - started, 2),
+        "symbols": summaries,
+        "config_hash": settings.config_hash,
+        "git_commit": _git_head(),
+        "pair_manifest_note": (
+            "SIM_FILL rows carry pair_manifest_hash + config_hash at write time; "
+            "git_commit references code revision at collect start"
+        ),
+        "ts": _now(),
+    }
+    if error:
+        manifest["error"] = error
+    return manifest
 
 
 def collect(
@@ -113,75 +195,113 @@ def collect(
     started = time.monotonic()
     tick_total = 0
     fill_count = 0
+    tick_errors = 0
 
-    while not _stop:
-        elapsed = time.monotonic() - started
-        if elapsed >= duration_s:
-            break
-        if max_ticks is not None and tick_total >= max_ticks:
-            break
-
-        for sym in symbols:
-            if _stop:
-                break
-            tick = fetch_binance_ticker(sym)
-            last_prices[sym] = float(tick.price)
-            if sym not in runners:
-                floors[sym] = tick.price * break_pct
-                runners[sym] = _make_runner(
-                    settings=settings,
-                    run_id=run_id,
-                    symbol=sym,
-                    break_floor=floors[sym],
-                    depth_mode=depth_mode,
-                )
-            result = runners[sym].on_tick(tick)
-            tick_total += 1
-            if result.get("fill"):
-                fill_count += 1
-
-        if _stop or (max_ticks is not None and tick_total >= max_ticks):
-            break
-        if time.monotonic() - started >= duration_s:
-            break
-        time.sleep(max(1.0, interval_s))
-
-    summaries: Dict[str, Dict[str, Any]] = {}
-    for sym, runner in runners.items():
-        mark = Decimal(str(last_prices.get(sym, 1.0)))
-        snap = runner.ledger.snapshot(mark)
-        persisted = _persist_worm(runner.run_id, str(runner.worm.path))
-        summaries[sym] = {
-            "run_id": runner.run_id,
-            "worm_path": str(runner.worm.path),
-            "persisted_path": str(persisted) if persisted else None,
-            "fills": len(runner.ledger.fills),
-            "equity_eur": snap["equity_eur"],
-            "pair_manifest_hash": settings.pair_manifest_hash_for(sym),
-            "volatility_profile": settings.volatility_profile_for(sym),
+    _log_event(
+        {
+            "action": "COLLECT_START",
+            "run_id": run_id,
+            "depth_mode": depth_mode,
+            "symbols": symbols,
+            "config_hash": settings.config_hash,
+            "git_commit": _git_head(),
         }
+    )
 
-    manifest = {
-        "schema": "raas_paper_collect_v1",
-        "scope": SCOPE,
-        "live_execution": False,
-        "order_send": False,
-        "not_investment_advice": True,
-        "run_id": run_id,
-        "depth_mode": depth_mode,
-        "tick_total": tick_total,
-        "fill_count": fill_count,
-        "duration_s": round(time.monotonic() - started, 2),
-        "symbols": summaries,
-        "config_hash": settings.config_hash,
-        "pair_manifest_note": (
-            "config_hash covers full file; pair_manifest_hash per symbol is fill-comparable "
-            "across runs when only other pairs change"
-        ),
-        "ts": _now(),
-    }
-    _append_manifest(manifest)
-    return manifest
+    try:
+        while not _stop:
+            elapsed = time.monotonic() - started
+            if elapsed >= duration_s:
+                break
+            if max_ticks is not None and tick_total >= max_ticks:
+                break
+
+            for sym in symbols:
+                if _stop:
+                    break
+                try:
+                    tick = fetch_binance_ticker(sym)
+                except Exception as exc:  # noqa: BLE001
+                    tick_errors += 1
+                    _log_event(
+                        {
+                            "action": "TICK_ERROR",
+                            "run_id": run_id,
+                            "symbol": sym,
+                            "error": str(exc),
+                        }
+                    )
+                    print(f"TICK_ERROR {sym}: {exc}", flush=True)
+                    continue
+                last_prices[sym] = float(tick.price)
+                if sym not in runners:
+                    floors[sym] = tick.price * break_pct
+                    runners[sym] = _make_runner(
+                        settings=settings,
+                        run_id=run_id,
+                        symbol=sym,
+                        break_floor=floors[sym],
+                        depth_mode=depth_mode,
+                    )
+                result = runners[sym].on_tick(tick)
+                tick_total += 1
+                if result.get("fill"):
+                    fill_count += 1
+
+            if tick_total > 0 and tick_total % max(1, len(symbols)) == 0:
+                print(
+                    f"heartbeat ticks={tick_total} fills={fill_count} "
+                    f"errors={tick_errors} elapsed_s={round(time.monotonic() - started, 0)}",
+                    flush=True,
+                )
+
+            if _stop or (max_ticks is not None and tick_total >= max_ticks):
+                break
+            if time.monotonic() - started >= duration_s:
+                break
+            time.sleep(max(1.0, interval_s))
+
+        status = "complete" if not _stop else "stopped"
+        manifest = _build_manifest(
+            settings=settings,
+            run_id=run_id,
+            depth_mode=depth_mode,
+            tick_total=tick_total,
+            fill_count=fill_count,
+            tick_errors=tick_errors,
+            started=started,
+            runners=runners,
+            last_prices=last_prices,
+            status=status,
+        )
+        _append_manifest(manifest)
+        _log_event({"action": "COLLECT_END", "run_id": run_id, "status": status})
+        return manifest
+    except Exception as exc:  # noqa: BLE001
+        manifest = _build_manifest(
+            settings=settings,
+            run_id=run_id,
+            depth_mode=depth_mode,
+            tick_total=tick_total,
+            fill_count=fill_count,
+            tick_errors=tick_errors,
+            started=started,
+            runners=runners,
+            last_prices=last_prices,
+            status="aborted",
+            error=str(exc),
+        )
+        _append_manifest(manifest)
+        _log_event(
+            {
+                "action": "COLLECT_ABORT",
+                "run_id": run_id,
+                "error": str(exc),
+                "traceback": traceback.format_exc(),
+            }
+        )
+        print(f"COLLECT_ABORT: {exc}", flush=True)
+        raise
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -220,6 +340,7 @@ def main(argv: list[str] | None = None) -> int:
     print("=" * 60)
     print(f"run_id={run_id} depth_mode={args.depth_mode} interval_s={interval_s}")
     print(f"symbols={symbols} duration_s={args.duration_s} max_ticks={args.max_ticks}")
+    print(f"git_commit={_git_head()} config_hash={settings.config_hash[:16]}…")
 
     try:
         manifest = collect(

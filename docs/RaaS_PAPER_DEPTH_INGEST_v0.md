@@ -69,8 +69,8 @@ make raas-paper-collect-smoke        # 2 ticks, network smoke
 Manifest: `logs/worm/paper_collect_manifest.jsonl` · PID: `logs/paper_collect.pid` ·
 per-symbol WORM copies under `logs/worm/paper_runs/<run_id>-<symbol>/`.
 
-For worm latency profile (`5–30 s` / `> 30 s` strata), run `make raas-depth-ingest` in parallel
-and a second collect with `--depth-mode worm`.
+On REST failure, optional `synthetic_fallback` (`depth_source` on SIM_FILL) — collect continues;
+replay reports `fills_synthetic_fallback` separately from `fills_binance_rest_depth`.
 
 ### Shadow pairs (BTC / ETH / SOL)
 

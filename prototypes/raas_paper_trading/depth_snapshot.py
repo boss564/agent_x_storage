@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Callable, Optional
 
 from prototypes.raas_paper_trading.feed import fetch_binance_depth, parse_orderbook_snapshot
-from prototypes.raas_paper_trading.slippage import OrderBook
+from prototypes.raas_paper_trading.slippage import OrderBook, synthetic_orderbook
 
 DepthFetcher = Callable[[str, float, str], "DepthSnapshot"]
 
@@ -55,19 +55,37 @@ def age_stratum(snapshot_age_s: Optional[float]) -> str:
     return AGE_STRATA_GT_30
 
 
-def make_live_depth_fetcher(*, limit: int = 10) -> DepthFetcher:
-    """Fetch public depth at fill time — snapshot_age_s ≈ API latency."""
+def make_live_depth_fetcher(
+    *,
+    limit: int = 10,
+    fallback_on_error: bool = True,
+) -> DepthFetcher:
+    """Fetch public depth at fill time — snapshot_age_s ≈ API latency.
 
-    def _fetch(symbol: str, _mid: float, fill_ts: str) -> DepthSnapshot:
-        book = fetch_binance_depth(symbol, limit=limit)
+    On REST failure, optional synthetic fallback (depth_source=synthetic_fallback).
+    """
+
+    def _fetch(symbol: str, mid: float, fill_ts: str) -> DepthSnapshot:
         snapshot_ts = datetime.now(timezone.utc).isoformat()
-        age = snapshot_age_seconds(fill_ts, snapshot_ts)
-        return DepthSnapshot(
-            orderbook=book,
-            snapshot_ts=snapshot_ts,
-            source="binance_rest_depth",
-            snapshot_age_s=age,
-        )
+        try:
+            book = fetch_binance_depth(symbol, limit=limit)
+            age = snapshot_age_seconds(fill_ts, snapshot_ts)
+            return DepthSnapshot(
+                orderbook=book,
+                snapshot_ts=snapshot_ts,
+                source="binance_rest_depth",
+                snapshot_age_s=age,
+            )
+        except Exception:
+            if not fallback_on_error:
+                raise
+            book = synthetic_orderbook(mid, depth_levels=limit)
+            return DepthSnapshot(
+                orderbook=book,
+                snapshot_ts=fill_ts,
+                source="synthetic_fallback",
+                snapshot_age_s=0.0,
+            )
 
     return _fetch
 

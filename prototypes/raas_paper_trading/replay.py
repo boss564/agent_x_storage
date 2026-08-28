@@ -437,6 +437,7 @@ def replay_slippage_ab(
     multi_level_fills = 0
     fills_with_snapshot = 0
     fills_live_depth = 0
+    fills_synthetic_fallback = 0
     age_strata = _empty_age_strata()
 
     for fill in fills:
@@ -446,6 +447,8 @@ def replay_slippage_ab(
             fills_with_snapshot += 1
             if fill.depth_source == "binance_rest_depth":
                 fills_live_depth += 1
+            if fill.depth_source == "synthetic_fallback":
+                fills_synthetic_fallback += 1
         fixed = per_fill_cost(
             fill,
             slippage_mode="fixed",
@@ -518,6 +521,7 @@ def replay_slippage_ab(
             "fills_past_level_1": multi_level_fills,
             "fills_with_orderbook_snapshot": fills_with_snapshot,
             "fills_binance_rest_depth": fills_live_depth,
+            "fills_synthetic_fallback": fills_synthetic_fallback,
         },
         "dynamic_book_note": (
             "Dynamic replay uses orderbook_snapshot on each SIM_FILL when present; "
