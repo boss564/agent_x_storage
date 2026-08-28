@@ -195,11 +195,29 @@ def test_env_overrides_json_file() -> None:
             os.environ.pop(key, None)
 
 
+def test_touch_heartbeat_liveness() -> None:
+    import scripts.run_regime_swarm_daemon as daemon_mod
+
+    with tempfile.TemporaryDirectory() as tmp:
+        hb = Path(tmp) / "heartbeat"
+        old = daemon_mod.HEARTBEAT
+        daemon_mod.HEARTBEAT = hb
+        try:
+            daemon_mod._touch_heartbeat()
+            if not hb.is_file():
+                _fail("heartbeat file missing after touch")
+            if "swarm_up 1" not in daemon_mod.render_metrics_text():
+                _fail("swarm_up should be 1 when heartbeat exists")
+        finally:
+            daemon_mod.HEARTBEAT = old
+
+
 def main() -> int:
     test_parse_and_url_guards()
     test_mock_feed_to_worm()
     test_charter_live_execution_env_blocks()
     test_env_overrides_json_file()
+    test_touch_heartbeat_liveness()
     test_feed_worm_daemon_counters()
     test_gate_block_counter()
     print("LIVE_FEED_PROMETHEUS_PASS")
