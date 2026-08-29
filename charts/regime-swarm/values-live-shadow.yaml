@@ -29,6 +29,13 @@ config:
   SWARM_METRICS_ENABLED: "true"
   SWARM_METRICS_PORT: "8080"
   SWARM_LIVE_EXECUTION: "false"
+  # Option B paper exit — §7 Amendment A1 (1s-Bars); k=4966
+  PAPER_EXIT_MODE: "time_hold"
+  PAPER_HOLD_SECONDS: "4966"
+  PAPER_EXIT_GAP_DT_S: "30"
+  PAPER_EXIT_MAX_WAIT_S: "24830"
+  PAPER_POSITION_STATE_PATH: "/data/state/paper_position.json"
+  PAPER_EDGES_PATH: "/data/audit/paper_edges.jsonl"
   # Position sizing (B0–B8) — default OFF; Strang B: enabled=true wenn ≥50 Fills
   # Siehe docs/POSITION_SIZING_REGIME_MAPPING.md §6–§8
   POSITION_SIZING_ENABLED: "false"
