@@ -33,6 +33,8 @@ config:
   # Siehe docs/POSITION_SIZING_REGIME_MAPPING.md §6–§8
   POSITION_SIZING_ENABLED: "false"
   POSITION_SIZING_GAMMA_MAP: '{"STABLE":0.25,"STABLE_SIDEWAYS":0.10,"LOW_LEVEL_DRIFT":0.20,"DRIFT_IID_UNRELIABLE":0.00,"HIGH_VOL_TREND":0.40,"HIGH_VOL_TREND_BEARISH":0.35}'
+  # Trailing SIGNAL window for A2 (streaming WORM; prevents OOM on 100k+ line archives)
+  SWARM_WORM_MAX_TICKS: "10000"
 
 infrastructureGates:
   enabled: true

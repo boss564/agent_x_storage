@@ -237,7 +237,19 @@ curl -s http://localhost:8080/metrics | grep -E '^sizing_'
 # Erwartung: sizing_gamma_current{regime="none"} 0, sizing_*_total{...} 0
 ```
 
-**Nächster Schritt:** [Paper Exit](PAPER_EXIT_ROUNDTRIP_SPEC.md) (Round-Trip-Gate) → dann [Strang B](POSITION_SIZING_REGIME_MAPPING.md#nach-implementierung) (`POSITION_SIZING_ENABLED=true`).
+**Nächster Schritt:** Nach Pod-Stabilität (Streaming-WORM-Fix) → [Paper Exit](PAPER_EXIT_ROUNDTRIP_SPEC.md) Kalibrierung §7 → [Strang B](POSITION_SIZING_REGIME_MAPPING.md#nach-implementierung).
+
+### OOM / CrashLoopBackOff (2026-08-29)
+
+**Ursache:** A2 lud die Live-WORM zweimal via `Path.read_text().splitlines()` (~670k Zeilen) → Peak >2 GiB → `OOMKilled` (Exit 137).
+
+**Fix:** Streaming-Reader (`prototypes/raas_paper_trading/worm_io.py`) + Trailing-`SWARM_WORM_MAX_TICKS` (Default 10 000). Siehe PR `fix/worm-oom-streaming`.
+
+```bash
+# Nach Image-Rebuild / kind load / pod delete:
+kubectl logs -n trading regime-swarm-0 | grep -E 'swarm_daemon_start|cycle_complete'
+kubectl get pods -n trading   # READY 1/1
+```
 
 ## Erfolgskriterien (Zusammenfassung)
 
