@@ -293,7 +293,9 @@ Zweckbindung = **Invariante**. Smoke muss eine Zeile mit Preis-Feld **ablehnen**
 | 5 | Smoke: einseitige Pause → LN/NL; synthetische Nah-Koinzidenz → LL + onset_skew; Preis-Feld → Reject |
 | 6 | Dual-Start W_xv dokumentieren (nicht an W anhängen) |
 
-**Branch (nach Freigabe):** `feature/cross-venue-feed-validation`
+**Ergebnisdok / LN-Dominanz (keine neue Verdict-Regel):** `p_LN` wird berechnet, fließt aber nicht in die H2-Kette ein (V1 = Untersuchungsgegenstand, V2 = Kontrolle; LN-Dominanz → typisch SEPARABLE). LN-Dominanz ist zweideutig (echte V1-Störung vs. zu enges `gap_dt[V1]`). Bei LN-Dominanz die **V1-Gap-Dauerverteilung** mitlesen: Häufung knapp über 30 s spricht für Schwellenartefakt, breitere Streuung für echte Störungen — beides bleibt SEPARABLE.
+
+**Branch (nach Freigabe):** `feature/cross-venue-connectivity`
 
 ---
 

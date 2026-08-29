@@ -355,6 +355,100 @@ class BinanceWebSocketFeed:
                 return
             time.sleep(1.0)
 
+
+@dataclass(frozen=True)
+class RecvPulse:
+    """Local accept pulse for cross-venue connectivity — no price field (Pre-Reg §5)."""
+
+    venue: str  # v1 | v2
+    recv_ts: str
+
+
+COINBASE_WS_DEFAULT = "wss://ws-feed.exchange.coinbase.com"
+
+
+def coinbase_matches_subscribe_msg(product_id: str = "ETH-USD") -> str:
+    return json.dumps(
+        {
+            "type": "subscribe",
+            "product_ids": [product_id],
+            "channels": ["matches"],
+        }
+    )
+
+
+def coinbase_frame_is_match(payload: str, *, product_id: str = "ETH-USD") -> bool:
+    """True if frame is a match/trade for product — price is ignored (connectivity only)."""
+    try:
+        data = json.loads(payload)
+    except json.JSONDecodeError:
+        return False
+    if not isinstance(data, dict):
+        return False
+    if str(data.get("type") or "") not in ("match", "last_match"):
+        return False
+    return str(data.get("product_id") or "") == product_id
+
+
+class CoinbaseMatchRecvFeed:
+    """Read-only Coinbase matches → RecvPulse (t_recv only). Inject frames for tests."""
+
+    def __init__(
+        self,
+        url: str = COINBASE_WS_DEFAULT,
+        *,
+        product_id: str = "ETH-USD",
+        frames: Optional[Iterable[str]] = None,
+        stop: Optional[Callable[[], bool]] = None,
+        venue: str = "v2",
+    ) -> None:
+        assert_no_order_urls(url)
+        if not url.startswith(("wss://", "ws://")):
+            raise RuntimeError("live_feed: only ws:// or wss:// URLs allowed")
+        self.url = url
+        self.product_id = product_id
+        self._frames = list(frames) if frames is not None else None
+        self._stop = stop
+        self.venue = venue
+
+    def __iter__(self) -> Iterator[RecvPulse]:
+        if self._frames is not None:
+            for raw in self._frames:
+                if coinbase_frame_is_match(raw, product_id=self.product_id):
+                    yield RecvPulse(venue=self.venue, recv_ts=datetime.now(timezone.utc).isoformat())
+            return
+        while True:
+            if self._stop is not None and self._stop():
+                return
+            sock: Optional[socket.socket] = None
+            try:
+                sock = _open_ws_socket(self.url)
+                _ws_send_frame(
+                    sock,
+                    coinbase_matches_subscribe_msg(self.product_id).encode("utf-8"),
+                    opcode=0x1,
+                )
+                for raw in _ws_recv_text_frames(sock):
+                    if self._stop is not None and self._stop():
+                        return
+                    if coinbase_frame_is_match(raw, product_id=self.product_id):
+                        yield RecvPulse(
+                            venue=self.venue,
+                            recv_ts=datetime.now(timezone.utc).isoformat(),
+                        )
+            except (ConnectionError, OSError, TimeoutError, ssl.SSLError):
+                pass
+            finally:
+                if sock is not None:
+                    try:
+                        sock.close()
+                    except OSError:
+                        pass
+            if self._stop is not None and self._stop():
+                return
+            time.sleep(1.0)
+
+
 def fetch_binance_depth(
     symbol: str,
     *,
