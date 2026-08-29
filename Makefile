@@ -372,6 +372,9 @@ raas-live-feed-prometheus-smoke: ## Mock-WS → WORM → daemon Prometheus count
 raas-position-sizing-smoke: ## B0–B8 Kelly boundary sub-swarm (charter §4)
 	PYTHONPATH=. python3 scripts/test_position_sizing_subswarm.py
 
+raas-paper-exit-smoke: ## Option B exit state machine (S1–S6 Pre-Reg)
+	PYTHONPATH=. python3 scripts/test_paper_exit_implementation.py
+
 raas-paper-hold-calibrate-smoke: ## Option B hold k calibration (filter·gap·E[|r|]·windows)
 	PYTHONPATH=. python3 scripts/test_paper_hold_calibration.py
 

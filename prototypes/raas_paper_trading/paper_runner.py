@@ -1,6 +1,7 @@
 """Live paper bridge: WebSocket ticks → WORM → daemon (monitoring only).
 
 Charter: live_execution is hardcoded False. Never starts an order path.
+Option B exit: PAPER_EXIT_MODE=time_hold (Pre-Reg PAPER_EXIT_IMPLEMENTATION_PREREG).
 """
 from __future__ import annotations
 
@@ -15,6 +16,7 @@ from prototypes.raas_paper_trading.feed import (
     PaperTick,
     binance_trade_ws_url,
 )
+from prototypes.raas_paper_trading.paper_exit import exit_config_from_env
 from prototypes.raas_paper_trading.runner import PaperTradingRunner
 from prototypes.raas_paper_trading.worm_log import PaperWormLog
 
@@ -52,12 +54,39 @@ class LivePaperBridge:
             run_id=self.symbol.lower(),
             data_root=self.worm_dir,
         )
-        self.runner = runner or PaperTradingRunner(
-            tenant_id="live",
-            run_id=self.symbol.lower(),
-            worm=self.worm,
-            attach_orderbook=attach_orderbook,
-        )
+        if runner is not None:
+            self.runner = runner
+        else:
+            cfg = exit_config_from_env()
+            exit_mode = cfg["exit_mode"]
+            # Live shadow defaults to Option-B time_hold (Pre-Reg).
+            # State/edges live next to the WORM tree unless env overrides absolute paths.
+            state_path = Path(cfg["state_path"])
+            edges_path = Path(cfg["edges_path"])
+            if "PAPER_POSITION_STATE_PATH" not in os.environ:
+                state_path = self.worm_dir / "state" / "paper_position.json"
+            if "PAPER_EDGES_PATH" not in os.environ:
+                edges_path = self.worm_dir / "audit" / "paper_edges.jsonl"
+            if exit_mode in ("", "legacy", "break", "off", "none"):
+                self.runner = PaperTradingRunner(
+                    tenant_id="live",
+                    run_id=self.symbol.lower(),
+                    worm=self.worm,
+                    attach_orderbook=attach_orderbook,
+                )
+            else:
+                self.runner = PaperTradingRunner(
+                    tenant_id="live",
+                    run_id=self.symbol.lower(),
+                    worm=self.worm,
+                    attach_orderbook=attach_orderbook,
+                    exit_mode="time_hold",
+                    hold_seconds=int(cfg["hold_seconds"]),
+                    gap_dt_s=float(cfg["gap_dt_s"]),
+                    max_wait_s=float(cfg["max_wait_s"]),
+                    position_state_path=state_path,
+                    edges_path=edges_path,
+                )
         self.feed: Iterable[PaperTick] = feed if feed is not None else self._feed_from_env()
         self.ticks_written = 0
 
