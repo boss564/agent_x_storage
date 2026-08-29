@@ -140,9 +140,10 @@ Bei Freeze-`PAPER_HOLD_SECONDS=433` (~7,2 min) und einer Position zur Zeit: **~5
 | PR | Inhalt |
 |----|--------|
 | **Option B Spec** | DECIDED — diese Datei §4 |
-| **Kalibrierung** | `hold_calibration.py` + `calibrate_paper_hold.py` → Vorschlag `PAPER_HOLD_SECONDS`; Freeze erst nach Live-WORM-Lauf in §7 |
-| **Exit** | `PaperTradingRunner`: Zeit-Exit nach `hold_seconds`; 1-Position-Regel; WORM-Felder `entry_ts` / `exit_reason: TIME_HOLD` |
-| **Wiring** | `load_ledger_from_worm(worm_path)` → `PaperLedger` für B0-Hook |
+| **Kalibrierung** | `hold_calibration.py` + Freeze §7 (`PAPER_HOLD_SECONDS=433`) |
+| **Exit Pre-Reg** | [`PAPER_EXIT_IMPLEMENTATION_PREREG.md`](PAPER_EXIT_IMPLEMENTATION_PREREG.md) — I1–I6, Automat, Smoke |
+| **Exit Code** | nach Freigabe der Pre-Reg: `feature/exit-implementation` |
+| **Wiring** | `load_ledger_from_worm` → `PaperLedger` für B0-Hook |
 | **Strang B** | `POSITION_SIZING_ENABLED=true`, Runbook §10, Metriken |
 
 **Env (Entwurf, nach Freeze):**
@@ -204,6 +205,7 @@ kubectl exec -n trading regime-swarm-0 -- sh -c \
 
 ## Siehe auch
 
+- [`docs/PAPER_EXIT_IMPLEMENTATION_PREREG.md`](PAPER_EXIT_IMPLEMENTATION_PREREG.md) — Implementierungs-Pre-Reg (I1–I6, Zustandsautomat, Smoke)
 - [`docs/POSITION_SIZING_SUBSWARM.md`](POSITION_SIZING_SUBSWARM.md) — B2, `INSUFFICIENT_HISTORY`
 - [`docs/POSITION_SIZING_REGIME_MAPPING.md`](POSITION_SIZING_REGIME_MAPPING.md) — γ-Map, Strang B
 - [`docs/REGIME_SWARM_LIVE_SHADOW_RUNBOOK.md`](REGIME_SWARM_LIVE_SHADOW_RUNBOOK.md) — Betrieb
