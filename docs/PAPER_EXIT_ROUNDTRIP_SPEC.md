@@ -277,6 +277,29 @@ PYTHONPATH=. python3 scripts/count_paper_edges_at_freeze.py \
 
 Round-Trip 1 (Live 2026-08-29): `target=4966`, `actual=4967.563`, `delta≈1.56 s` → **eligible**.
 
+### 8.1 Pre-Reg Standby (vor Mehrheits-Sample) — 2026-08-29
+
+**30-s-Schwelle (quantitativ, nicht gegriffen):**
+
+```text
+σ_1s ≈ 0.0106 %   (aus Freeze A1 / Ziel-σ_k)
+σ_30s = 0.0106 % × √30 ≈ 5.8 bps
+Zielbewegung bei k=4966:  ≈ 75 bps  (σ_k)
+Ausführungsrauschen ≈ 8 % des Zielsignals
+≪ Kostenboden 20 bps  → p,b nicht nennenswert verzerrt
+```
+
+**Erwartung Feed-Qualität (vor den Daten festgehalten):** Über 3–4 Tage Live-Feed **ohne** Lückenbehandlung im Exit-Pfad sollten **einige** Round-Trips am Delta scheitern (ineligible). Eine Ablehnungsquote grob zwischen wenigen Prozent und ~¼ wäre erwartbar. **`50/50 eligible` am Ende wäre nicht die gute Nachricht** — eher Hinweis, dass das Delta nicht auslöst, als dass drei Tage lang keine Unterbrechung war.
+
+**Zwei Ablesungen des Zählers:**
+
+| Ablesung | Bedeutung |
+|----------|-----------|
+| `n_eligible_at_freeze_k` | Gate für Strang B (N≥50) |
+| `n_ineligible` / `by_reason` | Feed-/Hold-Qualität (sonst nirgends gemessen) |
+
+Wall-Clock-Hold aus persistiertem `entry_tick_ts` (kein separates `hold_until`): Frist abgeleitet; Timer-Reset nach Restart wäre als Delta sichtbar.
+
 ---
 
 ## Siehe auch
