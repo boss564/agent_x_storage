@@ -84,21 +84,42 @@ Bei 30-Sekunden-Flats liegt die typische ETH-Bewegung unter diesem Boden → str
 
 **Reihenfolge verbindlich:**
 
-1. σ aus vorhandener WORM messen (670k+ `SIGNAL`-Zeilen reichen).
-2. k so wählen, dass erwartete |Δ| über k **≥ 3× Kostenboden** (~0.6 % absolut).
-3. **`PAPER_HOLD_SECONDS` (oder `PAPER_HOLD_TICKS`) in dieser Spec einfrieren** — dokumentiert mit Messdatum und σ-Schätzer.
+1. σ aus vorhandener WORM messen (Skript: `scripts/calibrate_paper_hold.py`).
+2. k so wählen, dass **E[|r_k|]** ≥ 3× Kostenboden (~0.6 %) — siehe Formel unten (**nicht** σ_k ≥ 0.6 %).
+3. **`PAPER_HOLD_SECONDS` in §7 einfrieren** — inkl. WORM-sha256, Zeilenzahl, Zeitraum, dt-Verteilung, σ-Teilfenster.
 4. Erst danach Exit-Code aktivieren und Round-Trips sammeln.
 
-**Faustformel (Überschlag, auf eigenen Daten zu verifizieren):**
+**Skript-Entscheidungen (verbindlich):**
+
+| # | Regel | Begründung |
+|---|-------|------------|
+| 1 | Nur Tick-`SIGNAL` (`aggregate is not True`, `signal_id ≠ aggregate`) | `runner.py` schreibt auch Aggregate mit wiederholtem `mark_price` → verzerrt σ |
+| 2 | Renditen **zeitnormiert** `ln(p_i/p_{i-1})/√Δt`; Δt > `gap_dt_s` (Default 30s) **ausschließen**; dt-p50/p95/p99/max ausgeben | Feed-Lücken sind keine Marktbewegung; Gap→zu hohes σ→**zu kurzes k** (gefährliche Richtung) |
+| 3 | Ziel: E[|r_k|] ≥ 0.6 % ⇒ σ_k ≥ 0.6 % / √(2/π) ≈ **0.7516 %** | E[|r|] ≠ σ; Gleichsetzen unterschätzt Horizont um ~20 % |
+| 4 | σ über Teilfenster (min/med/max) ausweisen | Vola clustert; √k-Skalierung unterstellt i.i.d. — Spannweite zeigt Stabilität |
+
+**Formel (Implementierung):**
 
 ```text
-E[|r_k|] ≥ 3 × 0.002   # 3 × 20 bps
-k ≈ (0.006 / σ_per_tick)^2  in Ticks   (random-walk-Näherung, grob)
+r̃_i = ln(p_i / p_{i-1}) / √Δt_i     # nur wenn 0 < Δt_i ≤ gap_dt_s
+σ_√s = std(r̃)                        # pro √Sekunde
+E[|r_k|] = σ_k · √(2/π),  σ_k = σ_√s · √k
+Forderung: E[|r_k|] ≥ 3 × 0.002 = 0.006
+         ⇒ σ_k ≥ 0.006 / √(2/π) ≈ 0.007516
+         ⇒ k ≥ (0.007516 / σ_√s)²   Sekunden
 ```
 
-Überschlag Live-ETH: **~1 Stunde** Haltedauer — **nicht** übernehmen ohne Kalibrierung auf dem eigenen WORM.
+```bash
+# Cluster-WORM (Pfad-Schema unverändert):
+kubectl cp trading/regime-swarm-0:/data/worm/live/live/paper/runs/ethusdt/paper_trades.worm.jsonl \
+  ./data/worm/ethusdt/paper_trades.worm.jsonl
+PYTHONPATH=. python3 scripts/calibrate_paper_hold.py \
+  --worm ./data/worm/ethusdt/paper_trades.worm.jsonl --print-freeze
+```
 
-**Anti-HARKing:** k darf **nicht** nachträglich an f* angepasst werden. Änderung nur via neuer Spec-Version + neues Pre-Reg-Freeze.
+**Konservierung:** Jeder Freeze-Eintrag in §7 trägt `worm_sha256`, `n_worm_lines`, `ts_first→ts_last`. Ohne Hash ist „σ aus dem WORM“ nicht rekonstruierbar.
+
+**Anti-HARKing (Freeze-Satz):** Die Kalibrierung stellt sicher, dass die **Messung möglich** ist (Horizont räumt den Kostenboden), **nicht** dass sie günstig ausfällt. Kommt f* nach 50 Round-Trips ≤ 0 heraus, ist das ein Ergebnis — Signal ohne Kante nach Kosten. k danach nachjustieren, bis f* positiv wirkt, ist HARKing. Änderung von k nur via neuer Spec-Version + neues Pre-Reg-Freeze.
 
 ### 4.4 Positions-Disziplin (Unabhängigkeit für B2)
 
@@ -118,10 +139,11 @@ Bei ~1 h Haltedauer und einer Position zur Zeit: **~50 h ≈ 2 Tage** bis 50 abg
 
 | PR | Inhalt |
 |----|--------|
-| **#26 (Kalibrierung)** | Skript: σ aus WORM → empfohlenes `PAPER_HOLD_SECONDS`; Freeze-Wert in Spec §4.3 eintragen |
-| **#27 (Exit)** | `PaperTradingRunner`: Zeit-Exit nach `hold_seconds`; 1-Position-Regel; WORM-Felder `entry_ts` / `exit_reason: TIME_HOLD` |
-| **#28 (Wiring)** | `load_ledger_from_worm(worm_path)` → `PaperLedger` für B0-Hook |
-| **#29 (Strang B)** | `POSITION_SIZING_ENABLED=true`, Runbook §10, Metriken |
+| **Option B Spec** | DECIDED — diese Datei §4 |
+| **Kalibrierung** | `hold_calibration.py` + `calibrate_paper_hold.py` → Vorschlag `PAPER_HOLD_SECONDS`; Freeze erst nach Live-WORM-Lauf in §7 |
+| **Exit** | `PaperTradingRunner`: Zeit-Exit nach `hold_seconds`; 1-Position-Regel; WORM-Felder `entry_ts` / `exit_reason: TIME_HOLD` |
+| **Wiring** | `load_ledger_from_worm(worm_path)` → `PaperLedger` für B0-Hook |
+| **Strang B** | `POSITION_SIZING_ENABLED=true`, Runbook §10, Metriken |
 
 **Env (Entwurf, nach Freeze):**
 
@@ -154,12 +176,24 @@ kubectl exec -n trading regime-swarm-0 -- sh -c \
 
 ## 7. Kalibrierungs-Log (§4.3 Freeze)
 
+**Status:** Skript bereit (`make raas-paper-hold-calibrate-smoke`); **Freeze-Werte TBD** bis Live-WORM-Lauf mit `--print-freeze`.
+
 | Feld | Wert |
 |------|------|
-| `PAPER_HOLD_SECONDS` | **TBD** — nach Skript-Lauf auf Live-WORM |
-| σ-Schätzer | TBD |
-| Messdatum / WORM-Pfad | TBD |
+| `PAPER_HOLD_SECONDS` | **TBD** — nach `calibrate_paper_hold.py --print-freeze` auf Live-WORM |
+| σ_per_√s (time-norm) | TBD |
+| target E[|r_k|] / σ_k | `0.0060` / `≈0.007516` |
+| σ Teilfenster [min, med, max] | TBD |
+| n_tick_signals / n_returns / gaps_excl | TBD |
+| WORM path | `/data/worm/live/live/paper/runs/ethusdt/paper_trades.worm.jsonl` |
+| WORM sha256 | TBD |
+| n_worm_lines | TBD |
+| ts range (UTC) | TBD |
+| dt p50/p95/p99/max (s) | TBD |
+| gap_dt_threshold_s | `30` (Default) |
+| Messdatum | TBD |
 | Freigegeben von | TBD |
+| Anti-HARKing | Kalibrierung = Messbarkeit (Kostenboden), **nicht** günstiges f*; f*≤0 nach N Round-Trips ist Ergebnis, kein Anlass k nachzuziehen |
 
 ---
 
