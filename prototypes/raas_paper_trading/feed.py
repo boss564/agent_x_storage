@@ -8,6 +8,7 @@ import os
 import socket
 import ssl
 import struct
+import time
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
@@ -300,6 +301,8 @@ class BinanceWebSocketFeed:
         frames: Optional[Iterable[str]] = None,
         default_symbol: str = "ETHUSDT",
         stop: Optional[Callable[[], bool]] = None,
+        on_disconnect: Optional[Callable[[], None]] = None,
+        on_reconnect: Optional[Callable[[], None]] = None,
     ) -> None:
         assert_no_order_urls(url)
         if not url.startswith(("wss://", "ws://")):
@@ -308,25 +311,49 @@ class BinanceWebSocketFeed:
         self._frames = list(frames) if frames is not None else None
         self._default_symbol = default_symbol
         self._stop = stop
+        self._on_disconnect = on_disconnect
+        self._on_reconnect = on_reconnect
 
     def __iter__(self) -> Iterator[PaperTick]:
         if self._frames is not None:
             yield from MockWebSocketFeed(self._frames, default_symbol=self._default_symbol)
             return
-        sock = _open_ws_socket(self.url)
-        try:
-            for raw in _ws_recv_text_frames(sock):
-                if self._stop is not None and self._stop():
-                    break
-                tick = parse_binance_ws_message(raw, default_symbol=self._default_symbol)
-                if tick is not None:
-                    yield tick
-        finally:
+        # Reconnect loop: drop → disconnect callback; next successful open → reconnect
+        ever_connected = False
+        pending_reconnect = False
+        while True:
+            if self._stop is not None and self._stop():
+                return
+            sock: Optional[socket.socket] = None
             try:
-                sock.close()
-            except OSError:
-                pass
-
+                sock = _open_ws_socket(self.url)
+                if pending_reconnect and self._on_reconnect is not None:
+                    self._on_reconnect()
+                pending_reconnect = False
+                ever_connected = True
+                for raw in _ws_recv_text_frames(sock):
+                    if self._stop is not None and self._stop():
+                        return
+                    tick = parse_binance_ws_message(raw, default_symbol=self._default_symbol)
+                    if tick is not None:
+                        yield tick
+                # Clean server close
+                if ever_connected and self._on_disconnect is not None:
+                    self._on_disconnect()
+                    pending_reconnect = True
+            except (ConnectionError, OSError, TimeoutError, ssl.SSLError):
+                if ever_connected and not pending_reconnect and self._on_disconnect is not None:
+                    self._on_disconnect()
+                    pending_reconnect = True
+            finally:
+                if sock is not None:
+                    try:
+                        sock.close()
+                    except OSError:
+                        pass
+            if self._stop is not None and self._stop():
+                return
+            time.sleep(1.0)
 
 def fetch_binance_depth(
     symbol: str,

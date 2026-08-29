@@ -63,16 +63,25 @@ class LivePaperBridge:
             # State/edges live next to the WORM tree unless env overrides absolute paths.
             state_path = Path(cfg["state_path"])
             edges_path = Path(cfg["edges_path"])
+            gaps_path = self.worm_dir / "audit" / "feed_gaps.jsonl"
+            gap_state_path = self.worm_dir / "state" / "feed_gap_state.json"
             if "PAPER_POSITION_STATE_PATH" not in os.environ:
                 state_path = self.worm_dir / "state" / "paper_position.json"
             if "PAPER_EDGES_PATH" not in os.environ:
                 edges_path = self.worm_dir / "audit" / "paper_edges.jsonl"
+            if "PAPER_FEED_GAPS_PATH" in os.environ:
+                gaps_path = Path(os.environ["PAPER_FEED_GAPS_PATH"])
+            if "PAPER_FEED_GAP_STATE_PATH" in os.environ:
+                gap_state_path = Path(os.environ["PAPER_FEED_GAP_STATE_PATH"])
             if exit_mode in ("", "legacy", "break", "off", "none"):
                 self.runner = PaperTradingRunner(
                     tenant_id="live",
                     run_id=self.symbol.lower(),
                     worm=self.worm,
                     attach_orderbook=attach_orderbook,
+                    feed_gaps_path=gaps_path,
+                    feed_gap_state_path=gap_state_path,
+                    enable_feed_gap=True,
                 )
             else:
                 self.runner = PaperTradingRunner(
@@ -86,13 +95,62 @@ class LivePaperBridge:
                     max_wait_s=float(cfg["max_wait_s"]),
                     position_state_path=state_path,
                     edges_path=edges_path,
+                    feed_gaps_path=gaps_path,
+                    feed_gap_state_path=gap_state_path,
+                    enable_feed_gap=True,
                 )
         self.feed: Iterable[PaperTick] = feed if feed is not None else self._feed_from_env()
         self.ticks_written = 0
 
+    def _socket_disconnect(self) -> None:
+        mon = self.runner.feed_gap
+        if mon is None:
+            return
+        fsm = self.runner.exit.state if self.runner.exit else "UNKNOWN"
+        mon.on_socket_disconnect(fsm_state=fsm)
+
+    def _socket_reconnect(self) -> None:
+        mon = self.runner.feed_gap
+        if mon is None:
+            return
+        fsm = "UNKNOWN"
+        position_open = False
+        hold_deadline = None
+        round_trip_id = None
+        if self.runner.exit is not None:
+            fsm = self.runner.exit.state
+            store = self.runner.exit.store
+            position_open = store.state in ("HOLDING", "EXIT_PENDING", "ENTRY_PENDING")
+            round_trip_id = store.entry_signal_id
+            if store.entry_tick_ts:
+                from datetime import datetime, timezone
+
+                from prototypes.raas_paper_trading.paper_exit import parse_ts_unix
+
+                try:
+                    deadline_u = parse_ts_unix(store.entry_tick_ts) + float(
+                        store.hold_seconds_target
+                    )
+                    hold_deadline = datetime.fromtimestamp(
+                        deadline_u, tz=timezone.utc
+                    ).isoformat()
+                except ValueError:
+                    hold_deadline = None
+        mon.on_socket_reconnect(
+            fsm_state=fsm,
+            position_open=position_open,
+            hold_deadline_ts=hold_deadline,
+            round_trip_id=round_trip_id,
+        )
+
     def _feed_from_env(self) -> Iterable[PaperTick]:
         url = binance_trade_ws_url(self.symbol)
-        return BinanceWebSocketFeed(url, default_symbol=self.symbol)
+        return BinanceWebSocketFeed(
+            url,
+            default_symbol=self.symbol,
+            on_disconnect=self._socket_disconnect,
+            on_reconnect=self._socket_reconnect,
+        )
 
     def ingest_tick(self, tick: PaperTick) -> Dict[str, Any]:
         if tick.symbol.upper() != self.symbol:

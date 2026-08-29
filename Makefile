@@ -375,6 +375,14 @@ raas-position-sizing-smoke: ## B0–B8 Kelly boundary sub-swarm (charter §4)
 raas-paper-exit-smoke: ## Option B exit state machine (S1–S6 Pre-Reg)
 	PYTHONPATH=. python3 scripts/test_paper_exit_implementation.py
 
+raas-feed-gap-smoke: ## Feed-gap JSONL + socket↔tick concordance (Pre-Reg)
+	PYTHONPATH=. python3 scripts/test_feed_gap_concordance.py
+
+raas-feed-gap-concordance: ## H0/H1/H_inv/H2 report (GAPS= EDGES= paths)
+	@test -n "$(GAPS)" || (echo "Usage: make raas-feed-gap-concordance GAPS=… EDGES=…"; exit 1)
+	@test -n "$(EDGES)" || (echo "Usage: make raas-feed-gap-concordance GAPS=… EDGES=…"; exit 1)
+	PYTHONPATH=. python3 scripts/count_feed_gap_concordance.py --gaps "$(GAPS)" --edges "$(EDGES)"
+
 raas-paper-edges-count: ## B2-eligible edges at freeze k (EDGES= path, optional FREEZE_K=4966)
 	@test -n "$(EDGES)" || (echo "Usage: make raas-paper-edges-count EDGES=path/to/paper_edges.jsonl"; exit 1)
 	PYTHONPATH=. python3 scripts/count_paper_edges_at_freeze.py --edges "$(EDGES)" --freeze-k "$(or $(FREEZE_K),4966)"

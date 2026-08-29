@@ -6,10 +6,12 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
 from uuid import uuid4
+import os
 
 from prototypes.raas_paper_trading.depth_snapshot import DepthFetcher, DepthSnapshot
 from prototypes.raas_paper_trading.envelope_score import score_envelope_hits
 from prototypes.raas_paper_trading.feed import PaperTick, orderbook_to_snapshot
+from prototypes.raas_paper_trading.feed_gap import FeedGapMonitor, feed_gap_paths_from_env
 from prototypes.raas_paper_trading.ledger import PaperLedger
 from prototypes.raas_paper_trading.paper_exit import (
     ExitAction,
@@ -18,6 +20,7 @@ from prototypes.raas_paper_trading.paper_exit import (
     enrich_sell_worm_fields,
     exit_config_from_env,
     human_force_exit_requested,
+    parse_ts_unix,
 )
 from prototypes.raas_paper_trading.worm_log import PaperWormLog
 
@@ -53,6 +56,10 @@ class PaperTradingRunner:
         max_wait_s: Optional[float] = None,
         position_state_path: Optional[Path] = None,
         edges_path: Optional[Path] = None,
+        feed_gap_monitor: Optional[FeedGapMonitor] = None,
+        feed_gaps_path: Optional[Path] = None,
+        feed_gap_state_path: Optional[Path] = None,
+        enable_feed_gap: Optional[bool] = None,
     ) -> None:
         self.tenant_id = tenant_id
         self.run_id = run_id or str(uuid4())
@@ -82,6 +89,27 @@ class PaperTradingRunner:
                 hold_seconds=int(hold_seconds if hold_seconds is not None else cfg["hold_seconds"]),
                 gap_dt_s=float(gap_dt_s if gap_dt_s is not None else cfg["gap_dt_s"]),
                 max_wait_s=float(max_wait_s if max_wait_s is not None else cfg["max_wait_s"]),
+            )
+
+        if enable_feed_gap is None:
+            raw = os.environ.get("PAPER_FEED_GAP_ENABLED", "").strip().lower()
+            enable_feed_gap = raw in ("1", "true", "yes", "on") or feed_gap_monitor is not None or feed_gaps_path is not None
+
+        self.feed_gap: Optional[FeedGapMonitor] = feed_gap_monitor
+        if self.feed_gap is None and enable_feed_gap:
+            paths = feed_gap_paths_from_env()
+            gpath = Path(feed_gaps_path or paths["gaps_path"])
+            spath = Path(feed_gap_state_path or paths["state_path"])
+            gap = float(
+                gap_dt_s
+                if gap_dt_s is not None
+                else (self.exit.gap_dt_s if self.exit else exit_config_from_env()["gap_dt_s"])
+            )
+            self.feed_gap = FeedGapMonitor.from_paths(
+                gaps_path=gpath,
+                state_path=spath,
+                gap_dt_s=gap,
+                emit_restart_marker=True,
             )
         if self.exit is not None:
             self.exit.seed_ledger_if_needed(
@@ -143,6 +171,43 @@ class PaperTradingRunner:
                 worm_row["depth_snapshot_hash"] = depth.depth_snapshot_hash
         return self.worm.append(worm_row)
 
+    def _observe_feed_gap(self, tick: PaperTick, fill_ts: str) -> None:
+        """Tick-spacing gap audit (Pre-Reg feed-gap concordance). Socket events via bridge."""
+        if self.feed_gap is None:
+            return
+        hold_deadline: Optional[str] = None
+        round_trip_id: Optional[str] = None
+        fsm = "IDLE"
+        position_open = self.ledger.position_qty > 0
+        if self.exit is not None:
+            fsm = self.exit.state
+            store = self.exit.store
+            if store.entry_tick_ts:
+                try:
+                    deadline_u = parse_ts_unix(store.entry_tick_ts) + float(
+                        store.hold_seconds_target
+                    )
+                    hold_deadline = datetime.fromtimestamp(
+                        deadline_u, tz=timezone.utc
+                    ).isoformat()
+                except ValueError:
+                    hold_deadline = None
+                round_trip_id = store.entry_signal_id
+            position_open = position_open or store.state in (
+                "HOLDING",
+                "EXIT_PENDING",
+                "ENTRY_PENDING",
+            )
+        self.feed_gap.on_tick(
+            tick_ts=fill_ts,
+            symbol=tick.symbol,
+            fsm_state=fsm,
+            position_open=bool(position_open),
+            hold_deadline_ts=hold_deadline,
+            exit_tick_ts=None,
+            round_trip_id=round_trip_id,
+        )
+
     def _on_tick_time_hold(self, tick: PaperTick) -> Dict[str, Any]:
         assert self.exit is not None
         self._tick_n += 1
@@ -151,6 +216,7 @@ class PaperTradingRunner:
         predicted = self._predict_break(tick)
         self.predictions.append({"condition_id": cid, "break": predicted})
         fill_ts = _fill_ts(tick)
+        self._observe_feed_gap(tick, fill_ts)
         mark = Decimal(str(tick.price))
         depth = self._resolve_depth(tick)
         orderbook = depth.orderbook if depth else None
