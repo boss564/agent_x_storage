@@ -7,8 +7,16 @@
 #     -f charts/regime-swarm/values-live-shadow.yaml
 #
 # Requires cluster egress to wss://stream.binance.com (or set LIVE_FEED_WS_URL).
+#
+# Image Sollzustand (Fenster W Dual-Start 2026-08-29T13:17:46Z): feed-gap-v1.
+# Helm upgrade kann an immutable PVC scheitern → dann kubectl set image (Runbook §9).
 
 replicaCount: 1
+
+image:
+  repository: agentx-regime-swarm
+  tag: "feed-gap-v1"
+  pullPolicy: IfNotPresent
 
 leaderElection:
   enabled: false
@@ -36,6 +44,10 @@ config:
   PAPER_EXIT_MAX_WAIT_S: "24830"
   PAPER_POSITION_STATE_PATH: "/data/state/paper_position.json"
   PAPER_EDGES_PATH: "/data/audit/paper_edges.jsonl"
+  # Feed-gap concordance (Pre-Reg PAPER_FEED_GAP_DELTA_CONCORDANCE) — Dual-Instrument
+  PAPER_FEED_GAP_ENABLED: "true"
+  PAPER_FEED_GAPS_PATH: "/data/audit/feed_gaps.jsonl"
+  PAPER_FEED_GAP_STATE_PATH: "/data/state/feed_gap_state.json"
   # Position sizing (B0–B8) — default OFF; Strang B: enabled=true wenn ≥50 Fills
   # Siehe docs/POSITION_SIZING_REGIME_MAPPING.md §6–§8
   POSITION_SIZING_ENABLED: "false"

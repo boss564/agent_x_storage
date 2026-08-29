@@ -192,17 +192,26 @@ Nach Merge von **PR #22** (γ-Map, Trigger `regime_flag>=1`, `sizing_*`-Metriken
 
 ```bash
 git checkout main && git pull
-docker build -f Dockerfile.regime-swarm -t agentx-regime-swarm:live-shadow .
-kind load docker-image agentx-regime-swarm:live-shadow --name regime-shadow
+docker build -f Dockerfile.regime-swarm -t agentx-regime-swarm:feed-gap-v1 .
+kind load docker-image agentx-regime-swarm:feed-gap-v1 --name regime-shadow
 ```
 
 ### 9.2 Rollout (PVC-sicher — ohne `helm upgrade` bei PVC-Drift)
 
+**Bekannt:** Bestehendes PVC (oft 10Gi) vs. Chart `persistence.size: 5Gi` blockiert
+`helm upgrade` (immutable `volumeClaimTemplates`). Zusätzlich kann ein früherer
+`kubectl set image` Field-Manager-Konflikte erzeugen. **Sollzustand** für Image und
+Env steht trotzdem in [`values-live-shadow.yaml`](../charts/regime-swarm/values-live-shadow.yaml)
+(`image.tag`, `PAPER_*`) — bei Cluster-Neuaufbau oder erfolgreichem Helm ist das die Quelle.
+Laufendes Fenster W: Image per `kubectl set image` setzen, ConfigMap bei Bedarf patchen;
+Abweichung Chart↔Cluster ist dokumentiert, nicht vergessen.
+
 Wenn `helm upgrade` an **immutable `volumeClaimTemplates`** scheitert (z. B. bestehendes PVC 10Gi vs. Chart 5Gi), Image per `kubectl` setzen:
 
 ```bash
+# Tag = Chart-Sollzustand (aktuell feed-gap-v1)
 kubectl set image statefulset/regime-swarm -n trading \
-  regime-swarm=agentx-regime-swarm:live-shadow
+  regime-swarm=agentx-regime-swarm:feed-gap-v1
 kubectl rollout restart statefulset/regime-swarm -n trading
 kubectl rollout status statefulset/regime-swarm -n trading --timeout=180s
 ```
@@ -222,21 +231,27 @@ helm upgrade regime-swarm charts/regime-swarm -n trading \
   -f charts/regime-swarm/values-dev.yaml \
   -f charts/regime-swarm/values-live-shadow.yaml \
   --set image.repository=agentx-regime-swarm \
-  --set image.tag=live-shadow \
+  --set image.tag=feed-gap-v1 \
   --reuse-values
 ```
+
+Feed-Gap Dual-Start (Provenienz für Pre-Reg-Fenster W): Config-Commit-Hash +
+`restart_marker` in `/data/audit/feed_gaps.jsonl` + Image-Tag `feed-gap-v1` ins
+Ergebnisdok (`PAPER_FEED_GAP_DELTA_CONCORDANCE_ERGEBNIS.md`).
 
 ### 9.4 Verifikation
 
 ```bash
-kubectl exec -n trading regime-swarm-0 -- env | grep POSITION_SIZING
-# Erwartung: POSITION_SIZING_ENABLED=false
+kubectl exec -n trading regime-swarm-0 -- env | grep -E 'POSITION_SIZING|PAPER_FEED_GAP'
+# Erwartung: POSITION_SIZING_ENABLED=false, PAPER_FEED_GAP_ENABLED=true
+
+kubectl exec -n trading regime-swarm-0 -- head -1 /data/audit/feed_gaps.jsonl
+# Erwartung: source=restart_marker (nach Deploy) bzw. tick_spacing/socket
 
 kubectl port-forward -n trading statefulset/regime-swarm 8080:8080 &
-curl -s http://localhost:8080/metrics | grep -E '^sizing_'
-# Erwartung: sizing_gamma_current{regime="none"} 0, sizing_*_total{...} 0
+curl -s http://localhost:8080/metrics | grep -E '^sizing_|^feed_gap_'
+# Erwartung: sizing_* 0; feed_gap_* ops-only (Auswertung = JSONL)
 ```
-
 **Nächster Schritt:** Nach Pod-Stabilität (Streaming-WORM-Fix) → [Paper Exit](PAPER_EXIT_ROUNDTRIP_SPEC.md) Kalibrierung §7 → [Strang B](POSITION_SIZING_REGIME_MAPPING.md#nach-implementierung).
 
 ### OOM / CrashLoopBackOff (2026-08-29)
