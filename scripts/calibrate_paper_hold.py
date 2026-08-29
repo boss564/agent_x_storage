@@ -35,6 +35,12 @@ def main() -> int:
     p.add_argument("--gap-dt-s", type=float, default=DEFAULT_GAP_DT_S, help="Exclude returns with dt > this (s)")
     p.add_argument("--subwindows", type=int, default=DEFAULT_SUBWINDOWS)
     p.add_argument("--target-abs-return", type=float, default=TARGET_ABS_RETURN)
+    p.add_argument(
+        "--bar-seconds",
+        type=float,
+        default=None,
+        help="Resample to last-price bars of this width (e.g. 1 for 1s bars). Default: trade ticks.",
+    )
     p.add_argument("--print-freeze", action="store_true", help="Print §7 markdown table")
     p.add_argument("--json-out", type=Path, default=None, help="Write full JSON result")
     args = p.parse_args()
@@ -48,6 +54,7 @@ def main() -> int:
         gap_dt_s=args.gap_dt_s,
         n_subwindows=args.subwindows,
         target_abs_return=args.target_abs_return,
+        bar_seconds=args.bar_seconds,
     )
     payload = result.to_dict()
     print(json.dumps(payload, indent=2, sort_keys=True))

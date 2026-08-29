@@ -20,6 +20,7 @@ from prototypes.raas_paper_trading.position_sizing.hold_calibration import (  # 
     calibrate_hold_from_worm,
     hold_seconds_from_sigma,
     is_tick_signal,
+    resample_last_price_bars,
     time_normalized_returns,
     TickPoint,
 )
@@ -136,12 +137,61 @@ def test_calibrate_end_to_end_synthetic() -> None:
             _fail("anti-harking note missing")
 
 
+def test_1s_bar_resampling_collapses_microstructure() -> None:
+    t0 = datetime(2026, 8, 28, 12, 0, 0, tzinfo=timezone.utc)
+    # 10 trade prints inside one second + next second
+    ticks = [
+        TickPoint(t0 + timedelta(milliseconds=i * 50), 100.0 + i * 0.01, i)
+        for i in range(10)
+    ]
+    ticks.append(TickPoint(t0 + timedelta(seconds=1, milliseconds=10), 101.0, 99))
+    bars = resample_last_price_bars(ticks, bar_seconds=1.0)
+    if len(bars) != 2:
+        _fail(f"expected 2 bars, got {len(bars)}")
+    if abs(bars[0].price - 100.09) > 1e-9:
+        _fail(f"first bar last price {bars[0].price}")
+    if abs(bars[1].price - 101.0) > 1e-9:
+        _fail(f"second bar last price {bars[1].price}")
+
+
+def test_calibrate_1s_basis_flag() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        worm = Path(tmp) / "paper_trades.worm.jsonl"
+        t0 = datetime(2026, 8, 28, 12, 0, 0, tzinfo=timezone.utc)
+        rows = []
+        price = 2500.0
+        for i in range(120):
+            price *= math.exp(0.0001 if i % 2 == 0 else -0.00008)
+            # two prints per second
+            for j in range(2):
+                rows.append(
+                    {
+                        "action": "SIGNAL",
+                        "signal_id": f"sig-{i}-{j}",
+                        "mark_price": f"{price:.4f}",
+                        "ts": (t0 + timedelta(seconds=i, milliseconds=j * 10)).isoformat(),
+                    }
+                )
+        _write_worm(worm, rows)
+        r = calibrate_hold_from_worm(worm, bar_seconds=1.0, gap_dt_s=30.0, n_subwindows=3)
+        if r.price_basis != "last_price_bar":
+            _fail(f"basis {r.price_basis}")
+        if r.bar_seconds != 1.0:
+            _fail(f"bar_seconds {r.bar_seconds}")
+        if r.n_price_points is None or r.n_price_points > r.n_tick_signals:
+            _fail(f"bars {r.n_price_points} vs ticks {r.n_tick_signals}")
+        if r.sigma_1d is None:
+            _fail("sigma_1d missing")
+
+
 def main() -> int:
     test_filter_excludes_aggregate()
     test_e_abs_vs_sigma_constant()
     test_gap_excluded_from_returns()
     test_hold_from_sigma_uses_e_abs_not_sigma_equality()
     test_calibrate_end_to_end_synthetic()
+    test_1s_bar_resampling_collapses_microstructure()
+    test_calibrate_1s_basis_flag()
     print("PAPER_HOLD_CALIBRATION_PASS")
     return 0
 

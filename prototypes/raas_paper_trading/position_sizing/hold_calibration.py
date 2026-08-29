@@ -68,6 +68,11 @@ class HoldCalibrationResult:
     hold_seconds_from_sub_max: Optional[float]
     hold_seconds_from_sub_min: Optional[float]
     anti_harking_note: str
+    # Price basis: trade_tick (raw SIGNAL) vs last-price bars (e.g. 1s)
+    price_basis: str = "trade_tick"
+    bar_seconds: Optional[float] = None
+    n_price_points: Optional[int] = None
+    sigma_1d: Optional[float] = None
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -76,9 +81,15 @@ class HoldCalibrationResult:
         """Rows for PAPER_EXIT_ROUNDTRIP_SPEC.md §7."""
         hold = self.recommended_hold_seconds
         hold_s = f"{hold:.0f}" if hold is not None else "TBD (insufficient data)"
+        basis = self.price_basis
+        if self.bar_seconds is not None:
+            basis = f"{self.price_basis} (bar={self.bar_seconds:g}s)"
         return [
             ("PAPER_HOLD_SECONDS", hold_s),
+            ("price_basis", basis),
+            ("n_price_points", str(self.n_price_points if self.n_price_points is not None else self.n_tick_signals)),
             ("σ_per_√s (time-norm)", f"{self.sigma_per_sqrt_s:.8f}" if self.sigma_per_sqrt_s else "TBD"),
+            ("σ_1d (= σ_√s·√86400)", f"{self.sigma_1d:.6f} ({100*self.sigma_1d:.2f}%)" if self.sigma_1d else "TBD"),
             ("target E[|r_k|]", f"{self.target_abs_return:.4f} ({100*self.target_abs_return:.2f}%)"),
             ("target σ_k (= E[|r|]/√(2/π))", f"{self.target_sigma_k:.6f}"),
             ("σ subwindow [min, med, max]", (
@@ -211,6 +222,32 @@ def time_normalized_returns(
     return norms, dts, n_gap
 
 
+def resample_last_price_bars(
+    ticks: Sequence[TickPoint],
+    *,
+    bar_seconds: float = 1.0,
+) -> List[TickPoint]:
+    """Collapse trade ticks to last price per UTC bar (market-usual time basis).
+
+    Trade prints at ~10ms inflate σ via microstructure bounce; 1s bars remove that
+    without changing the gap rule (dt > gap_dt_s still excluded from returns).
+    """
+    if bar_seconds <= 0:
+        raise ValueError("bar_seconds must be > 0")
+    if not ticks:
+        return []
+    buckets: Dict[int, TickPoint] = {}
+    for t in ticks:
+        epoch = int(math.floor(t.ts.timestamp() / bar_seconds) * bar_seconds)
+        buckets[epoch] = t
+    out: List[TickPoint] = []
+    for epoch in sorted(buckets):
+        src = buckets[epoch]
+        bar_ts = datetime.fromtimestamp(float(epoch), tz=timezone.utc)
+        out.append(TickPoint(ts=bar_ts, price=src.price, line_no=src.line_no))
+    return out
+
+
 def sample_sigma(values: Sequence[float]) -> Optional[float]:
     n = len(values)
     if n < 2:
@@ -247,23 +284,31 @@ def calibrate_hold_from_worm(
     n_subwindows: int = DEFAULT_SUBWINDOWS,
     target_abs_return: float = TARGET_ABS_RETURN,
     cost_floor_frac: float = COST_FLOOR_FRAC,
+    bar_seconds: Optional[float] = None,
 ) -> HoldCalibrationResult:
     path = Path(worm_path)
     digest = file_sha256(path)
     ticks, n_lines, n_agg = load_tick_signals(path)
+    n_tick_signals = len(ticks)
+    price_basis = "trade_tick"
+    if bar_seconds is not None:
+        ticks = resample_last_price_bars(ticks, bar_seconds=float(bar_seconds))
+        price_basis = "last_price_bar"
     target_sigma_k = target_abs_return / SQRT_2_OVER_PI
     anti = (
         "Calibration ensures the measurement is feasible (horizon clears cost floor), "
         "not that f* will be favourable. If f* ≤ 0 after N round-trips, that is a result — "
-        "do not retune k until f* looks good (HARKing)."
+        "do not retune k until f* looks good (HARKing). "
+        "Changing price_basis (e.g. trade_tick → 1s last_price_bar) is a measurement "
+        "correction, not performance-based retuning."
     )
 
-    if len(ticks) < 3:
+    def _empty() -> HoldCalibrationResult:
         return HoldCalibrationResult(
             worm_path=str(path),
             worm_sha256=digest,
             n_worm_lines=n_lines,
-            n_tick_signals=len(ticks),
+            n_tick_signals=n_tick_signals,
             n_aggregate_skipped=n_agg,
             n_returns_used=0,
             n_gap_excluded=0,
@@ -286,11 +331,19 @@ def calibrate_hold_from_worm(
             hold_seconds_from_sub_max=None,
             hold_seconds_from_sub_min=None,
             anti_harking_note=anti,
+            price_basis=price_basis,
+            bar_seconds=bar_seconds,
+            n_price_points=len(ticks),
+            sigma_1d=None,
         )
+
+    if len(ticks) < 3:
+        return _empty()
 
     norms, dts, n_gap = time_normalized_returns(ticks, gap_dt_s=gap_dt_s)
     dts_sorted = sorted(dts)
     sigma = sample_sigma(norms)
+    sigma_1d = (sigma * math.sqrt(86400.0)) if sigma is not None else None
     subs = subwindow_sigmas(norms, n_subwindows)
     subs_sorted = sorted(subs) if subs else []
     sub_min = subs_sorted[0] if subs_sorted else None
@@ -301,7 +354,7 @@ def calibrate_hold_from_worm(
         worm_path=str(path),
         worm_sha256=digest,
         n_worm_lines=n_lines,
-        n_tick_signals=len(ticks),
+        n_tick_signals=n_tick_signals,
         n_aggregate_skipped=n_agg,
         n_returns_used=len(norms),
         n_gap_excluded=n_gap,
@@ -321,10 +374,13 @@ def calibrate_hold_from_worm(
         sigma_sub_min=sub_min,
         sigma_sub_max=sub_max,
         sigma_sub_median=sub_med,
-        # Conservative: use highest subwindow σ → shorter k; report both ends
         hold_seconds_from_sub_max=hold_seconds_from_sigma(sub_max, target_sigma_k) if sub_max else None,
         hold_seconds_from_sub_min=hold_seconds_from_sigma(sub_min, target_sigma_k) if sub_min else None,
         anti_harking_note=anti,
+        price_basis=price_basis,
+        bar_seconds=bar_seconds,
+        n_price_points=len(ticks),
+        sigma_1d=sigma_1d,
     )
 
 

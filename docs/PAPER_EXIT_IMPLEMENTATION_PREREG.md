@@ -1,9 +1,11 @@
 # Paper Exit Implementation — Pre-Reg
 
 **Status:** FREIGEGEBEN (2026-08-29) · Implementierung auf `feature/exit-implementation`  
-**Parent (Theorie + Freeze):** [`PAPER_EXIT_ROUNDTRIP_SPEC.md`](PAPER_EXIT_ROUNDTRIP_SPEC.md) — Option B, `PAPER_HOLD_SECONDS=433` (§7 FROZEN)  
+**Parent (Theorie + Freeze):** [`PAPER_EXIT_ROUNDTRIP_SPEC.md`](PAPER_EXIT_ROUNDTRIP_SPEC.md) — Option B, `PAPER_HOLD_SECONDS=4966` (§7 FROZEN · Amendment A1 / 1s-Bars)  
 **Scope:** Live-Shadow Paper-Pfad · `live_execution=false` · `order_send=false` · `not_investment_advice=true`  
 **Ziel:** Abgeschlossene Round-Trips für B2 (Kelly-Historie) ohne Charter-Bruch
+
+**§7 Amendment A1 (2026-08-29):** Parent-Freeze korrigiert Preisbasis Trade-Tick → 1s last-price Bars. `k=433` ist **superseded** (Mikrostruktur); gültig ist `k=4966`. Das ist Messkorrektur, kein HARKing — siehe Parent §7.1.
 
 Dieses Dokument ist die **technische Umsetzungsspezifikation**. Die wissenschaftliche Basis (Option B, k-Kalibrierung, Anti-HARKing) bleibt in der Parent-Spec unverändert.
 
@@ -13,7 +15,7 @@ Dieses Dokument ist die **technische Umsetzungsspezifikation**. Die wissenschaft
 
 | Quelle | Inhalt |
 |--------|--------|
-| Parent §4 / §7 | Option B, `k=433`, Freeze-Hash, Anti-HARKing |
+| Parent §4 / §7 | Option B, `k=4966` (1s-Bars), Freeze-Hash, Anti-HARKing |
 | Parent Kostenschwelle | Round-Trip-Boden ≈ 20 bps; Gap-Default 30 s |
 | [`POSITION_SIZING_SUBSWARM.md`](POSITION_SIZING_SUBSWARM.md) §4 | Keine Sizing-/Kelly-Felder in `paper_trades.worm.jsonl` |
 | Charter | Paper-only; Single-Position; keine Advisories |
@@ -22,10 +24,10 @@ Dieses Dokument ist die **technische Umsetzungsspezifikation**. Die wissenschaft
 
 ```yaml
 PAPER_EXIT_MODE: "time_hold"
-PAPER_HOLD_SECONDS: "433"             # FROZEN — Parent §7
+PAPER_HOLD_SECONDS: "4966"            # FROZEN — Parent §7 Amendment A1 (1s-Bars)
 PAPER_MAX_OPEN_POSITIONS: "1"
 PAPER_EXIT_GAP_DT_S: "30"             # kein Entry/Exit auf Gap
-PAPER_EXIT_MAX_WAIT_S: "2165"         # 5 × 433 — Max-Warte in EXIT_PENDING
+PAPER_EXIT_MAX_WAIT_S: "24830"        # 5 × 4966 — Max-Warte in EXIT_PENDING
 PAPER_POSITION_STATE_PATH: "/data/state/paper_position.json"   # Cluster; lokal: {worm_dir}/state/…
 PAPER_EDGES_PATH: "/data/audit/paper_edges.jsonl"             # Cluster; lokal: {worm_dir}/audit/…
 # Force-Exit nur explizit:
@@ -46,7 +48,7 @@ Zu keinem Zeitpunkt mehr als **eine** offene Paper-Position.
 ### I2 — Hold-Timer-Absolutheit
 
 - Timer startet bei **Entry-Tick** (`entry_tick_ts`, Wall-clock **UTC**).
-- Läuft absolut **`PAPER_HOLD_SECONDS=433`** Sekunden.
+- Läuft absolut **`PAPER_HOLD_SECONDS=4966`** Sekunden.
 - **Kein** Reset bei neuem Signal, keine Verlängerung.
 - `hold_seconds_actual = exit_tick_ts − entry_tick_ts` (Unix-Zeitdifferenz, **nicht** Tick-Zähler).
 
@@ -54,11 +56,11 @@ Zu keinem Zeitpunkt mehr als **eine** offene Paper-Position.
 
 Exit nur wenn **alle** gelten:
 
-1. `hold_seconds_elapsed >= 433`
+1. `hold_seconds_elapsed >= 4966`
 2. Gültiger Exit-Tick: Δt zum vorherigen Tick **≤ `PAPER_EXIT_GAP_DT_S` (30 s)**
 3. Sonst: in `EXIT_PENDING` warten
 
-**Max-Warte (S1):** Wenn nach Hold-Ablauf länger als **`PAPER_EXIT_MAX_WAIT_S = 5 × 433 = 2165 s`** kein gültiger Exit-Tick kommt → **Alarm** (`EXIT_WAIT_TIMEOUT`), Position bleibt offen, kein automatischer Force-Exit. Fortsetzung beim nächsten gültigen Tick oder `HUMAN_FORCE_EXIT`.
+**Max-Warte (S1):** Wenn nach Hold-Ablauf länger als **`PAPER_EXIT_MAX_WAIT_S = 5 × 4966 = 24830 s`** kein gültiger Exit-Tick kommt → **Alarm** (`EXIT_WAIT_TIMEOUT`), Position bleibt offen, kein automatischer Force-Exit. Fortsetzung beim nächsten gültigen Tick oder `HUMAN_FORCE_EXIT`.
 
 ### I4 — WORM-Feld-Erweiterung
 
@@ -69,7 +71,7 @@ Exit nur wenn **alle** gelten:
 | `entry_tick_ts` | ISO-8601 UTC / Unix | Entry-Zeitpunkt |
 | `exit_tick_ts` | ISO-8601 UTC / Unix | Exit-Zeitpunkt |
 | `hold_seconds_actual` | float | `exit_ts − entry_ts` |
-| `hold_seconds_target` | int | `433` (Freeze) |
+| `hold_seconds_target` | int | `4966` (Freeze A1) |
 | `exit_reason` | enum | **`hold_expired` \| `force_exit`** nur |
 
 **Verboten auf Paper-WORM (B1):** `kelly_fraction_computed`, `advisory_position_size`, und alle Sizing-Export-Felder aus Parent-Sizing-Charter. Kelly nur in `/data/audit/position_sizing.jsonl` (Strang B / später).
@@ -98,7 +100,7 @@ Kanten-Felder (Minimum):
 
 ### I6 — Anti-HARKing
 
-`k=433` unveränderbar bis neuer WORM-Snapshot + neues Freeze in Parent §7. Keine Anpassung von k an f* / PnL / Edge-Statistik.
+`k=4966` unveränderbar bis neuer WORM-Snapshot + neues Freeze in Parent §7. Keine Anpassung von k an f* / PnL / Edge-Statistik.
 
 ---
 
@@ -122,7 +124,7 @@ Persistenz: **`/data/state/paper_position.json`** (B4) — speichert mindestens:
   "entry_tick_ts": "2026-08-29T07:00:00.000000+00:00",
   "entry_price": "1850.42",
   "entry_signal_id": "sig-…",
-  "hold_seconds_target": 433,
+  "hold_seconds_target": 4966,
   "symbol": "ETHUSDT",
   "updated_at": "…"
 }
@@ -142,7 +144,7 @@ Explizit und unverändert zur bisherigen Paper-Semantik:
 
 ```text
 IDLE + erster gültiger Tick     → ENTRY_PENDING → HOLDING  (entry_tick_ts gesetzt, BUY SIM_FILL)
-HOLDING + elapsed ≥ 433         → EXIT_PENDING
+HOLDING + elapsed ≥ 4966        → EXIT_PENDING
 EXIT_PENDING + gültiger Tick    → EXITED → IDLE            (SELL SIM_FILL + Kante)
 ```
 
@@ -154,7 +156,7 @@ EXIT_PENDING + gültiger Tick    → EXITED → IDLE            (SELL SIM_FILL +
 | `EXIT_PENDING` + Entry-Versuch | BLOCKED (I1), Log `SIGNAL_IGNORED_EXIT_PENDING` |
 | `ENTRY_PENDING` / Entry und Gap > 30 s | kein Entry auf Gap-Tick; warten |
 | `EXIT_PENDING` und Gap > 30 s | kein Exit auf Gap-Tick; warten (I3) |
-| `EXIT_PENDING` und Wait > 2165 s | Alarm `EXIT_WAIT_TIMEOUT`; kein Auto-Force-Exit |
+| `EXIT_PENDING` und Wait > 24830 s | Alarm `EXIT_WAIT_TIMEOUT`; kein Auto-Force-Exit |
 
 ---
 
@@ -188,9 +190,9 @@ Beispiel `SIM_FILL` SELL (Auszug):
   "realized_pnl_eur": "1.75",
   "signal_id": "sig-…",
   "entry_tick_ts": "2026-08-29T07:00:00.000000+00:00",
-  "exit_tick_ts": "2026-08-29T07:07:13.333000+00:00",
-  "hold_seconds_actual": 433.333,
-  "hold_seconds_target": 433,
+  "exit_tick_ts": "2026-08-29T08:22:46.500000+00:00",
+  "hold_seconds_actual": 4966.5,
+  "hold_seconds_target": 4966,
   "exit_reason": "hold_expired",
   "live_execution": false,
   "order_send": false,
@@ -208,7 +210,7 @@ Beispiel `SIM_FILL` SELL (Auszug):
 | ID | Kriterium | Erwartung |
 |----|-----------|-----------|
 | **S1** | Single-Position-Gate | Zweiter Entry während Hold → BLOCKED; nur eine offene Position |
-| **S2** | Hold-Timer-Absolutheit | Entry t=0, „Signal“ t=200 → kein Reset; Exit bei elapsed ≥ 433 (nicht 633) |
+| **S2** | Hold-Timer-Absolutheit | Entry t=0, „Signal“ t=200 → kein Reset; Exit bei elapsed ≥ 4966 (kein Timer-Reset) |
 | **S3** | Gap-Schutz | Exit-Tick mit Δt > 30 s → kein Exit; warten |
 | **S4** | Restart-Rekonstruktion | State-Datei `HOLDING` + Restart → Timer fortgesetzt; kein doppelter BUY |
 | **S5** | WORM-Vollständigkeit | Jeder SELL trägt I4-Felder; `exit_reason ∈ {hold_expired, force_exit}` |
@@ -239,7 +241,7 @@ Zusätzlich empfohlen: **S3b** Max-Warte → `EXIT_WAIT_TIMEOUT`-Alarm ohne Forc
 | 3 | Hold-Timer + Gap-Regeln + Max-Warte-Alarm |
 | 4 | SELL-WORM-Felder + `paper_edges.jsonl` |
 | 5 | Smoke S1–S6 (+ S3b/S6b) |
-| 6 | Live-Shadow: Env `PAPER_HOLD_SECONDS=433`, Round-Trips sammeln bis N≥50 → Strang B (Sizing) |
+| 6 | Live-Shadow: Env `PAPER_HOLD_SECONDS=4966`, Round-Trips sammeln bis N≥50 → Strang B (Sizing) |
 
 **Kein Code vor Freigabe dieser Pre-Reg.**
 

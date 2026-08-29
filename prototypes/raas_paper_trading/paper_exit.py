@@ -85,9 +85,9 @@ def exit_config_from_env() -> Dict[str, Any]:
     root = Path(os.environ.get("RAAS_DATA_ROOT", "data/raas"))
     return {
         "exit_mode": os.environ.get("PAPER_EXIT_MODE", "time_hold").strip().lower(),
-        "hold_seconds": int(os.environ.get("PAPER_HOLD_SECONDS", "433")),
+        "hold_seconds": int(os.environ.get("PAPER_HOLD_SECONDS", "4966")),
         "gap_dt_s": float(os.environ.get("PAPER_EXIT_GAP_DT_S", "30")),
-        "max_wait_s": float(os.environ.get("PAPER_EXIT_MAX_WAIT_S", "2165")),
+        "max_wait_s": float(os.environ.get("PAPER_EXIT_MAX_WAIT_S", "24830")),
         # Cluster: set PAPER_*_PATH=/data/... ; local default under RAAS_DATA_ROOT
         "state_path": Path(
             os.environ.get(
@@ -109,7 +109,7 @@ class PaperPositionStore:
     """B4 — persist IDLE/ENTRY_PENDING/HOLDING/EXIT_PENDING across restarts."""
 
     path: Path
-    hold_seconds_target: int = 433
+    hold_seconds_target: int = 4966
     state: str = PositionState.IDLE.value
     entry_tick_ts: Optional[str] = None
     entry_price: Optional[str] = None
@@ -237,9 +237,9 @@ class PaperExitController:
 
     store: PaperPositionStore
     edges: PaperEdgesLog
-    hold_seconds: int = 433
+    hold_seconds: int = 4966
     gap_dt_s: float = 30.0
-    max_wait_s: float = 2165.0
+    max_wait_s: float = 24830.0
     _prev_tick_ts: Optional[str] = None
     _alarms: List[str] = field(default_factory=list)
     _logs: List[str] = field(default_factory=list)
@@ -250,9 +250,9 @@ class PaperExitController:
         *,
         state_path: Path,
         edges_path: Path,
-        hold_seconds: int = 433,
+        hold_seconds: int = 4966,
         gap_dt_s: float = 30.0,
-        max_wait_s: float = 2165.0,
+        max_wait_s: float = 24830.0,
     ) -> "PaperExitController":
         store = PaperPositionStore(path=Path(state_path), hold_seconds_target=hold_seconds)
         store.load()
