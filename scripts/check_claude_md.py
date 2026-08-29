@@ -230,6 +230,7 @@ NO_TEST_SUMMARY: set[str] = {
     "scripts/test_raas_regime_drift.py",  # Baustein 2 regime drift swarm (RAAS_REGIME_DRIFT_PASS/FAIL)
     "scripts/test_live_feed_prometheus.py",  # Live WS mock → WORM → Prometheus (LIVE_FEED_PROMETHEUS_PASS/FAIL)
     "scripts/test_position_sizing_subswarm.py",  # B0–B8 Kelly boundary (POSITION_SIZING_SUBSWARM_PASS/FAIL)
+    "scripts/test_paper_hold_calibration.py",  # Option B hold k calibration (PAPER_HOLD_CALIBRATION_PASS/FAIL)
     "scripts/test_regime_leader_z3.py",  # P6 leader FSM Z3 (REGIME_LEADER_Z3_PASS/FAIL)
     "scripts/regime_swarm_shadow_chaos.py",  # P2/P5 shadow chaos (INFRA_SHADOW_CHAOS_PASS/FAIL)
     "scripts/regime_swarm_lease_t_s1a.py",  # T-S1a K8s lease split-brain (T_S1A_LEASE_PASS/FAIL)

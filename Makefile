@@ -372,6 +372,13 @@ raas-live-feed-prometheus-smoke: ## Mock-WS → WORM → daemon Prometheus count
 raas-position-sizing-smoke: ## B0–B8 Kelly boundary sub-swarm (charter §4)
 	PYTHONPATH=. python3 scripts/test_position_sizing_subswarm.py
 
+raas-paper-hold-calibrate-smoke: ## Option B hold k calibration (filter·gap·E[|r|]·windows)
+	PYTHONPATH=. python3 scripts/test_paper_hold_calibration.py
+
+raas-paper-hold-calibrate: ## Calibrate PAPER_HOLD_SECONDS from WORM (WORM= path required)
+	@test -n "$(WORM)" || (echo "Usage: make raas-paper-hold-calibrate WORM=path/to/paper_trades.worm.jsonl"; exit 1)
+	PYTHONPATH=. python3 scripts/calibrate_paper_hold.py --worm "$(WORM)" --print-freeze
+
 raas-regime-swarm-build: ## Build regime swarm production image
 	docker build -f Dockerfile.regime-swarm -t agentx-regime-swarm .
 
