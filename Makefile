@@ -385,6 +385,10 @@ raas-paper-hold-calibrate: ## Calibrate PAPER_HOLD_SECONDS from WORM (WORM= path
 	@test -n "$(WORM)" || (echo "Usage: make raas-paper-hold-calibrate WORM=path/to/paper_trades.worm.jsonl"; exit 1)
 	PYTHONPATH=. python3 scripts/calibrate_paper_hold.py --worm "$(WORM)" --print-freeze
 
+raas-paper-hold-calibrate-1s: ## §7 amendment: 1s last-price bars (not trade ticks)
+	@test -n "$(WORM)" || (echo "Usage: make raas-paper-hold-calibrate-1s WORM=path/to/paper_trades.worm.jsonl"; exit 1)
+	PYTHONPATH=. python3 scripts/calibrate_paper_hold.py --worm "$(WORM)" --bar-seconds 1 --print-freeze
+
 raas-regime-swarm-build: ## Build regime swarm production image
 	docker build -f Dockerfile.regime-swarm -t agentx-regime-swarm .
 

@@ -94,13 +94,15 @@ Bei 30-Sekunden-Flats liegt die typische ETH-Bewegung unter diesem Boden → str
 | # | Regel | Begründung |
 |---|-------|------------|
 | 1 | Nur Tick-`SIGNAL` (`aggregate is not True`, `signal_id ≠ aggregate`) | `runner.py` schreibt auch Aggregate mit wiederholtem `mark_price` → verzerrt σ |
-| 2 | Renditen **zeitnormiert** `ln(p_i/p_{i-1})/√Δt`; Δt > `gap_dt_s` (Default 30s) **ausschließen**; dt-p50/p95/p99/max ausgeben | Feed-Lücken sind keine Marktbewegung; Gap→zu hohes σ→**zu kurzes k** (gefährliche Richtung) |
-| 3 | Ziel: E[|r_k|] ≥ 0.6 % ⇒ σ_k ≥ 0.6 % / √(2/π) ≈ **0.7516 %** | E[|r|] ≠ σ; Gleichsetzen unterschätzt Horizont um ~20 % |
-| 4 | σ über Teilfenster (min/med/max) ausweisen | Vola clustert; √k-Skalierung unterstellt i.i.d. — Spannweite zeigt Stabilität |
+| 2 | **Preisbasis = 1s last-price Bars** (`--bar-seconds 1`); nicht Roh-Trade-Ticks | Trade-Prints (p50≈12 ms) blähen σ durch Mikrostruktur auf → **zu kurzes k** (gefährliche Richtung). Messkorrektur ≠ HARKing |
+| 3 | Renditen **zeitnormiert** `ln(p_i/p_{i-1})/√Δt`; Δt > `gap_dt_s` (Default 30s) **ausschließen**; dt-p50/p95/p99/max ausgeben | Feed-Lücken sind keine Marktbewegung; Gap→zu hohes σ→**zu kurzes k** |
+| 4 | Ziel: E[|r_k|] ≥ 0.6 % ⇒ σ_k ≥ 0.6 % / √(2/π) ≈ **0.7516 %** | E[|r|] ≠ σ; Gleichsetzen unterschätzt Horizont um ~20 % |
+| 5 | σ über Teilfenster (min/med/max) ausweisen; **σ_1d = σ_√s·√86400** dokumentieren | Vola clustert; √k-Skalierung unterstellt i.i.d. — Spannweite + Tages-σ als Plausibilität |
 
 **Formel (Implementierung):**
 
 ```text
+# p_i = last mid/mark in UTC-second i  (1s last-price bar)
 r̃_i = ln(p_i / p_{i-1}) / √Δt_i     # nur wenn 0 < Δt_i ≤ gap_dt_s
 σ_√s = std(r̃)                        # pro √Sekunde
 E[|r_k|] = σ_k · √(2/π),  σ_k = σ_√s · √k
@@ -113,13 +115,16 @@ Forderung: E[|r_k|] ≥ 3 × 0.002 = 0.006
 # Cluster-WORM (Pfad-Schema unverändert):
 kubectl cp trading/regime-swarm-0:/data/worm/live/live/paper/runs/ethusdt/paper_trades.worm.jsonl \
   ./data/worm/ethusdt/paper_trades.worm.jsonl
+# Verbindlich für Freeze (§7): 1s-Bars
 PYTHONPATH=. python3 scripts/calibrate_paper_hold.py \
-  --worm ./data/worm/ethusdt/paper_trades.worm.jsonl --print-freeze
+  --worm ./data/worm/ethusdt/paper_trades.worm.jsonl --bar-seconds 1 --print-freeze
+# Kurzform:
+make raas-paper-hold-calibrate-1s WORM=./data/worm/ethusdt/paper_trades.worm.jsonl
 ```
 
-**Konservierung:** Jeder Freeze-Eintrag in §7 trägt `worm_sha256`, `n_worm_lines`, `ts_first→ts_last`. Ohne Hash ist „σ aus dem WORM“ nicht rekonstruierbar.
+**Konservierung:** Jeder Freeze-Eintrag in §7 trägt `worm_sha256`, `n_worm_lines`, `ts_first→ts_last`, **`price_basis`**. Ohne Hash ist „σ aus dem WORM“ nicht rekonstruierbar.
 
-**Anti-HARKing (Freeze-Satz):** Die Kalibrierung stellt sicher, dass die **Messung möglich** ist (Horizont räumt den Kostenboden), **nicht** dass sie günstig ausfällt. Kommt f* nach 50 Round-Trips ≤ 0 heraus, ist das ein Ergebnis — Signal ohne Kante nach Kosten. k danach nachjustieren, bis f* positiv wirkt, ist HARKing. Änderung von k nur via neuer Spec-Version + neues Pre-Reg-Freeze.
+**Anti-HARKing (Freeze-Satz):** Die Kalibrierung stellt sicher, dass die **Messung möglich** ist (Horizont räumt den Kostenboden), **nicht** dass sie günstig ausfällt. Kommt f* nach 50 Round-Trips ≤ 0 heraus, ist das ein Ergebnis — Signal ohne Kante nach Kosten. k danach nachjustieren, bis f* positiv wirkt, ist HARKing. Änderung von k nur via neuer Spec-Version + neues Pre-Reg-Freeze. **Messkorrektur der Preisbasis** (Trade-Tick → 1s-Bar) vor erstem Round-Trip-Lauf ist **kein** HARKing — siehe §7 Amendment 2026-08-29.
 
 ### 4.4 Positions-Disziplin (Unabhängigkeit für B2)
 
@@ -131,7 +136,7 @@ PYTHONPATH=. python3 scripts/calibrate_paper_hold.py \
 
 ### 4.5 Laufzeit bis Gate N=50
 
-Bei Freeze-`PAPER_HOLD_SECONDS=433` (~7,2 min) und einer Position zur Zeit: **~50 × 433 s ≈ 6 h** bis 50 abgeschlossene Round-Trips (ohne Überlappung; zzgl. Entry-Lücken).
+Bei Freeze-`PAPER_HOLD_SECONDS=4966` (~82,8 min) und einer Position zur Zeit: **~50 × 4966 s ≈ 69 h** (~2,9 Tage) bis 50 abgeschlossene Round-Trips (ohne Überlappung; zzgl. Entry-Lücken).
 
 ---
 
@@ -140,9 +145,9 @@ Bei Freeze-`PAPER_HOLD_SECONDS=433` (~7,2 min) und einer Position zur Zeit: **~5
 | PR | Inhalt |
 |----|--------|
 | **Option B Spec** | DECIDED — diese Datei §4 |
-| **Kalibrierung** | `hold_calibration.py` + Freeze §7 (`PAPER_HOLD_SECONDS=433`) |
+| **Kalibrierung** | `hold_calibration.py` + Freeze §7 (`PAPER_HOLD_SECONDS=4966`, 1s-Bars) |
 | **Exit Pre-Reg** | [`PAPER_EXIT_IMPLEMENTATION_PREREG.md`](PAPER_EXIT_IMPLEMENTATION_PREREG.md) — I1–I6, Automat, Smoke |
-| **Exit Code** | nach Freigabe der Pre-Reg: `feature/exit-implementation` |
+| **Exit Code** | nach Freigabe der Pre-Reg: `feature/exit-implementation` (merged #29) |
 | **Wiring** | `load_ledger_from_worm` → `PaperLedger` für B0-Hook |
 | **Strang B** | `POSITION_SIZING_ENABLED=true`, Runbook §10, Metriken |
 
@@ -150,7 +155,8 @@ Bei Freeze-`PAPER_HOLD_SECONDS=433` (~7,2 min) und einer Position zur Zeit: **~5
 
 ```yaml
 PAPER_EXIT_MODE: "time_hold"          # Option B
-PAPER_HOLD_SECONDS: "433"             # FROZEN §7 — 2026-08-29
+PAPER_HOLD_SECONDS: "4966"            # FROZEN §7 — 2026-08-29 (1s-Bar Amendment)
+PAPER_EXIT_MAX_WAIT_S: "24830"        # 5 × 4966
 PAPER_MAX_OPEN_POSITIONS: "1"
 ```
 
@@ -177,29 +183,53 @@ kubectl exec -n trading regime-swarm-0 -- sh -c \
 
 ## 7. Kalibrierungs-Log (§4.3 Freeze)
 
-**Status:** **FROZEN** 2026-08-29 — Live-WORM-Lauf (`make raas-paper-hold-calibrate`).
+**Status:** **FROZEN** 2026-08-29 (Amendment A1) — `make raas-paper-hold-calibrate-1s` · Preisbasis **1s last-price Bars**.
 
 | Feld | Wert |
 |------|------|
-| `PAPER_HOLD_SECONDS` | **`433`** (aus `recommended_hold_seconds=432.55`, gerundet) |
-| σ_per_√s (time-norm) | `0.00036157` |
+| `PAPER_HOLD_SECONDS` | **`4966`** (aus `recommended_hold_seconds=4966.50`, gerundet) |
+| price_basis | **`last_price_bar` (bar=1s)** — verbindlich |
+| n_price_points (1s-Bars) | `7859` |
+| σ_per_√s (time-norm) | `0.00010671` |
+| **σ_1d (= σ_√s·√86400)** | **`0.031365` (3.14%)** — ETH-üblich (3–5%) |
 | target E[|r_k|] / σ_k | `0.0060` / `0.007520` |
-| σ Teilfenster [min, med, max] | `[0.00011221, 0.00032706, 0.00059780]` |
-| Hold aus Sub-Min / Sub-Max (Diagnose) | `4491 s` / `158 s` — **nicht** Freeze-Wert; Span zeigt Vola-Clustering |
-| n_tick_signals / n_returns / gaps_excl | `471254` / `48481` / `143` |
+| σ Teilfenster [min, med, max] | `[0.00004437, 0.00006342, 0.00020734]` |
+| Hold aus Sub-Min / Sub-Max (Diagnose) | `28720 s` / `1315 s` — **nicht** Freeze-Wert; Span zeigt Vola-Clustering |
+| n_tick_signals / n_returns / gaps_excl | `471254` / `7715` / `143` |
 | WORM path (Cluster) | `/data/worm/live/live/paper/runs/ethusdt/paper_trades.worm.jsonl` |
 | WORM path (Kalibrierungs-Kopie) | `data/worm/ethusdt/paper_trades.worm.jsonl` |
 | WORM sha256 | `9be6fdfd25d8399d1c15693fd7729c34e2f5024ccdeb7b22cf4578d2ba1615e8` |
 | n_worm_lines | `942508` |
-| ts range (UTC) | `2026-08-28T16:01:46.904000+00:00` → `2026-08-29T07:00:38.771000+00:00` |
-| dt p50/p95/p99/max (s) | `0.012` / `1.353` / `3.316` / `1258.249` |
+| ts range (UTC) | `2026-08-28T16:01:46+00:00` → `2026-08-29T07:00:38+00:00` |
+| bar-dt p50/p95/p99/max (s) | `1.000` / `4.000` / `304.000` / `1258.000` (p99 inkl. Lücken; Returns nur Δt≤30s) |
 | gap_dt_threshold_s | `30.0` |
-| Messdatum (UTC) | `2026-08-29T07:00:45.801934+00:00` |
-| Skript | `scripts/calibrate_paper_hold.py` |
-| Freigegeben von | Live-Shadow Kalibrierung 2026-08-29 (gemessen, nicht justiert) |
-| Anti-HARKing | Kalibrierung = Messbarkeit (Kostenboden), **nicht** günstiges f*; f*≤0 nach N Round-Trips ist Ergebnis, kein Anlass k nachzuziehen. Änderung von `433` nur via neuer Spec-Version + neues Pre-Reg-Freeze. |
+| Messdatum (UTC) | `2026-08-29T08:15:24.390694+00:00` |
+| Skript | `scripts/calibrate_paper_hold.py --bar-seconds 1` |
+| Freigegeben von | §7 Amendment A1 — Messkorrektur Preisbasis (nicht Performance) |
+| Anti-HARKing | Kalibrierung = Messbarkeit (Kostenboden), **nicht** günstiges f*. Änderung von `4966` nur via neuer Spec-Version + neues Pre-Reg-Freeze. |
 
-**Freeze-Regel:** Punktwert aus Vollsample-σ_√s (`433 s` ≈ **7,2 min**). Teilfenster-Span dokumentiert Instabilität der Vola; er ersetzt den Freeze nicht und darf nicht ex-post für f*-Optimierung genutzt werden.
+**Freeze-Regel:** Punktwert aus Vollsample-σ_√s auf **1s-Bars** (`4966 s` ≈ **82,8 min**). Teilfenster-Span dokumentiert Instabilität der Vola; er ersetzt den Freeze nicht und darf nicht ex-post für f*-Optimierung genutzt werden.
+
+### 7.1 Amendment A1 — Preisbasis Trade-Tick → 1s-Bar (2026-08-29)
+
+| | |
+|--|--|
+| **Warum** | Originaler Freeze (§7.0) verwendete Roh-Trade-Ticks (p50≈12 ms). Mikrostruktur bläht σ künstlich auf (Faktor ~3.4 in σ / ~11 in k). |
+| **Was geändert** | Zeitbasis = **1s last-price Bars**; Formel/Ziel E[|r_k|]≥0.6 % unverändert; **derselbe** WORM-sha256. |
+| **Was nicht** | Keine Anpassung von k an f*/PnL/Edges. Kein Deploy mit k=433. |
+| **Klassifikation** | **Messkorrektur** (wissenschaftliche Redlichkeit) — **kein** HARKing. |
+
+#### 7.0 Superseded — Trade-Tick-Freeze (historisch, nicht deployen)
+
+| Feld | Wert (superseded) |
+|------|-------------------|
+| `PAPER_HOLD_SECONDS` | ~~`433`~~ (aus `recommended_hold_seconds=432.55`) |
+| price_basis | `trade_tick` (fehlerhaft für σ) |
+| σ_per_√s / σ_1d | `0.00036157` / **10.63%** (Mikrostruktur-aufgebläht) |
+| n_returns / gaps_excl | `48481` / `143` |
+| dt p50/p95/p99/max (s) | `0.012` / `1.353` / `3.316` / `1258.249` |
+| Messdatum (UTC) | `2026-08-29T07:00:45.801934+00:00` |
+| Status | **SUPERSEDED** durch Amendment A1 — nur Archiv |
 
 ---
 
