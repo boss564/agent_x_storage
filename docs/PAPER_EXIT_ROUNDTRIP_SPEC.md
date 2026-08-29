@@ -300,10 +300,13 @@ Ausführungsrauschen ≈ 8 % des Zielsignals
 
 Wall-Clock-Hold aus persistiertem `entry_tick_ts` (kein separates `hold_until`): Frist abgeleitet; Timer-Reset nach Restart wäre als Delta sichtbar.
 
+**Feed-Gap Pre-Reg (FREIGABE):** Tick-Spacing vs. Delta ist **Invariante** (`n_delta ≤ n_tick_hits`), keine Kreuzvalidierung. Echte Unabhängigkeit: WebSocket-Disconnect (`source=socket`) ↔ Tick-Lücke (`source=tick_spacing`), Konkordanz ±1. Siehe [`PAPER_FEED_GAP_DELTA_CONCORDANCE_PREREG.md`](PAPER_FEED_GAP_DELTA_CONCORDANCE_PREREG.md).
+
 ---
 
 ## Siehe auch
 
+- [`docs/PAPER_FEED_GAP_DELTA_CONCORDANCE_PREREG.md`](PAPER_FEED_GAP_DELTA_CONCORDANCE_PREREG.md) — Feed-Gap Invariante + Socket↔Tick (FREIGABE)
 - [`docs/PAPER_EXIT_IMPLEMENTATION_PREREG.md`](PAPER_EXIT_IMPLEMENTATION_PREREG.md) — Implementierungs-Pre-Reg (I1–I6, Zustandsautomat, Smoke)
 - [`docs/POSITION_SIZING_SUBSWARM.md`](POSITION_SIZING_SUBSWARM.md) — B2, `INSUFFICIENT_HISTORY`
 - [`docs/POSITION_SIZING_REGIME_MAPPING.md`](POSITION_SIZING_REGIME_MAPPING.md) — γ-Map, Strang B
