@@ -122,27 +122,41 @@ def calculate_iid_violation_flag(
 # --- A2 Data-Ingestor ---------------------------------------------------------
 
 
+def _env_max_ticks(default: int = 10_000) -> Optional[int]:
+    """SWARM_WORM_MAX_TICKS — trailing SIGNAL window; 0 = unlimited (still streaming)."""
+    import os
+
+    raw = os.environ.get("SWARM_WORM_MAX_TICKS", "").strip()
+    if not raw:
+        return default
+    try:
+        n = int(raw)
+    except ValueError:
+        return default
+    if n <= 0:
+        return None
+    return n
+
+
 @dataclass
 class DataIngestorAgent:
     """A2 — WORM / price stream ingest (read-only)."""
 
     name: str = "A2_DataIngestor"
+    max_ticks: Optional[int] = None
+
+    def __post_init__(self) -> None:
+        if self.max_ticks is None:
+            self.max_ticks = _env_max_ticks()
 
     def load_prices(self, worm_path: Path) -> List[float]:
-        return load_signal_prices(worm_path)
+        return load_signal_prices(worm_path, max_ticks=self.max_ticks)
 
     def load_transport_meta(self, worm_path: Path) -> Dict[str, Any]:
-        """Extract optional transport fields from the latest SIGNAL row."""
-        if not worm_path.is_file():
-            return {}
-        last_signal: Optional[Dict[str, Any]] = None
-        for line in worm_path.read_text(encoding="utf-8").splitlines():
-            line = line.strip()
-            if not line:
-                continue
-            row = json.loads(line)
-            if row.get("action") == "SIGNAL":
-                last_signal = row
+        """Extract optional transport fields from the latest SIGNAL row (tail seek)."""
+        from prototypes.raas_paper_trading.worm_io import last_signal_row
+
+        last_signal = last_signal_row(worm_path)
         if not last_signal:
             return {}
         explicit = last_signal.get("transport_meta")
@@ -165,6 +179,7 @@ class DataIngestorAgent:
             "worm_path": str(worm_path),
             "n_ticks": len(prices),
             "source": "worm_signal_mark_price",
+            "max_ticks": self.max_ticks,
         }
         if transport_meta:
             out["transport_meta"] = transport_meta

@@ -375,6 +375,9 @@ raas-position-sizing-smoke: ## B0–B8 Kelly boundary sub-swarm (charter §4)
 raas-paper-hold-calibrate-smoke: ## Option B hold k calibration (filter·gap·E[|r|]·windows)
 	PYTHONPATH=. python3 scripts/test_paper_hold_calibration.py
 
+raas-worm-streaming-oom-smoke: ## WORM streaming reader OOM regression (no read_text)
+	PYTHONPATH=. python3 scripts/test_worm_streaming_oom.py
+
 raas-paper-hold-calibrate: ## Calibrate PAPER_HOLD_SECONDS from WORM (WORM= path required)
 	@test -n "$(WORM)" || (echo "Usage: make raas-paper-hold-calibrate WORM=path/to/paper_trades.worm.jsonl"; exit 1)
 	PYTHONPATH=. python3 scripts/calibrate_paper_hold.py --worm "$(WORM)" --print-freeze

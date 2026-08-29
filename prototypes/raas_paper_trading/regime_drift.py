@@ -66,23 +66,14 @@ def prices_to_feature_rows(prices: Sequence[float]) -> Dict[str, List[float]]:
     }
 
 
-def load_signal_prices(path: Path) -> List[float]:
-    """Extract mark_price from WORM SIGNAL rows (chronological)."""
-    if not path.is_file():
-        return []
-    out: List[float] = []
-    for line in path.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        row = json.loads(line)
-        if row.get("action") != "SIGNAL":
-            continue
-        raw = row.get("mark_price")
-        if raw is None:
-            continue
-        out.append(float(raw))
-    return out
+def load_signal_prices(path: Path, *, max_ticks: Optional[int] = None) -> List[float]:
+    """Extract mark_price from WORM SIGNAL rows (chronological, streaming).
+
+    Optional max_ticks keeps only the trailing N prices (O(max_ticks) memory).
+    """
+    from prototypes.raas_paper_trading.worm_io import load_signal_mark_prices
+
+    return load_signal_mark_prices(path, max_ticks=max_ticks)
 
 
 def kolmogorov_smirnov_stat(a: Sequence[float], b: Sequence[float]) -> float:
