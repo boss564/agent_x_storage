@@ -187,9 +187,22 @@ FALSCH (v0 Spec verworfen):
 | Parameter | Wert Review | Verhalten |
 |-----------|-------------|-----------|
 | `window_size` N | 50 | Ziel-Fenster |
-| `min_trades` N_min | **50** (gleich N) | `< N_min` **abgeschlossene Round-Trips** (SELL) → `INSUFFICIENT_HISTORY`, **kein** Kelly, **kein** p=0.5/b=1.0-Fallback |
+| `min_trades` N_min | **50** (gleich N) | `< N_min` **B2-eligible Edges** → `INSUFFICIENT_HISTORY`, **kein** Kelly, **kein** p=0.5/b=1.0-Fallback |
 
-Begründung: Default-p=0.5 sieht aus wie Messung; bei dünnen Paper-WORMs wäre das der Normalfall.
+**B2-eligible** (nicht „jeder SELL“) — siehe [`PAPER_EXIT_ROUNDTRIP_SPEC.md`](PAPER_EXIT_ROUNDTRIP_SPEC.md) §8:
+
+1. `hold_seconds_target == PAPER_HOLD_SECONDS` (Freeze, aktuell **4966**)
+2. `exit_reason == hold_expired` (kein `force_exit`)
+3. `|hold_seconds_actual − hold_seconds_target| ≤ PAPER_EXIT_GAP_DT_S` (Default 30 s)
+
+Begründung: p, b sind die Verteilung der **k-Schritt-Rendite**. Gemischte k (z. B. superseded 433 + 4966) oder gap-gestreckte Holds sind **andere Estimands** — Gate-Zähler = `n_eligible_at_freeze_k`, nicht `grep SELL`.
+
+```bash
+PYTHONPATH=. python3 scripts/count_paper_edges_at_freeze.py \
+  --edges /data/audit/paper_edges.jsonl --freeze-k 4966
+```
+
+Begründung Default-p: Default-p=0.5 sieht aus wie Messung; bei dünnen Paper-WORMs wäre das der Normalfall.
 
 **Voraussetzung Paper-Pfad:** Live-Shadow ohne Exit-Policy erzeugt nur BUY — B2 bleibt leer. Siehe [`PAPER_EXIT_ROUNDTRIP_SPEC.md`](PAPER_EXIT_ROUNDTRIP_SPEC.md).
 
