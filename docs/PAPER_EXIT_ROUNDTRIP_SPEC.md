@@ -131,7 +131,7 @@ PYTHONPATH=. python3 scripts/calibrate_paper_hold.py \
 
 ### 4.5 Laufzeit bis Gate N=50
 
-Bei ~1 h Haltedauer und einer Position zur Zeit: **~50 h ≈ 2 Tage** bis 50 abgeschlossene Round-Trips (ohne Überlappung).
+Bei Freeze-`PAPER_HOLD_SECONDS=433` (~7,2 min) und einer Position zur Zeit: **~50 × 433 s ≈ 6 h** bis 50 abgeschlossene Round-Trips (ohne Überlappung; zzgl. Entry-Lücken).
 
 ---
 
@@ -149,7 +149,7 @@ Bei ~1 h Haltedauer und einer Position zur Zeit: **~50 h ≈ 2 Tage** bis 50 abg
 
 ```yaml
 PAPER_EXIT_MODE: "time_hold"          # Option B
-PAPER_HOLD_SECONDS: "<frozen>"        # aus §4.3 Kalibrierung
+PAPER_HOLD_SECONDS: "433"             # FROZEN §7 — 2026-08-29
 PAPER_MAX_OPEN_POSITIONS: "1"
 ```
 
@@ -176,24 +176,29 @@ kubectl exec -n trading regime-swarm-0 -- sh -c \
 
 ## 7. Kalibrierungs-Log (§4.3 Freeze)
 
-**Status:** Skript bereit (`make raas-paper-hold-calibrate-smoke`); **Freeze-Werte TBD** bis Live-WORM-Lauf mit `--print-freeze`.
+**Status:** **FROZEN** 2026-08-29 — Live-WORM-Lauf (`make raas-paper-hold-calibrate`).
 
 | Feld | Wert |
 |------|------|
-| `PAPER_HOLD_SECONDS` | **TBD** — nach `calibrate_paper_hold.py --print-freeze` auf Live-WORM |
-| σ_per_√s (time-norm) | TBD |
-| target E[|r_k|] / σ_k | `0.0060` / `≈0.007516` |
-| σ Teilfenster [min, med, max] | TBD |
-| n_tick_signals / n_returns / gaps_excl | TBD |
-| WORM path | `/data/worm/live/live/paper/runs/ethusdt/paper_trades.worm.jsonl` |
-| WORM sha256 | TBD |
-| n_worm_lines | TBD |
-| ts range (UTC) | TBD |
-| dt p50/p95/p99/max (s) | TBD |
-| gap_dt_threshold_s | `30` (Default) |
-| Messdatum | TBD |
-| Freigegeben von | TBD |
-| Anti-HARKing | Kalibrierung = Messbarkeit (Kostenboden), **nicht** günstiges f*; f*≤0 nach N Round-Trips ist Ergebnis, kein Anlass k nachzuziehen |
+| `PAPER_HOLD_SECONDS` | **`433`** (aus `recommended_hold_seconds=432.55`, gerundet) |
+| σ_per_√s (time-norm) | `0.00036157` |
+| target E[|r_k|] / σ_k | `0.0060` / `0.007520` |
+| σ Teilfenster [min, med, max] | `[0.00011221, 0.00032706, 0.00059780]` |
+| Hold aus Sub-Min / Sub-Max (Diagnose) | `4491 s` / `158 s` — **nicht** Freeze-Wert; Span zeigt Vola-Clustering |
+| n_tick_signals / n_returns / gaps_excl | `471254` / `48481` / `143` |
+| WORM path (Cluster) | `/data/worm/live/live/paper/runs/ethusdt/paper_trades.worm.jsonl` |
+| WORM path (Kalibrierungs-Kopie) | `data/worm/ethusdt/paper_trades.worm.jsonl` |
+| WORM sha256 | `9be6fdfd25d8399d1c15693fd7729c34e2f5024ccdeb7b22cf4578d2ba1615e8` |
+| n_worm_lines | `942508` |
+| ts range (UTC) | `2026-08-28T16:01:46.904000+00:00` → `2026-08-29T07:00:38.771000+00:00` |
+| dt p50/p95/p99/max (s) | `0.012` / `1.353` / `3.316` / `1258.249` |
+| gap_dt_threshold_s | `30.0` |
+| Messdatum (UTC) | `2026-08-29T07:00:45.801934+00:00` |
+| Skript | `scripts/calibrate_paper_hold.py` |
+| Freigegeben von | Live-Shadow Kalibrierung 2026-08-29 (gemessen, nicht justiert) |
+| Anti-HARKing | Kalibrierung = Messbarkeit (Kostenboden), **nicht** günstiges f*; f*≤0 nach N Round-Trips ist Ergebnis, kein Anlass k nachzuziehen. Änderung von `433` nur via neuer Spec-Version + neues Pre-Reg-Freeze. |
+
+**Freeze-Regel:** Punktwert aus Vollsample-σ_√s (`433 s` ≈ **7,2 min**). Teilfenster-Span dokumentiert Instabilität der Vola; er ersetzt den Freeze nicht und darf nicht ex-post für f*-Optimierung genutzt werden.
 
 ---
 
