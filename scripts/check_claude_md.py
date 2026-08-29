@@ -235,6 +235,8 @@ NO_TEST_SUMMARY: set[str] = {
     "scripts/count_paper_edges_at_freeze.py",  # B2 eligible edge counter (freeze-k)
     "scripts/test_feed_gap_concordance.py",  # Feed-gap JSONL + H_inv/H2 smoke (6/6)
     "scripts/count_feed_gap_concordance.py",  # H0/H1/H_inv/H2 concordance report
+    "scripts/test_cross_venue_connectivity.py",  # Cross-venue 2×2 t_recv smoke
+    "scripts/count_cross_venue_h2.py",  # Cross-venue H2 report
     "scripts/test_worm_streaming_oom.py",  # WORM streaming OOM guard (WORM_STREAMING_OOM_PASS/FAIL)
     "scripts/test_regime_leader_z3.py",  # P6 leader FSM Z3 (REGIME_LEADER_Z3_PASS/FAIL)
     "scripts/regime_swarm_shadow_chaos.py",  # P2/P5 shadow chaos (INFRA_SHADOW_CHAOS_PASS/FAIL)

@@ -378,6 +378,9 @@ raas-paper-exit-smoke: ## Option B exit state machine (S1–S6 Pre-Reg)
 raas-feed-gap-smoke: ## Feed-gap JSONL + socket↔tick concordance (Pre-Reg)
 	PYTHONPATH=. python3 scripts/test_feed_gap_concordance.py
 
+raas-cross-venue-smoke: ## Cross-venue connectivity 2×2 (t_recv only, Pre-Reg)
+	PYTHONPATH=. python3 scripts/test_cross_venue_connectivity.py
+
 raas-feed-gap-concordance: ## H0/H1/H_inv/H2 report (GAPS= EDGES= paths)
 	@test -n "$(GAPS)" || (echo "Usage: make raas-feed-gap-concordance GAPS=… EDGES=…"; exit 1)
 	@test -n "$(EDGES)" || (echo "Usage: make raas-feed-gap-concordance GAPS=… EDGES=…"; exit 1)

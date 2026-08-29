@@ -2,16 +2,23 @@
 
 Charter: live_execution is hardcoded False. Never starts an order path.
 Option B exit: PAPER_EXIT_MODE=time_hold (Pre-Reg PAPER_EXIT_IMPLEMENTATION_PREREG).
+Cross-venue connectivity: t_recv only (Pre-Reg CROSS_VENUE_FEED_VALIDATION_PREREG).
 """
 from __future__ import annotations
 
 import os
 import threading
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterable, Optional
 
+from prototypes.raas_paper_trading.cross_venue import (
+    CrossVenueMonitor,
+    cross_venue_paths_from_env,
+)
 from prototypes.raas_paper_trading.feed import (
     BinanceWebSocketFeed,
+    CoinbaseMatchRecvFeed,
     MockWebSocketFeed,
     PaperTick,
     binance_trade_ws_url,
@@ -43,6 +50,8 @@ class LivePaperBridge:
         feed: Optional[Iterable[PaperTick]] = None,
         runner: Optional[PaperTradingRunner] = None,
         attach_orderbook: bool = False,
+        cross_venue: Optional[CrossVenueMonitor] = None,
+        enable_cross_venue: Optional[bool] = None,
     ) -> None:
         if LIVE_EXECUTION is True:
             raise RuntimeError("live_execution must stay false")
@@ -59,8 +68,6 @@ class LivePaperBridge:
         else:
             cfg = exit_config_from_env()
             exit_mode = cfg["exit_mode"]
-            # Live shadow defaults to Option-B time_hold (Pre-Reg).
-            # State/edges live next to the WORM tree unless env overrides absolute paths.
             state_path = Path(cfg["state_path"])
             edges_path = Path(cfg["edges_path"])
             gaps_path = self.worm_dir / "audit" / "feed_gaps.jsonl"
@@ -102,6 +109,31 @@ class LivePaperBridge:
         self.feed: Iterable[PaperTick] = feed if feed is not None else self._feed_from_env()
         self.ticks_written = 0
 
+        if enable_cross_venue is None:
+            enable_cross_venue = _env_bool("CROSS_VENUE_ENABLED", False)
+        self.cross_venue = cross_venue
+        if self.cross_venue is None and enable_cross_venue:
+            paths = cross_venue_paths_from_env()
+            gaps = Path(os.environ.get("CROSS_VENUE_GAPS_PATH", str(paths["gaps_path"])))
+            slots = Path(os.environ.get("CROSS_VENUE_SLOTS_PATH", str(paths["slots_path"])))
+            st = Path(os.environ.get("CROSS_VENUE_STATE_PATH", str(paths["state_path"])))
+            if "CROSS_VENUE_GAPS_PATH" not in os.environ:
+                gaps = self.worm_dir / "audit" / "cross_venue_gaps.jsonl"
+            if "CROSS_VENUE_SLOTS_PATH" not in os.environ:
+                slots = self.worm_dir / "audit" / "cross_venue_slots.jsonl"
+            if "CROSS_VENUE_STATE_PATH" not in os.environ:
+                st = self.worm_dir / "state" / "cross_venue_state.json"
+            gap_dt = float(os.environ.get("CROSS_VENUE_GAP_DT_S", "30"))
+            self.cross_venue = CrossVenueMonitor.from_paths(
+                gaps_path=gaps,
+                slots_path=slots,
+                state_path=st,
+                gap_dt_v1=gap_dt,
+                gap_dt_v2=gap_dt,
+            )
+        self._v2_thread: Optional[threading.Thread] = None
+        self._v2_stop: Optional[threading.Event] = None
+
     def _socket_disconnect(self) -> None:
         mon = self.runner.feed_gap
         if mon is None:
@@ -123,8 +155,6 @@ class LivePaperBridge:
             position_open = store.state in ("HOLDING", "EXIT_PENDING", "ENTRY_PENDING")
             round_trip_id = store.entry_signal_id
             if store.entry_tick_ts:
-                from datetime import datetime, timezone
-
                 from prototypes.raas_paper_trading.paper_exit import parse_ts_unix
 
                 try:
@@ -160,6 +190,11 @@ class LivePaperBridge:
                 price=tick.price,
                 source=tick.source,
             )
+        # Cross-venue V1: local accept time — not exchange tick.ts (Pre-Reg §3.2)
+        if self.cross_venue is not None:
+            self.cross_venue.on_recv(
+                "v1", recv_ts=datetime.now(timezone.utc).isoformat()
+            )
         row = self.runner.on_tick(tick)
         self.ticks_written += 1
         return row
@@ -184,13 +219,54 @@ class LivePaperBridge:
 
         t = threading.Thread(target=_loop, name="live-paper-feed", daemon=True)
         t.start()
+        if self.cross_venue is not None:
+            self.start_cross_venue_v2(stop=stop)
         return t
 
+    def start_cross_venue_v2(
+        self,
+        *,
+        stop: Optional[threading.Event] = None,
+        frames: Optional[Iterable[str]] = None,
+    ) -> threading.Thread:
+        """Coinbase matches → V2 t_recv pulses (no prices on audit path)."""
+        if self.cross_venue is None:
+            raise RuntimeError("cross_venue monitor not enabled")
+        self._v2_stop = stop or threading.Event()
+        product = os.environ.get("CROSS_VENUE_V2_PRODUCT", "ETH-USD")
+        url = os.environ.get(
+            "CROSS_VENUE_V2_WS_URL", "wss://ws-feed.exchange.coinbase.com"
+        )
+        feed = CoinbaseMatchRecvFeed(
+            url,
+            product_id=product,
+            frames=list(frames) if frames is not None else None,
+            stop=lambda: bool(self._v2_stop and self._v2_stop.is_set()),
+            venue="v2",
+        )
+
+        def _loop() -> None:
+            assert self.cross_venue is not None
+            for pulse in feed:
+                if self._v2_stop is not None and self._v2_stop.is_set():
+                    break
+                self.cross_venue.on_recv(pulse.venue, recv_ts=pulse.recv_ts)
+
+        self._v2_thread = threading.Thread(
+            target=_loop, name="cross-venue-v2", daemon=True
+        )
+        self._v2_thread.start()
+        return self._v2_thread
+
     @classmethod
-    def from_env(cls, *, worm_dir: Path, frames: Optional[Iterable[str]] = None) -> "LivePaperBridge":
+    def from_env(
+        cls, *, worm_dir: Path, frames: Optional[Iterable[str]] = None
+    ) -> "LivePaperBridge":
         symbol = os.environ.get("LIVE_FEED_SYMBOL", "ETHUSDT").upper()
         if frames is not None:
-            feed: Iterable[PaperTick] = MockWebSocketFeed(list(frames), default_symbol=symbol)
+            feed: Iterable[PaperTick] = MockWebSocketFeed(
+                list(frames), default_symbol=symbol
+            )
         else:
             feed = None
         return cls(symbol=symbol, worm_dir=worm_dir, feed=feed)
