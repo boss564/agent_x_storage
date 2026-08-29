@@ -94,6 +94,8 @@ Kanten-Felder (Minimum):
 | `entry_price` / `exit_price` | Mark |
 | `pnl_eur` | aus Paper-Ledger (`realized_pnl_eur`) |
 | `hold_seconds_actual` | wie WORM |
+| `hold_seconds_target` | Freeze-k (4966) |
+| `hold_seconds_delta` | `actual − target` (Live-Lücken messbar; B2-Ausschluss wenn \|delta\| > gap) |
 | `exit_reason` | `hold_expired` \| `force_exit` |
 | `worm_sell_hash` | Hash der zugehörigen SELL-Zeile |
 | Charter-Stempel | `live_execution=false`, `order_send=false`, `not_investment_advice=true`, `diagnostic_only=true` |

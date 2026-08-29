@@ -283,6 +283,9 @@ def test_s6_edge_ledger() -> None:
         if edges[0].get("exit_reason") not in EXIT_REASONS:
             _fail(name, "edge exit_reason")
             return
+        if "hold_seconds_delta" not in edges[0]:
+            _fail(name, "missing hold_seconds_delta")
+            return
         if not edges[0].get("prev_hash") or not edges[0].get("hash"):
             _fail(name, "hash chain missing")
             return
@@ -326,6 +329,36 @@ def test_round_trip_second_entry() -> None:
         _ok(name)
 
 
+def test_b2_sample_eligibility() -> None:
+    name = "B2 freeze-k sample eligibility"
+    from prototypes.raas_paper_trading.paper_edge_sample import count_eligible, edge_sample_eligible
+
+    clean = {
+        "hold_seconds_target": 4966,
+        "hold_seconds_actual": 4967.5,
+        "exit_reason": "hold_expired",
+    }
+    ok, code = edge_sample_eligible(clean, freeze_k=4966, max_delta_s=30)
+    if not ok or code != "ok":
+        _fail(name, f"clean should pass: {ok} {code}")
+        return
+    wrong_k = {**clean, "hold_seconds_target": 433}
+    ok, code = edge_sample_eligible(wrong_k, freeze_k=4966)
+    if ok or code != "wrong_k":
+        _fail(name, f"wrong_k: {ok} {code}")
+        return
+    late = {**clean, "hold_seconds_actual": 4966 + 120}
+    ok, code = edge_sample_eligible(late, freeze_k=4966, max_delta_s=30)
+    if ok or code != "hold_delta_exceeded":
+        _fail(name, f"late hold: {ok} {code}")
+        return
+    report = count_eligible([clean, wrong_k, late], freeze_k=4966)
+    if report["n_eligible_at_freeze_k"] != 1:
+        _fail(name, f"eligible={report['n_eligible_at_freeze_k']}")
+        return
+    _ok(name)
+
+
 def main() -> int:
     print("paper exit implementation smoke (S1–S6)")
     test_s1_single_position_gate()
@@ -337,6 +370,7 @@ def main() -> int:
     test_s6_edge_ledger()
     test_s6b_force_exit()
     test_round_trip_second_entry()
+    test_b2_sample_eligibility()
     print(f"\n{ _PASS } passed, { _FAIL } failed")
     return 1 if _FAIL else 0
 

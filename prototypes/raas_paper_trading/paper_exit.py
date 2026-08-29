@@ -500,6 +500,9 @@ class PaperExitController:
                 "pnl_eur": pnl_eur,
                 "hold_seconds_actual": hold_seconds_actual,
                 "hold_seconds_target": self.hold_seconds,
+                "hold_seconds_delta": round(
+                    float(hold_seconds_actual) - float(self.hold_seconds), 6
+                ),
                 "exit_reason": exit_reason,
                 "worm_sell_hash": worm_sell_hash,
                 "entry_tick_ts": entry_tick_ts,

@@ -231,6 +231,52 @@ kubectl exec -n trading regime-swarm-0 -- sh -c \
 | Messdatum (UTC) | `2026-08-29T07:00:45.801934+00:00` |
 | Status | **SUPERSEDED** durch Amendment A1 — nur Archiv |
 
+### 7.2 Abschlussnachweis — Vorhersage bestätigt (2026-08-29)
+
+Vor dem Deploy stand die Plausibilitätsrechnung; nach A1 bestätigt die Messung dieselbe Größenordnung:
+
+```text
+Ziel-σ_k ≈ 0.75 %   (E[|r_k|] ≥ 0.6 % ⇒ σ_k = 0.6%/√(2/π))
+k = 4966 s
+σ_1s = 0.0075 / √4966 ≈ 0.0106 %
+σ_1d = 0.0106 % × √86400 ≈ 0.0106 × 293.9 ≈ 3.1 % / Tag
+```
+
+| | Trade-Tick-Freeze (§7.0) | 1s-Bar-Freeze (A1) |
+|--|-------------------------|---------------------|
+| k | 433 s (~7,2 min) | **4966 s (~82,8 min)** |
+| σ_1d | ~10,6 % | **~3,14 %** (gemessen) / ~3,1 % (Rückrechnung) |
+| Faktor Zeit | 1× | ~11,5× |
+| Faktor σ | aufgebläht ~3,4× | ETH-üblich (3–5 %) |
+
+**Beleg Tick-Abstände (Trade-Stream):** p50≈12 ms → Mikrostruktur, nicht Markt-σ.  
+**Beleg Lücken-Filter Kalibrierung:** Δt>30 s ausgeschlossen (143 Gaps); die Aufblähung kam trotzdem aus Trade-Bounce.  
+**Klassifikation:** Vorhersage vor Messung → Zahl bestätigt → belastbarster Teil des Strangs; `4966` ist nicht „gegriffen“.
+
+Live-Pfad schließt Lücken **nicht** (Exit wartet auf nächsten gültigen Tick). Deshalb §8: Haltedauer messbar, dirty Holds aus B2 ausschließbar.
+
+---
+
+## 8. B2-Sample-Disziplin (Freeze-k only)
+
+**Estimand:** Verteilung der **k-Schritt-Rendite** bei eingefrorenem `PAPER_HOLD_SECONDS` (aktuell **4966**).
+
+| Regel | Inhalt |
+|-------|--------|
+| **Gleicher k** | Nur Edges mit `hold_seconds_target == 4966`. Keine Mischung mit superseded 433 (oder anderen Horizonten). |
+| **Sauberer Hold** | `|hold_seconds_actual − hold_seconds_target| ≤ gap_dt` (Default **30 s**). Späterer Exit nach Feed-Lücke → anderer Horizont → **ausschließen**. |
+| **Exit-Grund** | Nur `exit_reason=hold_expired`. `force_exit` zählt nicht in die k-Stichprobe. |
+| **Zähler** | `n_eligible_at_freeze_k` aus `paper_edges.jsonl` — **nicht** `grep SELL` auf dem WORM. |
+| **Felder** | Jede Kante trägt `hold_seconds_actual`, `hold_seconds_target`, `hold_seconds_delta` (ab Deploy nach diesem Absatz). |
+
+```bash
+# Gate-Fortschritt (N_min=50):
+PYTHONPATH=. python3 scripts/count_paper_edges_at_freeze.py \
+  --edges ./data/audit/paper_edges.jsonl --freeze-k 4966
+```
+
+Round-Trip 1 (Live 2026-08-29): `target=4966`, `actual=4967.563`, `delta≈1.56 s` → **eligible**.
+
 ---
 
 ## Siehe auch
