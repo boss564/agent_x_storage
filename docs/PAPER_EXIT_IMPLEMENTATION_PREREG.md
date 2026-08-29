@@ -1,6 +1,6 @@
 # Paper Exit Implementation — Pre-Reg
 
-**Status:** PRE-REG (2026-08-29) · **kein Code** bis Freigabe dieses Dokuments  
+**Status:** FREIGEGEBEN (2026-08-29) · Implementierung auf `feature/exit-implementation`  
 **Parent (Theorie + Freeze):** [`PAPER_EXIT_ROUNDTRIP_SPEC.md`](PAPER_EXIT_ROUNDTRIP_SPEC.md) — Option B, `PAPER_HOLD_SECONDS=433` (§7 FROZEN)  
 **Scope:** Live-Shadow Paper-Pfad · `live_execution=false` · `order_send=false` · `not_investment_advice=true`  
 **Ziel:** Abgeschlossene Round-Trips für B2 (Kelly-Historie) ohne Charter-Bruch
@@ -26,8 +26,8 @@ PAPER_HOLD_SECONDS: "433"             # FROZEN — Parent §7
 PAPER_MAX_OPEN_POSITIONS: "1"
 PAPER_EXIT_GAP_DT_S: "30"             # kein Entry/Exit auf Gap
 PAPER_EXIT_MAX_WAIT_S: "2165"         # 5 × 433 — Max-Warte in EXIT_PENDING
-PAPER_POSITION_STATE_PATH: "/data/state/paper_position.json"
-PAPER_EDGES_PATH: "/data/audit/paper_edges.jsonl"
+PAPER_POSITION_STATE_PATH: "/data/state/paper_position.json"   # Cluster; lokal: {worm_dir}/state/…
+PAPER_EDGES_PATH: "/data/audit/paper_edges.jsonl"             # Cluster; lokal: {worm_dir}/audit/…
 # Force-Exit nur explizit:
 # HUMAN_FORCE_EXIT=1  (oder API) — nie aus Regime/A7
 ```
@@ -252,7 +252,7 @@ Zusätzlich empfohlen: **S3b** Max-Warte → `EXIT_WAIT_TIMEOUT`-Alarm ohne Forc
 - [x] B3 — Entry = Idle-First-Tick / Tick-1-BUY-Semantik  
 - [x] B4 — Persistenz `/data/state/paper_position.json`  
 - [x] S1–S5 — Max-Warte, UTC, SIM_FILL SELL, Kanten-Pfad, Human Force-Exit  
-- [ ] Reviewer-Freigabe → Implementierung  
+- [x] Reviewer-Freigabe → Implementierung (`feature/exit-implementation`)  
 
 ---
 
