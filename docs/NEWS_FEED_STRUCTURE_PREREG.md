@@ -1,11 +1,12 @@
 # News-Feed Structural Liveness — Pre-Reg
 
-**Status:** FREIGABE (2026-08-30) — Implementierung gemäß §9 + Auflagen 1–3  
+**Status:** VALIDIERT (2026-08-30) — Strang geschlossen  
 **Erstellt:** 2026-08-30  
 **Strang:** Einzelstrang, eine gemessene Parse-Lücke. Kein Subsystem.  
 **Parent:** [`NEWS_AGENT.md`](NEWS_AGENT.md) · `agents_b2g/news/feed_health.py` · `agents_b2g/news/scraper.py`  
 **Liveness-Inventar:** [`AUDIT_WRITER_LIVENESS.md`](AUDIT_WRITER_LIVENESS.md) (Instanz 3)  
-**Außerhalb:** `prototypes/raas_paper_trading/*` (Paper-Exit, Feed-Gap, WORM) bleibt unberührt.
+**Außerhalb:** `prototypes/raas_paper_trading/*` (Paper-Exit, Feed-Gap, WORM) bleibt unberührt.  
+**Closing:** Commit `bbb18dd5` · Gate §5 S1–S7 (13/13) · Freeze §6 Live `run_marker` 2026-08-30T17:42:15Z — CoinDesk/Cointelegraph/BinanceCMS `structure_ok=true` + `ok` · H1/H2 live-Randfälle nicht beobachtet (Smoke S1/S2 tragen die Logik)
 
 ---
 
@@ -177,3 +178,4 @@ Keine Änderung an Dedup, Run-Marker-Schema (außer dem neuen Report-Feld), Proc
 - [x] Freeze: Container-Liste = Extraktor-Pfade, kein RDF in diesem Strang
 - [x] S1–S7 als einziges Smoke-Gate akzeptiert
 - [x] Kein Code vor Status FREIGABE (FREIGABE erteilt; Code danach)
+- [x] Freeze gegen echte Feeds bestätigt (Live-Lauf 2026-08-30) → Status VALIDIERT
