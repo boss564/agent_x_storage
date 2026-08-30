@@ -29,9 +29,10 @@ class PaperWormLog:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._prev = "0" * 64
         if self.path.is_file():
-            lines = self.path.read_text(encoding="utf-8").strip().splitlines()
-            if lines:
-                last = json.loads(lines[-1])
+            from prototypes.raas_paper_trading.worm_io import last_jsonl_row
+
+            last = last_jsonl_row(self.path)
+            if last:
                 self._prev = str(last.get("hash") or self._prev)
 
     def append(self, event: Dict[str, Any]) -> Dict[str, Any]:

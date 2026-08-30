@@ -8,14 +8,14 @@
 #
 # Requires cluster egress to wss://stream.binance.com (or set LIVE_FEED_WS_URL).
 #
-# Image Sollzustand (Fenster W Dual-Start 2026-08-29T13:17:46Z): feed-gap-v1.
+# Image Sollzustand (Fenster W Dual-Start 2026-08-29T13:17:46Z): feed-gap-v2 (WORM tail init OOM fix).
 # Helm upgrade kann an immutable PVC scheitern → dann kubectl set image (Runbook §9).
 
 replicaCount: 1
 
 image:
   repository: agentx-regime-swarm
-  tag: "feed-gap-v1"
+  tag: "feed-gap-v2"
   pullPolicy: IfNotPresent
 
 leaderElection:

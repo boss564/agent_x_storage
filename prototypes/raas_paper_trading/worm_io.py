@@ -49,6 +49,32 @@ def read_last_jsonl_chunk(path: Path, *, max_bytes: int = 65536) -> str:
     return text
 
 
+def last_jsonl_row(path: Path, *, max_bytes: int = 65536) -> Optional[Dict[str, Any]]:
+    """Return the last valid JSON object in a JSONL file (tail seek, no full read)."""
+    if not path.is_file():
+        return None
+    size = path.stat().st_size
+    window = max_bytes
+    while window <= size + max_bytes:
+        text = read_last_jsonl_chunk(path, max_bytes=window)
+        if not text:
+            return None
+        for line in reversed(text.splitlines()):
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                row = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(row, dict):
+                return row
+        if window >= size:
+            return None
+        window = min(size, window * 4)
+    return None
+
+
 def last_signal_row(path: Path, *, max_bytes: int = 65536) -> Optional[Dict[str, Any]]:
     """Return the last SIGNAL row by scanning a trailing chunk backwards."""
     text = read_last_jsonl_chunk(path, max_bytes=max_bytes)

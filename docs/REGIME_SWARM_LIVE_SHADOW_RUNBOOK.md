@@ -256,9 +256,9 @@ curl -s http://localhost:8080/metrics | grep -E '^sizing_|^feed_gap_'
 
 ### OOM / CrashLoopBackOff (2026-08-29)
 
-**Ursache:** A2 lud die Live-WORM zweimal via `Path.read_text().splitlines()` (~670k Zeilen) → Peak >2 GiB → `OOMKilled` (Exit 137).
+**Ursache:** A2 lud die Live-WORM zweimal via `Path.read_text().splitlines()` (~670k Zeilen) → Peak >2 GiB → `OOMKilled` (Exit 137). Zusätzlich lud `PaperWormLog.__init__` beim Live-Feed-Start die **gesamte** WORM (~1 GiB) nur für `prev_hash` → sofortiger OOM beim Pod-Start.
 
-**Fix:** Streaming-Reader (`prototypes/raas_paper_trading/worm_io.py`) + Trailing-`SWARM_WORM_MAX_TICKS` (Default 10 000). Siehe PR `fix/worm-oom-streaming`.
+**Fix:** Streaming-Reader (`worm_io.py`) + Trailing-`SWARM_WORM_MAX_TICKS`; `PaperWormLog` nutzt `last_jsonl_row` (Tail-Seek). Image **`feed-gap-v2`**. Recovery: `scripts/recover_regime_swarm_rt_abort.py`.
 
 ```bash
 # Nach Image-Rebuild / kind load / pod delete:
