@@ -249,7 +249,42 @@ NO_TEST_SUMMARY: set[str] = {
     "scripts/run_regime_swarm_infra_smoke.py",  # E2E infra smoke (REGIME_SWARM_INFRA_SMOKE_PASS/FAIL)
     "scripts/helm_pod_smoke.py",  # Helm pod smoke (HELM_POD_SMOKE_PASS/FAIL)
     "scripts/run_regime_swarm_cluster_smoke.sh",  # Cluster helm test runbook
+    "scripts/swarm_health.py",  # Schwarm-Log-Status (keine x/y-Bilanz)
+    "scripts/audit_feed_gap_worm.py",  # W-Studie WORM Δt audit CLI
 }
+
+# Inventar-Dokumente: Abschnitte, Pflicht-Erwähnungen, referenzierte Artefakte.
+DOC_INVENTORY_FILES: list[dict] = [
+    {
+        "path": "docs/SWARM_INVENTORY.md",
+        "required_sections": [
+            "## System-Übersicht",
+            "## Übersicht aller Agenten",
+            "## Zuordnung zu den RAAS-Schichten",
+            "## Konfigurations-Pfade",
+        ],
+        "required_mentions": [
+            "scripts/swarm_health.py",
+            "scripts/run_regime_swarm_daemon.py",
+            "make raas-swarm-health",
+            "make raas-swarm-inventory-sync",
+            "<!-- SWARM_RUNTIME_BEGIN -->",
+            "<!-- SWARM_RUNTIME_END -->",
+        ],
+        "required_paths_exist": [
+            "scripts/swarm_health.py",
+            "scripts/run_regime_swarm_daemon.py",
+            "prototypes/raas_paper_trading/paper_runner.py",
+            "prototypes/raas_paper_trading/feed_gap.py",
+            "prototypes/raas_paper_trading/cross_venue.py",
+            "services/exporter/agent_x_raas_exporter.py",
+            "charts/regime-swarm/values-live-shadow.yaml",
+            "Dockerfile.regime-swarm",
+        ],
+        "makefile_target": "raas-swarm-health",
+        "sync_makefile_target": "raas-swarm-inventory-sync",
+    },
+]
 
 
 class Report:
@@ -443,6 +478,223 @@ def check_tests(text: str, root: Path, rep: Report) -> None:
                      "nicht dokumentiert", real)
 
 
+def _resolve_inventory_ref(root: Path, ref: str) -> bool:
+    """Repo-relative Pfad oder Kurzname → existierende Datei."""
+    if ref.startswith("tests/") or ref.startswith("/"):
+        return True
+    candidates = [
+        root / ref,
+        root / "agents_b2g" / ref,
+        root / "scripts" / ref,
+        root / "services" / ref,
+        root / "prototypes" / ref,
+        root / "prototypes" / "raas_paper_trading" / ref,
+        root / "docs" / ref,
+        root / "chaos" / ref,
+        root / "api" / ref,
+        root / "charts" / ref,
+        root / "config" / ref,
+        root / "deploy" / ref,
+    ]
+    if any(p.exists() for p in candidates):
+        return True
+    name = Path(ref).name
+    for base in (
+        "prototypes/raas_paper_trading",
+        "services",
+        "scripts",
+        "agents_b2g",
+        "agents",
+        "config",
+    ):
+        base_path = root / base
+        if not base_path.is_dir():
+            continue
+        for hit in base_path.rglob(name):
+            if hit.is_file():
+                return True
+    return False
+
+
+def _skip_inventory_backtick_ref(ref: str) -> bool:
+    """Runtime-/Output-Pfade nicht gegen Repo prüfen."""
+    if ref.startswith("/") or ref.startswith("exports/"):
+        return True
+    if "/" not in ref and ref.endswith((".json", ".jsonl")):
+        return True
+    if ref.startswith(("logs/", "data/")):
+        return True
+    return False
+
+
+def _load_swarm_health(root: Path):
+    import importlib.util
+    import sys
+
+    path = root / "scripts" / "swarm_health.py"
+    spec = importlib.util.spec_from_file_location("swarm_health", path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"kann {path} nicht laden")
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = mod
+    spec.loader.exec_module(mod)
+    return mod
+
+
+INVENTORY_RUNTIME_MAX_AGE_H = float(
+    __import__("os").environ.get("SWARM_INVENTORY_MAX_AGE_H", "24")
+)
+
+
+def _parse_runtime_generated_at(text: str) -> Optional["datetime"]:
+    from datetime import datetime, timezone
+
+    m = re.search(r"<!-- generated_at:\s*([^>]+?) -->", text)
+    if not m:
+        return None
+    raw = m.group(1).strip()
+    try:
+        dt = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt
+    except ValueError:
+        return None
+
+
+def check_inventory_runtime_block_age(inventory_text: str, rel: str, rep: Report) -> None:
+    """Offline-sicher: Laufzeit-Block älter als SWARM_INVENTORY_MAX_AGE_H → Fehler."""
+    from datetime import datetime, timezone
+
+    generated = _parse_runtime_generated_at(inventory_text)
+    if generated is None:
+        rep.fail(None, f"{rel} Laufzeit-Block", "generated_at fehlt", "make raas-swarm-inventory-sync")
+        return
+    age_h = (datetime.now(timezone.utc) - generated).total_seconds() / 3600.0
+    rep.ok()
+    if age_h > INVENTORY_RUNTIME_MAX_AGE_H:
+        rep.fail(
+            None,
+            f"{rel} Laufzeit-Block veraltet",
+            f"{age_h:.1f}h alt",
+            f">{INVENTORY_RUNTIME_MAX_AGE_H:.0f}h",
+            "make raas-swarm-inventory-sync",
+        )
+    else:
+        rep.ok()
+
+
+def check_inventory_runtime_status(root: Path, inventory_text: str, rel: str, rep: Report) -> None:
+    """Laufzeit-Spalte im Inventar gegen frische swarm_health-Messung halten."""
+    check_inventory_runtime_block_age(inventory_text, rel, rep)
+
+    if "Sync ausstehend" in inventory_text:
+        return
+
+    try:
+        sh = _load_swarm_health(root)
+    except Exception as exc:
+        rep.fail(None, f"{rel} Laufzeit-Check", "swarm_health.py", str(exc))
+        return
+
+    live = sh.collect_health_report()
+    documented = sh.parse_runtime_block(inventory_text)
+    expected = {cid: live["components"][cid]["status"] for cid in live["components"]}
+
+    if not documented:
+        if live.get("cluster_reachable"):
+            rep.fail(None, f"{rel} Laufzeit-Block", "Komponenten fehlen", "make raas-swarm-inventory-sync")
+        return
+
+    if not live.get("cluster_reachable"):
+        rep.env("swarm_inventory_runtime", "Cluster offline — Laufzeit-Drift nicht geprüft (Alter geprüft)")
+        return
+
+    mismatches: list[tuple[str, str, str]] = []
+    for comp in sh.RUNTIME_COMPONENTS:
+        cid = comp.component_id
+        rep.ok()
+        doc_status = documented.get(cid)
+        live_status = expected.get(cid)
+        if doc_status is None:
+            rep.fail(None, f"{rel} Laufzeit-Zeile fehlt", comp.label, "nicht im SWARM_RUNTIME-Block")
+            continue
+        if doc_status != live_status:
+            mismatches.append((comp.label, doc_status, live_status or "?"))
+        else:
+            rep.ok()
+
+    for label, doc_s, live_s in mismatches:
+        rep.fail(
+            None,
+            f"{rel} Laufzeit drift ({label})",
+            doc_s,
+            live_s,
+            "make raas-swarm-inventory-sync",
+        )
+
+
+def check_doc_inventories(root: Path, rep: Report) -> None:
+    """Pflicht-Abschnitte, Erwähnungen und referenzierte Pfade in Inventar-Docs."""
+    makefile = (root / "Makefile").read_text(encoding="utf-8") if (root / "Makefile").is_file() else ""
+    for spec in DOC_INVENTORY_FILES:
+        rel = spec["path"]
+        doc_path = root / rel
+        if not doc_path.is_file():
+            rep.fail(None, f"Inventar-Dokument fehlt", rel, "existiert nicht")
+            continue
+        text = doc_path.read_text(encoding="utf-8")
+        rep.ok()
+
+        for section in spec.get("required_sections", []):
+            if section not in text:
+                rep.fail(None, f"{rel} Abschnitt fehlt", section, "nicht gefunden")
+            else:
+                rep.ok()
+
+        for mention in spec.get("required_mentions", []):
+            if mention not in text:
+                rep.fail(None, f"{rel} Erwähnung fehlt", mention, "nicht gefunden")
+            else:
+                rep.ok()
+
+        for artefact in spec.get("required_paths_exist", []):
+            if not (root / artefact).exists():
+                rep.fail(None, f"{rel} Artefakt fehlt", artefact, "existiert nicht")
+            else:
+                rep.ok()
+
+        target = spec.get("makefile_target")
+        if target and f"{target}:" not in makefile:
+            rep.fail(None, f"{rel} Makefile-Target fehlt", target, "nicht in Makefile")
+        elif target:
+            rep.ok()
+
+        sync_target = spec.get("sync_makefile_target")
+        if sync_target and f"{sync_target}:" not in makefile:
+            rep.fail(None, f"{rel} Makefile-Target fehlt", sync_target, "nicht in Makefile")
+        elif sync_target:
+            rep.ok()
+
+        check_inventory_runtime_status(root, text, rel, rep)
+
+        # Backtick-Referenzen wie in CLAUDE.md (nur repo-relative Pfade)
+        seen: set[str] = set()
+        for lineno, raw in enumerate(text.splitlines(), 1):
+            for ref in re.findall(r"`([\w/.\-]+\.(?:py|yaml|yml|json|md|sh))`", raw):
+                if ref in seen or _skip_inventory_backtick_ref(ref):
+                    continue
+                seen.add(ref)
+                hits = [root / ref, root / "agents_b2g" / ref, root / "scripts" / ref]
+                if not any(h.exists() for h in hits):
+                    if not _resolve_inventory_ref(root, ref):
+                        rep.fail(lineno, f"{rel} tote Referenz", ref, "existiert nicht")
+                    else:
+                        rep.ok()
+                else:
+                    rep.ok()
+
+
 def check_undocumented_tests(root: Path, rep: Report) -> None:
     """Find all scripts/test_*.py files and check they're registered."""
     on_disk = sorted(
@@ -485,6 +737,7 @@ def main() -> int:
     check_dead_refs(text, root, rep)
     check_counts(text, waves, per, rep)
     check_undocumented_tests(root, rep)
+    check_doc_inventories(root, rep)
     if "--run-tests" in sys.argv:
         check_tests(text, root, rep)
 
