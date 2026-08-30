@@ -162,7 +162,28 @@ Default-Freeze:
 /data/audit/cross_venue_slots.jsonl    # Slot → Zelle {LL,LN,NL,NN}; bei LL: onset_skew_s
 ```
 
-Gap-Zeile (Minimum): `venue`, `gap_start_recv_ts`, `gap_end_recv_ts`, `gap_duration_s`, `gap_dt_threshold_s`, `event_id`, Hash-Kette, Charter-Stempel.
+Gap-Zeile (Minimum): `source` (`recv_gap` \| `heartbeat` \| `restart_marker`), `venue`, `gap_start_recv_ts`, `gap_end_recv_ts`, `gap_duration_s`, `gap_dt_threshold_s`, `event_id`, Hash-Kette, Charter-Stempel.
+
+**Heartbeat (pro Venue, vor W_xv Dual-Start):** stündlich `source=heartbeat` je `v1`/`v2` in `cross_venue_gaps.jsonl` — trennt „keine Lücke beobachtet" von „Beobachter tot". Auswertung: `writer_liveness_status(venue=…)`; H2-Priorität **OBSERVER_DOWN** vor INSUFFICIENT/V2_NOISE.
+
+**Restart-Marker (pro Venue, bei `from_paths`):** `source=restart_marker` + Clock-Seeding analog Feed-Gap — verhindert **OBSERVER_DOWN** als False Positive unmittelbar nach Pod-Start, bevor der erste Heartbeat fällig ist.
+
+**Observer-Gate (normativ, vor W_xv):** H2 ohne geladene `cross_venue_gaps.jsonl` → **`UNVERIFIED` / `NOT_GATED`** (kein sauberer PASS). Leere/stale Gaps → **`OBSERVER_DOWN`**. Meta-Zustand **U** (unbeobachtet): Venue-Seite nicht als „N" (ruhig) lesen, wenn der Beobachter tot ist.
+
+\* Bei `heartbeat`/`restart_marker`: `gap_end_recv_ts`/`gap_duration_s` dürfen null sein (Lebendmarker, keine Lücke).
+
+### 3.6 Deploy-Wiring (vor W_xv Dual-Start)
+
+Cross-Venue-Heartbeats laufen **nur** über `LivePaperBridge.start_background` (gemeinsamer Thread `audit-writer-heartbeat` mit Feed-Gap):
+
+```text
+scripts/run_regime_swarm_daemon.py
+  → _start_live_feed_thread (LIVE_FEED_ENABLED=true)
+  → LivePaperBridge.from_env().start_background()
+  → maybe_emit_all_heartbeats() für Feed-Gap + Cross-Venue
+```
+
+`PaperTradingRunner` allein startet **keinen** Heartbeat-Thread. Vor Dual-Start prüfen: `CROSS_VENUE_ENABLED=true` im Live-Shadow-Overlay **und** Daemon mit Live-Feed (nicht isolierter Runner).
 
 Slot-Zeile (Minimum): `slot_start_ts`, `cell` ∈ {NN,LN,NL,LL}; wenn `cell=LL`: **`onset_skew_s`** (Pflicht).
 
@@ -216,34 +237,46 @@ Zusätzlich über alle LL-Slots: Verteilung von `onset_skew_s` (Median, p90; Ant
 Hausregel analog Wave 38/39: **eine** Reihenfolge, **erschöpfend**, **überschneidungsfrei**. Erste zutreffende Regel gewinnt.
 
 ```text
-Schritt 0 — Voraussetzung:
+Schritt −1 — Observer-Gate (zuerst):
+  gaps JSONL nicht an Auswertung übergeben
+  → UNVERIFIED (observer_check: NOT_GATED)
+  # kein sauberer H2-PASS ohne Beobachter-Evidenz
+
+Schritt 0 — OBSERVER_DOWN:
+  writer_liveness(v1) oder writer_liveness(v2) ≠ ACTIVE
+  → OBSERVER_DOWN
+  # Meta-Zustand U: betroffene Venue nicht als „N" (ruhig) lesen
+
+Schritt 1 — Voraussetzung:
   n_disturbed ≥ 20
   sonst → INSUFFICIENT_DISTURBED   (kein H2-Urteil)
 
-Schritt 1 — V2_NOISE (zuerst):
+Schritt 2 — V2_NOISE:
   wenn p_NL > 0.60
   → V2_NOISE
   # V2-Schwelle/Venue ungeeignet; Kontrollfall dominiert disturbed
 
-Schritt 2 — COLLAPSED:
+Schritt 3 — COLLAPSED:
   wenn p_LL > 0.70
   → COLLAPSED
   # gemeinsame Ursache / Koinzidenz-Aufblähung dominiert;
   # Onset-Verteilung im Ergebnisdok: hoher f_sync stützt gemeinsame Ursache,
   # niedriger f_sync stützt Koinzidenz-Artefakt (deskriptiv, ändert Verdict nicht)
 
-Schritt 3 — SEPARABLE:
+Schritt 4 — SEPARABLE:
   wenn p_LL ≤ 0.50
   → SEPARABLE
   # (p_LN+p_NL ≥ 0.50 folgt aus p_LL ≤ 0.50 — keine zweite Bedingung)
 
-Schritt 4 — MIXED (Rest, lückenlos):
+Schritt 5 — MIXED (Rest, lückenlos):
   sonst  (insb. 0.50 < p_LL ≤ 0.70 und p_NL ≤ 0.60)
   → MIXED
 ```
 
 | Verdict | Bedeutung |
 |---------|-----------|
+| **UNVERIFIED** | gaps JSONL nicht geladen — kein H2-Urteil |
+| **OBSERVER_DOWN** | Beobachter tot/stale — kein Zellen-Urteil |
 | **INSUFFICIENT_DISTURBED** | zu wenig gestörte Slots |
 | **V2_NOISE** | V2 zu störanfällig / falsch kalibriert |
 | **COLLAPSED** | LL dominiert — Trennschärfe gering; Onset-Deskriptoren lesen |
