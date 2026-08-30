@@ -15,9 +15,11 @@ from prototypes.raas_paper_trading.regime_drift import load_signal_prices  # noq
 from prototypes.raas_paper_trading.regime_swarm.agents import DataIngestorAgent  # noqa: E402
 from prototypes.raas_paper_trading.worm_io import (  # noqa: E402
     iter_jsonl_rows,
+    last_jsonl_row,
     last_signal_row,
     load_signal_mark_prices,
 )
+from prototypes.raas_paper_trading.worm_log import PaperWormLog  # noqa: E402
 
 
 def _fail(msg: str) -> None:
@@ -109,11 +111,28 @@ def test_a2_run_reports_max_ticks() -> None:
             _fail(f"a2 run {out}")
 
 
+def test_paper_worm_log_tail_prev_hash() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        worm = PaperWormLog("live", "ethusdt", data_root=root)
+        worm.append({"action": "SIGNAL", "signal_id": "sig-1", "mark_price": "2000"})
+        for i in range(200):
+            worm.append({"action": "SIM_SKIP", "signal_id": f"skip-{i}"})
+        last_hash = worm._prev
+        worm2 = PaperWormLog("live", "ethusdt", data_root=root)
+        if worm2._prev != last_hash:
+            _fail(f"prev hash {worm2._prev} != {last_hash}")
+        row = last_jsonl_row(worm.path)
+        if row is None or row.get("hash") != worm2._prev:
+            _fail(f"last_jsonl_row mismatch {row}")
+
+
 def main() -> int:
     test_stream_not_full_read()
     test_unlimited_streaming_count()
     test_last_signal_row_tail()
     test_a2_run_reports_max_ticks()
+    test_paper_worm_log_tail_prev_hash()
     print("WORM_STREAMING_OOM_PASS")
     return 0
 
