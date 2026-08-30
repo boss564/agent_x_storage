@@ -1,6 +1,7 @@
 # Paper Feed-Gap — Invariante + Socket↔Tick-Konkordanz (Pre-Reg)
 
 **Status:** FREIGABE (2026-08-29) · Review-Schärfungen S1–S4 + methodische Korrektur  
+**Amendments (append-only):** **FGDC-A1** (2026-08-30) — WORM-H0-Abdeckung · siehe §9  
 **Parent:** [`PAPER_EXIT_ROUNDTRIP_SPEC.md`](PAPER_EXIT_ROUNDTRIP_SPEC.md) §7 Gap-Filter · §8 / §8.1  
 **Exit-Impl:** [`PAPER_EXIT_IMPLEMENTATION_PREREG.md`](PAPER_EXIT_IMPLEMENTATION_PREREG.md) (I2/I3)  
 **Scope:** Live-Shadow · ETHUSDT · `live_execution=false` · `order_send=false` · `not_investment_advice=true`  
@@ -162,6 +163,9 @@ Rohzähler `n_gaps_total_{source}` sind deskriptiv.
 In W: Gap-JSONL existiert (ggf. nur Marker) **und** ≥ 1 freeze-k RT in Edges.  
 Sonst: Studie nicht aussagekräftig.
 
+**WORM-Zweig (retrospektiv):** siehe **§9 Amendment FGDC-A1** — nicht im Original-Freeze
+(Commit `b1f92b99`, Hash unten); gilt erst ab Amendment-Zeitstempel.
+
 ### H1 — §8.1 Feed-Qualitäts-Erwartung
 
 | Ausgang | Kriterium |
@@ -212,6 +216,7 @@ Kein Betragsstrich. „I2 ≫ I1“ ist kein Interpretationspfad — es ist ein 
 | `coverage_gate.json` überschrieben | kein Rewrite der Gap-Historie |
 | Image imperativ ohne Herkunft | Dual-Start + Image-Tag im Ergebnisdok |
 | Prometheus-only | Reset/Retention → Abgleich zerfällt |
+| Pre-Reg §3 in-place während Fenster W | **Amendment** append-only (`original_pre_reg_hash`, `amendment_id`) — §9 |
 
 **Normativ:** Primärspeicher = append-only JSONL. Prometheus nur Ops
 (`feed_gap_events_total{source=…}`, tick-rate). Auswertung liest **nur** JSONL.
@@ -237,7 +242,7 @@ Kein Betragsstrich. „I2 ≫ I1“ ist kein Interpretationspfad — es ist ein 
 - Paper-only · Single-Symbol ETHUSDT in W  
 - `k=4966` und `gap_dt=30` unverändert  
 - Strang B weiter geblockt bis `n_eligible_at_freeze_k ≥ 50`  
-- Kein Retuning nach DISCORDANT / BROKEN — nur neues Amendment
+- Kein Retuning nach DISCORDANT / BROKEN — nur neues Amendment (§9)
 
 ---
 
@@ -265,3 +270,50 @@ H0 / H1 / H_inv / H2 + Dual-Start UTC + Image-Tag.
 - [`PAPER_EXIT_ROUNDTRIP_SPEC.md`](PAPER_EXIT_ROUNDTRIP_SPEC.md) §8.1  
 - [`PAPER_EXIT_IMPLEMENTATION_PREREG.md`](PAPER_EXIT_IMPLEMENTATION_PREREG.md)  
 - `prototypes/raas_paper_trading/paper_edge_sample.py`
+
+---
+
+## 9. Amendments (append-only)
+
+Sealed Pre-Reg-Hash (Commit `b1f92b99`, FREIGABE 2026-08-29, **unverändert**):
+
+```text
+original_pre_reg_hash = 0b2ea75d2b18e90b52dcaa158fcd5bcead6c36d0d7ff73ba3aafc40401901950
+```
+
+Register (JSONL): [`PAPER_FEED_GAP_DELTA_CONCORDANCE_AMENDMENTS.jsonl`](PAPER_FEED_GAP_DELTA_CONCORDANCE_AMENDMENTS.jsonl)
+
+### 9.1 FGDC-A1 — WORM-H0 Abdeckung + Restart-Unbeobachtbar (2026-08-30)
+
+| Feld | Wert |
+|------|------|
+| `amendment_id` | `FGDC-A1` |
+| `created_at` | `2026-08-30T05:28:16.414774+00:00` |
+| `original_pre_reg_hash` | `0b2ea75d2b18e90b52dcaa158fcd5bcead6c36d0d7ff73ba3aafc40401901950` |
+| `prev_amendment_hash` | `0000000000000000000000000000000000000000000000000000000000000000` |
+| `amendment_hash` | `5f2c47d7bf7a91430fca50baeaf3689630ef29e8abdb5f11c4d87f76385f4d41` |
+
+**Begründung:** Review-Befund vor Audit-Lauf Fenster W: (1) WORM-Retrospektive
+zählte **Intervalle** statt **Zeit** — ein 3-s-Tick-Paar konnte `null_gaps_proven`
+auslösen; (2) Pod-Restart erzeugte große WORM-Δt ohne `tick_spacing` — weder
+`null_gaps_proven` noch `writer_failed`, sondern **unbeobachtbar** via
+`restart_marker`; (3) Schwelle **vor** erstem Audit-Lauf festgelegt (Anti-HARKing,
+Analogie k-Freeze). Audit noch **nicht** gelaufen zum Amendment-Zeitpunkt.
+
+**Normativ ab FGDC-A1 (§3 H0 WORM-Zweig):**
+
+| Regel | Wert |
+|-------|------|
+| `MIN_OBSERVABLE_FRACTION` | **0.80** (80 % der Fensterzeit beobachtbar) |
+| Dual-Start W (Default Audit) | `2026-08-29T13:17:46+00:00` |
+| `null_gaps_proven` | `coverage_fraction ≥ 0.80` **und** kein beobachtbarer Δt &gt; `gap_dt` ohne `tick_spacing` |
+| `INSUFFICIENT_COVERAGE` | `coverage_fraction < 0.80` — ehrlicher Ausgang, **kein** gerettetes „belegt" |
+| `writer_failed` | beobachtbarer Δt &gt; `gap_dt` ohne deckende `tick_spacing`-Zeile |
+| Unbeobachtbar | WORM-Intervall überspannt `restart_marker` — aus beiden Zweigen ausgeschlossen |
+
+**H0 (Konkordanz-Skript):** `h0_measurable` via Gap-JSONL **oder** WORM-Zweig nur
+wenn `null_gaps_proven`; bei `INSUFFICIENT_COVERAGE` → `h0_branch=insufficient_coverage`,
+H0 nicht erfüllt (sofern keine Gap-JSONL).
+
+**Klassifikation:** Methodische Schärfung vor Ergebnisdok — **kein** Retuning nach
+Datenblick (Audit ungelaufen).

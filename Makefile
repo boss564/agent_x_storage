@@ -247,7 +247,7 @@ test-all:
 	@echo "✅ All test suites complete"
 	@echo "✅ Alle Container, Images und Volumes entfernt"
 
-.PHONY: son-report backup raas-smoke raas-portal
+.PHONY: son-report backup raas-smoke raas-portal raas-swarm-health raas-swarm-inventory-sync
 
 raas-smoke: ## RaaS prototype E2E (upload→stress→certificate, gate sim)
 	PYTHONPATH=. python3 scripts/test_raas_smoke.py
@@ -384,7 +384,14 @@ raas-cross-venue-smoke: ## Cross-venue connectivity 2×2 (t_recv only, Pre-Reg)
 raas-feed-gap-concordance: ## H0/H1/H_inv/H2 report (GAPS= EDGES= paths)
 	@test -n "$(GAPS)" || (echo "Usage: make raas-feed-gap-concordance GAPS=… EDGES=…"; exit 1)
 	@test -n "$(EDGES)" || (echo "Usage: make raas-feed-gap-concordance GAPS=… EDGES=…"; exit 1)
-	PYTHONPATH=. python3 scripts/count_feed_gap_concordance.py --gaps "$(GAPS)" --edges "$(EDGES)"
+	PYTHONPATH=. python3 scripts/count_feed_gap_concordance.py --gaps "$(GAPS)" --edges "$(EDGES)" $(if $(WORM),--worm "$(WORM)",)
+
+raas-feed-gap-worm-audit: ## W-Studie WORM Δt vs Schreiber (WORM= GAPS=; Default WINDOW_START=Dual-Start W)
+	@test -n "$(WORM)" || (echo "Usage: make raas-feed-gap-worm-audit WORM=… GAPS=…"; exit 1)
+	@test -n "$(GAPS)" || (echo "Usage: make raas-feed-gap-worm-audit WORM=… GAPS=…"; exit 1)
+	PYTHONPATH=. python3 scripts/audit_feed_gap_worm.py --worm "$(WORM)" --gaps "$(GAPS)" \
+		$(if $(EDGES),--edges "$(EDGES)",) $(if $(WINDOW_START),--window-start "$(WINDOW_START)",) \
+		$(if $(WINDOW_END),--window-end "$(WINDOW_END)",)
 
 raas-paper-edges-count: ## B2-eligible edges at freeze k (EDGES= path, optional FREEZE_K=4966)
 	@test -n "$(EDGES)" || (echo "Usage: make raas-paper-edges-count EDGES=path/to/paper_edges.jsonl"; exit 1)
@@ -395,6 +402,12 @@ raas-paper-hold-calibrate-smoke: ## Option B hold k calibration (filter·gap·E[
 
 raas-worm-streaming-oom-smoke: ## WORM streaming reader OOM regression (no read_text)
 	PYTHONPATH=. python3 scripts/test_worm_streaming_oom.py
+
+raas-swarm-health: ## Schwarm-Inventar: aktive Logs/Agenten (scripts/swarm_health.py)
+	PYTHONPATH=. python3 scripts/swarm_health.py
+
+raas-swarm-inventory-sync: ## Laufzeit-Block in docs/SWARM_INVENTORY.md schreiben
+	PYTHONPATH=. python3 scripts/swarm_health.py --sync-inventory
 
 raas-paper-hold-calibrate: ## Calibrate PAPER_HOLD_SECONDS from WORM (WORM= path required)
 	@test -n "$(WORM)" || (echo "Usage: make raas-paper-hold-calibrate WORM=path/to/paper_trades.worm.jsonl"; exit 1)

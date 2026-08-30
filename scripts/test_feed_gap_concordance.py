@@ -22,10 +22,13 @@ from prototypes.raas_paper_trading.feed import PaperTick  # noqa: E402
 from prototypes.raas_paper_trading.feed_gap import (  # noqa: E402
     FeedGapMonitor,
     analyze_concordance,
+    audit_gap_writer_against_worm,
     load_gaps,
     render_feed_gap_metrics_text,
     reset_feed_gap_prom_metrics,
+    writer_liveness_status,
 )
+from prototypes.raas_paper_trading.regime_swarm.worm_fixtures import write_signal_worm  # noqa: E402
 from prototypes.raas_paper_trading.ledger import PaperLedger  # noqa: E402
 from prototypes.raas_paper_trading.paper_edge_sample import load_edges  # noqa: E402
 from prototypes.raas_paper_trading.runner import PaperTradingRunner  # noqa: E402
@@ -275,6 +278,150 @@ def test_runner_writes_gap_on_pause() -> None:
         _ok("runner emits tick_spacing gap after >30s pause")
 
 
+def test_heartbeat_writer_liveness() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        mon = FeedGapMonitor.from_paths(
+            gaps_path=root / "feed_gaps.jsonl",
+            state_path=root / "feed_gap_state.json",
+            emit_restart_marker=False,
+        )
+        row = mon.emit_heartbeat()
+        if row.get("source") != "heartbeat":
+            _fail("heartbeat", str(row))
+            return
+        live = writer_liveness_status(gaps_path=root / "feed_gaps.jsonl")
+        if live.get("status") != "ACTIVE" or live.get("mode") != "quiet":
+            _fail("heartbeat", str(live))
+            return
+        _ok("heartbeat → writer_liveness ACTIVE/quiet")
+
+
+def test_worm_null_gaps_and_writer_failed() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        worm = root / "worm.jsonl"
+        t0 = datetime(2026, 8, 29, 12, 0, 0, tzinfo=timezone.utc)
+        lines = []
+        for i in range(5):
+            lines.append(
+                json.dumps(
+                    {
+                        "action": "SIGNAL",
+                        "ts": _iso(t0, i * 5),
+                        "mark_price": "100.0",
+                        "symbol": "ETHUSDT",
+                    }
+                )
+            )
+        worm.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+        gaps_path = root / "feed_gaps.jsonl"
+        mon = FeedGapMonitor.from_paths(
+            gaps_path=gaps_path,
+            state_path=root / "state.json",
+            emit_restart_marker=True,
+        )
+        audit_ok = audit_gap_writer_against_worm(gaps=load_gaps(gaps_path), worm_path=worm)
+        if not audit_ok.get("null_gaps_proven"):
+            _fail("worm_null", str(audit_ok))
+            return
+        if audit_ok.get("writer_failed"):
+            _fail("worm_null", "unexpected writer_failed")
+            return
+
+        # Gap >30s in WORM without tick_spacing line → writer_failed
+        worm2 = root / "worm2.jsonl"
+        write_signal_worm(worm2, [100.0] * 3, symbol="ETHUSDT")
+        # append signals with 60s gap manually
+        extra = [
+            {"action": "SIGNAL", "ts": _iso(t0, 0), "mark_price": "100", "symbol": "ETHUSDT"},
+            {"action": "SIGNAL", "ts": _iso(t0, 65), "mark_price": "100", "symbol": "ETHUSDT"},
+        ]
+        worm2.write_text("\n".join(json.dumps(r) for r in extra) + "\n", encoding="utf-8")
+        audit_bad = audit_gap_writer_against_worm(gaps=load_gaps(gaps_path), worm_path=worm2)
+        if not audit_bad.get("writer_failed"):
+            _fail("worm_writer", str(audit_bad))
+            return
+        report = analyze_concordance(gaps=load_gaps(gaps_path), edges=[], worm_audit=audit_ok)
+        if report.get("h0_branch") != "gap_jsonl" and not report.get("null_gaps_proven"):
+            _fail("h0_branch", str(report))
+            return
+        _ok("worm null-gaps proven + writer_failed on missing tick_spacing")
+
+
+def test_worm_restart_span_unobservable() -> None:
+    """Pod-Restart: großer WORM-Δt ohne tick_spacing ist unbeobachtbar, kein writer_failed."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        worm = root / "worm_restart.jsonl"
+        t0 = datetime(2026, 8, 29, 13, 0, 0, tzinfo=timezone.utc)
+        lines = [
+            json.dumps(
+                {"action": "SIGNAL", "ts": _iso(t0, 0), "mark_price": "100", "symbol": "ETHUSDT"}
+            ),
+            json.dumps(
+                {"action": "SIGNAL", "ts": _iso(t0, 5), "mark_price": "100", "symbol": "ETHUSDT"}
+            ),
+            json.dumps(
+                {"action": "SIGNAL", "ts": _iso(t0, 125), "mark_price": "100", "symbol": "ETHUSDT"}
+            ),
+        ]
+        worm.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+        gaps_path = root / "feed_gaps.jsonl"
+        mon = FeedGapMonitor.from_paths(
+            gaps_path=gaps_path,
+            state_path=root / "state.json",
+            emit_restart_marker=False,
+        )
+        mon.log.append(
+            {
+                "source": "restart_marker",
+                "ts": _iso(t0, 60),
+                "gap_start_ts": _iso(t0, 60),
+                "gap_end_ts": None,
+                "gap_duration_s": None,
+                "gap_dt_threshold_s": 30.0,
+            }
+        )
+
+        audit = audit_gap_writer_against_worm(gaps=load_gaps(gaps_path), worm_path=worm)
+        if audit.get("writer_failed"):
+            _fail("restart_unobs", f"unexpected writer_failed: {audit}")
+            return
+        if audit.get("n_unobservable_spacings") != 1:
+            _fail("restart_unobs", f"n_unobservable={audit.get('n_unobservable_spacings')}")
+            return
+        if audit.get("null_gaps_proven"):
+            _fail("restart_unobs", f"null_gaps_proven despite low coverage: {audit}")
+            return
+        if not audit.get("insufficient_coverage"):
+            _fail("restart_unobs", f"expected insufficient_coverage: {audit}")
+            return
+        if "INSUFFICIENT_COVERAGE" not in str(audit.get("coverage_summary", "")):
+            _fail("restart_unobs", str(audit.get("coverage_summary")))
+            return
+        _ok("restart-spanning WORM gap → unobservable, INSUFFICIENT_COVERAGE not null_gaps")
+
+
+def test_insufficient_coverage_blocks_h0_worm_branch() -> None:
+    worm_audit = {
+        "null_gaps_proven": False,
+        "insufficient_coverage": True,
+        "coverage_fraction": 0.001,
+        "min_observable_fraction": 0.80,
+    }
+    report = analyze_concordance(gaps=[], edges=[{"hold_seconds_target": 4966, "exit_reason": "hold_expired", "exit_tick_ts": "2026-08-30T00:00:00+00:00"}], worm_audit=worm_audit)
+    if report.get("h0_measurable"):
+        _fail("h0_insuff", str(report))
+        return
+    if report.get("h0_branch") != "insufficient_coverage":
+        _fail("h0_insuff", f"branch={report.get('h0_branch')}")
+        return
+    _ok("INSUFFICIENT_COVERAGE → h0_branch insufficient_coverage, H0 false")
+
+
 def main() -> int:
     print("=== feed-gap concordance smoke ===")
     test_tick_spacing_gap_schema()
@@ -283,6 +430,10 @@ def main() -> int:
     test_h_inv_and_h2_concordance()
     test_h_inv_broken_detectable()
     test_runner_writes_gap_on_pause()
+    test_heartbeat_writer_liveness()
+    test_worm_null_gaps_and_writer_failed()
+    test_worm_restart_span_unobservable()
+    test_insufficient_coverage_blocks_h0_worm_branch()
     print(f"--- {_PASS} passed, {_FAIL} failed ---")
     return 1 if _FAIL else 0
 

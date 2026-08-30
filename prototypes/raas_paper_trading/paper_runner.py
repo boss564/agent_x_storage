@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 import threading
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterable, Optional
@@ -211,6 +212,22 @@ class LivePaperBridge:
     def start_background(self, *, stop: Optional[threading.Event] = None) -> threading.Thread:
         """Daemon thread: consume feed until stop is set (or feed ends)."""
 
+        def _heartbeat_loop() -> None:
+            check_s = float(os.environ.get("PAPER_FEED_GAP_HEARTBEAT_CHECK_S", "60"))
+            while True:
+                if stop is not None and stop.is_set():
+                    break
+                mon = self.runner.feed_gap
+                if mon is not None:
+                    mon.maybe_emit_heartbeat()
+                cv = self.cross_venue
+                if cv is not None:
+                    cv.maybe_emit_all_heartbeats()
+                if stop is None:
+                    time.sleep(check_s)
+                elif stop.wait(check_s):
+                    break
+
         def _loop() -> None:
             for tick in self.feed:
                 if stop is not None and stop.is_set():
@@ -219,6 +236,8 @@ class LivePaperBridge:
 
         t = threading.Thread(target=_loop, name="live-paper-feed", daemon=True)
         t.start()
+        if self.runner.feed_gap is not None or self.cross_venue is not None:
+            threading.Thread(target=_heartbeat_loop, name="audit-writer-heartbeat", daemon=True).start()
         if self.cross_venue is not None:
             self.start_cross_venue_v2(stop=stop)
         return t

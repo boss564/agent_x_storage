@@ -31,19 +31,32 @@ def main() -> int:
     p.add_argument("--max-delta-s", type=float, default=30.0)
     p.add_argument("--window-start", default=None, help="ISO-8601 Dual-Start UTC")
     p.add_argument("--window-end", default=None, help="ISO-8601 window end UTC")
+    p.add_argument("--worm", type=Path, default=None, help="WORM for null-gap / writer audit (W-Studie)")
     args = p.parse_args()
     freeze = args.freeze_k
     if freeze is None:
         import os
 
         freeze = int(os.environ.get("PAPER_HOLD_SECONDS", "4966"))
+    gaps = load_gaps(args.gaps)
+    worm_audit = None
+    if args.worm is not None:
+        from prototypes.raas_paper_trading.feed_gap import audit_gap_writer_against_worm
+
+        worm_audit = audit_gap_writer_against_worm(
+            gaps=gaps,
+            worm_path=args.worm,
+            window_start_ts=args.window_start,
+            window_end_ts=args.window_end,
+        )
     report = analyze_concordance(
-        gaps=load_gaps(args.gaps),
+        gaps=gaps,
         edges=load_edges(args.edges),
         freeze_k=freeze,
         max_delta_s=args.max_delta_s,
         window_start_ts=args.window_start,
         window_end_ts=args.window_end,
+        worm_audit=worm_audit,
     )
     print(json.dumps(report, indent=2, sort_keys=True))
     return 0

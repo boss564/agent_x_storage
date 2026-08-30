@@ -137,3 +137,45 @@ def load_signal_mark_prices(
         except (TypeError, ValueError):
             continue
     return list(buf)
+
+
+def iter_signal_timestamps(
+    path: Path,
+    *,
+    window_start_ts: Optional[str] = None,
+    window_end_ts: Optional[str] = None,
+) -> Iterator[tuple[str, float]]:
+    """Yield (iso_ts, unix_s) for each WORM SIGNAL row in chronological order."""
+
+    def _in_window(u: float) -> bool:
+        from prototypes.raas_paper_trading.paper_exit import parse_ts_unix
+
+        if window_start_ts:
+            try:
+                if u < parse_ts_unix(window_start_ts):
+                    return False
+            except ValueError:
+                return False
+        if window_end_ts:
+            try:
+                if u > parse_ts_unix(window_end_ts):
+                    return False
+            except ValueError:
+                return False
+        return True
+
+    from prototypes.raas_paper_trading.paper_exit import parse_ts_unix
+
+    for row in iter_jsonl_rows(path):
+        if row.get("action") != "SIGNAL":
+            continue
+        raw_ts = row.get("ts") or row.get("tick_ts")
+        if not raw_ts:
+            continue
+        try:
+            u = parse_ts_unix(str(raw_ts))
+        except ValueError:
+            continue
+        if not _in_window(u):
+            continue
+        yield str(raw_ts), u
