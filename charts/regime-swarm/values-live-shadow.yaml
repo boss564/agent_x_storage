@@ -8,14 +8,14 @@
 #
 # Requires cluster egress to wss://stream.binance.com (or set LIVE_FEED_WS_URL).
 #
-# Image Sollzustand (Fenster W Dual-Start 2026-08-29T13:17:46Z): feed-gap-v2 (WORM tail init OOM fix).
-# Helm upgrade kann an immutable PVC scheitern → dann kubectl set image (Runbook §9).
+# Image Sollzustand W_xv Dual-Start: xv-observer-v1 (Cross-Venue + Observer-Gate, Commit 02c4e044).
+# Vorher: feed-gap-v2 (Fenster W 2026-08-29T13:17:46Z). kind load vor Pod-Restart (Runbook §9).
 
 replicaCount: 1
 
 image:
   repository: agentx-regime-swarm
-  tag: "feed-gap-v2"
+  tag: "xv-observer-v1"
   pullPolicy: IfNotPresent
 
 leaderElection:
@@ -48,6 +48,11 @@ config:
   PAPER_FEED_GAP_ENABLED: "true"
   PAPER_FEED_GAPS_PATH: "/data/audit/feed_gaps.jsonl"
   PAPER_FEED_GAP_STATE_PATH: "/data/state/feed_gap_state.json"
+  # Cross-venue connectivity (Pre-Reg CROSS_VENUE_FEED_VALIDATION) — W_xv Dual-Start
+  CROSS_VENUE_ENABLED: "true"
+  CROSS_VENUE_GAPS_PATH: "/data/audit/cross_venue_gaps.jsonl"
+  CROSS_VENUE_SLOTS_PATH: "/data/audit/cross_venue_slots.jsonl"
+  CROSS_VENUE_STATE_PATH: "/data/state/cross_venue_state.json"
   # Position sizing (B0–B8) — default OFF; Strang B: enabled=true wenn ≥50 Fills
   # Siehe docs/POSITION_SIZING_REGIME_MAPPING.md §6–§8
   POSITION_SIZING_ENABLED: "false"
