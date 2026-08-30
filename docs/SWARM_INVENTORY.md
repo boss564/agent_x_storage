@@ -87,25 +87,25 @@ flowchart LR
 #### Laufzeit-Status (auto — Log-Frische)
 
 <!-- SWARM_RUNTIME_BEGIN -->
-<!-- generated_at: 2026-08-30T05:46:50.274222+00:00 -->
+<!-- generated_at: 2026-08-30T17:26:10.224220+00:00 -->
 <!-- generator: scripts/swarm_health.py (--sync-inventory) -->
 
 _**Laufzeit** = Log-Frische (ACTIVE/STALE/IDLE/MISSING/OFF). **Rolle** = Architektur-Zugehörigkeit — kein Prozess-Nachweis. Sync: `make raas-swarm-inventory-sync`_
 
 | Komponente | Schicht | Laufzeit | Alter | Signal-Pfad | Rolle (Hand) |
 |------------|---------|----------|-------|-------------|--------------|
-| **LivePaperBridge** | P3 | **ACTIVE** | 1s | `…/live/live/paper/runs/ethusdt/paper_trades.worm.jsonl` | Shadow-Pfad |
-| **PaperTradingRunner** | P3 | **ACTIVE** | 1s | `…/live/live/paper/runs/ethusdt/paper_trades.worm.jsonl` | Shadow-Pfad |
+| **LivePaperBridge** | P3 | **ACTIVE** | 0s | `…/live/live/paper/runs/ethusdt/paper_trades.worm.jsonl` | Shadow-Pfad |
+| **PaperTradingRunner** | P3 | **ACTIVE** | 0s | `…/live/live/paper/runs/ethusdt/paper_trades.worm.jsonl` | Shadow-Pfad |
 | **FeedGapMonitor** | P1 | **MISSING** | — | `data/raas/audit/feed_gaps.jsonl (empty)` | Shadow-Pfad |
-| **CrossVenueMonitor** | P1 | **OFF** | — | `data/raas/audit/cross_venue_gaps.jsonl` | Opt-in (Env default off) |
-| **Regime Swarm Daemon** | P5 | **ACTIVE** | 1.1m | `regime-swarm-0:/data/audit/regime_swarm_cycles.jsonl` | Shadow-Pfad (primary) |
-| **A2 DataIngestor** | P5 | **ACTIVE** | 1.1m | `regime-swarm-0:/data/audit/regime_swarm_cycles.jsonl` | Shadow-Pfad |
-| **A3–A9 Drift Agents** | P5 | **ACTIVE** | 1.1m | `regime-swarm-0:/data/audit/regime_drift_audit.jsonl` | Shadow-Pfad |
-| **A0 Core Sanity Gate** | P6 | **ACTIVE** | 1.1m | `regime-swarm-0:/data/audit/regime_swarm_cycles.jsonl` | Shadow-Pfad |
-| **A2.5 Transport Gate** | P6 | **ACTIVE** | 1.1m | `regime-swarm-0:/data/audit/regime_swarm_cycles.jsonl` | Shadow-Pfad |
+| **CrossVenueMonitor** | P1 | **STALE** | 9.2m | `regime-swarm-0:/data/audit/cross_venue_gaps.jsonl` | Opt-in (Env default off) |
+| **Regime Swarm Daemon** | P5 | **ACTIVE** | 50s | `regime-swarm-0:/data/audit/regime_swarm_cycles.jsonl` | Shadow-Pfad (primary) |
+| **A2 DataIngestor** | P5 | **ACTIVE** | 50s | `regime-swarm-0:/data/audit/regime_swarm_cycles.jsonl` | Shadow-Pfad |
+| **A3–A9 Drift Agents** | P5 | **ACTIVE** | 49s | `regime-swarm-0:/data/audit/regime_drift_audit.jsonl` | Shadow-Pfad |
+| **A0 Core Sanity Gate** | P6 | **ACTIVE** | 50s | `regime-swarm-0:/data/audit/regime_swarm_cycles.jsonl` | Shadow-Pfad |
+| **A2.5 Transport Gate** | P6 | **ACTIVE** | 50s | `regime-swarm-0:/data/audit/regime_swarm_cycles.jsonl` | Shadow-Pfad |
 | **B0 Position Sizing** | P5 | **OFF** | — | `data/raas/audit/position_sizing_audit.jsonl` | Opt-in (Helm off, Strang B n<50) |
 
-_Stand: 2026-08-30T05:46:50.274222+00:00 · 7 ACTIVE · 0 STALE (Laufzeit-Zeilen, nicht Rollen-Zeilen)_
+_Stand: 2026-08-30T17:26:10.224220+00:00 · 7 ACTIVE · 1 STALE (Laufzeit-Zeilen, nicht Rollen-Zeilen)_
 
 <!-- SWARM_RUNTIME_END -->
 
