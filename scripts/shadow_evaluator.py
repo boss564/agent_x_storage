@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Strang B.1 shadow evaluator — read-only replay, append shadow_eval.jsonl.
 
-Pre-Reg: docs/SHADOW_EVALUATOR_PREREG.md · G1: SHADOW_EVAL_G1_PASS=1 for /data/* reads.
+Pre-Reg: docs/SHADOW_EVALUATOR_PREREG.md · G1: SHADOW_EVAL_G1_PASS=1 for live-export reads.
 """
 from __future__ import annotations
 
@@ -53,12 +53,54 @@ def _jsonl(p: Path) -> List[Dict[str, Any]]:
     return [json.loads(ln) for ln in p.read_text(encoding="utf-8").splitlines() if ln.strip()]
 
 
+def _resolve_path(p: Path) -> Path:
+    try:
+        return p.resolve()
+    except OSError:
+        return p.absolute()
+
+
+def _live_export_anchors() -> List[Path]:
+    """Resolved roots for Fenster-W live exports (cluster + host sync layers)."""
+    anchors: List[Path] = []
+    for base in (Path("/data"), _ROOT / "data"):
+        for sub in ("audit", "phase_signals"):
+            anchors.append(_resolve_path(base / sub))
+    rr = os.environ.get("RAAS_DATA_ROOT", "").strip()
+    if rr:
+        anchors.append(_resolve_path(Path(rr) / "audit"))
+    pep = os.environ.get("PAPER_EDGES_PATH", "").strip()
+    if pep:
+        anchors.append(_resolve_path(Path(pep)))
+    return anchors
+
+
+def is_live_export_path(path: Path) -> bool:
+    """True if path is under a live export layer (G1 blocks reads until gate PASS)."""
+    rp = _resolve_path(path)
+    if str(rp).startswith("/data/"):
+        return True
+    for anchor in _live_export_anchors():
+        if rp == anchor:
+            return True
+        parent = anchor if anchor.is_dir() else anchor.parent
+        try:
+            rp.relative_to(parent)
+        except ValueError:
+            continue
+        return True
+    return False
+
+
 def _guard_g1(paths: Sequence[Path]) -> None:
     if os.environ.get("SHADOW_EVAL_G1_PASS") == "1":
         return
-    for p in paths:
-        if str(p.resolve()).startswith("/data/"):
-            raise SystemExit("G1: live exports blocked until NEWS_24H gate PASS")
+    blocked = [str(_resolve_path(p)) for p in paths if is_live_export_path(p)]
+    if blocked:
+        raise SystemExit(
+            "G1: live export read blocked until NEWS_24H gate PASS "
+            f"(set SHADOW_EVAL_G1_PASS=1 after G1): {blocked[0]}"
+        )
 
 
 def _profit_frac(edge: Dict[str, Any], notional: float = ENTRY_NOTIONAL) -> Optional[float]:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 import tempfile
 from pathlib import Path
@@ -15,8 +16,10 @@ from scripts.shadow_evaluator import (  # noqa: E402
     DEFAULT_FREEZE_K,
     ShadowEvalWriter,
     VALID_DECISIONS,
+    _guard_g1,
     _hash_file,
     evaluate_edge,
+    is_live_export_path,
     run_once,
 )
 
@@ -136,23 +139,107 @@ def test_s4_reject_order_send_true() -> None:
             _ok(name)
 
 
-def test_g1_blocks_data_audit() -> None:
-    name = "G1 guard blocks /data/audit without pass"
-    with tempfile.TemporaryDirectory() as td:
-        live = Path("/data/audit/paper_edges.jsonl")
-        if not live.parent.exists():
-            _ok(f"{name} (skip — no /data/audit on host)")
-            return
+def test_a1_blocked() -> None:
+    name = "A1 regime_flag=0 → BLOCKED, Kelly null"
+    rets = [0.01] * 50
+    row = evaluate_edge(_fixture_edge(), regime_flag=0, classified_regime="STABLE", returns=rets)
+    if row.get("shadow_gate_decision") != "BLOCKED":
+        _fail(name, f"decision={row.get('shadow_gate_decision')}")
+    for key in ("p", "b", "kelly_fraction_computed", "kelly_fraction_p05"):
+        if row.get(key) is not None:
+            _fail(name, f"{key} should be null")
+    _ok(name)
+
+
+def test_a2_insufficient() -> None:
+    name = "A2 INSUFFICIENT_HISTORY (nw/nl/n)"
+    edge = _fixture_edge()
+    cases = [
+        ("n<50", [0.0] * 10, "INSUFFICIENT_HISTORY"),
+        ("nw<5", [0.01] * 4 + [-0.01] * 46, "INSUFFICIENT_HISTORY"),
+        ("nl<5", [0.01] * 46 + [-0.01] * 4, "INSUFFICIENT_HISTORY"),
+    ]
+    for label, rets, expected in cases:
+        row = evaluate_edge(edge, regime_flag=1, returns=rets)
+        if row.get("shadow_gate_decision") != expected:
+            _fail(name, f"{label}: {row.get('shadow_gate_decision')}")
+        if row.get("kelly_fraction_computed") is not None:
+            _fail(name, f"{label}: kelly should be null")
+    _ok(name)
+
+
+def test_a3_kelly_sign_uncertain() -> None:
+    name = "A3 f*_p05≤0 → KELLY_SIGN_UNCERTAIN"
+    rets = [0.01] * 5 + [-0.01] * 45
+    row = evaluate_edge(_fixture_edge(), regime_flag=1, classified_regime="STABLE", returns=rets)
+    if row.get("shadow_gate_decision") != "KELLY_SIGN_UNCERTAIN":
+        _fail(name, f"decision={row.get('shadow_gate_decision')}")
+    if row.get("kelly_sign_uncertain") is not True:
+        _fail(name, "kelly_sign_uncertain not true")
+    if row.get("shadow_gate_decision") in ("LIMIT_OK", "LIMIT_EXCEEDED"):
+        _fail(name, "must not emit LIMIT_* when p05≤0")
+    _ok(name)
+
+
+def test_g1_blocks_repo_relative_audit() -> None:
+    name = "G1 blocks repo data/audit relative path"
+    p = _ROOT / "data" / "audit" / "paper_edges.jsonl"
+    if not is_live_export_path(p):
+        _fail(name, "is_live_export_path should be true")
+    try:
+        _guard_g1([p])
+        _fail(name, "expected SystemExit")
+    except SystemExit:
+        _ok(name)
+
+
+def test_g1_blocks_paper_edges_path_env() -> None:
+    name = "G1 blocks PAPER_EDGES_PATH"
+    target = _ROOT / "data" / "audit" / "paper_edges.jsonl"
+    os.environ["PAPER_EDGES_PATH"] = str(target)
+    try:
+        if not is_live_export_path(target):
+            _fail(name, "PAPER_EDGES_PATH not flagged")
         try:
-            run_once(
-                edges_path=live,
-                out_path=Path(td) / "shadow_eval.jsonl",
-                news_path=Path(td) / "news.jsonl",
-                gap_path=Path(td) / "gap.jsonl",
-            )
+            _guard_g1([target])
             _fail(name, "expected SystemExit")
         except SystemExit:
             _ok(name)
+    finally:
+        os.environ.pop("PAPER_EDGES_PATH", None)
+
+
+def test_g1_allows_temp_fixture() -> None:
+    name = "G1 allows tempfile fixture paths"
+    with tempfile.TemporaryDirectory() as td:
+        p = Path(td) / "audit" / "paper_edges.jsonl"
+        if is_live_export_path(p):
+            _fail(name, "temp path flagged as live")
+        _guard_g1([p])
+        _ok(name)
+
+
+def test_g1_pass_env_allows_live() -> None:
+    name = "G1 SHADOW_EVAL_G1_PASS=1 bypass"
+    p = _ROOT / "data" / "audit" / "paper_edges.jsonl"
+    os.environ["SHADOW_EVAL_G1_PASS"] = "1"
+    try:
+        _guard_g1([p])
+        _ok(name)
+    finally:
+        os.environ.pop("SHADOW_EVAL_G1_PASS", None)
+
+
+def test_g1_blocks_data_audit_absolute() -> None:
+    name = "G1 blocks /data/audit absolute path"
+    live = Path("/data/audit/paper_edges.jsonl")
+    if not is_live_export_path(live):
+        _fail(name, "/data path not flagged")
+    try:
+        _guard_g1([live])
+        _fail(name, "expected SystemExit")
+    except SystemExit:
+        _ok(name)
 
 
 def main() -> int:
@@ -160,7 +247,14 @@ def main() -> int:
     test_s2_append_two_lines()
     test_s3_edges_file_unchanged()
     test_s4_reject_order_send_true()
-    test_g1_blocks_data_audit()
+    test_a1_blocked()
+    test_a2_insufficient()
+    test_a3_kelly_sign_uncertain()
+    test_g1_blocks_repo_relative_audit()
+    test_g1_blocks_paper_edges_path_env()
+    test_g1_allows_temp_fixture()
+    test_g1_pass_env_allows_live()
+    test_g1_blocks_data_audit_absolute()
     print("ALL shadow_evaluator smoke tests passed")
     return 0
 
