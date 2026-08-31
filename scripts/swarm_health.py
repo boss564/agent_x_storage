@@ -117,10 +117,10 @@ def _targets() -> List[LogTarget]:
         LogTarget("paper_worm", "Paper WORM (live)", "P3", lambda: _live_worm_dir() / "paper_trades.worm.jsonl", 120.0),
         LogTarget("feed_gaps", "Feed gaps (raw JSONL)", "P1", lambda: Path(os.environ.get("PAPER_FEED_GAPS_PATH", str(rr / "audit" / "feed_gaps.jsonl"))), 120.0),
         LogTarget("feed_gap_writer", "Feed gap writer", "P1", lambda: Path(os.environ.get("PAPER_FEED_GAPS_PATH", str(rr / "audit" / "feed_gaps.jsonl"))), 7200.0),
-        LogTarget("cross_venue_gaps", "Cross-venue gaps", "P1", lambda: Path(os.environ.get("CROSS_VENUE_GAPS_PATH", str(rr / "audit" / "cross_venue_gaps.jsonl"))), 300.0, True),
+        LogTarget("cross_venue_gaps", "Cross-venue gaps", "P1", lambda: Path(os.environ.get("CROSS_VENUE_GAPS_PATH", str(rr / "audit" / "cross_venue_gaps.jsonl"))), 7200.0, True),
         LogTarget("cross_venue_v1_writer", "Cross-venue V1 writer", "P1", lambda: Path(os.environ.get("CROSS_VENUE_GAPS_PATH", str(rr / "audit" / "cross_venue_gaps.jsonl"))), 7200.0, True),
         LogTarget("cross_venue_v2_writer", "Cross-venue V2 writer", "P1", lambda: Path(os.environ.get("CROSS_VENUE_GAPS_PATH", str(rr / "audit" / "cross_venue_gaps.jsonl"))), 7200.0, True),
-        LogTarget("cross_venue_slots", "Cross-venue slots", "P1", lambda: Path(os.environ.get("CROSS_VENUE_SLOTS_PATH", str(rr / "audit" / "cross_venue_slots.jsonl"))), 300.0, True),
+        LogTarget("cross_venue_slots", "Cross-venue slots", "P1", lambda: Path(os.environ.get("CROSS_VENUE_SLOTS_PATH", str(rr / "audit" / "cross_venue_slots.jsonl"))), 7200.0, True),
         LogTarget("regime_drift_audit", "Regime drift audit", "P5", lambda: Path(os.environ.get("REGIME_DRIFT_AUDIT_PATH", str(sr / "audit" / "regime_drift_audit.jsonl"))), 120.0),
         LogTarget("regime_cycles", "Regime swarm cycles", "P5", lambda: Path(os.environ.get("REGIME_SWARM_CYCLES_PATH", str(sr / "audit" / "regime_swarm_cycles.jsonl"))), 120.0),
         LogTarget("position_sizing_audit", "Position sizing audit", "P5", lambda: sr / "audit" / "position_sizing_audit.jsonl", 600.0, True),
@@ -371,6 +371,53 @@ def _best_local_worm() -> Optional[Dict[str, Any]]:
     return best
 
 
+def _probe_astrocore_hook(pod_info: Optional[Dict[str, str]]) -> Optional[Dict[str, Any]]:
+    """Optional diagnostic probe — never blocks health classification.
+
+    Runs helm_astrocore_hook_smoke.py inside the pod when the cluster is
+    reachable. Disable with ASTROCORE_HEALTH_PROBE=false.
+    """
+    raw = os.environ.get("ASTROCORE_HEALTH_PROBE", "true").strip().lower()
+    if raw in ("0", "false", "no", "off"):
+        return {"status": "SKIPPED", "reason": "ASTROCORE_HEALTH_PROBE=false"}
+    if not pod_info or pod_info.get("phase") != "Running" or pod_info.get("ready") != "true":
+        return None
+    ns, pod = pod_info["namespace"], pod_info["pod"]
+    try:
+        proc = subprocess.run(
+            [
+                "kubectl",
+                "exec",
+                "-n",
+                ns,
+                pod,
+                "--",
+                "python3",
+                "scripts/helm_astrocore_hook_smoke.py",
+                "--quiet",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+    except (subprocess.TimeoutExpired, OSError) as exc:
+        return {"status": "SKIPPED", "reason": str(exc)}
+    if proc.returncode != 0:
+        return {
+            "status": "FAIL",
+            "reason": (proc.stderr or proc.stdout or "").strip()[:240],
+            "exit_code": proc.returncode,
+        }
+    try:
+        raw_out = proc.stdout.strip()
+        start = raw_out.find("{")
+        payload = json.loads(raw_out[start:] if start >= 0 else raw_out)
+    except json.JSONDecodeError:
+        return {"status": "FAIL", "reason": "smoke stdout not JSON"}
+    payload.setdefault("status", "PASS")
+    return payload
+
+
 def collect_health_report() -> Dict[str, Any]:
     """Canonical runtime health — source of truth for inventory Laufzeit column."""
     pod = _kubectl_pod()
@@ -438,12 +485,14 @@ def collect_health_report() -> Dict[str, Any]:
         counts[st] = counts.get(st, 0) + 1
 
     metrics = _curl_metrics(int(os.environ.get("SWARM_METRICS_PORT", "8080")))
+    astrocore = _probe_astrocore_hook(pod if cluster_reachable else None)
 
     return {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "cluster_reachable": cluster_reachable,
         "pod": pod,
         "metrics": metrics,
+        "astrocore_hook": astrocore,
         "signals": signals,
         "components": components,
         "summary": counts,
@@ -572,6 +621,17 @@ def print_human_report(report: Dict[str, Any]) -> int:
         print(f"Prometheus :8080 → {report['metrics']}")
     else:
         print("Prometheus :8080 → nicht erreichbar (Daemon lokal nicht aktiv?)")
+    ac = report.get("astrocore_hook")
+    if ac:
+        print(
+            "AstroCore hook → "
+            f"status={ac.get('status')}  prov={ac.get('data_provenance', '—')}  "
+            f"verdict={ac.get('verdict', '—')}  events={ac.get('events_read', '—')}"
+        )
+        if ac.get("reason"):
+            print(f"  reason: {ac['reason']}")
+    else:
+        print("AstroCore hook → nicht abgefragt (kein Running-Pod; ASTROCORE_HEALTH_PROBE=false zum Skip)")
     print()
 
     rows: List[Tuple[str, str, str, str, str, str]] = []
@@ -621,6 +681,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Schwarm-Log-Frische und Inventar-Laufzeit")
     parser.add_argument("--json", action="store_true", help="Maschinenlesbarer Report (stdout)")
     parser.add_argument("--sync-inventory", action="store_true", help="SWARM_RUNTIME-Block in Inventar schreiben")
+    parser.add_argument("--no-alert", action="store_true", help="Kein Telegram bei STALE/Pod-Down")
     args = parser.parse_args()
 
     if args.sync_inventory:
@@ -629,11 +690,31 @@ def main() -> int:
         return 0
 
     report = collect_health_report()
+    rc = 0
     if args.json:
         print(json.dumps(report, indent=2, ensure_ascii=False))
-        return 0
+    else:
+        rc = print_human_report(report)
 
-    return print_human_report(report)
+    if not args.no_alert:
+        try:
+            from scripts.telegram_alert import maybe_alert_health
+
+            alerted = maybe_alert_health(report)
+            if alerted and not args.json:
+                skipped = all(r.get("skipped") for r in alerted)
+                if not skipped:
+                    ok = any(r.get("ok") for r in alerted)
+                    print(
+                        "\nTelegram: sent"
+                        if ok
+                        else f"\nTelegram: failed ({alerted[0].get('error') or alerted[0].get('reason')})"
+                    )
+        except Exception as exc:  # noqa: BLE001 — health table must still print
+            if not args.json:
+                print(f"\nTelegram: error {exc}", file=sys.stderr)
+
+    return rc
 
 
 if __name__ == "__main__":
