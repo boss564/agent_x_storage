@@ -1,0 +1,57 @@
+{
+  "version": "v1.0",
+  "bridges": [
+    {
+      "name": "wormhole",
+      "chains": ["solana", "ethereum", "avalanche", "polygon", "arbitrum", "optimism"],
+      "type": "bridge",
+      "impact_factor": 0.8
+    },
+    {
+      "name": "layerzero",
+      "chains": ["ethereum", "arbitrum", "optimism", "polygon", "bnb"],
+      "type": "bridge",
+      "impact_factor": 0.7
+    },
+    {
+      "name": "axelar",
+      "chains": ["ethereum", "avalanche", "polygon", "arbitrum"],
+      "type": "bridge",
+      "impact_factor": 0.65
+    }
+  ],
+  "protocols": [
+    {
+      "name": "uniswap",
+      "chains": ["ethereum", "arbitrum", "optimism", "polygon", "bnb"],
+      "type": "dex",
+      "impact_factor": 0.9
+    },
+    {
+      "name": "aave",
+      "chains": ["ethereum", "arbitrum", "polygon", "avalanche"],
+      "type": "lending",
+      "impact_factor": 0.8
+    },
+    {
+      "name": "chainlink",
+      "chains": ["ethereum", "arbitrum", "optimism", "polygon", "avalanche", "bnb"],
+      "type": "oracle",
+      "impact_factor": 0.75
+    }
+  ],
+  "liquidity_corridors": [
+    {
+      "from": "solana",
+      "to": ["ethereum", "arbitrum"],
+      "direction": "outflow",
+      "trigger": "network_issue",
+      "impact_factor": 0.6
+    }
+  ],
+  "correlation_matrix": {
+    "solana": {"ethereum": 0.45, "avalanche": 0.35, "arbitrum": 0.30},
+    "ethereum": {"solana": 0.45, "polygon": 0.55, "arbitrum": 0.70},
+    "avalanche": {"solana": 0.35, "ethereum": 0.60, "arbitrum": 0.40}
+  }
+}
