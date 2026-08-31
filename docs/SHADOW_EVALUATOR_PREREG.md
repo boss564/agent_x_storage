@@ -1,7 +1,8 @@
 # Shadow Evaluator (Strang B.1) — Pre-Reg
 
-**Status:** ENTWURF (2026-08-31) — **kein Code vor FREIGABE**  
+**Status:** FREIGABE (2026-08-31) — Amendments A1–A3 · **kein Code vor Implementierung**  
 **Erstellt:** 2026-08-31  
+**Freigegeben:** 2026-08-31 (A1 `regime_flag` T2 · A2 volle `INSUFFICIENT_HISTORY` · A3 `KELLY_SIGN_UNCERTAIN`)  
 **Strang:** Offline Shadow Evaluator — passive Replay der eingefrorenen Stufe-3-Methodik  
 **Scope:** `DEFENSIVE_CAUSAL_GROUNDING` · `live_execution=false` · `order_send=false` · `not_investment_advice=true`  
 **Parent:** [`PAPER_SIZING_PREREG.md`](PAPER_SIZING_PREREG.md) (Strang B, **FROZEN**) · [`PAPER_EXIT_IMPLEMENTATION_PREREG.md`](PAPER_EXIT_IMPLEMENTATION_PREREG.md) · [`NEWS_24H_SCHEDULER_GATE.md`](NEWS_24H_SCHEDULER_GATE.md)  
@@ -64,12 +65,15 @@ f*_point      = min(f*_raw, kelly_fraction_cap)    # K1 = 0.25
 |-------|---------------------|
 | `p`, `b` | Rollierendes Fenster N=50 **eligible** `profit_fraction` aus `paper_edges.jsonl` / WORM-Replay (Parent §1, §4.2) |
 | `γ` | `classified_regime` → Map Parent §5.2 |
+| `regime_flag` | Regime-Zyklus-Export (`drift_summary.regime_flag`) — Parent §2.6 T2 |
 | Bootstrap | B=1000, `f*_p05`/`f*_p95` Parent §2.4 |
 | Schranke | `max_notional = capital × 0.02`; Gate `LIMIT_OK` nur wenn `f*_p05 > 0` Parent §2.5 |
 
-**Vor n≥50 eligible:** Evaluator darf **kein** Kelly mit Fallback-p rechnen — Status `INSUFFICIENT_HISTORY` (Parent H3).
+**A1 — Parent §2.6 T2 (`regime_flag`):** Kelly wird nur berechnet bei **`regime_flag >= 1`**. Bei `regime_flag < 1`: `shadow_gate_decision = BLOCKED`, `regime_flag` wird protokolliert, **keine** Kelly-Berechnung (kein Sizing in STABLE-only-Phasen).
 
-**Ab n≥25 (Pilot):** Evaluator **darf starten**, protokolliert aber nur `stats_count`, `n_wins`, `n_losses` — **kein** `LIMIT_OK` als Freigabe.
+**A2 — `INSUFFICIENT_HISTORY` (Parent §2.5, konjunktiv zu §2.3):** `INSUFFICIENT_HISTORY` wenn `stats_count < 50` **ODER** `n_wins < 5` **ODER** `n_losses < 5` **ODER** `b <= 0` **ODER** `b` undefiniert (`min_wins = min_losses = 5`). Kein Kelly mit Fallback-p (Parent H3).
+
+**Ab n≥25 (Pilot):** Evaluator **darf starten**, protokolliert `stats_count`, `n_wins`, `n_losses` — **kein** `LIMIT_OK` / `LIMIT_EXCEEDED` / `KELLY_SIGN_UNCERTAIN` als Freigabe.
 
 ### 3.2 Z3 Risk Gates (Parent §3 — nicht vereinfachen)
 
@@ -101,8 +105,11 @@ Shadow rechnet **Post-A1-Estimand** (auch für historische Trips: WORM-Rückrech
 |------|-----------|
 | `shadow_pnl_eur` | Hypothetische Trip-PnL unter Post-A1 + Maker (Replay) |
 | `shadow_would_size` | `f*_point × capital` wenn alle Gates offen (Diagnose, keine Empfehlung) |
-| `shadow_gate_decision` | `BLOCKED` \| `INSUFFICIENT_HISTORY` \| `LIMIT_OK` \| `LIMIT_EXCEEDED` \| `Z3_BLOCKED` |
+| `shadow_gate_decision` | `BLOCKED` \| `INSUFFICIENT_HISTORY` \| `LIMIT_OK` \| `LIMIT_EXCEEDED` \| `Z3_BLOCKED` \| **`KELLY_SIGN_UNCERTAIN`** |
+| `kelly_sign_uncertain` | `true` iff `shadow_gate_decision == KELLY_SIGN_UNCERTAIN` (Parent §2.5 dritter Zustand) |
 | `fenster_w_unchanged` | Hash-Snapshot der gelesenen Edge-Zeile (H3-Nachweis) |
+
+**A3 — dritter Kelly-Zustand (Parent §2.5):** `KELLY_SIGN_UNCERTAIN` wenn `f*_p05 <= 0` — **kein** `LIMIT_OK` / `LIMIT_EXCEEDED`. Zusätzlich `kelly_sign_uncertain: true` protokollieren (Parent-Konsistenz).
 
 ---
 
@@ -116,7 +123,10 @@ Append-only. Schema `shadow_evaluator_v0`:
   "ts": "2026-08-31T12:00:00+00:00",
   "edge_id": "…",
   "swarm_cycle_id": "SWARM-…",
+  "regime_flag": 1,
   "stats_count": 12,
+  "n_wins": 3,
+  "n_losses": 2,
   "p": null,
   "b": null,
   "gamma": 0.20,
@@ -126,6 +136,7 @@ Append-only. Schema `shadow_evaluator_v0`:
   "kelly_fraction_p05": null,
   "kelly_fraction_p95": null,
   "shadow_gate_decision": "INSUFFICIENT_HISTORY",
+  "kelly_sign_uncertain": false,
   "z3_gate_reason": null,
   "execution_mode": "post_only_limit",
   "shadow_pnl_eur": null,
@@ -146,7 +157,7 @@ Keine Felder: `advisory_position_size`, `recommended_units`, `should_trade`.
 
 | Stufe | Bedingung | Aktion |
 |-------|-----------|--------|
-| **G0** | Diese Pre-Reg **FREIGABE** | Erst dann Implementierung (~200 LOC Ziel) |
+| **G0** | Diese Pre-Reg **FREIGABE** (2026-08-31, A1–A3) | Implementierung erlaubt (~200 LOC Ziel) |
 | **G1** | News-24h-Scheduler-Gate **PASS** ([`NEWS_24H_SCHEDULER_GATE.md`](NEWS_24H_SCHEDULER_GATE.md)) | Evaluator-Design final; Start noch nicht |
 | **G2** | `n_eligible_at_freeze_k ≥ 25` | Evaluator **starten** (Pilot, nur Deskriptiv) |
 | **G3** | `n_eligible_at_freeze_k ≥ 50` | Volle Auswertung + Abgleich mit Strang B nach Enable |
@@ -160,7 +171,7 @@ Fenster W läuft während G2–G4 **unverändert** (`PAPER_HOLD_SECONDS=4966`, k
 
 | ID | Test | Erwartung |
 |----|------|-----------|
-| **S1** | Fixture-Edge + Fixture-Regime + leere PhaseSignals | Shadow-Zeile mit `shadow_gate_decision` ∈ erlaubter Enum |
+| **S1** | Fixture-Edge + Fixture-Regime + leere PhaseSignals | `shadow_gate_decision` ∈ {`BLOCKED`, `INSUFFICIENT_HISTORY`, `LIMIT_OK`, `LIMIT_EXCEEDED`, `Z3_BLOCKED`, `KELLY_SIGN_UNCERTAIN`} |
 | **S2** | Zwei Läufe, gleiche Inputs | Zwei Zeilen in `shadow_eval.jsonl`; zweite `prev_hash`/`hash` Kette optional |
 | **S3** | Vorher/Nachher-Hash von `paper_edges.jsonl` (Fixture-Kopie) | Identisch — I4/H3 |
 | **S4** | Output-Zeile mit `order_send: true` | Validator/Writer wirft vor Append |
@@ -213,16 +224,19 @@ Keine Änderung an: `run_regime_swarm_daemon.py`, `ledger.py`, Helm, Fenster-W-E
 
 ---
 
-## 11. Review-Checkliste vor FREIGABE
+## 11. Review-Checkliste (FREIGABE 2026-08-31)
 
-- [ ] Parent-Referenz [`PAPER_SIZING_PREREG.md`](PAPER_SIZING_PREREG.md) akzeptiert (keine parallele Kelly/Z3-Formel)
-- [ ] Z3 = PhaseSources + Daily Loss + Post-Only (nicht Spread/Cross-Venue-Vereinfachung)
-- [ ] Maker-Fee aus `FeeSchedule`, nicht ad-hoc 2 bps
-- [ ] G2/G3/G4 Zeitdisciplin akzeptiert
-- [ ] S1–S4 als einziges Smoke-Gate
-- [ ] Kein Code vor Status FREIGABE
+- [x] Parent-Referenz [`PAPER_SIZING_PREREG.md`](PAPER_SIZING_PREREG.md) akzeptiert (keine parallele Kelly/Z3-Formel)
+- [x] Z3 = PhaseSources + Daily Loss + Post-Only (nicht Spread/Cross-Venue-Vereinfachung)
+- [x] Maker-Fee aus `FeeSchedule`, nicht ad-hoc 2 bps
+- [x] G2/G3/G4 Zeitdisciplin akzeptiert
+- [x] S1–S4 als einziges Smoke-Gate
+- [x] A1 `regime_flag >= 1` (Parent §2.6 T2)
+- [x] A2 volle `INSUFFICIENT_HISTORY`-Konjunktion (Parent §2.3 + §2.5)
+- [x] A3 `KELLY_SIGN_UNCERTAIN` + `kelly_sign_uncertain` (Parent §2.5)
+- [x] Kein Code vor Status FREIGABE
 
-**Nach FREIGABE:** Implementierung → Smoke → Commit → Start ab n≥25.
+**Nach FREIGABE:** Implementierung → Smoke S1–S4 → Commit → Start ab n≥25 (G1 News-24h-Gate PASS weiterhin vor erstem Live-Lauf).
 
 ---
 
