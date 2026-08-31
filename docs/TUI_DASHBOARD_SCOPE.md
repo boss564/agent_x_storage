@@ -1,6 +1,8 @@
-# TUI Dashboard — Scope-Note (ENTWURF)
+# TUI Dashboard — Scope-Note
 
-**Status:** ENTWURF (2026-08-31) — **kein Code vor FREIGABE**  
+**Status:** FREIGABE (2026-08-31) — §8 geprüft · I5 tragend · **Implementierung erlaubt** (Smoke S1–S7 auf Fixtures vor Live-Pfad)  
+**Basis:** `91cfefc5` (Scope-Amendments)  
+**Freigegeben:** 2026-08-31 (§0–§8 Wortlaut-Review, I5 doppelt: §4 + S5)  
 **Erstellt:** 2026-08-31  
 **Strang:** Einzelstrang, passives Diagnose-TUI (Host)  
 **Charter:** `diagnostic_only` · `live_execution=false` · `order_send=false` · `not_investment_advice=true`  
@@ -109,15 +111,17 @@ Gate: S1–S7 grün vor erstem Live-Pfad-Lauf.
 
 ---
 
-## §8 Review-Checkliste vor Umsetzung
+## §8 Review-Checkliste (FREIGABE 2026-08-31)
 
-- [ ] Vier Panels, kein fünftes
-- [ ] I1–I5 akzeptiert (I5 tragend)
-- [ ] §2-Quellen/Pfade gegen Host-Deployment bestätigt
-- [ ] P2 an run_marker, nicht Cron-Annahme
-- [ ] §5 Anti-Scope akzeptiert
-- [ ] S1–S7 als Smoke-Gate
-- [ ] Kein Code vor FREIGABE
+- [x] Vier Panels, kein fünftes
+- [x] I1–I5 akzeptiert (I5 tragend)
+- [x] §2-Quellen/Pfade gegen Host-Deployment bestätigt
+- [x] P2 an run_marker, nicht Cron-Annahme
+- [x] §5 Anti-Scope akzeptiert
+- [x] S1–S7 als Smoke-Gate
+- [x] Kein Code vor FREIGABE (eingehalten bis 2026-08-31)
+
+**Nach FREIGABE:** `scripts/tui_dashboard.py` + `scripts/test_tui_dashboard.py` — Smoke S1–S7 grün vor erstem Live-Pfad-Lauf. **P0 unverändert:** G1 PASS → Shadow Evaluator Live-Lauf; TUI parallel, nicht davor.
 
 ---
 
