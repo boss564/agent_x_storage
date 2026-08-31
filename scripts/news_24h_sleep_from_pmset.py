@@ -21,6 +21,10 @@ _LINE_RE = re.compile(
     r"^\s*(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) ([+-]\d{4})\s+"
     r"(Sleep|Wake|Dark Wake|Maintenance Sleep)"
 )
+_TS_LINE_RE = re.compile(r"^\s*(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) ([+-]\d{4})\s+")
+
+# pmset may omit events within ~15 min of "now"; gate-close evaluation allows that margin.
+_COVERAGE_END_MARGIN = timedelta(minutes=15)
 
 
 def _parse_pmset_ts(date_s: str, tz_s: str) -> Optional[datetime]:
@@ -104,6 +108,53 @@ def g1_n_min(total_sleep_h: float) -> int:
     return max(1, math.floor(hours_awake * G1_FACTOR))
 
 
+def pmset_log_time_span(text: str) -> Tuple[Optional[datetime], Optional[datetime]]:
+    """Earliest and latest timestamp in any pmset log line."""
+    earliest: Optional[datetime] = None
+    latest: Optional[datetime] = None
+    for line in text.splitlines():
+        m = _TS_LINE_RE.match(line)
+        if not m:
+            continue
+        dt = _parse_pmset_ts(m.group(1), m.group(2))
+        if dt is None:
+            continue
+        if earliest is None or dt < earliest:
+            earliest = dt
+        if latest is None or dt > latest:
+            latest = dt
+    return earliest, latest
+
+
+def pmset_covers_gate_window(
+    text: str,
+    *,
+    window_start: datetime,
+    window_end: datetime,
+) -> Tuple[bool, str]:
+    """True only if pmset log spans the full 24h observation window.
+
+    If rotation truncates history, sleep is under-counted, n_min rises, and G1
+    could false-FAIL — emit INCOMPLETE instead of a silently truncated sleep_h.
+    """
+    earliest, latest = pmset_log_time_span(text)
+    if earliest is None or latest is None:
+        return False, "no_timestamps_in_pmset_log"
+    if earliest > window_start:
+        return (
+            False,
+            f"log_starts_after_epoch earliest={earliest.isoformat()} "
+            f"epoch={window_start.isoformat()}",
+        )
+    if latest < window_end - _COVERAGE_END_MARGIN:
+        return (
+            False,
+            f"log_ends_before_gate_close latest={latest.isoformat()} "
+            f"close={window_end.isoformat()}",
+        )
+    return True, "ok"
+
+
 def main(argv: List[str] | None = None) -> int:
     argv = argv if argv is not None else sys.argv[1:]
     window_start = parse_marker_ts(NEWS_SCHEDULER_EPOCH_TS)
@@ -129,11 +180,32 @@ def main(argv: List[str] | None = None) -> int:
     intervals = sleep_intervals_from_pmset_log(
         text, window_start=window_start, window_end=window_end
     )
+    ok, reason = pmset_covers_gate_window(
+        text, window_start=window_start, window_end=window_end
+    )
+    if not ok:
+        earliest, latest = pmset_log_time_span(text)
+        print(
+            "status=INCOMPLETE sleep_source=pmset pmset_coverage=insufficient "
+            f"reason={reason}"
+        )
+        if earliest:
+            print(f"  pmset_earliest {earliest.isoformat()}")
+        if latest:
+            print(f"  pmset_latest {latest.isoformat()}")
+        print(f"  gate_epoch {window_start.isoformat()}")
+        print(f"  gate_close {window_end.isoformat()}")
+        print(
+            "  hint: do not use truncated sleep_h for G1; "
+            "use sleep_source=manual with documented intervals or extend log coverage"
+        )
+        return 3
+
     sleep_s = total_sleep_seconds(intervals)
     sleep_h = round(sleep_s / 3600.0, 2)
     n_min = g1_n_min(sleep_h)
 
-    print(f"sleep_source=pmset sleep_h={sleep_h} n_min={n_min} intervals={len(intervals)}")
+    print(f"status=OK sleep_source=pmset sleep_h={sleep_h} n_min={n_min} intervals={len(intervals)}")
     for start, end in intervals:
         print(f"  sleep_interval {start.isoformat()} .. {end.isoformat()}")
     return 0

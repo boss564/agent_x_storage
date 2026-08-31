@@ -107,6 +107,8 @@ Auswertung **muss** eine Sleep-Notiz enthalten (eine Zeile reicht):
 
 **Herkunft `total_sleep_h`:** `pmset -g log` liefert Sleep-/Wake-Zeitstempel; Ableitung via [`scripts/news_24h_sleep_from_pmset.py`](../scripts/news_24h_sleep_from_pmset.py). **Manuell** nur wenn pmset im Fenster unvollständig ist — dann `sleep_source=manual` in der Ergebniszeile **Pflicht**. Überschätzung von `sleep_h` senkt `n_min` (weicher Nenner) — deshalb pmset vor Handeingabe.
 
+**pmset-Rotation (A1):** Reicht das Log **nicht** über das volle Gate-Fenster zurück, wird Schlaf **unter**erfasst, `n_min` steigt, G1 könnte fälschlich FAIL — konservativ, aber teuer. Das Skript prüft die Abdeckung (`pmset_earliest ≤ epoch`, `pmset_latest ≈ gate_close`); bei Lücke: **`status=INCOMPLETE`**, **keine** still gekürzte `sleep_h` für G1. Ergebniszeile z. B. `NEWS_24H_GATE=INCOMPLETE pmset_coverage=insufficient …` — dann G4 per `sleep_source=manual` mit dokumentierten Intervallen nachziehen.
+
 Ohne G4: Auswertung **unvollständig** — kein PASS, auch wenn G1–G3 grün (Lücken nicht attributierbar).
 
 ---
@@ -118,7 +120,7 @@ Ohne G4: Auswertung **unvollständig** — kein PASS, auch wenn G1–G3 grün (L
 | **F1** | `n_markers_post_epoch < n_min` (G1 A1, nach G4 `total_sleep_h`) | **FAIL** |
 | **F2** | `max_gap_awake_s > 10_800` | **FAIL** |
 | **F3** | Gate-Close: `marker_liveness` ∈ {`MISSING`, `STALE`, `UNPARSEABLE`} | **FAIL** |
-| **F4** | Kein Sleep-Protokoll (G4) | **INCOMPLETE** (nicht PASS) |
+| **F4** | Kein Sleep-Protokoll (G4) oder pmset-Log deckt Gate-Fenster nicht ab (`pmset_coverage=insufficient`) | **INCOMPLETE** (nicht PASS) |
 | **F5** | Post-Epochen-Marker mit durchgehend `dead`/`DEGRADED` ohne Recovery | **FAIL** (Scheduler ok, Feed/Transport nicht — separates Ticket) |
 
 **F5** ist **nicht** Teil von G1–G3, aber blockiert Freigabe „Scheduler + Feed gesund“. Mindestens ein Lauf mit allen Quellen `ok` oder `quiet` (nicht `dead`) nach Epoche.
@@ -136,7 +138,8 @@ make news-agent-cron-status
 # 2) Sleep + G1 n_min (G4 zuerst — Nenner messen, nicht schätzen)
 # Bevorzugt: pmset → sleep_h + n_min
 PYTHONPATH=. python3 scripts/news_24h_sleep_from_pmset.py | tee /tmp/news_gate_sleep.txt
-# Ausgabe z. B.: sleep_source=pmset sleep_h=7.52 n_min=14 intervals=1
+# OK:     status=OK sleep_source=pmset sleep_h=7.52 n_min=14 …
+# Lücke:  status=INCOMPLETE pmset_coverage=insufficient … (exit 3 — G1 nicht mit dieser sleep_h)
 
 # Fallback nur wenn pmset unvollständig — sleep_source=manual in Ergebniszeile Pflicht:
 # export SLEEP_H=7.5
@@ -161,6 +164,9 @@ sleep_source = os.environ.get("SLEEP_SOURCE", "")
 if not sleep_source:
     try:
         line = open("/tmp/news_gate_sleep.txt").readline()
+        if "status=INCOMPLETE" in line:
+            print("gate_sleep INCOMPLETE — fix G4 before G1 (manual sleep_source or extend pmset log)")
+            raise SystemExit(3)
         m = re.search(r"sleep_source=(\w+)", line)
         m2 = re.search(r"sleep_h=([\d.]+)", line)
         if m and m2:
