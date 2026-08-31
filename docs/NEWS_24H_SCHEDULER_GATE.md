@@ -80,7 +80,8 @@ Zwischen zwei aufeinanderfolgenden post-Epochen-Markern, **nur** Intervalle, die
 
 ```text
 gap_i = ts(marker_{i+1}) − ts(marker_i)
-gap_awake_i = gap_i − overlap(gap_i, sleep_intervals)
+sleep_union = Vereinigung(sleep_intervals)    # disjunkte Blöcke — kein Doppel-Overlap
+gap_awake_i = max(0, gap_i − overlap(gap_i, sleep_union))
 max_gap_awake = max(gap_awake_i)
 ```
 
@@ -227,23 +228,25 @@ NEWS_24H_GATE=PASS|FAIL|INCOMPLETE n=17 n_min=14 max_gap_awake_s=3600 liveness=A
 
 ### 5.2 G2 — Awake-Gaps-Tabelle (morgen ausfüllen)
 
-**Schritt A — Sleep-Intervalle** aus Schritt 2 (`news_24h_sleep_from_pmset.py`, Zeilen `sleep_interval …`):
+**Schritt A — Sleep-Intervalle** aus Schritt 2 (`news_24h_sleep_from_pmset.py`, Zeilen `sleep_interval …`). **Vor G2:** überlappende Blöcke zur **Vereinigung** zusammenführen (disjunkt machen). Das Skript liefert bereits gemergte Intervalle; bei `sleep_source=manual` selbst mergen.
 
 ```text
 # Beispiel (Platzhalter — morgen aus pmset-Ausgabe übernehmen):
 #   sleep_interval 2026-08-31T22:00:00+00:00 .. 2026-09-01T05:30:00+00:00
-S1: [ ________________ , ________________ ]   # start_utc , end_utc
+S1: [ ________________ , ________________ ]   # start_utc , end_utc (disjunkt)
 S2: [ ________________ , ________________ ]   # oder „none“
 ```
 
-**Schritt B — Overlap-Algorithmus** (pro Marker-Paar und Sleep-Intervall `S = [s_start, s_end)`):
+**Schritt B — Overlap-Algorithmus** (disjunkte Sleep-Blöcke `S_k = [s_start, s_end)`):
 
 ```text
 gap_i       = [ts_i , ts_{i+1})                    # aus §5-Snippet: pair … gap_s
 overlap_k   = max(0, min(ts_{i+1}, s_end) − max(ts_i, s_start))   # Sekunden
-overlap_i   = Σ_k overlap_k                         # über alle Sleep-Intervalle S_k
-gap_awake_i = gap_i − overlap_i
+overlap_i   = Σ_k overlap_k                         # nur gültig wenn S_k disjunkt (nach Vereinigung)
+gap_awake_i = max(0, gap_i − overlap_i)           # negativ ⇒ Intervalle nicht disjunkt — neu mergen
 ```
+
+**Warum Vereinigung + Klemmen:** `pmset` kann Sleep, DarkWake, Standby, PowerNap liefern — ohne Merge zählt `Σ overlap_k` doppelt, `overlap_i` kann `gap_i` übersteigen, `gap_awake_i` negativ. Fehlerrichtung: **zu viel Overlap → kleineres `gap_awake` → falsches G2-PASS** (nicht False-FAIL).
 
 **Schritt C — Tabelle** (`gap_s` aus §5-Snippet `pair …`; `sleep_overlap_s` per Schritt B):
 
@@ -275,7 +278,7 @@ max_gap_awake_s = max(gap_awake_s) = ________
 G2 ok:  max_gap_awake_s ≤ 10_800   →  ☐ PASS   ☐ FAIL (F2 — Zeile mit max notieren)
 ```
 
-**Fehlrichtung:** `max_gap_s` (roh, §5-Snippet) **≥** `max_gap_awake_s`. Roh-Gap für G2 verwenden → höchstens False-FAIL, nie False-PASS — trotzdem **nur** `max_gap_awake_s` in die Urteilszeile.
+**Fehlrichtung Roh-Gap:** `max_gap_s` (roh) **≥** `max_gap_awake_s` — Roh-Gap für G2 → höchstens False-FAIL. **Fehlrichtung Doppel-Overlap:** nicht gemergte Sleep-Intervalle → False-**PASS** — deshalb Schritt A (Vereinigung) und `max(0, …)`.
 
 ---
 

@@ -92,7 +92,24 @@ def sleep_intervals_from_pmset_log(
             lo = max(start, window_start)
             hi = min(end, window_end)
             clipped.append((lo, hi))
-    return clipped
+    return merge_sleep_intervals(clipped)
+
+
+def merge_sleep_intervals(
+    intervals: List[Tuple[datetime, datetime]],
+) -> List[Tuple[datetime, datetime]]:
+    """Union of sleep intervals — disjoint blocks for G2 overlap (no double-count)."""
+    if not intervals:
+        return []
+    ordered = sorted(intervals, key=lambda iv: iv[0])
+    merged: List[Tuple[datetime, datetime]] = [ordered[0]]
+    for start, end in ordered[1:]:
+        prev_start, prev_end = merged[-1]
+        if start <= prev_end:
+            merged[-1] = (prev_start, max(prev_end, end))
+        else:
+            merged.append((start, end))
+    return merged
 
 
 def total_sleep_seconds(

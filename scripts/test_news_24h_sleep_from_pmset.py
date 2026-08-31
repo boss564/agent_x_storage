@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 
 from scripts.news_24h_sleep_from_pmset import (
     g1_n_min,
+    merge_sleep_intervals,
     pmset_covers_gate_window,
     sleep_intervals_from_pmset_log,
     total_sleep_seconds,
@@ -63,13 +64,24 @@ def test_pmset_log_covers_full_window() -> None:
     assert ok, reason
 
 
+def test_merge_overlapping_sleep_intervals() -> None:
+    t0 = datetime(2026, 8, 31, 22, 0, tzinfo=timezone.utc)
+    t1 = datetime(2026, 9, 1, 2, 0, tzinfo=timezone.utc)
+    t2 = datetime(2026, 9, 1, 1, 0, tzinfo=timezone.utc)
+    t3 = datetime(2026, 9, 1, 6, 0, tzinfo=timezone.utc)
+    merged = merge_sleep_intervals([(t0, t1), (t2, t3)])
+    assert len(merged) == 1
+    assert merged[0] == (t0, t3)
+
+
 def run() -> None:
     test_g1_anchor_no_sleep()
     test_g1_night_sleep_example()
     test_pmset_log_parses_sleep_block()
     test_pmset_log_rotation_incomplete()
     test_pmset_log_covers_full_window()
-    print("news_24h_sleep_from_pmset: 5/5 passed")
+    test_merge_overlapping_sleep_intervals()
+    print("news_24h_sleep_from_pmset: 6/6 passed")
 
 
 if __name__ == "__main__":
