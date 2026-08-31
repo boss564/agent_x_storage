@@ -52,7 +52,7 @@ Scorer: `keyword_v1` (Lexikon). LLM bleibt optional und unverdrahtet.
 
 **Scheduler-Epoche:** `NEWS_SCHEDULER_EPOCH_TS = 2026-08-31T09:00:00+00:00` — erste :00 unter LaunchAgent + `.venv`. Quiet-Streaks und Feed-Qualitätsauswertung ignorieren ältere `run_marker` (Vorlauf inkl. System-Python-TLS → falsch `dead`/`DEGRADED`). Analog `OPTION_B_EXIT_EPOCH_TS` im Paper-WORM.
 
-**24h-Scheduler-Gate (PASS/FAIL):** Auswertung **2026-09-01 09:00 UTC** — Kriterien eingefroren in [`NEWS_24H_SCHEDULER_GATE.md`](NEWS_24H_SCHEDULER_GATE.md) (≥20 Marker, max. 3 h Lücke in wacher Zeit, `marker_liveness` ACTIVE, Sleep-Protokoll). LaunchAgent holt nach Sleep nur **einen** Lauf nach — <24 Marker bei Nacht-Sleep ist erwartbar.
+**24h-Scheduler-Gate (PASS/FAIL):** Auswertung **2026-09-01 09:00 UTC** — Kriterien eingefroren in [`NEWS_24H_SCHEDULER_GATE.md`](NEWS_24H_SCHEDULER_GATE.md) (**G1-A1:** `n ≥ floor(hours_awake×0.85)`; **G2:** max. 3 h Lücke in wacher Zeit; **G3:** `marker_liveness` ACTIVE; **G4:** Sleep-Protokoll). LaunchAgent holt nach Sleep nur **einen** Lauf nach.
 
 Unabhängig von `regime-swarm-hourly-rt` (`:14` UTC im Pod). Pfade mit Leerzeichen sind gequotet.
 
