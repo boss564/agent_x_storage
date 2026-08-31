@@ -232,6 +232,7 @@ NO_TEST_SUMMARY: set[str] = {
     "scripts/test_position_sizing_subswarm.py",  # B0–B8 Kelly boundary (POSITION_SIZING_SUBSWARM_PASS/FAIL)
     "scripts/test_paper_hold_calibration.py",  # Option B hold k calibration (PAPER_HOLD_CALIBRATION_PASS/FAIL)
     "scripts/test_paper_exit_implementation.py",  # Option B exit I1–I6 smoke (S1–S6)
+    "scripts/test_shadow_evaluator.py",  # Strang B.1 shadow evaluator smoke (S1–S4)
     "scripts/test_position_abandoned.py",  # E8 POSITION_ABANDONED + Option-B epoch pairing
     "scripts/count_paper_edges_at_freeze.py",  # B2 eligible edge counter (freeze-k)
     "scripts/test_feed_gap_concordance.py",  # Feed-gap JSONL + H_inv/H2 smoke (6/6)
