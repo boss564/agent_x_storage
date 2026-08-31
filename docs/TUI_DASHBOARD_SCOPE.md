@@ -51,8 +51,8 @@ LEDs (P2) aus **echten run_marker-Daten** + Alter — nicht aus Cron-Annahmen.
 | # | Panel | Anzeige |
 |---|-------|---------|
 | **P1** | Fenster-W-Zähler | `n_eligible / 50` · Fortschrittsbalken · B2-Filter: `freeze_k`, `exit_reason=hold_expired`, `\|Δhold\| ≤ max_delta_s` ([`paper_edge_sample.py`](../prototypes/raas_paper_trading/paper_edge_sample.py)) |
-| **P2** | Host-Cron-Matrix | LED grün/rot je `:00/:05/:06/:07` · grün iff letzter Marker `age ≤ max_age` (News `:00` → `NEWS_MARKER_MAX_AGE_H`, Default 2 h) |
-| **P3** | Liveness-Countdown | Restzeit bis **2026-09-01 09:00 UTC** · `n_markers_post_epoch` · `marker_liveness.status` (Anzeige, kein Gate-Urteil vor Close) |
+| **P2** | Host-Cron-Matrix | LED grün/rot je `:00/:05/:06/:07` · grün iff letzter Marker `age ≤ max_age` · alle vier Slots: `NEWS_MARKER_MAX_AGE_H` (Default **2 h**, aus [`liveness.py`](../services/news_agent/liveness.py)) |
+| **P3** | Liveness-Countdown | Restzeit bis **2026-09-01 09:00 UTC** · `n_markers_post_epoch` · `marker_liveness.status` (Anzeige, kein Gate-Urteil vor Close) · *Hard-Date nur G1-Fenster; nach Gate-Close Env oder Scope-Amendment* |
 | **P4** | Position-Tracker | `IDLE` / `HOLDING` / … · bei offener Position: wall-clock `Δt` seit `entry_tick_ts` |
 
 Ein fünftes Panel braucht einen **neuen gemessenen Anlass** und Scope-Amendment.
@@ -66,7 +66,7 @@ Ein fünftes Panel braucht einen **neuen gemessenen Anlass** und Scope-Amendment
 | **I1** | Read-only auf Quellen; Schreiben nur auf Terminal (Render). |
 | **I2** | Kein schreibender State-Zugriff, keine Order, kein Daemon/Helm/Fenster-W-Eingriff. |
 | **I3** | Tail/streaming — keine ganze JSONL ins RAM. |
-| **I4** | Charter auf jeder Ausgabe: `diagnostic_only`, `live_execution=false`, `order_send=false`. |
+| **I4** | Charter auf jeder Ausgabe: `diagnostic_only`, `live_execution=false`, `order_send=false`, `not_investment_advice=true`. |
 | **I5** | **Spiegel, kein Analyst** — nur Felder aus den Quellen. Keine Prognose, kein „should", keine Handelsempfehlung, keine Regime-Deutung. |
 
 **I5 ist tragend.** Deutung = abgelehnter Geheimdienst-Strang.
@@ -95,8 +95,9 @@ Ein fünftes Panel braucht einen **neuen gemessenen Anlass** und Scope-Amendment
 | **S4** | Fixture `paper_position.json` HOLDING | P4 State + `Δt` |
 | **S5** | Render-Output | Keine Labels `should`, `recommend`, `bullish`, `bearish` |
 | **S6** | Lauf gegen Fixture-Kopie | Quell-Dateien bit-identisch (I1) |
+| **S7** | Fehlende/leere Quelle | Kein Crash, Panel zeigt „—" |
 
-Gate: S1–S6 grün vor erstem Live-Pfad-Lauf.
+Gate: S1–S7 grün vor erstem Live-Pfad-Lauf.
 
 ---
 
@@ -112,9 +113,10 @@ Gate: S1–S6 grün vor erstem Live-Pfad-Lauf.
 
 - [ ] Vier Panels, kein fünftes
 - [ ] I1–I5 akzeptiert (I5 tragend)
+- [ ] §2-Quellen/Pfade gegen Host-Deployment bestätigt
 - [ ] P2 an run_marker, nicht Cron-Annahme
 - [ ] §5 Anti-Scope akzeptiert
-- [ ] S1–S6 als Smoke-Gate
+- [ ] S1–S7 als Smoke-Gate
 - [ ] Kein Code vor FREIGABE
 
 ---
