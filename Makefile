@@ -247,7 +247,7 @@ test-all:
 	@echo "✅ All test suites complete"
 	@echo "✅ Alle Container, Images und Volumes entfernt"
 
-.PHONY: son-report backup raas-smoke raas-portal raas-swarm-health raas-swarm-inventory-sync
+.PHONY: son-report backup raas-smoke raas-portal raas-swarm-health raas-swarm-inventory-sync raas-swarm-inventory-drift-check
 
 raas-smoke: ## RaaS prototype E2E (upload→stress→certificate, gate sim)
 	PYTHONPATH=. python3 scripts/test_raas_smoke.py
@@ -408,6 +408,9 @@ raas-swarm-health: ## Schwarm-Inventar: aktive Logs/Agenten (scripts/swarm_healt
 
 raas-swarm-inventory-sync: ## Laufzeit-Block in docs/SWARM_INVENTORY.md schreiben
 	PYTHONPATH=. python3 scripts/swarm_health.py --sync-inventory
+
+raas-swarm-inventory-drift-check: ## Live Laufzeit vs Inventar (CI/Ops — nicht Pre-Commit)
+	PYTHONPATH=. python3 scripts/swarm_health.py --check-runtime-drift
 
 raas-paper-hold-calibrate: ## Calibrate PAPER_HOLD_SECONDS from WORM (WORM= path required)
 	@test -n "$(WORM)" || (echo "Usage: make raas-paper-hold-calibrate WORM=path/to/paper_trades.worm.jsonl"; exit 1)

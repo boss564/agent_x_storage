@@ -232,8 +232,10 @@ NO_TEST_SUMMARY: set[str] = {
     "scripts/test_position_sizing_subswarm.py",  # B0–B8 Kelly boundary (POSITION_SIZING_SUBSWARM_PASS/FAIL)
     "scripts/test_paper_hold_calibration.py",  # Option B hold k calibration (PAPER_HOLD_CALIBRATION_PASS/FAIL)
     "scripts/test_paper_exit_implementation.py",  # Option B exit I1–I6 smoke (S1–S6)
+    "scripts/test_position_abandoned.py",  # E8 POSITION_ABANDONED + Option-B epoch pairing
     "scripts/count_paper_edges_at_freeze.py",  # B2 eligible edge counter (freeze-k)
     "scripts/test_feed_gap_concordance.py",  # Feed-gap JSONL + H_inv/H2 smoke (6/6)
+    "scripts/test_hourly_rt_tick_liveness.py",  # Hourly RT paper last_tick_ts vs heartbeat.ts
     "scripts/count_feed_gap_concordance.py",  # H0/H1/H_inv/H2 concordance report
     "scripts/test_cross_venue_connectivity.py",  # Cross-venue 2×2 t_recv smoke
     "scripts/count_cross_venue_h2.py",  # Cross-venue H2 report
@@ -585,7 +587,7 @@ def check_inventory_runtime_block_age(inventory_text: str, rel: str, rep: Report
 
 
 def check_inventory_runtime_status(root: Path, inventory_text: str, rel: str, rep: Report) -> None:
-    """Laufzeit-Spalte im Inventar gegen frische swarm_health-Messung halten."""
+    """Pre-commit: Block-Alter + Schema (Komponenten/Schicht/Rolle/Signal). Kein Live-Status."""
     check_inventory_runtime_block_age(inventory_text, rel, rep)
 
     if "Sync ausstehend" in inventory_text:
@@ -597,39 +599,16 @@ def check_inventory_runtime_status(root: Path, inventory_text: str, rel: str, re
         rep.fail(None, f"{rel} Laufzeit-Check", "swarm_health.py", str(exc))
         return
 
-    live = sh.collect_health_report()
-    documented = sh.parse_runtime_block(inventory_text)
-    expected = {cid: live["components"][cid]["status"] for cid in live["components"]}
-
-    if not documented:
-        if live.get("cluster_reachable"):
-            rep.fail(None, f"{rel} Laufzeit-Block", "Komponenten fehlen", "make raas-swarm-inventory-sync")
+    if not sh._runtime_block_body(inventory_text):
+        rep.fail(None, f"{rel} Laufzeit-Block", "SWARM_RUNTIME fehlt", "make raas-swarm-inventory-sync")
         return
 
-    if not live.get("cluster_reachable"):
-        rep.env("swarm_inventory_runtime", "Cluster offline — Laufzeit-Drift nicht geprüft (Alter geprüft)")
-        return
-
-    mismatches: list[tuple[str, str, str]] = []
-    for comp in sh.RUNTIME_COMPONENTS:
-        cid = comp.component_id
-        rep.ok()
-        doc_status = documented.get(cid)
-        live_status = expected.get(cid)
-        if doc_status is None:
-            rep.fail(None, f"{rel} Laufzeit-Zeile fehlt", comp.label, "nicht im SWARM_RUNTIME-Block")
-            continue
-        if doc_status != live_status:
-            mismatches.append((comp.label, doc_status, live_status or "?"))
-        else:
-            rep.ok()
-
-    for label, doc_s, live_s in mismatches:
+    for err in sh.check_runtime_schema(inventory_text):
         rep.fail(
             None,
-            f"{rel} Laufzeit drift ({label})",
-            doc_s,
-            live_s,
+            f"{rel} Laufzeit-Schema ({err['component']} {err['field']})",
+            err["expected"],
+            err["actual"],
             "make raas-swarm-inventory-sync",
         )
 

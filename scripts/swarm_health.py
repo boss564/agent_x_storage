@@ -556,16 +556,20 @@ def render_runtime_markdown(report: Dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-def parse_runtime_block(text: str) -> Dict[str, str]:
-    """component_id → Laufzeit status from committed inventory."""
+def _runtime_block_body(text: str) -> str:
     m = re.search(
         re.escape(RUNTIME_BEGIN) + r"(.*?)" + re.escape(RUNTIME_END),
         text,
         re.DOTALL,
     )
-    if not m:
+    return m.group(1) if m else ""
+
+
+def parse_runtime_block(text: str) -> Dict[str, str]:
+    """component_id → Laufzeit status from committed inventory."""
+    block = _runtime_block_body(text)
+    if not block:
         return {}
-    block = m.group(1)
     out: Dict[str, str] = {}
     for comp in RUNTIME_COMPONENTS:
         pat = rf"\|\s*\*\*{re.escape(comp.label)}\*\*\s*\|[^|]+\|\s*\*\*(\w+)\*\*"
@@ -573,6 +577,95 @@ def parse_runtime_block(text: str) -> Dict[str, str]:
         if hit:
             out[comp.component_id] = hit.group(1)
     return out
+
+
+def parse_runtime_block_schema(text: str) -> Dict[str, Dict[str, str]]:
+    """component_id → {layer, role, signal} — slow-changing fields only (no Laufzeit/Alter)."""
+    block = _runtime_block_body(text)
+    if not block:
+        return {}
+    out: Dict[str, Dict[str, str]] = {}
+    for comp in RUNTIME_COMPONENTS:
+        pat = (
+            rf"\|\s*\*\*{re.escape(comp.label)}\*\*\s*"
+            rf"\|\s*([^|]+?)\s*\|\s*\*\*\w+\*\*\s*"
+            rf"\|\s*[^|]+\|\s*`[^`]*`\s*"
+            rf"\|\s*([^|]+?)\s*\|"
+        )
+        hit = re.search(pat, block)
+        if hit:
+            out[comp.component_id] = {
+                "layer": hit.group(1).strip(),
+                "role": hit.group(2).strip(),
+                "signal": comp.signal,
+            }
+    return out
+
+
+def check_runtime_schema(text: str) -> List[Dict[str, str]]:
+    """Offline: Komponenten-Zeilen vs RUNTIME_COMPONENTS (Schicht, Rolle, Signal-Key)."""
+    documented = parse_runtime_block_schema(text)
+    errors: List[Dict[str, str]] = []
+    for comp in RUNTIME_COMPONENTS:
+        row = documented.get(comp.component_id)
+        if row is None:
+            errors.append(
+                {
+                    "component": comp.label,
+                    "field": "row",
+                    "expected": "SWARM_RUNTIME-Zeile",
+                    "actual": "fehlt",
+                }
+            )
+            continue
+        if row["layer"] != comp.layer:
+            errors.append(
+                {
+                    "component": comp.label,
+                    "field": "Schicht",
+                    "expected": comp.layer,
+                    "actual": row["layer"],
+                }
+            )
+        if row["role"] != comp.role:
+            errors.append(
+                {
+                    "component": comp.label,
+                    "field": "Rolle",
+                    "expected": comp.role,
+                    "actual": row["role"],
+                }
+            )
+        if row["signal"] != comp.signal:
+            errors.append(
+                {
+                    "component": comp.label,
+                    "field": "Signal",
+                    "expected": comp.signal,
+                    "actual": row["signal"],
+                }
+            )
+    return errors
+
+
+def check_runtime_status_drift(
+    text: str, report: Optional[Dict[str, Any]] = None
+) -> List[Tuple[str, str, str]]:
+    """Live: dokumentierter Laufzeit-Status vs frische Messung (label, doc, live)."""
+    if report is None:
+        report = collect_health_report()
+    if not report.get("cluster_reachable"):
+        return []
+    documented = parse_runtime_block(text)
+    drift: List[Tuple[str, str, str]] = []
+    for comp in RUNTIME_COMPONENTS:
+        live_status = report["components"][comp.component_id]["status"]
+        doc_status = documented.get(comp.component_id)
+        if doc_status is None:
+            continue
+        if doc_status != live_status:
+            drift.append((comp.label, doc_status, live_status))
+    return drift
 
 
 def sync_inventory_markdown(inventory_path: Optional[Path] = None) -> Tuple[str, Dict[str, Any]]:
@@ -681,8 +774,42 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Schwarm-Log-Frische und Inventar-Laufzeit")
     parser.add_argument("--json", action="store_true", help="Maschinenlesbarer Report (stdout)")
     parser.add_argument("--sync-inventory", action="store_true", help="SWARM_RUNTIME-Block in Inventar schreiben")
+    parser.add_argument(
+        "--check-runtime-drift",
+        action="store_true",
+        help="Live Laufzeit-Status vs SWARM_INVENTORY (CI/Ops — nicht Pre-Commit)",
+    )
     parser.add_argument("--no-alert", action="store_true", help="Kein Telegram bei STALE/Pod-Down")
     args = parser.parse_args()
+
+    if args.check_runtime_drift:
+        inv_path = _repo_root() / INVENTORY_PATH
+        if not inv_path.is_file():
+            print(f"SWARM_INVENTORY_RUNTIME_DRIFT_FAIL missing {INVENTORY_PATH}", file=sys.stderr)
+            return 1
+        inv_text = inv_path.read_text(encoding="utf-8")
+        schema_errors = check_runtime_schema(inv_text)
+        if schema_errors:
+            for err in schema_errors:
+                print(
+                    f"SCHEMA {err['component']} {err['field']}: "
+                    f"expected={err['expected']} actual={err['actual']}",
+                    file=sys.stderr,
+                )
+            print("SWARM_INVENTORY_RUNTIME_DRIFT_FAIL schema", file=sys.stderr)
+            return 1
+        report = collect_health_report()
+        if not report.get("cluster_reachable"):
+            print("SWARM_INVENTORY_RUNTIME_DRIFT_SKIP cluster offline")
+            return 0
+        drift = check_runtime_status_drift(inv_text, report)
+        if drift:
+            for label, doc_s, live_s in drift:
+                print(f"DRIFT {label}: documented={doc_s} live={live_s}", file=sys.stderr)
+            print("SWARM_INVENTORY_RUNTIME_DRIFT_FAIL", file=sys.stderr)
+            return 1
+        print("SWARM_INVENTORY_RUNTIME_DRIFT_PASS")
+        return 0
 
     if args.sync_inventory:
         _, report = sync_inventory_markdown()

@@ -5,7 +5,7 @@
 **Verwandte Docs:** [`REGIME_SWARM_LIVE_SHADOW_RUNBOOK.md`](REGIME_SWARM_LIVE_SHADOW_RUNBOOK.md) · [`REGIME_SWARM_INFRA_GATES.md`](REGIME_SWARM_INFRA_GATES.md)
 
 > **Zwei Bedeutungen von „aktiv":** **Laufzeit** (Log-Frische, ACTIVE/STALE/…) wird aus `swarm_health.py` gemessen. **Rolle** (Shadow-Pfad, Opt-in, Cron, …) ist eine Hand-Annotation zur Architektur — kein Nachweis, dass der Prozess gerade läuft.  
-> **Pre-Commit offline:** Laufzeit-Block-`generated_at` darf max. **24 h** alt sein (`SWARM_INVENTORY_MAX_AGE_H`). Inhaltliche Drift nur mit Cluster.
+> **Pre-Commit (offline):** `generated_at` max. **24 h** (`SWARM_INVENTORY_MAX_AGE_H`) + Schema (Komponenten/Schicht/Rolle/Signal) — **kein** ACTIVE/STALE-Vergleich. **Live-Drift:** `make raas-swarm-inventory-drift-check` (CI/Ops, Cluster nötig).
 
 ---
 
@@ -337,6 +337,7 @@ _Stand: 2026-08-31T09:25:32.202138+00:00 · 8 ACTIVE · 0 STALE (Laufzeit-Zeilen
 | `raas-worm-streaming-oom-smoke` | P5 | OOM regression |
 | `raas-swarm-health` | Ops | Terminal-Status aktiver Logs/Agenten |
 | `raas-swarm-inventory-sync` | Ops | Laufzeit-Block in SWARM_INVENTORY.md schreiben |
+| `raas-swarm-inventory-drift-check` | CI/Ops | Live ACTIVE/STALE vs Inventar (nicht Pre-Commit) |
 | `raas-regime-drift-monitor` | P5 | One-shot drift |
 | `raas-paper-report` | Export | Daily report |
 | `raas-depth-ingest` | P1 | Depth WORM |
