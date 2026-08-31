@@ -127,9 +127,9 @@ Ohne G4: Auswertung **unvollständig** — kein PASS, auch wenn G1–G3 grün (L
 
 ---
 
-## 5. Auswertung morgen (2026-09-01 ~09:00 UTC)
+## 5. Auswertung morgen (2026-09-01 **09:05–09:15 UTC**)
 
-Read-only — kein Cluster, kein Cron-Patch.
+Read-only — kein Cluster, kein Cron-Patch. **Nicht** punktgenau 09:00 UTC: die 15-Minuten-Marge am Gate-Ende (`pmset_latest`) kompensiert fehlende letzte pmset-Minuten.
 
 ```bash
 # 1) Scheduler + aktuelle Liveness (G3)
@@ -210,6 +210,17 @@ pmset -g log | tail -30
 ```text
 NEWS_24H_GATE=PASS|FAIL|INCOMPLETE n=17 n_min=14 max_gap_awake_s=3600 liveness=ACTIVE sleep_h=7.52 sleep_source=pmset
 ```
+
+### 5.1 Entscheidungsbaum (P0 — keine Nach-Tuning)
+
+| Beobachtung | Verdict | Aktion |
+|-------------|---------|--------|
+| **pmset-Rotation** / Log deckt Fenster nicht ab | **F4 → INCOMPLETE** | `sleep_source=manual` + dokumentierte `sleep_intervals`. **Nicht** mit halber/truncated `sleep_h` trotzdem G1 rechnen. |
+| **Marker-Liveness** `STALE` oder `MISSING` | **F3 → FAIL** | [`NEWS_AGENT.md`](NEWS_AGENT.md) (`make news-agent-cron-status`, `WRITER_STALE`) · [`AUDIT_WRITER_LIVENESS.md`](AUDIT_WRITER_LIVENESS.md). **Kein** Cluster-Patch — Host-isoliert. |
+| `n_markers < n_min` (nach G4) | **F1 → G1 FAIL** | Urteilszeile dokumentieren. **Keine** Schwelle nachträglich anpassen (A1-Anker: `sleep_h=0 → n_min=20`). |
+| `max_gap_awake_s > 10_800` (nach Sleep-Overlap-Abzug) | **F2 → G2 FAIL** | Einzeln dokumentieren: welches Marker-Paar, `gap_s`, Sleep-Overlap, `gap_awake_s`. **Nicht** `max_gap_s` (roh) für G2 verwenden. |
+
+**G2-Rechnung (manuell):** pro Marker-Paar `gap_awake_i = gap_i − overlap(gap_i, sleep_intervals)`; Sleep-Intervalle aus pmset-Skript (`sleep_interval …`) oder manuellem G4-Protokoll.
 
 ---
 
