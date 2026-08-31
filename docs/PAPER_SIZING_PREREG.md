@@ -429,7 +429,7 @@ Erst dann:
 - [ ] Gate-Zähler `n_eligible_at_freeze_k` definiert (nicht SELL-grep)
 - [ ] γ-Map §5.2 eingefroren
 - [ ] H1–H14 im Runbook zitiert
-- [ ] News-24h-Gate + Paper-Exit-Gate abgeschlossen (Vorbedingung Beobachtung)
+- [ ] News-24h-Scheduler-Gate PASS ([`NEWS_24H_SCHEDULER_GATE.md`](NEWS_24H_SCHEDULER_GATE.md)) + Paper-Exit-Gate abgeschlossen (Vorbedingung Beobachtung)
 - [ ] **Kein** Strang-B-Enable vor n≥50
 
 **Nach VALIDIERT:** Ergebnisse dokumentieren; Parameteränderung nur via **PAPER_SIZING_PREREG v2** + neues Freeze.

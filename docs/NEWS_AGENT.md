@@ -52,6 +52,8 @@ Scorer: `keyword_v1` (Lexikon). LLM bleibt optional und unverdrahtet.
 
 **Scheduler-Epoche:** `NEWS_SCHEDULER_EPOCH_TS = 2026-08-31T09:00:00+00:00` — erste :00 unter LaunchAgent + `.venv`. Quiet-Streaks und Feed-Qualitätsauswertung ignorieren ältere `run_marker` (Vorlauf inkl. System-Python-TLS → falsch `dead`/`DEGRADED`). Analog `OPTION_B_EXIT_EPOCH_TS` im Paper-WORM.
 
+**24h-Scheduler-Gate (PASS/FAIL):** Auswertung **2026-09-01 09:00 UTC** — Kriterien eingefroren in [`NEWS_24H_SCHEDULER_GATE.md`](NEWS_24H_SCHEDULER_GATE.md) (≥20 Marker, max. 3 h Lücke in wacher Zeit, `marker_liveness` ACTIVE, Sleep-Protokoll). LaunchAgent holt nach Sleep nur **einen** Lauf nach — <24 Marker bei Nacht-Sleep ist erwartbar.
+
 Unabhängig von `regime-swarm-hourly-rt` (`:14` UTC im Pod). Pfade mit Leerzeichen sind gequotet.
 
 `make satellites-cron-enable` setzt **zwei** Host-Zeilen: News `:00` (`# AGENTX_NEWS_AGENT`) und Preis-Gap `:05` (`# AGENTX_PRICE_GAP` → `data/gap_reports.jsonl` + `docs/SWARM_GAP_ANALYSIS.md`). Der Preis-Cron: `cd` ins Repo, absoluter `{repo}/.venv/bin/python` und absoluter Skriptpfad (Cron-CWD ist `$HOME`). Jeder Lauf schreibt `kind=run_marker` (Invariante Instanz 4). `news-agent-cron-disable` entfernt nur die News-Zeile.
