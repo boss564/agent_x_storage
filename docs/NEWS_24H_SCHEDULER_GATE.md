@@ -192,13 +192,16 @@ print("sleep_source", sleep_source, "sleep_h", sleep_h, "hours_awake", hours_awa
 print("n_markers_post_epoch", n, "g1_ok", n >= n_min)
 if len(markers) >= 2:
     gaps = []
-    for a, b in zip(markers, markers[1:]):
+    for i, (a, b) in enumerate(zip(markers, markers[1:]), 1):
         ta = parse_marker_ts(str(a.get("ts")))
         tb = parse_marker_ts(str(b.get("ts")))
         if ta and tb:
-            gaps.append((tb - ta).total_seconds())
+            g = (tb - ta).total_seconds()
+            gaps.append(g)
+            print(f"pair {i} ts_i={a.get('ts')} ts_ip1={b.get('ts')} gap_s={round(g)}")
     print("gaps_s", [round(g) for g in gaps])
     print("max_gap_s", round(max(gaps)) if gaps else None)
+    print("hint: fill G2 table §5.2 — max_gap_s is NOT max_gap_awake_s")
 PY
 
 # 3) Sleep-Rohlog (G4 Beleg, Archiv)
@@ -220,7 +223,59 @@ NEWS_24H_GATE=PASS|FAIL|INCOMPLETE n=17 n_min=14 max_gap_awake_s=3600 liveness=A
 | `n_markers < n_min` (nach G4) | **F1 → G1 FAIL** | Urteilszeile dokumentieren. **Keine** Schwelle nachträglich anpassen (A1-Anker: `sleep_h=0 → n_min=20`). |
 | `max_gap_awake_s > 10_800` (nach Sleep-Overlap-Abzug) | **F2 → G2 FAIL** | Einzeln dokumentieren: welches Marker-Paar, `gap_s`, Sleep-Overlap, `gap_awake_s`. **Nicht** `max_gap_s` (roh) für G2 verwenden. |
 
-**G2-Rechnung (manuell):** pro Marker-Paar `gap_awake_i = gap_i − overlap(gap_i, sleep_intervals)`; Sleep-Intervalle aus pmset-Skript (`sleep_interval …`) oder manuellem G4-Protokoll.
+**G2-Rechnung (manuell):** pro Marker-Paar `gap_awake_i = gap_i − overlap(gap_i, sleep_intervals)`; Sleep-Intervalle aus pmset-Skript (`sleep_interval …`) oder manuellem G4-Protokoll. Vorlage: **§5.2**.
+
+### 5.2 G2 — Awake-Gaps-Tabelle (morgen ausfüllen)
+
+**Schritt A — Sleep-Intervalle** aus Schritt 2 (`news_24h_sleep_from_pmset.py`, Zeilen `sleep_interval …`):
+
+```text
+# Beispiel (Platzhalter — morgen aus pmset-Ausgabe übernehmen):
+#   sleep_interval 2026-08-31T22:00:00+00:00 .. 2026-09-01T05:30:00+00:00
+S1: [ ________________ , ________________ ]   # start_utc , end_utc
+S2: [ ________________ , ________________ ]   # oder „none“
+```
+
+**Schritt B — Overlap-Algorithmus** (pro Marker-Paar und Sleep-Intervall `S = [s_start, s_end)`):
+
+```text
+gap_i       = [ts_i , ts_{i+1})                    # aus §5-Snippet: pair … gap_s
+overlap_k   = max(0, min(ts_{i+1}, s_end) − max(ts_i, s_start))   # Sekunden
+overlap_i   = Σ_k overlap_k                         # über alle Sleep-Intervalle S_k
+gap_awake_i = gap_i − overlap_i
+```
+
+**Schritt C — Tabelle** (`gap_s` aus §5-Snippet `pair …`; `sleep_overlap_s` per Schritt B):
+
+| i | ts_i (UTC) | ts_{i+1} (UTC) | gap_s | sleep_overlap_s | gap_awake_s |
+|---|------------|----------------|------:|----------------:|------------:|
+| 1 |            |                |       |                 |             |
+| 2 |            |                |       |                 |             |
+| 3 |            |                |       |                 |             |
+| 4 |            |                |       |                 |             |
+| 5 |            |                |       |                 |             |
+| 6 |            |                |       |                 |             |
+| 7 |            |                |       |                 |             |
+| 8 |            |                |       |                 |             |
+| 9 |            |                |       |                 |             |
+|10 |            |                |       |                 |             |
+|11 |            |                |       |                 |             |
+|12 |            |                |       |                 |             |
+|13 |            |                |       |                 |             |
+|14 |            |                |       |                 |             |
+|15 |            |                |       |                 |             |
+|16 |            |                |       |                 |             |
+
+*(Zeilen nach Bedarf ergänzen — typisch ~16–17 Marker-Paare bei Nacht-Sleep.)*
+
+**Schritt D — G2-Urteil:**
+
+```text
+max_gap_awake_s = max(gap_awake_s) = ________
+G2 ok:  max_gap_awake_s ≤ 10_800   →  ☐ PASS   ☐ FAIL (F2 — Zeile mit max notieren)
+```
+
+**Fehlrichtung:** `max_gap_s` (roh, §5-Snippet) **≥** `max_gap_awake_s`. Roh-Gap für G2 verwenden → höchstens False-FAIL, nie False-PASS — trotzdem **nur** `max_gap_awake_s` in die Urteilszeile.
 
 ---
 
