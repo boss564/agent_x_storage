@@ -327,6 +327,27 @@ def test_degraded_breaks_quiet_streak():
     assert out["CoinDesk"]["span_s"] == 0.0
 
 
+def test_pre_epoch_markers_excluded_from_quiet_streak():
+    """System-python Vorlauf must not poison 72h streak (NEWS_SCHEDULER_EPOCH_TS)."""
+    from services.news_agent.liveness import measurement_run_markers
+
+    poison = {
+        "source_type": "run_marker",
+        "ts": "2026-08-31T08:56:05.373501+00:00",
+        "feeds": {"CoinDesk": {"health": "dead"}},
+    }
+    prior = measurement_run_markers([poison, poison])
+    assert prior == []
+    quiet = {"health": "quiet", "status": 200, "bozo": 0, "entries": 0}
+    out = derive_quiet_streaks(
+        prior,
+        {"CoinDesk": quiet},
+        now="2026-08-31T10:00:00+00:00",
+    )
+    assert out["CoinDesk"]["consecutive_quiet"] == 1
+    assert out["CoinDesk"]["stale"] is False
+
+
 def test_structure_ok_s1_to_s7():
     """Pre-Reg NEWS_FEED_STRUCTURE_PREREG Smoke S1–S7."""
     from agents_b2g.news.feed_health import feed_report
@@ -402,13 +423,16 @@ def test_structure_ok_s1_to_s7():
 
 def test_stale_quiet_elevates_run_status():
     """72h quiet → streaks.stale and status=DEGRADED (not only in the marker)."""
+    from services.news_agent.liveness import NEWS_SCHEDULER_EPOCH_TS
+
     root = Path(tempfile.mkdtemp())
     jsonl = root / "news_scores.jsonl"
-    now = datetime(2026, 8, 30, 15, 0, tzinfo=timezone.utc)
+    epoch = datetime.fromisoformat(NEWS_SCHEDULER_EPOCH_TS)
+    now = epoch + timedelta(hours=80)
     quiet = {"health": "quiet", "status": 200, "bozo": 0, "entries": 0}
     prior = {
         "source_type": "run_marker",
-        "ts": (now - timedelta(hours=72)).isoformat(),
+        "ts": (now - timedelta(hours=80)).isoformat(),
         "feeds": {"CoinDesk": quiet, "Cointelegraph": quiet},
         "diagnostic_only": True,
         "live_execution": False,
@@ -427,8 +451,14 @@ def test_stale_quiet_elevates_run_status():
             self.last_error = ""
             return []
 
+    from unittest.mock import patch
+
     try:
-        result = run_once(scrapers=[AllQuiet()])
+        with patch(
+            "services.news_agent.liveness.utc_now",
+            return_value=now.isoformat(),
+        ):
+            result = run_once(scrapers=[AllQuiet()])
         assert result["stale"], result
         assert result["status"] == "DEGRADED", result["status"]
         assert not any(
@@ -603,9 +633,12 @@ if __name__ == "__main__":
     test_transport_health_matrix()
     test_run_marker_carries_health_not_counts_only()
     test_quiet_stale_duration_frozen()
+    test_degraded_breaks_quiet_streak()
+    test_pre_epoch_markers_excluded_from_quiet_streak()
+    test_structure_ok_s1_to_s7()
     test_stale_quiet_elevates_run_status()
     test_run_marker_freshness_stale_and_active()
     test_writer_stale_elevates_run_status()
     test_item_id_stable_on_title_change()
     test_entities_on_enrich_and_jsonl()
-    print("OK: tests/test_news_agent 13/13")
+    print("OK: tests/test_news_agent 16/16")

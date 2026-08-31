@@ -60,6 +60,14 @@ def feed_structure_present(root: ET.Element) -> bool:
     return False
 
 
+def _find_child(parent: ET.Element, *tags: str) -> Optional[ET.Element]:
+    for tag in tags:
+        el = parent.find(tag)
+        if el is not None:
+            return el
+    return None
+
+
 def _extract_items(root: ET.Element, source: str) -> List[Dict[str, str]]:
     """Same extraction paths as historical parse_rss_xml (RSS then Atom)."""
     items: List[Dict[str, str]] = []
@@ -84,15 +92,13 @@ def _extract_items(root: ET.Element, source: str) -> List[Dict[str, str]]:
         return items
 
     for entry in root.findall(f".//{_ATOM}entry") or root.findall("./entry"):
-        title = _text(entry.find(f"{_ATOM}title") or entry.find("title"))
-        link_el = entry.find(f"{_ATOM}link") or entry.find("link")
+        title = _text(_find_child(entry, f"{_ATOM}title", "title"))
+        link_el = _find_child(entry, f"{_ATOM}link", "link")
         href = ""
         if link_el is not None:
             href = (link_el.get("href") or "").strip() or _text(link_el)
         summary = _text(
-            entry.find(f"{_ATOM}summary")
-            or entry.find("summary")
-            or entry.find(f"{_ATOM}content")
+            _find_child(entry, f"{_ATOM}summary", "summary", f"{_ATOM}content")
         )[:500]
         if not title and not href:
             continue

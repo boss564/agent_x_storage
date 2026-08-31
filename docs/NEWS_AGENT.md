@@ -14,7 +14,7 @@ make cross-chain-validate     # config/cross_chain_map.json
 make news-agent-once         # Legacy-PoC → logs/audit/news_scores.jsonl
 make news-agent-multi-once   # Multi-Scraper → data/news_scores.jsonl
 make news-agent-cron-enable # genau eine Zeile, Marker # AGENTX_NEWS_AGENT
-make news-agent-cron-status   # muss count=1 unique=1
+make news-agent-cron-status   # launchd/cron + marker_liveness (NEWS_MARKER_MAX_AGE_H)
 make news-agent-cron-disable
 make news-agent-gap-report     # Entity-Lücken → exports/reports/gap_analysis.json
 make news-agent-gap-cron-enable  # optional täglich 00:00, Marker # AGENTX_NEWS_GAP
@@ -48,7 +48,11 @@ Scorer: `keyword_v1` (Lexikon). LLM bleibt optional und unverdrahtet.
 
 ## Host-Cron (nicht Cluster)
 
-`make news-agent-cron-enable` schreibt **eine** crontab-Zeile, identifiziert durch den festen Kommentar `# AGENTX_NEWS_AGENT` (nicht Pfad, nicht Modulname). Unabhängig von `regime-swarm-hourly-rt` (`:14` UTC im Pod). Pfade mit Leerzeichen sind gequotet. `status` prüft `count=1 unique=1`.
+**macOS:** `make news-agent-cron-enable` installiert **LaunchAgent** `com.agentx.news-agent` (stündlich :00, `.venv/bin/python` absolut) — kein User-Cron für News (Sleep/:00-Verpasser). **Linux:** eine crontab-Zeile mit Marker `# AGENTX_NEWS_AGENT`. `status` zeigt `scheduler=launchd` bzw. `count=1 unique=1` und **`marker_liveness`** (`NEWS_MARKER_MAX_AGE_H`, Default **2** h) — automatische Altersprüfung, nicht nur Sichtprüfung.
+
+**Scheduler-Epoche:** `NEWS_SCHEDULER_EPOCH_TS = 2026-08-31T09:00:00+00:00` — erste :00 unter LaunchAgent + `.venv`. Quiet-Streaks und Feed-Qualitätsauswertung ignorieren ältere `run_marker` (Vorlauf inkl. System-Python-TLS → falsch `dead`/`DEGRADED`). Analog `OPTION_B_EXIT_EPOCH_TS` im Paper-WORM.
+
+Unabhängig von `regime-swarm-hourly-rt` (`:14` UTC im Pod). Pfade mit Leerzeichen sind gequotet.
 
 `make satellites-cron-enable` setzt **zwei** Host-Zeilen: News `:00` (`# AGENTX_NEWS_AGENT`) und Preis-Gap `:05` (`# AGENTX_PRICE_GAP` → `data/gap_reports.jsonl` + `docs/SWARM_GAP_ANALYSIS.md`). Der Preis-Cron: `cd` ins Repo, absoluter `{repo}/.venv/bin/python` und absoluter Skriptpfad (Cron-CWD ist `$HOME`). Jeder Lauf schreibt `kind=run_marker` (Invariante Instanz 4). `news-agent-cron-disable` entfernt nur die News-Zeile.
 
