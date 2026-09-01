@@ -22,9 +22,11 @@ Die **Pass/Fail-Regeln** sind hier eingefroren, damit morgen nicht ad-hoc entsch
 
 | Grenze | Wert |
 |--------|------|
-| **Start (Epoche)** | `NEWS_SCHEDULER_EPOCH_TS = 2026-08-31T09:00:00+00:00` |
-| **Gate-Close (Auswertung)** | **2026-09-01T09:00:00+00:00** |
+| **Start (Epoche)** | `NEWS_SCHEDULER_EPOCH_TS` — Timestamp des ersten **autonomen** Scheduler-Markers (`run_marker`, nicht Smoke/Manual). Kanonisch in `services/news_agent/liveness.py` + Gate-Protokoll. |
+| **Gate-Close (Auswertung)** | **Epoche + 24 h** (UTC) |
 | **Dauer** | 24 h |
+
+**Archiv (Mac VOID, nicht für Hetzner):** Erster Lauf `2026-08-31T09:00:00+00:00` → Gate-Close `2026-09-01T09:00:00+00:00` — Fenster ohne post-Epochen-Marker (`launchd` `EX_CONFIG`). Epoche bleibt dokumentiert, zählt nicht für den aktuellen Strang (§8.5).
 
 Zählen nur `run_marker` mit `ts ≥ NEWS_SCHEDULER_EPOCH_TS` (`measurement_run_markers` in `liveness.py`). Vor-Epochen-Marker = Vorlauf, ignorieren.
 
