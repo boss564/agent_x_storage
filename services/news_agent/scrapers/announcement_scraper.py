@@ -10,8 +10,7 @@ from urllib.request import Request, urlopen
 from services.news_agent.models import NewsItem
 from services.news_agent.scrapers.base_scraper import BaseScraper
 from agents_b2g.news.feed_health import feed_report
-
-_USER_AGENT = "agent-x-news/0 (diagnostic_only; no order send)"
+from agents_b2g.news.scraper import http_user_agent
 DEFAULT_BINANCE_URL = (
     "https://www.binance.com/bapi/composite/v1/public/cms/article/catalog/list/query"
     "?catalogId=48&pageNo=1&pageSize=20"
@@ -97,7 +96,7 @@ class AnnouncementScraper(BaseScraper):
                 status=200, bozo=0, entries=n, bozo_exception=None
             )
             return items
-        req = Request(self.url, headers={"User-Agent": _USER_AGENT})
+        req = Request(self.url, headers={"User-Agent": http_user_agent()})
         try:
             with urlopen(req, timeout=15) as resp:
                 status = int(getattr(resp, "status", None) or resp.getcode() or 0) or None

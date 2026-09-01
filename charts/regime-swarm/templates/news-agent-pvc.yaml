@@ -1,0 +1,18 @@
+{{- if and .Values.newsAgent.enabled .Values.newsAgent.persistence.create (not .Values.newsAgent.persistence.existingClaim) }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "regime-swarm.fullname" . }}-news-data
+  labels:
+    {{- include "regime-swarm.labels" . | nindent 4 }}
+    app.kubernetes.io/component: news-agent
+spec:
+  accessModes:
+    {{- toYaml .Values.newsAgent.persistence.accessModes | nindent 4 }}
+  {{- if .Values.newsAgent.persistence.storageClassName }}
+  storageClassName: {{ .Values.newsAgent.persistence.storageClassName | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.newsAgent.persistence.size | quote }}
+{{- end }}

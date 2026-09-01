@@ -22,7 +22,15 @@ DEFAULT_FEEDS = (
 
 _ATOM = "{http://www.w3.org/2005/Atom}"
 _HTML_TAG = re.compile(r"<[^>]+>")
-_USER_AGENT = "agent-x-news/0 (diagnostic_only; no order send)"
+_DEFAULT_USER_AGENT = "agent-x-news/0 (diagnostic_only; no order send)"
+
+
+def http_user_agent() -> str:
+    """Cluster CronJob may set HTTP_USER_AGENT (see NEWS_24H_SCHEDULER_GATE §8.4)."""
+    import os
+
+    raw = os.environ.get("HTTP_USER_AGENT", "").strip()
+    return raw if raw else _DEFAULT_USER_AGENT
 
 
 def item_id(source: str, link: str, title: str) -> str:
@@ -139,7 +147,7 @@ def fetch_feed_report(
     stdlib urlopen (no feedparser): HTTP status ≈ feed.status; ParseError ≈ bozo.
     """
     try:
-        req = Request(url, headers={"User-Agent": _USER_AGENT})
+        req = Request(url, headers={"User-Agent": http_user_agent()})
         with urlopen(req, timeout=timeout_s) as resp:
             status = int(getattr(resp, "status", None) or resp.getcode() or 0) or None
             body = resp.read().decode("utf-8", errors="replace")

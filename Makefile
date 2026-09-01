@@ -247,7 +247,7 @@ test-all:
 	@echo "✅ All test suites complete"
 	@echo "✅ Alle Container, Images und Volumes entfernt"
 
-.PHONY: son-report backup raas-smoke raas-portal raas-swarm-health raas-swarm-inventory-sync raas-swarm-inventory-drift-check
+.PHONY: son-report backup raas-smoke raas-portal raas-swarm-health raas-swarm-inventory-sync raas-swarm-inventory-drift-check news-agent-cluster-build news-agent-cluster-apply news-agent-cluster-disable news-agent-cluster-plumbing news-agent-cluster-pvc-tail
 
 raas-smoke: ## RaaS prototype E2E (upload→stress→certificate, gate sim)
 	PYTHONPATH=. python3 scripts/test_raas_smoke.py
@@ -526,3 +526,44 @@ son-report: ## Regenerate SON report (24h validity for compliance gate)
 
 backup: ## Nightly backup (compose + env + Neo4j dump + retention)
 	bash scripts/backup_agent_x.sh
+
+# News-Agent Cluster CronJob — Phase A (suspend=true; §8.4 NEWS_24H_SCHEDULER_GATE)
+RAAS_NS ?= trading
+NEWS_AGENT_IMAGE_REPO ?= agentx-news-agent
+NEWS_AGENT_IMAGE_TAG ?= phase-a-v1
+
+news-agent-cluster-build: ## Build news-agent image (RSS/announcements, diagnostic_only)
+	docker build -f Dockerfile.news-agent -t $(NEWS_AGENT_IMAGE_REPO):$(NEWS_AGENT_IMAGE_TAG) .
+
+news-agent-cluster-apply: ## Phase A: PVC + CronJob (suspend=true, no autonomous :00)
+	{ helm template regime-swarm charts/regime-swarm \
+		-f charts/regime-swarm/values-news-agent.yaml \
+		--set newsAgent.enabled=true \
+		--set newsAgent.image.repository=$(NEWS_AGENT_IMAGE_REPO) \
+		--set newsAgent.image.tag=$(NEWS_AGENT_IMAGE_TAG) \
+		--show-only templates/news-agent-pvc.yaml; \
+	  helm template regime-swarm charts/regime-swarm \
+		-f charts/regime-swarm/values-news-agent.yaml \
+		--set newsAgent.enabled=true \
+		--set newsAgent.image.repository=$(NEWS_AGENT_IMAGE_REPO) \
+		--set newsAgent.image.tag=$(NEWS_AGENT_IMAGE_TAG) \
+		--show-only templates/news-agent-cronjob.yaml; } \
+		| kubectl apply -n $(RAAS_NS) -f -
+
+news-agent-cluster-disable: ## CronJob + PVC entfernen (Phase A/B teardown)
+	kubectl delete cronjob regime-swarm-news-agent -n $(RAAS_NS) --ignore-not-found
+	kubectl delete pvc regime-swarm-news-data -n $(RAAS_NS) --ignore-not-found
+
+news-agent-cluster-plumbing: ## Phase A manual job (NOT gate epoch — §8.4)
+	@job=news-agent-plumbing-$$(date -u +%Y%m%d%H%M%S); \
+	cronjob=$$(kubectl get cronjob -n $(RAAS_NS) -l app.kubernetes.io/component=news-agent -o jsonpath='{.items[0].metadata.name}' 2>/dev/null); \
+	test -n "$$cronjob" || (echo "FAIL: no news-agent CronJob in namespace $(RAAS_NS)"; exit 1); \
+	kubectl create job "$$job" --from=cronjob/$$cronjob -n $(RAAS_NS); \
+	echo "→ waiting for job $$job …"; \
+	kubectl wait --for=condition=complete "job/$$job" -n $(RAAS_NS) --timeout=300s; \
+	echo "→ logs (run_marker JSON):"; \
+	kubectl logs -n $(RAAS_NS) "job/$$job" | python3 -c "import sys,json; t='\n'.join(l for l in sys.stdin.read().splitlines() if 'RuntimeWarning' not in l and not l.startswith('<frozen')); d=json.loads(t); print(json.dumps(d.get('run_marker',d), indent=2)); feeds=d.get('run_marker',{}).get('feeds',{}); print('--- feed health ---'); [print(f'{k}: health={v.get(\"health\")} status={v.get(\"status\")}') for k,v in feeds.items()]"
+
+news-agent-cluster-pvc-tail: ## Debug: tail PVC (busybox; after plumbing)
+	@echo "PVC regime-swarm-news-data — run after plumbing:"
+	@echo "  kubectl run news-pvc-debug --rm -i --restart=Never -n $(RAAS_NS) --image=busybox:1.36 -- sh -c 'tail -n 5 /data/news_scores.jsonl' --overrides='{\"spec\":{\"volumes\":[{\"name\":\"d\",\"persistentVolumeClaim\":{\"claimName\":\"regime-swarm-news-data\"}}],\"containers\":[{\"name\":\"news-pvc-debug\",\"image\":\"busybox:1.36\",\"stdin\":true,\"tty\":true,\"command\":[\"tail\",\"-n\",\"5\",\"/data/news_scores.jsonl\"],\"volumeMounts\":[{\"name\":\"d\",\"mountPath\":\"/data\"}]}]}}'"

@@ -1,0 +1,63 @@
+{{- if .Values.newsAgent.enabled }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "regime-swarm.fullname" . }}-news-agent
+  labels:
+    {{- include "regime-swarm.labels" . | nindent 4 }}
+    app.kubernetes.io/component: news-agent
+  annotations:
+    agentx.io/gate-phase: {{ ternary "A" "B" .Values.newsAgent.suspend | quote }}
+    agentx.io/gate-note: "Phase A: suspend=true; manual kubectl create job = plumbing only (§8.4)"
+spec:
+  schedule: {{ .Values.newsAgent.schedule | quote }}
+  suspend: {{ .Values.newsAgent.suspend }}
+  concurrencyPolicy: {{ .Values.newsAgent.concurrencyPolicy }}
+  startingDeadlineSeconds: {{ .Values.newsAgent.startingDeadlineSeconds }}
+  successfulJobsHistoryLimit: {{ .Values.newsAgent.successfulJobsHistoryLimit }}
+  failedJobsHistoryLimit: {{ .Values.newsAgent.failedJobsHistoryLimit }}
+  jobTemplate:
+    spec:
+      backoffLimit: {{ .Values.newsAgent.backoffLimit }}
+      ttlSecondsAfterFinished: {{ .Values.newsAgent.ttlSecondsAfterFinished }}
+      template:
+        metadata:
+          labels:
+            {{- include "regime-swarm.selectorLabels" . | nindent 12 }}
+            app.kubernetes.io/component: news-agent
+        spec:
+          restartPolicy: Never
+          {{- with .Values.imagePullSecrets }}
+          imagePullSecrets:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          containers:
+            - name: news-agent
+              image: "{{ .Values.newsAgent.image.repository }}:{{ .Values.newsAgent.image.tag }}"
+              imagePullPolicy: {{ .Values.newsAgent.image.pullPolicy }}
+              env:
+                - name: PYTHONPATH
+                  value: /app
+                - name: HTTP_USER_AGENT
+                  value: {{ .Values.newsAgent.httpUserAgent | quote }}
+                - name: NEWS_AGENT_MULTI_JSONL
+                  value: {{ .Values.newsAgent.jsonlPath | quote }}
+                - name: NEWS_AGENT_TELEGRAM_CRITICAL
+                  value: {{ .Values.newsAgent.telegramCritical | quote }}
+                - name: TZ
+                  value: UTC
+              command:
+                - python3
+                - -m
+                - services.news_agent.runner
+                - --once
+              volumeMounts:
+                - name: news-data
+                  mountPath: /app/data
+              resources:
+                {{- toYaml .Values.newsAgent.resources | nindent 16 }}
+          volumes:
+            - name: news-data
+              persistentVolumeClaim:
+                claimName: {{ .Values.newsAgent.persistence.existingClaim | default (printf "%s-news-data" (include "regime-swarm.fullname" .)) }}
+{{- end }}

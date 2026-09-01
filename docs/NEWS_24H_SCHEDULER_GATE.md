@@ -372,18 +372,23 @@ make news-agent-cron-status
 ```text
 Phase A — Plumbing (jetzt, ohne 24h-Warten):
     CronJob-Manifest deployen (eigene Ressource, nicht regime-swarm-0)
+      suspend: true              # Schedule feuert NICHT — nur manueller Job
       concurrencyPolicy: Forbid
       startingDeadlineSeconds: sinnvoll gesetzt (K8s-Skip ≠ launchd-Nachholen)
-    kubectl create job …  (manueller Einmal-Job)
-    prüfen: Job exit 0, run_marker auf PVC, Konsument kann lesen
+    kubectl create job …  (manueller Einmal-Job — funktioniert auch bei suspend: true)
+    prüfen: Job exit 0, run_marker auf PVC (kubectl logs zeigt run_marker-JSON)
+      oder Debug-Pod: PVC mount + tail news_scores.jsonl
     → startet NICHT das Gate, setzt NICHT die Epoche
 
 Phase B — Gate (erfordert Warten):
-    CronJob feuert AUTONOM um :00 (kein create job, kein kickstart)
+    suspend: false — CronJob feuert AUTONOM um :00 (kein create job, kein kickstart)
     prüfen: Job-Name vom CronJob-Controller, run_marker ts ≈ :00
     ERST DANN NEWS_SCHEDULER_EPOCH_TS = dieser autonome Marker
     → frisches 24h-Fenster ab Epoche (gleiche G1–G3-Intention, kein sleep_h)
 ```
+
+**Manifest:** `charts/regime-swarm/templates/news-agent-cronjob.yaml` · `values-news-agent.yaml` · `Dockerfile.news-agent`  
+**Phase A Make:** `make news-agent-cluster-build` → `news-agent-cluster-apply` → `news-agent-cluster-plumbing`
 
 | Trigger | Erlaubt für | Verboten für |
 |---------|-------------|--------------|

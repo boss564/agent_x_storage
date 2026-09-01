@@ -1,0 +1,43 @@
+# News-Agent Cluster CronJob — Phase A (plumbing only)
+#
+# Phase A: newsAgent.suspend=true — schedule does NOT fire; manual kubectl create job only.
+# Phase B: suspend=false — first autonomous :00 becomes NEWS_SCHEDULER_EPOCH_TS anchor.
+#
+# Usage (Phase A):
+#   make news-agent-cluster-build
+#   kind load docker-image agentx-news-agent:phase-a-v1 --name regime-shadow
+#   make news-agent-cluster-apply RAAS_NS=trading
+#   make news-agent-cluster-plumbing RAAS_NS=trading
+
+newsAgent:
+  enabled: false
+  # Phase A: true (no autonomous :00). Phase B gate: false.
+  suspend: true
+  schedule: "0 * * * *"
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 300
+  successfulJobsHistoryLimit: 24
+  failedJobsHistoryLimit: 6
+  ttlSecondsAfterFinished: 86400
+  backoffLimit: 0
+  jsonlPath: /app/data/news_scores.jsonl
+  httpUserAgent: agent-x-news/0
+  telegramCritical: "false"
+  image:
+    repository: agentx-news-agent
+    tag: phase-a-v1
+    pullPolicy: IfNotPresent
+  persistence:
+    create: true
+    existingClaim: ""
+    storageClassName: ""
+    accessModes:
+      - ReadWriteOnce
+    size: 1Gi
+  resources:
+    limits:
+      cpu: 300m
+      memory: 256Mi
+    requests:
+      cpu: 50m
+      memory: 128Mi

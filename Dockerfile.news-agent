@@ -1,0 +1,37 @@
+# News-Agent — hourly RSS/announcement ingest (diagnostic_only; no order send)
+#
+# Build:
+#   docker build -f Dockerfile.news-agent -t agentx-news-agent:phase-a-v1 .
+#
+# Run (local smoke):
+#   docker run --rm -v "$(pwd)/data:/app/data" -e HTTP_USER_AGENT=agent-x-news/0 \
+#     agentx-news-agent:phase-a-v1
+
+FROM python:3.11-slim
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    tzdata \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY services/__init__.py ./services/
+COPY services/news_agent/ ./services/news_agent/
+COPY agents_b2g/__init__.py ./agents_b2g/
+COPY agents_b2g/news/ ./agents_b2g/news/
+COPY config/cross_chain_map.json ./config/
+COPY scripts/raas_alert.py ./scripts/
+COPY scripts/telegram_alert.py ./scripts/
+
+RUN mkdir -p /app/data
+
+RUN python3 -c "from services.news_agent.runner import run_once; print('news_agent import ok')"
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    TZ=UTC \
+    PYTHONPATH=/app \
+    NEWS_AGENT_MULTI_JSONL=/app/data/news_scores.jsonl \
+    HTTP_USER_AGENT=agent-x-news/0
+
+ENTRYPOINT ["python3", "-m", "services.news_agent.runner"]
