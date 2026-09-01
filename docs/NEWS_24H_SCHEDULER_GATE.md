@@ -357,13 +357,40 @@ make news-agent-cron-status
 
 | # | Schritt | Gate |
 |---|---------|------|
-| 1 | **Egress** — `curl` aus Pod zu CoinDesk + Cointelegraph RSS | Rot → Umzug trägt nicht; keine weitere Arbeit |
-| 2 | Scope: eigene CronJob-Ressource + **Datenfluss** (`news_scores.jsonl` → Shadow Evaluator) | Architektur geklärt |
-| 3 | CronJob deployen → `:00`-Proof im Cluster (exit 0, `run_marker`) | wie §8.2 |
-| 4 | **Neues Gate** auf Cluster — Kriterien unverändert, **ohne** Sleep-Überbau: `hours_awake=24`, `n_min=20`, G2 ohne Sleep-Overlap, kein G4-pmset | kein Erlass |
-| 5 | PASS → Shadow Evaluator Live-Lauf | unverändert |
+| 1 | **Egress** — HTTP aus Pod zu CoinDesk + Cointelegraph RSS **mit Scraper-UA** `agent-x-news/0` (nicht nacktes `curl`; Pod hat oft kein `curl`) | Rot → Umzug trägt nicht |
+| 2 | Scope: **eigene** CronJob-Ressource + **Datenfluss** (Shared PVC `news_scores.jsonl`; Shadow Evaluator **erst nach** Cluster-Gate PASS — kein Deployment in Phase A) | Architektur geklärt |
+| 3 | §8.4 **Phase A** Plumbing, dann **Phase B** autonomes `:00` | siehe unten |
+| 4 | **Neues Gate** auf Cluster — `hours_awake=24`, `n_min=20`, G2 ohne Sleep-Overlap, **kein** G4-pmset; Gap-Semantik an K8s anpassen (`startingDeadlineSeconds`, `concurrencyPolicy: Forbid`) | kein Erlass |
+| 5 | PASS → Shadow Evaluator erster Live-Lauf (Host-Skript oder später K8s-Deployment — **nach** Gate) | unverändert |
 
-**Shadow Evaluator:** erst Live-Lauf nach **sauberem** Gate PASS (unverändert).
+**Nicht verwechseln:** Binance-**WS**-Ausfall (Lab-Listener) ≠ News-**HTTP/RSS**-Egress (grün mit UA).
+
+### 8.4 Cluster — Phase A (Plumbing) vs. Phase B (Gate-Beweis)
+
+**`kubectl create job --from=cronjob/…` ist der Mac-`kickstart` in K8s-Form** — beweist Verdrahtung, **nicht** Scheduler-Zuverlässigkeit. Marker eines manuellen Jobs **zählen nicht** für G1 und dürfen **nicht** `NEWS_SCHEDULER_EPOCH_TS` setzen.
+
+```text
+Phase A — Plumbing (jetzt, ohne 24h-Warten):
+    CronJob-Manifest deployen (eigene Ressource, nicht regime-swarm-0)
+      concurrencyPolicy: Forbid
+      startingDeadlineSeconds: sinnvoll gesetzt (K8s-Skip ≠ launchd-Nachholen)
+    kubectl create job …  (manueller Einmal-Job)
+    prüfen: Job exit 0, run_marker auf PVC, Konsument kann lesen
+    → startet NICHT das Gate, setzt NICHT die Epoche
+
+Phase B — Gate (erfordert Warten):
+    CronJob feuert AUTONOM um :00 (kein create job, kein kickstart)
+    prüfen: Job-Name vom CronJob-Controller, run_marker ts ≈ :00
+    ERST DANN NEWS_SCHEDULER_EPOCH_TS = dieser autonome Marker
+    → frisches 24h-Fenster ab Epoche (gleiche G1–G3-Intention, kein sleep_h)
+```
+
+| Trigger | Erlaubt für | Verboten für |
+|---------|-------------|--------------|
+| `kubectl create job` (manuell) | Phase A Plumbing | Epoche, G1-Zählung, Gate-Start |
+| CronJob-Controller `:00` (autonom) | Phase B, Epoche, 24h-Gate | — |
+
+**Shadow Evaluator:** erst Live-Lauf nach **sauberem** Cluster-Gate PASS (unverändert).
 
 ---
 
