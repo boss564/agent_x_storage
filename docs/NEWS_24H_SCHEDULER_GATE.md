@@ -347,6 +347,22 @@ make news-agent-cron-status
 
 **Epoche:** `NEWS_SCHEDULER_EPOCH_TS` = **exakter** Timestamp des ersten bewiesenen `:00`-Scheduler-Markers (nicht „jetzt", nicht willkürlich). Alte Epoche `2026-08-31T09:00Z` bleibt **VOID/archiviert**.
 
+### 8.3 Plattform-Wechsel Cluster (nach Fenster W — kein Goalpost-Move)
+
+**Befund:** Zwei Ausfallmodi sind Laptop-Eigenschaften (Sleep, APFS/Mount/GUI-Session), keine Bugs. Ein Host-Gate misst mit `sleep_h`/pmset primär **Wachzeit**, nicht Scheduler-Zuverlässigkeit. **Kriterien bleiben** (`run_marker`, Liveness, G1–G4-Intention); nur der **Zeitgeber** wechselt (LaunchAgent → **eigener** Cluster-CronJob, nicht in `regime-swarm-0` verflochten).
+
+**Heute (Host):** §8.2 `:00`-Proof nur als **Pfad-Diagnose** — danach **kein** neues 24h-Fenster auf dem Host.
+
+**Reihenfolge Cluster (Go/No-Go):**
+
+| # | Schritt | Gate |
+|---|---------|------|
+| 1 | **Egress** — `curl` aus Pod zu CoinDesk + Cointelegraph RSS | Rot → Umzug trägt nicht; keine weitere Arbeit |
+| 2 | Scope: eigene CronJob-Ressource + **Datenfluss** (`news_scores.jsonl` → Shadow Evaluator) | Architektur geklärt |
+| 3 | CronJob deployen → `:00`-Proof im Cluster (exit 0, `run_marker`) | wie §8.2 |
+| 4 | **Neues Gate** auf Cluster — Kriterien unverändert, **ohne** Sleep-Überbau: `hours_awake=24`, `n_min=20`, G2 ohne Sleep-Overlap, kein G4-pmset | kein Erlass |
+| 5 | PASS → Shadow Evaluator Live-Lauf | unverändert |
+
 **Shadow Evaluator:** erst Live-Lauf nach **sauberem** Gate PASS (unverändert).
 
 ---
