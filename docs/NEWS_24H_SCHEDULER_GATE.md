@@ -2,6 +2,7 @@
 
 **Status:** FROZEN (2026-08-31) — Bestehenskriterien **vor** Auswertung festgelegt  
 **Amendment A1 (2026-08-31, vor Gate-Close):** G1 absolut `≥ 20` → **relativ** `n_markers ≥ floor(hours_awake × 0.85)` — Messkorrektur (Widerspruch zu §2 Sleep-Semantik), **kein** HARKing nach Datenblick.  
+**Amendment A2 (2026-09-01, vor Hetzner-Epoche):** G4 auf Linux — `pmset` entfällt; **`downtime_h`** aus Neustart-Lücken (`journalctl`/`uptime`) ersetzt **`total_sleep_h`**. A1-Anker bei `downtime_h=0` → `n_min=20` unverändert. **Kein** HARKing nach Datenblick.  
 **Erstellt:** 2026-08-31  
 **Strang:** Host-Scheduler + `run_marker`-Liveness (Instanz 3) — **kein** Cluster, **kein** Code in diesem Gate  
 **Parent:** [`NEWS_AGENT.md`](NEWS_AGENT.md) · [`NEWS_FEED_STRUCTURE_PREREG.md`](NEWS_FEED_STRUCTURE_PREREG.md) · [`AUDIT_WRITER_LIVENESS.md`](AUDIT_WRITER_LIVENESS.md)  
@@ -52,17 +53,18 @@ Alle **vier** Bedingungen müssen zur Gate-Close-Zeit erfüllt sein.
 
 ### G1 — Marker-Anzahl (**relativ zu wacher Laufzeit**, A1)
 
-G4 (`total_sleep_h`) muss **vor** G1 bekannt sein (Sleep-Protokoll zuerst).
+G4 (`total_sleep_h` **macOS** / `downtime_h` **Linux** — §8.5.2 A2) muss **vor** G1 bekannt sein (Betriebszeit-Protokoll zuerst).
 
 ```text
-hours_awake     = 24 − total_sleep_h          # Beobachtungsfenster §1
-n_min           = max(1, floor(hours_awake × 0.85))
+hours_awake     = 24 − total_sleep_h          # macOS (LaunchAgent + Sleep)
+hours_up        = 24 − downtime_h             # Linux/Hetzner (Neustart-Lücken) — §8.5.2
+n_min           = max(1, floor(hours_awake × 0.85))   # bzw. hours_up auf Linux
 n_markers_post_epoch ≥ n_min
 ```
 
 `n_markers_post_epoch` = Anzahl `run_marker` mit `ts ∈ [NEWS_SCHEDULER_EPOCH_TS, GATE_CLOSE]`.
 
-**Anker (A1, keine Lockerung):** Bei `total_sleep_h = 0` gilt `n_min = floor(24 × 0,85) = 20` — **identisch** zur ursprünglichen absoluten Schwelle. A1 macht die 20 schlafabhängig statt fix; wer später „nach Datenblick weichgemacht?“ fragt, findet die Antwort in dieser Zeile.
+**Anker (A1, keine Lockerung):** Bei `total_sleep_h = 0` (macOS) bzw. `downtime_h = 0` (Linux, A2) gilt `n_min = floor(24 × 0,85) = 20` — **identisch** zur ursprünglichen absoluten Schwelle.
 
 **Beispiel (ein Nacht-Sleep-Block):** `sleep_h = 7.5` → `hours_awake = 16.5` → `n_min = 14`. Erwartung ~17 Marker (16× :00 + 1 Nachhol) — **PASS**, nicht FAIL.
 
@@ -81,7 +83,8 @@ Zwischen zwei aufeinanderfolgenden post-Epochen-Markern, **nur** Intervalle, die
 ```text
 gap_i = ts(marker_{i+1}) − ts(marker_i)
 sleep_union = Vereinigung(sleep_intervals)    # disjunkte Blöcke — kein Doppel-Overlap
-gap_awake_i = max(0, gap_i − overlap(gap_i, sleep_union))
+gap_awake_i = max(0, gap_i − overlap(gap_i, sleep_union))   # macOS
+gap_awake_i = max(0, gap_i − overlap(gap_i, downtime_union)) # Linux — §8.5.2
 max_gap_awake = max(gap_awake_i)
 ```
 
@@ -96,19 +99,26 @@ marker_liveness.age_s ≤ NEWS_MARKER_MAX_AGE_S   (Default 2 h)
 
 Prüfung: `make news-agent-cron-status` unmittelbar vor/nach Gate-Close.
 
-### G4 — Sleep-Protokoll (Pflicht-Anhang)
+### G4 — Betriebszeit-Protokoll (Pflicht-Anhang)
 
-Auswertung **muss** eine Sleep-Notiz enthalten (eine Zeile reicht):
+**Plattform:**
 
-| Feld | Inhalt |
-|------|--------|
-| `sleep_intervals` | Liste `[{start_utc, end_utc}, …]` oder `none` |
-| `sleep_source` | **`pmset`** (bevorzugt, maschinenlesbar) oder **`manual`** (nur Fallback) |
-| `total_sleep_h` | Summe im Beobachtungsfenster — **gemessen**, nicht geschätzt |
+| Plattform | Mechanik | `sleep_source` / `boot_source` |
+|-----------|----------|--------------------------------|
+| **macOS** (§2, Host) | `total_sleep_h` aus `pmset -g log` | `pmset` (bevorzugt) oder `manual` |
+| **Linux** (§8.5 Hetzner, A2) | `downtime_h` aus Neustart-Lücken | `journalctl` (bevorzugt) oder `uptime` / `manual` |
 
-**Herkunft `total_sleep_h`:** `pmset -g log` liefert Sleep-/Wake-Zeitstempel; Ableitung via [`scripts/news_24h_sleep_from_pmset.py`](../scripts/news_24h_sleep_from_pmset.py). **Manuell** nur wenn pmset im Fenster unvollständig ist — dann `sleep_source=manual` in der Ergebniszeile **Pflicht**. Überschätzung von `sleep_h` senkt `n_min` (weicher Nenner) — deshalb pmset vor Handeingabe.
+Auswertung **muss** eine Betriebszeit-Notiz enthalten (eine Zeile reicht):
 
-**pmset-Rotation (A1):** Reicht das Log **nicht** über das volle Gate-Fenster zurück, wird Schlaf **unter**erfasst, `n_min` steigt, G1 könnte fälschlich FAIL — konservativ, aber teuer. Das Skript prüft die Abdeckung (`pmset_earliest ≤ epoch`, `pmset_latest ≈ gate_close`); bei Lücke: **`status=INCOMPLETE`**, **keine** still gekürzte `sleep_h` für G1. Ergebniszeile z. B. `NEWS_24H_GATE=INCOMPLETE pmset_coverage=insufficient …` — dann G4 per `sleep_source=manual` mit dokumentierten Intervallen nachziehen.
+| Feld | macOS | Linux (A2) |
+|------|-------|------------|
+| Intervalle | `sleep_intervals` | `downtime_intervals` (Boot-Lücken) |
+| Quelle | `sleep_source` | `boot_source` |
+| Summe | `total_sleep_h` | `downtime_h` |
+
+**Herkunft macOS:** [`scripts/news_24h_sleep_from_pmset.py`](../scripts/news_24h_sleep_from_pmset.py). **Linux:** `journalctl --list-boots`, `uptime -s` — siehe §8.5.2.
+
+**pmset-Rotation (macOS, A1):** Reicht das Log **nicht** über das volle Gate-Fenster zurück → **`status=INCOMPLETE`**. **journalctl-Lücke (Linux, A2):** analog — keine still gekürzte `downtime_h`.
 
 Ohne G4: Auswertung **unvollständig** — kein PASS, auch wenn G1–G3 grün (Lücken nicht attributierbar).
 
@@ -121,7 +131,7 @@ Ohne G4: Auswertung **unvollständig** — kein PASS, auch wenn G1–G3 grün (L
 | **F1** | `n_markers_post_epoch < n_min` (G1 A1, nach G4 `total_sleep_h`) | **FAIL** |
 | **F2** | `max_gap_awake_s > 10_800` | **FAIL** |
 | **F3** | Gate-Close: `marker_liveness` ∈ {`MISSING`, `STALE`, `UNPARSEABLE`} | **FAIL** |
-| **F4** | Kein Sleep-Protokoll (G4) oder pmset-Log deckt Gate-Fenster nicht ab (`pmset_coverage=insufficient`) | **INCOMPLETE** (nicht PASS) |
+| **F4** | Kein Betriebszeit-Protokoll (G4): macOS `pmset_coverage=insufficient`; Linux `journal_coverage=insufficient` (A2) | **INCOMPLETE** (nicht PASS) |
 | **F5** | Post-Epochen-Marker mit durchgehend `dead`/`DEGRADED` ohne Recovery | **FAIL** (Scheduler ok, Feed/Transport nicht — separates Ticket) |
 
 **F5** ist **nicht** Teil von G1–G3, aber blockiert Freigabe „Scheduler + Feed gesund“. Mindestens ein Lauf mit allen Quellen `ok` oder `quiet` (nicht `dead`) nach Epoche.
@@ -476,10 +486,48 @@ tail -3 /root/agent_x_storage/logs/audit/news_cron.log
 
 **Epoche:** `NEWS_SCHEDULER_EPOCH_TS` = Timestamp des ersten **Cron**-Markers (nicht Smoke aus SSH). Phase-A-/Cluster-Test-Marker davor = Vorlauf.
 
+#### 8.5.2 G4-Linux (Amendment A2 — vor Epoche, **kein** pmset)
+
+**Problem:** §5/`news_24h_sleep_from_pmset.py` sind macOS-only. Hetzner-Gate ohne A2 → G4 immer **INCOMPLETE** — Gate nie PASS, unabhängig von Markerzahl.
+
+**Äquivalenz:** Auf einem Server gibt es kein Sleep — **Neustart** ist die einzige Größe, die Markerzahl legitim senkt (Cron läuft nicht während der Maschine down ist).
+
+```text
+downtime_h        = Σ Neustart-Lücken im Fenster [EPOCH, GATE_CLOSE]
+hours_up          = 24 − downtime_h
+n_min             = max(1, floor(hours_up × 0.85))
+boot_source       = journalctl | uptime
+```
+
+**Anker (A1+A2):** `downtime_h = 0` (durchgehend up) → `hours_up = 24` → **`n_min = 20`** — identisch zum eingefrorenen A1-Anker bei `total_sleep_h = 0`.
+
+**G2:** `downtime_union` ersetzt `sleep_union` bei `gap_awake`-Berechnung (Lücken während Reboot zählen nicht als Scheduler-Fehler).
+
+**Messung (bevorzugt `journalctl`):**
+
+```bash
+uptime -s
+journalctl --list-boots
+# Boot-Grenzen im Gate-Fenster → downtime_intervals → downtime_h
+```
+
+| Feld | Inhalt |
+|------|--------|
+| `downtime_intervals` | `[{start_utc, end_utc}, …]` oder `none` |
+| `boot_source` | `journalctl` (bevorzugt), `uptime`, oder `manual` (Fallback) |
+| `downtime_h` | Summe im Beobachtungsfenster — **gemessen**, nicht geschätzt |
+
+**Ergebniszeile (Beispiel):** `NEWS_24H_GATE=… boot_source=journalctl downtime_h=0.00 hours_up=24.00 n_min=20 …`
+
+**Coverage:** Journal muss das Fenster ab Epoche abdecken; sonst `journal_coverage=insufficient` → **INCOMPLETE** (wie pmset auf macOS), dann `boot_source=manual` mit dokumentierten Intervallen.
+
+**Nicht:** `pmset` auf Linux erzwingen oder G4 weglassen — beides würde das Gate strukturell unmöglich machen.
+
 ---
 
 ## Siehe auch
 
 - [`docs/PAPER_SIZING_PREREG.md`](PAPER_SIZING_PREREG.md) — Strang B, Gate n≥50
-- [`scripts/news_24h_sleep_from_pmset.py`](../scripts/news_24h_sleep_from_pmset.py) — G4 `total_sleep_h` aus `pmset -g log`
+- [`scripts/news_24h_sleep_from_pmset.py`](../scripts/news_24h_sleep_from_pmset.py) — G4 `total_sleep_h` (macOS)
+- §8.5.2 — G4 `downtime_h` (Linux/Hetzner, A2)
 - [`scripts/news_agent_host_cron.py`](../scripts/news_agent_host_cron.py) — LaunchAgent-Plist
