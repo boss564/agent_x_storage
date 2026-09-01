@@ -2,7 +2,7 @@
 
 **Status:** FROZEN (2026-08-31) — Bestehenskriterien **vor** Auswertung festgelegt  
 **Amendment A1 (2026-08-31, vor Gate-Close):** G1 absolut `≥ 20` → **relativ** `n_markers ≥ floor(hours_awake × 0.85)` — Messkorrektur (Widerspruch zu §2 Sleep-Semantik), **kein** HARKing nach Datenblick.  
-**Amendment A2 (2026-09-01, vor Hetzner-Epoche):** G4 auf Linux — `pmset` entfällt; **`downtime_h`** aus Neustart-Lücken (`journalctl`/`uptime`) ersetzt **`total_sleep_h`**. A1-Anker bei `downtime_h=0` → `n_min=20` unverändert. **Kein** HARKing nach Datenblick.  
+**Amendment A2 (2026-09-01, vor Hetzner-Epoche):** G4 auf Linux — `pmset` entfällt; **`downtime_h`** aus Neustart-Lücken (`uptime -s` führend, `journalctl` ergänzend) ersetzt **`total_sleep_h`**. A1-Anker bei `downtime_h=0` → `n_min=20` unverändert. **Kein** HARKing nach Datenblick.  
 **Erstellt:** 2026-08-31  
 **Strang:** Host-Scheduler + `run_marker`-Liveness (Instanz 3) — **kein** Cluster, **kein** Code in diesem Gate  
 **Parent:** [`NEWS_AGENT.md`](NEWS_AGENT.md) · [`NEWS_FEED_STRUCTURE_PREREG.md`](NEWS_FEED_STRUCTURE_PREREG.md) · [`AUDIT_WRITER_LIVENESS.md`](AUDIT_WRITER_LIVENESS.md)  
@@ -503,23 +503,42 @@ boot_source       = journalctl | uptime
 
 **G2:** `downtime_union` ersetzt `sleep_union` bei `gap_awake`-Berechnung (Lücken während Reboot zählen nicht als Scheduler-Fehler).
 
-**Messung (bevorzugt `journalctl`):**
+**Vorab (einmal pro Host):** Journal-Persistenz klären — sonst droht falsches FAIL mit falscher Ursache:
+
+```bash
+ls -d /var/log/journal    # vorhanden → persistent; fehlt → nur RAM-Journal
+grep ^Storage /etc/systemd/journald.conf
+```
+
+Ohne `/var/log/journal` (`Storage` nicht persistent) verliert `journalctl` Vorgänger-Boots nach Neustart → `--list-boots` zeigt nur den aktuellen Boot → `downtime_h = 0` obwohl Neustart im Fenster → fehlende Marker werden dem **Scheduler** zugeschrieben. **Gleiche Fehlerklasse** wie abgeschnittenes pmset — nur umgekehrt begründet.
+
+**Mess-Hierarchie (A2.1):**
+
+| Signal | Rolle | Belastbarkeit |
+|--------|-------|----------------|
+| **`uptime -s`** | **führend** — Boot-Zeitpunkt | Liegt Boot **in** `[EPOCH, GATE_CLOSE]` → Neustart **ja**, unabhängig vom Journal |
+| `journalctl --list-boots` | Ergänzung — Lückenlänge / mehrere Boots | Nur belastbar bei persistentem Journal; sonst max. „Neustart ja/nein" via `uptime -s` |
+| `boot_source=manual` | Fallback | Rohausgabe **Pflicht** (s. unten) |
 
 ```bash
 uptime -s
 journalctl --list-boots
-# Boot-Grenzen im Gate-Fenster → downtime_intervals → downtime_h
+# persistent: Boot-Grenzen → downtime_intervals → downtime_h
+# volatile:   uptime -s in Fenster? → Neustart ja; Dauer nur wenn anderweitig belegt
 ```
 
 | Feld | Inhalt |
 |------|--------|
 | `downtime_intervals` | `[{start_utc, end_utc}, …]` oder `none` |
-| `boot_source` | `journalctl` (bevorzugt), `uptime`, oder `manual` (Fallback) |
+| `boot_source` | `uptime`+`journalctl`, `uptime` allein, oder `manual` (Fallback) |
 | `downtime_h` | Summe im Beobachtungsfenster — **gemessen**, nicht geschätzt |
+| `journal_persistent` | `true` / `false` (aus `ls -d /var/log/journal`) |
 
-**Ergebniszeile (Beispiel):** `NEWS_24H_GATE=… boot_source=journalctl downtime_h=0.00 hours_up=24.00 n_min=20 …`
+**Ergebniszeile (Beispiel):** `NEWS_24H_GATE=… boot_source=uptime+journalctl journal_persistent=true downtime_h=0.00 hours_up=24.00 n_min=20 …`
 
-**Coverage:** Journal muss das Fenster ab Epoche abdecken; sonst `journal_coverage=insufficient` → **INCOMPLETE** (wie pmset auf macOS), dann `boot_source=manual` mit dokumentierten Intervallen.
+**Manueller Weg (bis Skript existiert):** Ergebnisdokument enthält **nicht nur** `downtime_h=…`, sondern die **Rohausgabe** von `uptime -s` und `journalctl --list-boots` (copy-paste). `boot_source=manual` trägt den Nachweis bei sich — Ableitung ohne Werkzeug nachvollziehbar.
+
+**Coverage:** Bei persistentem Journal muss `--list-boots` das Fenster ab Epoche abdecken; sonst `journal_coverage=insufficient` → **INCOMPLETE**. Bei volatilem Journal: `uptime -s` + dokumentierte Boot-Lücke (Rohausgabe); Dauer ohne Journal nur mit explizitem Beleg.
 
 **Nicht:** `pmset` auf Linux erzwingen oder G4 weglassen — beides würde das Gate strukturell unmöglich machen.
 
