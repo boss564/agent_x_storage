@@ -48,7 +48,7 @@ Scorer: `keyword_v1` (Lexikon). LLM bleibt optional und unverdrahtet.
 
 ## Host-Cron (nicht Cluster)
 
-**macOS:** `make news-agent-cron-enable` installiert **LaunchAgent** `com.agentx.news-agent` (stündlich :00, `.venv/bin/python` absolut) — kein User-Cron für News (Sleep/:00-Verpasser). **Linux:** eine crontab-Zeile mit Marker `# AGENTX_NEWS_AGENT`. `status` zeigt `scheduler=launchd` bzw. `count=1 unique=1` und **`marker_liveness`** (`NEWS_MARKER_MAX_AGE_H`, Default **2** h) — automatische Altersprüfung, nicht nur Sichtprüfung.
+**macOS:** `make news-agent-cron-enable` installiert **LaunchAgent** `com.agentx.news-agent` (stündlich :00, `.venv/bin/python` absolut) — kein User-Cron für News (Sleep/:00-Verpasser). **Linux (Hetzner):** Cron mit `cd`, `PYTHONPATH=.`, absolutem `venv/bin/python`, `--once` — siehe [`NEWS_24H_SCHEDULER_GATE.md`](NEWS_24H_SCHEDULER_GATE.md) §8.5. **Cluster:** eigener CronJob — §8.4.
 
 **Scheduler-Epoche:** `NEWS_SCHEDULER_EPOCH_TS = 2026-08-31T09:00:00+00:00` — erste :00 unter LaunchAgent + `.venv`. Quiet-Streaks und Feed-Qualitätsauswertung ignorieren ältere `run_marker` (Vorlauf inkl. System-Python-TLS → falsch `dead`/`DEGRADED`). Analog `OPTION_B_EXIT_EPOCH_TS` im Paper-WORM.
 

@@ -397,6 +397,85 @@ Phase B — Gate (erfordert Warten):
 
 **Shadow Evaluator:** erst Live-Lauf nach **sauberem** Cluster-Gate PASS (unverändert).
 
+### 8.5 Hetzner-Host (Produzent-Umzug — Vor Epoche **BLOCKING**)
+
+**Befund:** Sleep, versiegelte Volumes und GUI-Sessions entfallen — der Umzug beseitigt die Host-Ursache, nicht nur Symptome. **Gate-Intention unverändert** (`run_marker`, Liveness, G1–G3); **Zeitgeber** = Linux-Cron auf `65.108.246.89`, Daten: `/root/agent_x_storage/data/news_scores.jsonl`.
+
+#### V1 — Verbraucher-Kopplung (**entschieden: Co-Location Hetzner**)
+
+**Kanonisch (Option A):** Produzent und Gate-Konsument auf **demselben Host** (`65.108.246.89`, lokale NVMe).
+
+```text
+[ Hetzner ]
+  Cron (:00) → news_agent → /root/agent_x_storage/data/news_scores.jsonl
+  Cron/systemd → shadow_evaluator → liest dieselbe Datei (Direct Read)
+[ Mac Studio TUI ] → passives Monitoring (SSH tail / rsync) — kein Gate-Konsument
+```
+
+| Rolle | Standort | Pfad / Zugriff |
+|-------|----------|----------------|
+| **News-Agent (Produzent)** | Hetzner | schreibt `data/news_scores.jsonl` |
+| **Shadow Evaluator** | Hetzner (nach G1 PASS) | liest `/root/agent_x_storage/data/news_scores.jsonl` lokal |
+| **TUI / Monitoring** | Mac | `ssh … tail` oder rsync — **nicht** für Gate-Bewertung |
+| **Kind-Cluster CronJob** | Lab (Phase A/B) | separater Pfad; nicht mit Hetzner-Gate vermischen |
+
+**Regel:** Hetzner-G1-PASS zählt nur mit Co-Location — kein Mac-/Cluster-Leser als Gate-Konsument.
+
+#### V2 — Cron-Umgebung (Linux ≠ interaktive Shell)
+
+Cron: minimales `PATH`, kein `PYTHONPATH`, CWD oft `$HOME`. Crontab **absolut** + explizit:
+
+```cron
+0 * * * * cd /root/agent_x_storage && PYTHONPATH=. /root/agent_x_storage/venv/bin/python -m services.news_agent.runner --once >> /root/agent_x_storage/logs/audit/news_cron.log 2>&1
+```
+
+| Pflicht | Warum |
+|---------|--------|
+| `cd /root/agent_x_storage` | relative Pfade (`data/`, `config/`) |
+| `PYTHONPATH=.` | Modul-Import ohne System-Python-Falle |
+| absoluter `venv/bin/python` | nicht `/usr/bin/python3` |
+| `--once` | kein Loop im Cron-Kontext |
+
+Smoke aus interaktiver SSH-Shell beweist **nicht** Cron — erst Marker **nach** erstem Cron-`:00` + Syslog (unten).
+
+#### V3 — Git-Governance (Single Source of Truth)
+
+```text
+[ Mac Dev ] ──git commit & push──► [ origin/main ] ──git pull──► [ Hetzner Production ]
+```
+
+| Schicht | Kanonisch | Regel |
+|---------|-----------|--------|
+| **Code** | `origin/main` (Git) | Hetzner **PULL-ONLY** — nie editieren/mergen/pushen auf dem Server |
+| **Laufzeit-Daten** | Hetzner `/root/agent_x_storage/data/` | Produzent; jeder Zustand = Commit-SHA nach `git pull` |
+| **Hetzner** | Execution Target | Reproduzierbarkeit vor Epochenstart |
+
+#### 8.5.1 :00-Proof Linux (Analog §8.2 — Daemon-Beweis)
+
+**Kein** manueller `runner`-Aufruf für Epochen-Anker. Nach erstem vollem `:00`:
+
+```bash
+# 1) Cron-Daemon (nicht interaktive Shell)
+journalctl -u cron --since "5 minutes ago" | grep -i news_agent
+# Alternativ:
+grep CRON /var/log/syslog | tail -10
+
+# 2) WORM-Marker
+tail -n 2 /root/agent_x_storage/data/news_scores.jsonl
+
+# 3) Log exit 0 (optional)
+tail -3 /root/agent_x_storage/logs/audit/news_cron.log
+```
+
+| Check | Erwartung |
+|-------|-----------|
+| `run_marker` `ts` | ≈ volle `:00` UTC |
+| `feeds.*.health` | `ok`, `status` 200 |
+| `syslog` CRON | Eintrag zum gleichen Zeitfenster |
+| `marker_liveness` | ACTIVE (`age_s < 2h`) |
+
+**Epoche:** `NEWS_SCHEDULER_EPOCH_TS` = Timestamp des ersten **Cron**-Markers (nicht Smoke aus SSH). Phase-A-/Cluster-Test-Marker davor = Vorlauf.
+
 ---
 
 ## Siehe auch

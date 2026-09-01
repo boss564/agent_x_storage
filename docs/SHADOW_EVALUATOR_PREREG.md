@@ -158,7 +158,7 @@ Keine Felder: `advisory_position_size`, `recommended_units`, `should_trade`.
 | Stufe | Bedingung | Aktion |
 |-------|-----------|--------|
 | **G0** | Diese Pre-Reg **FREIGABE** (2026-08-31, A1–A3) | Implementierung erlaubt (~200 LOC Ziel) |
-| **G1** | News-24h-Scheduler-Gate **PASS** ([`NEWS_24H_SCHEDULER_GATE.md`](NEWS_24H_SCHEDULER_GATE.md)) | Evaluator-Design final; Start noch nicht |
+| **G1** | News-24h-Scheduler-Gate **PASS** ([`NEWS_24H_SCHEDULER_GATE.md`](NEWS_24H_SCHEDULER_GATE.md)) | Evaluator-Design final; Start noch nicht. **Hetzner:** Co-Location — Evaluator auf Hetzner, liest dieselbe `news_scores.jsonl` ([§8.5 V1](NEWS_24H_SCHEDULER_GATE.md#85-hetzner-host-produzent-umzug--vor-epoche-blocking)). |
 | **G2** | `n_eligible_at_freeze_k ≥ 25` | Evaluator **starten** (Pilot, nur Deskriptiv) |
 | **G3** | `n_eligible_at_freeze_k ≥ 50` | Volle Auswertung + Abgleich mit Strang B nach Enable |
 | **G4** | Strang B Enable | Separater Runbook-Schritt — **nicht** durch Shadow-Ergebnis auslösen |
