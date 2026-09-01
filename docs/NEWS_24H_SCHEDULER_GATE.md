@@ -329,6 +329,24 @@ Installation und Messung trennen — wie Alterprüfung vor Drift beim Inventar:
 
 **Enable-Guards** (`news_agent_host_cron.py`): Pflicht **vor** Schritt 3 — keine neue Funktion, Konsequenz aus `EX_CONFIG`-Befund. Verhindert, dass ein anderer Pfadfehler denselben Tag erneut verbrennt.
 
+### 8.2 :00-Proof (Scheduler-Beweis, nicht Konfig-Check)
+
+Nach Schritt 1 (`enable` + `status` grün: Plist auf beschreibbarem Pfad, `plist_working_directory == repo_root`, `last exit code ≠ 78`) **warten** — **kein** `kickstart`, **kein** `news-agent-once`, kein manueller Anstoß.
+
+```bash
+launchctl print gui/$(id -u)/com.agentx.news-agent | grep "last exit"
+tail -1 data/news_scores.jsonl
+make news-agent-cron-status
+```
+
+| Check | Erwartung | Bei Abweichung |
+|-------|-----------|----------------|
+| `last exit code` | **`0`** (Erfolg — nicht nur ≠ 78) | Non-Zero → neues Problem; Marker prüfen, **keine** Epoche |
+| `news_scores.jsonl` | `source_type=run_marker`, `ts` ≈ volle `:00` | Kein Marker → Installationsproblem, Fenster nicht öffnen |
+| `marker_liveness` | **ACTIVE** (`age_s < 2h`) — von STALE gekippt | End-to-End: Fix lebt, nicht nur konfiguriert |
+
+**Epoche:** `NEWS_SCHEDULER_EPOCH_TS` = **exakter** Timestamp des ersten bewiesenen `:00`-Scheduler-Markers (nicht „jetzt", nicht willkürlich). Alte Epoche `2026-08-31T09:00Z` bleibt **VOID/archiviert**.
+
 **Shadow Evaluator:** erst Live-Lauf nach **sauberem** Gate PASS (unverändert).
 
 ---
