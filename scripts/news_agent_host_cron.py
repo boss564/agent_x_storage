@@ -12,9 +12,12 @@ from __future__ import annotations
 import argparse
 import fcntl
 import os
+import plistlib
+import re
 import subprocess
 import sys
 from pathlib import Path
+from typing import Optional
 
 # Canonical ownership tag — filter enable/disable/status on this only.
 MARKER = "# AGENTX_NEWS_AGENT"
@@ -30,6 +33,68 @@ LOCK_PATH = Path("/tmp/agent_x_news_agent_crontab.lock")
 
 def repo_root() -> Path:
     return Path(__file__).resolve().parents[1]
+
+
+def canonical_schedulable_root(root: Path) -> Path:
+    """Prefer writable APFS data volume over sealed read-only firmlink path."""
+    root = root.resolve()
+    s = str(root)
+    ro_prefix = "/Volumes/THX_OS_ULTRA/"
+    rw_prefix = "/Volumes/THX_OS_ULTRA - Data/"
+    if s.startswith(ro_prefix) and not s.startswith(rw_prefix):
+        candidate = Path(rw_prefix + s[len(ro_prefix) :])
+        if candidate.exists():
+            return candidate.resolve()
+    return root
+
+
+def verify_schedulable_root(root: Path) -> Path:
+    """Abort enable if launchd cannot chdir/write logs (e.g. read-only APFS volume)."""
+    root = canonical_schedulable_root(root)
+    audit = root / "logs" / "audit"
+    audit.mkdir(parents=True, exist_ok=True)
+    probe = audit / ".schedulable_probe"
+    try:
+        probe.write_text("ok", encoding="utf-8")
+        probe.unlink()
+    except OSError as exc:
+        print(
+            f"FAIL: repo path not schedulable (launchd EX_CONFIG risk): {root}\n"
+            f"  {exc}\n"
+            "  Use the writable clone (e.g. THX_OS_ULTRA - Data/...), not read-only THX_OS_ULTRA/.",
+            file=sys.stderr,
+        )
+        raise SystemExit(1) from exc
+    py = news_python(root)
+    if not py.is_file():
+        print(f"FAIL: venv python missing: {py}", file=sys.stderr)
+        raise SystemExit(1)
+    return root
+
+
+def plist_working_directory(plist: Path) -> Optional[str]:
+    if not plist.is_file():
+        return None
+    with plist.open("rb") as handle:
+        data = plistlib.load(handle)
+    wd = data.get("WorkingDirectory")
+    return str(wd) if wd else None
+
+
+def launchd_last_exit_code() -> Optional[int]:
+    proc = subprocess.run(
+        ["launchctl", "print", f"{launchd_domain()}/{LAUNCHD_LABEL}"],
+        capture_output=True,
+        text=True,
+        timeout=20,
+    )
+    if proc.returncode != 0:
+        return None
+    for line in proc.stdout.splitlines():
+        m = re.search(r"last exit code = (\d+)", line)
+        if m:
+            return int(m.group(1))
+    return None
 
 
 def news_python(root: Path) -> Path:
@@ -311,6 +376,7 @@ def _remove_news_cron_line() -> None:
 
 
 def cmd_launchd_enable(root: Path) -> int:
+    root = verify_schedulable_root(root)
     (root / "logs" / "audit").mkdir(parents=True, exist_ok=True)
     (root / "data").mkdir(parents=True, exist_ok=True)
     plist = launchd_plist_path()
@@ -325,6 +391,7 @@ def cmd_launchd_enable(root: Path) -> int:
 
 
 def cmd_enable(root: Path) -> int:
+    root = verify_schedulable_root(root)
     (root / "logs" / "audit").mkdir(parents=True, exist_ok=True)
     (root / "data").mkdir(parents=True, exist_ok=True)
     if sys.platform == "darwin":
@@ -364,12 +431,30 @@ def cmd_disable() -> int:
 
 
 def cmd_status() -> int:
+    rc = 0
     if sys.platform == "darwin":
         plist = launchd_plist_path()
         loaded = launchd_loaded()
         print(f"scheduler=launchd label={LAUNCHD_LABEL} loaded={loaded} plist={plist}")
         if plist.is_file():
             print(f"python={news_python(repo_root())}")
+            wd = plist_working_directory(plist)
+            repo = str(canonical_schedulable_root(repo_root()))
+            if wd:
+                print(f"plist_working_directory={wd}")
+                print(f"repo_root={repo}")
+                if wd != repo:
+                    print(
+                        "FAIL: plist WorkingDirectory != repo_root "
+                        "(re-run make news-agent-cron-enable from writable repo)"
+                    )
+                    rc = 1
+            exit_code = launchd_last_exit_code()
+            if exit_code is not None:
+                print(f"launchd_last_exit_code={exit_code}")
+                if exit_code == 78:
+                    print("FAIL: launchd EX_CONFIG — path/log not writable; fix plist then re-enable")
+                    rc = 1
     all_lines = crontab_list()
     current = [ln for ln in all_lines if MARKER in ln]
     legacy = [
@@ -388,7 +473,6 @@ def cmd_status() -> int:
     for ln in legacy:
         print(f"LEGACY {ln}")
     print(f"count={n} unique={unique}")
-    rc = 0
     if legacy:
         print("WARN: Legacy-Marker — einmal: make news-agent-cron-enable")
         rc = 1
