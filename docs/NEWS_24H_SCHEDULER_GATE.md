@@ -299,6 +299,40 @@ G2 ok:  max_gap_awake_s ≤ 10_800   →  ☐ PASS   ☐ FAIL (F2 — Zeile mit 
 
 ---
 
+## 8. Nach FAIL — Neuauflage (nicht dasselbe Fenster retten)
+
+**2026-09-01 (erster Lauf):** Installation kaputt (`launchd` `EX_CONFIG`, Plist-`WorkingDirectory` auf read-only-Pfad). Post-Epoche **0** Scheduler-Marker — das Fenster enthält **keine** Information über Scheduler-Zuverlässigkeit, nur über fehlgeschlagene Installation. Urteil: **FAIL dokumentieren**, nicht retunen.
+
+```text
+NEWS_24H_GATE=FAIL n=0 F3=STALE F1=n<n_min
+root_cause=launchd_EX_CONFIG scheduler_never_fired_post_epoch
+note=window_void_no_G1_information; archive_epoch_2026-08-31T09:00Z
+```
+
+**Verboten:** Fenster verlängern · `n_min` senken · manuelle `news-agent-once`-Marker als Scheduler zählen · Auswertung verschieben.
+
+### 8.1 Reihenfolge Neuauflage (vor neuem 24h-Fenster)
+
+Installation und Messung trennen — wie Alterprüfung vor Drift beim Inventar:
+
+```text
+1. enable (beschreibbarer Repo-Pfad) + Enable-Guards grün
+      → Pfad existiert, beschreibbar, Plist-WD == repo_root()
+      → sonst Abbruch (kein neues Fenster)
+2. Eine Stunde warten — geplanter :00-Lauf
+      → erster post-enable run_marker da?  ja → weiter
+      → nein → Installationsproblem, Fenster gar nicht eröffnen
+3. NEWS_SCHEDULER_EPOCH_TS = Zeitstempel des ersten bewiesenen Scheduler-Markers
+      (nicht vor Schritt 2)
+4. 24 h zählen ab Epoche — gleiche G1–G4-Kriterien (§3–§5)
+```
+
+**Enable-Guards** (`news_agent_host_cron.py`): Pflicht **vor** Schritt 3 — keine neue Funktion, Konsequenz aus `EX_CONFIG`-Befund. Verhindert, dass ein anderer Pfadfehler denselben Tag erneut verbrennt.
+
+**Shadow Evaluator:** erst Live-Lauf nach **sauberem** Gate PASS (unverändert).
+
+---
+
 ## Siehe auch
 
 - [`docs/PAPER_SIZING_PREREG.md`](PAPER_SIZING_PREREG.md) — Strang B, Gate n≥50
