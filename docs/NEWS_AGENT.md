@@ -50,9 +50,9 @@ Scorer: `keyword_v1` (Lexikon). LLM bleibt optional und unverdrahtet.
 
 **macOS:** `make news-agent-cron-enable` installiert **LaunchAgent** `com.agentx.news-agent` (stündlich :00, `.venv/bin/python` absolut) — kein User-Cron für News (Sleep/:00-Verpasser). **Linux (Hetzner):** Cron mit `cd`, `PYTHONPATH=.`, absolutem `venv/bin/python`, `--once` — siehe [`NEWS_24H_SCHEDULER_GATE.md`](NEWS_24H_SCHEDULER_GATE.md) §8.5. **Cluster:** eigener CronJob — §8.4.
 
-**Scheduler-Epoche:** `NEWS_SCHEDULER_EPOCH_TS = 2026-08-31T09:00:00+00:00` — erste :00 unter LaunchAgent + `.venv`. Quiet-Streaks und Feed-Qualitätsauswertung ignorieren ältere `run_marker` (Vorlauf inkl. System-Python-TLS → falsch `dead`/`DEGRADED`). Analog `OPTION_B_EXIT_EPOCH_TS` im Paper-WORM.
+**Scheduler-Epoche:** `NEWS_SCHEDULER_EPOCH_TS = 2026-09-01T12:00:01.615076+00:00` — erster **autonomer** Hetzner-Cron-`:00` (syslog `12:00:01` + `run_marker` WORM). **`GATE_CLOSE`** = `2026-09-02T12:00:01.615076+00:00` (`NEWS_SCHEDULER_GATE_CLOSE_TS`, Epoche + 24 h). Quiet-Streaks und Feed-Qualität ignorieren ältere `run_marker` (Vorlauf inkl. Mac-VOID `2026-08-31T09:00Z`, Smoke). Analog `OPTION_B_EXIT_EPOCH_TS` im Paper-WORM.
 
-**24h-Scheduler-Gate (PASS/FAIL):** Auswertung **2026-09-01 09:00 UTC** — Kriterien eingefroren in [`NEWS_24H_SCHEDULER_GATE.md`](NEWS_24H_SCHEDULER_GATE.md) (**G1-A1:** `n ≥ floor(hours_awake×0.85)`; **G2:** max. 3 h Lücke in wacher Zeit; **G3:** `marker_liveness` ACTIVE; **G4:** Sleep-Protokoll). LaunchAgent holt nach Sleep nur **einen** Lauf nach.
+**24h-Scheduler-Gate (PASS/FAIL):** Fenster **2026-09-01T12:00:01Z → 2026-09-02T12:00:01Z** (Hetzner, **LIVE**) — Kriterien in [`NEWS_24H_SCHEDULER_GATE.md`](NEWS_24H_SCHEDULER_GATE.md) (**G1-A1:** `n ≥ floor(hours_up×0.85)`; **G2:** max. 3 h Lücke in Betriebszeit; **G3:** `marker_liveness` ACTIVE; **G4:** `downtime_h` / A2). Linux-Cron feuert stündlich `:00`; kein Sleep-Nachholen wie LaunchAgent.
 
 Unabhängig von `regime-swarm-hourly-rt` (`:14` UTC im Pod). Pfade mit Leerzeichen sind gequotet.
 

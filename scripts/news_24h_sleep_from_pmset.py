@@ -11,9 +11,13 @@ import sys
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional, Tuple
 
-from services.news_agent.liveness import NEWS_SCHEDULER_EPOCH_TS, parse_marker_ts
+from services.news_agent.liveness import (
+    NEWS_SCHEDULER_EPOCH_TS,
+    NEWS_SCHEDULER_GATE_CLOSE_TS,
+    parse_marker_ts,
+)
 
-GATE_CLOSE_TS = "2026-09-01T09:00:00+00:00"
+GATE_CLOSE_TS = NEWS_SCHEDULER_GATE_CLOSE_TS
 WINDOW_H = 24.0
 G1_FACTOR = 0.85
 

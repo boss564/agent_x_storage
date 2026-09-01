@@ -38,9 +38,10 @@ QUIET_STALE_ORIGINAL_S = 259200
 NEWS_MARKER_MAX_AGE_H = float(os.environ.get("NEWS_MARKER_MAX_AGE_H", "2"))
 NEWS_MARKER_MAX_AGE_S = NEWS_MARKER_MAX_AGE_H * 3600.0
 
-# First hourly :00 under LaunchAgent + repo .venv (not bare cron / system python3).
-# Pre-epoch run_markers (incl. TLS false-dead under /usr/bin/python3) are Vorlauf.
-NEWS_SCHEDULER_EPOCH_TS = "2026-08-31T09:00:00+00:00"
+# First autonomous Hetzner cron :00 (2026-09-01T12:00:01Z) — syslog CRON proof + run_marker WORM.
+# Pre-epoch run_markers (smoke, manual SSH, Mac VOID launchd) are Vorlauf.
+NEWS_SCHEDULER_EPOCH_TS = "2026-09-01T12:00:01.615076+00:00"
+NEWS_SCHEDULER_GATE_CLOSE_TS = "2026-09-02T12:00:01.615076+00:00"
 
 
 def utc_now() -> str:
@@ -249,6 +250,7 @@ __all__ = [
     "NEWS_MARKER_MAX_AGE_H",
     "NEWS_MARKER_MAX_AGE_S",
     "NEWS_SCHEDULER_EPOCH_TS",
+    "NEWS_SCHEDULER_GATE_CLOSE_TS",
     "ts_ge_scheduler_epoch",
     "measurement_run_markers",
 ]
