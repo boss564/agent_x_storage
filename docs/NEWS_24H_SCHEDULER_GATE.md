@@ -548,6 +548,7 @@ journalctl --list-boots
 
 ## Siehe auch
 
+- [`docs/V13_DEPLOY_RUNBOOK.md`](V13_DEPLOY_RUNBOOK.md) — v1.3 Deploy **post Gate-Close only**
 - [`docs/PAPER_SIZING_PREREG.md`](PAPER_SIZING_PREREG.md) — Strang B, Gate n≥50
 - [`scripts/news_24h_sleep_from_pmset.py`](../scripts/news_24h_sleep_from_pmset.py) — G4 `total_sleep_h` (macOS)
 - §8.5.2 — G4 `downtime_h` (Linux/Hetzner, A2)
