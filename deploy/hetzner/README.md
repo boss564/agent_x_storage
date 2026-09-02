@@ -2,24 +2,36 @@
 
 **Status:** Template only — install **after** gate-close unless ops explicitly approves.
 
+## Phased install (recommended)
+
+| Phase | When | File | What |
+|-------|------|------|------|
+| **A** | Post gate-close + v1.3 deploy | `logrotate.agent-x-logs-only.conf` | `logs/*.log` only — safe immediately |
+| **B** | After v1.3 soak (~3–7 d, Watchdog OK) | append `news_scores` block from `logrotate.agent-x.conf` | WORM data — narrows rollback window |
+
+**Why phased:** Before the first `news_scores.jsonl` rotation, rollback = `git checkout` + audit restore. After rotation, a legacy reader (v1.2) sees an empty active file and replays the full RSS corpus — worse than no rollback unless archives are merged back. See [`docs/V13_DEPLOY_RUNBOOK.md`](../../docs/V13_DEPLOY_RUNBOOK.md) §5.
+
 ## Logrotate
 
 ```bash
+# Phase A (logs only)
+sudo cp deploy/hetzner/logrotate.agent-x-logs-only.conf /etc/logrotate.d/agent-x
+sudo sed -i 's|@AGENT_X_ROOT@|/root/agent_x_storage|g' /etc/logrotate.d/agent-x
+sudo logrotate -d /etc/logrotate.d/agent-x
+
+# Phase B (full — after soak)
 sudo cp deploy/hetzner/logrotate.agent-x.conf /etc/logrotate.d/agent-x
 sudo sed -i 's|@AGENT_X_ROOT@|/root/agent_x_storage|g' /etc/logrotate.d/agent-x
-sudo logrotate -d /etc/logrotate.d/agent-x          # syntax / dry-run
-sudo logrotate -f /etc/logrotate.d/agent-x          # manual rotate (careful)
+sudo logrotate -d /etc/logrotate.d/agent-x
 find /root/agent_x_storage/data -name 'news_scores.jsonl-*.gz' -exec gzip -t {} \; -print
 ```
 
 | Path | Policy | Install |
 |------|--------|---------|
-| `logs/*.log` | 14 days, `maxsize 100M`, `0640 root adm` | Anytime |
-| `data/news_scores.jsonl` | 365 days, **rename + create** (not `copytruncate`), `maxsize 200M`, `dateformat -%Y%m%d-%s` (unique per rotation when `maxsize` fires intraday), post-rotate watchdog + `gzip -t` | **After** loader deploy + preferably gate-close |
+| `logs/*.log` | 14d, `maxsize 100M`, `0640 root adm` | Phase A (anytime post gate-close) |
+| `data/news_scores.jsonl` | 365d, rename+create, `maxsize 200M`, `dateformat -%Y%m%d-%s`, post-rotate watchdog + `gzip -t` | Phase B (after soak) |
 
-`news_scores.jsonl` is WORM state, not a throwaway log. The hourly cron opens the file per run and closes it — regular rotation is safe once readers use `iter_jsonl_store` (`load_seen`, `load_run_markers`, `last_run_marker`). Archive sort: `dateext` suffixes lex ascending (`-%Y%m%d-%s` in template); numeric `.N` fallback if convention changes.
-
-`maxsize 200M` can rotate outside the daily window — avoid enabling the data block during the 24h scheduler gate unless ops accepts mid-window archive moves.
+`news_scores.jsonl` is WORM state. Readers use `iter_jsonl_store` (`load_seen`, `load_run_markers`, `last_run_marker`). Archive sort: `dateext` lex ascending (`-%Y%m%d-%s`); numeric `.N` fallback.
 
 ## Python loader
 

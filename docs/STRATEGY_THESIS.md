@@ -190,7 +190,7 @@ Verbleibende Kandidaten (nicht mehr Preis-Action):
 - [x] M2-Reißbrett (`H1_M2_EVENT_DRIVEN_SPEC.md`) + Skeleton
 - [x] M2 Synthetic-Injection Audit lokal — PASS
 - [x] `published_at` + `detection_lag` Scraper-Fix lokal (schema v1.3) — **Deploy nach Gate-Close** → [`V13_DEPLOY_RUNBOOK.md`](V13_DEPLOY_RUNBOOK.md)
-- [ ] **Post-Gate v1.3:** G1-Snapshot archiviert · `make news-agent-test` auf Hetzner · Logrotate-Template · Watchdog OK
+- [ ] **Post-Gate v1.3:** G1-Snapshot + `pre_v13_deploy_sha` · `make news-agent-test` · Logrotate Phase A · Watchdog OK · Phase B nach Soak
 - [ ] Tag-7 `--lag-report` (§5.1.1/§5.1.3) — Verdict + `lag_coverage`/`coverage_by_source` vor Median
 - [ ] Post-Gate: Polling-Epoche (5 min) prüfen **bevor** M2-Parameter — Spec §11
 - [ ] Optional: 1h-Sanity nur wenn H₁-Brutto auch ≈ 0

@@ -55,14 +55,19 @@ print('n_markers_post_epoch', len(markers))
 "
 
 # WORM-Snapshot (unveränderlich archivieren)
+git rev-parse HEAD > ~/gate_close_audit_20260902/pre_v13_deploy_sha
+git log -1 --oneline > ~/gate_close_audit_20260902/pre_v13_deploy_log
 cp -a data/news_scores.jsonl ~/gate_close_audit_20260902/
 cp -a logs/ ~/gate_close_audit_20260902/logs/ 2>/dev/null || true
 wc -l ~/gate_close_audit_20260902/news_scores.jsonl
 sha256sum ~/gate_close_audit_20260902/news_scores.jsonl > ~/gate_close_audit_20260902/checksum.sha256
+cat ~/gate_close_audit_20260902/pre_v13_deploy_sha
 ```
 
 **Kriterium:** `n_markers_post_epoch` ≥ `n_min` (G1, siehe Gate-Doc). Ergebniszeile archivieren:  
 `NEWS_24H_GATE=PASS|FAIL n=… n_min=…`
+
+`pre_v13_deploy_sha` ist das **kanonische Rollback-Ziel** — kein Tag `v1.2-freeze` im Repo; niemand muss eine SHA notieren.
 
 ---
 
@@ -105,15 +110,13 @@ PYTHONPATH=. python3 tests/test_h1_m2_lag_report.py
 
 ## 3. Infrastruktur & Log-Konfiguration
 
-### 3.1 Logrotate (Template — **kein** `copytruncate`)
+### 3.1 Logrotate — Phase A (sofort nach v1.3-Deploy)
 
-**Wichtig:** `news_scores.jsonl` ist WORM-Zustand, kein Wegwerf-Log. Der stündliche Cron öffnet/schließt die Datei pro Lauf — **rename + create** ist sicher, sobald `iter_jsonl_store`-Reader deployed sind (`load_seen`, `load_run_markers`, `last_run_marker`).
-
-**Nicht verwenden:** Inline-Heredoc mit `copytruncate` oder `dateformat -%Y%m%d` allein — bei `maxsize 200M` entstehen sonst Same-Day-Kollisionen (`-YYYYMMDD.N.gz`).
+**App-Logs** können sofort rotieren — kein Leser rekonstruiert Zustand aus `logs/*.log`.
 
 ```bash
 cd /root/agent_x_storage
-sudo cp deploy/hetzner/logrotate.agent-x.conf /etc/logrotate.d/agent-x
+sudo cp deploy/hetzner/logrotate.agent-x-logs-only.conf /etc/logrotate.d/agent-x
 sudo sed -i 's|@AGENT_X_ROOT@|/root/agent_x_storage|g' /etc/logrotate.d/agent-x
 sudo chmod 0644 /etc/logrotate.d/agent-x
 sudo logrotate -d /etc/logrotate.d/agent-x    # Dry-Run
@@ -122,7 +125,23 @@ sudo logrotate -d /etc/logrotate.d/agent-x    # Dry-Run
 | Pfad | Policy |
 |------|--------|
 | `logs/*.log` | 14d, `maxsize 100M`, `0640 root adm` |
-| `data/news_scores.jsonl` | 365d, **rename+create**, `maxsize 200M`, `dateformat -%Y%m%d-%s`, post-rotate Watchdog + `gzip -t` |
+
+### 3.2 Logrotate — Phase B (`news_scores.jsonl`, **nach Soak**)
+
+**Nicht** direkt nach Gate-Close scharfschalten. Erst wenn v1.3 **~3–7 Tage** unauffällig läuft (Watchdog OK, Schema v1.3 stabil) — sonst verengt sich der Rollback-Pfad (§5).
+
+`news_scores.jsonl` ist WORM-Zustand. **rename + create** ist sicher mit `iter_jsonl_store`-Readern (`load_seen`, `load_run_markers`, `last_run_marker`). **Kein** `copytruncate`, **kein** `dateformat -%Y%m%d` allein (`maxsize 200M` → Same-Day-Kollisionen).
+
+```bash
+cd /root/agent_x_storage
+sudo cp deploy/hetzner/logrotate.agent-x.conf /etc/logrotate.d/agent-x
+sudo sed -i 's|@AGENT_X_ROOT@|/root/agent_x_storage|g' /etc/logrotate.d/agent-x
+sudo logrotate -d /etc/logrotate.d/agent-x
+```
+
+| Pfad | Policy |
+|------|--------|
+| `data/news_scores.jsonl` | 365d, rename+create, `maxsize 200M`, `dateformat -%Y%m%d-%s`, post-rotate Watchdog + `gzip -t` |
 
 Details: [`deploy/hetzner/README.md`](../deploy/hetzner/README.md)
 
@@ -193,24 +212,82 @@ Frozen GO/NO-GO: Median `detection_lag` ≤ 15 min → GO; sonst Polling-Epoche 
 
 ## 5. Rollback (Contingency)
 
-Kein Tag `v1.2-freeze` im Repo — Rollback per **SHA vor v1.3-Deploy**:
+**Kein Tag `v1.2-freeze`.** Rollback-SHA steht in `~/gate_close_audit_20260902/pre_v13_deploy_sha` (§1.2).
+
+### 5.1 Rollback-Fenster (Asymmetrie)
+
+```text
+Vor der ersten news_scores-Rotation (Phase B aus):
+  → git checkout $(cat ~/gate_close_audit_20260902/pre_v13_deploy_sha)
+  → optional: audit-JSONL zurückspielen
+  → folgenlos für Dedup/Marker (eine Datei, v1.2-Reader)
+
+Nach der ersten news_scores-Rotation:
+  → v1.2 liest nur den aktiven Pfad (leer nach rename+create)
+  → load_seen findet nichts → jeder Artikel „neu“ → Alert-Lawine + Voll-Reanalyse
+  → git checkout allein ist SCHLECHTER als kein Rollback
+```
+
+Sauberer Rollback nach Rotation erfordert **gleichzeitig**:
+
+1. Data-Block in `/etc/logrotate.d/agent-x` entfernen (oder logs-only-Template zurück)
+2. Archive in die aktive Datei zusammenführen (noch auf v1.3, `iter_jsonl_store`-Reihenfolge)
+3. Dann `git checkout` auf `pre_v13_deploy_sha` + JSONL aus Audit falls nötig
+
+### 5.2 Pfad A — vor erster Data-Rotation (bevorzugt)
 
 ```bash
 cd /root/agent_x_storage
-# Cron stoppen (nur News-Zeile)
 make news-agent-cron-disable
 
-PRE_V13_SHA="<sha-vor-deploy>"   # z.B. aus gate_close_audit git log
+PRE_V13_SHA="$(cat ~/gate_close_audit_20260902/pre_v13_deploy_sha)"
 git checkout "$PRE_V13_SHA"
 
 cp ~/gate_close_audit_20260902/news_scores.jsonl data/news_scores.jsonl
+sha256sum -c ~/gate_close_audit_20260902/checksum.sha256
+
 make news-agent-cron-enable
 make news-agent-multi-once   # Smoke only
 
-echo "[$(date -u +'%Y-%m-%dT%H:%M:%SZ')] ROLLBACK to $PRE_V13_SHA" >> logs/deploy_incidents.log
+echo "[$(date -u +'%Y-%m-%dT%H:%M:%SZ')] ROLLBACK to $PRE_V13_SHA (pre-rotation)" >> logs/deploy_incidents.log
 ```
 
-Logrotate data-Block bei Rollback auf v1.2-Reader: `news_scores.jsonl`-Rotation **deaktivieren** oder Reader-Commit erneut deployen.
+### 5.3 Pfad B — nach Data-Rotation (Notfall)
+
+```bash
+cd /root/agent_x_storage
+make news-agent-cron-disable
+
+# 1) Rotation stoppen (logs-only Template)
+sudo cp deploy/hetzner/logrotate.agent-x-logs-only.conf /etc/logrotate.d/agent-x
+sudo sed -i 's|@AGENT_X_ROOT@|/root/agent_x_storage|g' /etc/logrotate.d/agent-x
+
+# 2) Archive → aktive Datei (noch v1.3 — store sort oldest→newest)
+PYTHONPATH=. python3 <<'PY'
+import json
+from pathlib import Path
+from src.ingestion.news_jsonl_loader import iter_jsonl_store
+
+active = Path("data/news_scores.jsonl")
+merged = active.with_suffix(".merged")
+with merged.open("w", encoding="utf-8") as out:
+    for row in iter_jsonl_store(active):
+        out.write(json.dumps(row, default=str) + "\n")
+merged.replace(active)
+PY
+find data -maxdepth 1 -name 'news_scores.jsonl-*' -delete
+
+# 3) Code-Rollback
+PRE_V13_SHA="$(cat ~/gate_close_audit_20260902/pre_v13_deploy_sha)"
+git checkout "$PRE_V13_SHA"
+
+make news-agent-cron-enable
+make news-agent-multi-once
+
+echo "[$(date -u +'%Y-%m-%dT%H:%M:%SZ')] ROLLBACK to $PRE_V13_SHA (post-rotation merge)" >> logs/deploy_incidents.log
+```
+
+**Prävention:** Phase-B-Logrotate erst nach Soak — in den ersten Tagen nach Deploy bleibt Pfad A verfügbar.
 
 ---
 
@@ -221,7 +298,8 @@ Nach erfolgreichem Durchlauf in [`STRATEGY_THESIS.md`](STRATEGY_THESIS.md) §6 u
 ```markdown
 - [x] **2026-09-02T12:00:01Z:** Gate-Close erreicht (G1 PASS archiviert).
 - [x] **Release v1.3 deployed:** `published_at` + `detection_lag` (schema v1.3).
-- [x] **Logrotate:** `/etc/logrotate.d/agent-x` (rename+create, `-%Y%m%d-%s`).
+- [x] **Logrotate Phase A:** `logs/*.log` (`logrotate.agent-x-logs-only.conf`).
+- [ ] **Logrotate Phase B:** `news_scores.jsonl` — erst nach ~3–7d Soak.
 - [x] **JSONL store readers:** `iter_jsonl_store` (Dedup + Marker + Hash-Kette).
 - [ ] **Tag-7 `--lag-report`:** GO/NO-GO (§5.1.1 H1_M2_EVENT_DRIVEN_SPEC).
 - [ ] **M2 Live-Replay:** erst ≥90d JSONL + ≥200 gated Events.
