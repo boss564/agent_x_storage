@@ -4,6 +4,7 @@ from __future__ import annotations
 import gzip
 import json
 import logging
+import re
 from collections import deque
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -14,22 +15,43 @@ logger = logging.getLogger(__name__)
 DEFAULT_BASENAME = "news_scores.jsonl"
 OpenText = Callable[..., TextIO]
 
+_DATEEXT_SUFFIX_RE = re.compile(r"^(\d{8})$")
+_NUMERIC_SUFFIX_RE = re.compile(r"^(\d+)$")
+
+
+def _archive_sort_key(path: Path, *, basename: str = DEFAULT_BASENAME) -> tuple[int, int, str]:
+    """Oldest archives first, active file last.
+
+    Logrotate numbering is reverse: ``.1`` is the newest archive, ``.2`` older.
+    ``dateext`` suffixes ``-YYYYMMDD`` sort ascending by date.
+    """
+    name = path.name
+    if name == basename:
+        return (1, 0, "")
+
+    stem = name[:-3] if name.endswith(".gz") else name
+    if not stem.startswith(basename):
+        return (0, 0, name)
+
+    tail = stem[len(basename) :]
+    if tail.startswith("-") and (m := _DATEEXT_SUFFIX_RE.match(tail[1:])):
+        return (0, int(m.group(1)), "")
+    if tail.startswith(".") and (m := _NUMERIC_SUFFIX_RE.match(tail[1:])):
+        # Higher N = older archive → read first → smaller sort key via negation.
+        return (0, -int(m.group(1)), "")
+
+    return (0, 0, name)
+
+
+def sort_news_jsonl_files(files: List[Path], *, basename: str = DEFAULT_BASENAME) -> List[Path]:
+    """Oldest archives first, active ``news_scores.jsonl`` last."""
+    return sorted(files, key=lambda p: _archive_sort_key(p, basename=basename))
+
 
 def _open_text(path: Path) -> TextIO:
     if path.suffix == ".gz":
         return gzip.open(path, "rt", encoding="utf-8")  # type: ignore[return-value]
     return path.open("r", encoding="utf-8")
-
-
-def sort_news_jsonl_files(files: List[Path], *, basename: str = DEFAULT_BASENAME) -> List[Path]:
-    """Oldest archives first, active ``news_scores.jsonl`` last."""
-
-    def sort_key(path: Path) -> tuple[int, str]:
-        if path.name == basename:
-            return (1, path.name)
-        return (0, path.name)
-
-    return sorted(files, key=sort_key)
 
 
 def discover_news_jsonl_files(

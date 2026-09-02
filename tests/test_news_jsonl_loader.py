@@ -20,6 +20,52 @@ def _write(path: Path, rows: list[dict]) -> None:
     path.write_text("\n".join(json.dumps(r) for r in rows) + "\n", encoding="utf-8")
 
 
+def test_sort_logrotate_numeric_suffix() -> None:
+    files = [
+        Path("news_scores.jsonl"),
+        Path("news_scores.jsonl.1"),
+        Path("news_scores.jsonl.2.gz"),
+    ]
+    ordered = sort_news_jsonl_files(files)
+    assert [p.name for p in ordered] == [
+        "news_scores.jsonl.2.gz",
+        "news_scores.jsonl.1",
+        "news_scores.jsonl",
+    ]
+
+
+def test_last_hash_follows_archive_chain_not_lex(tmp_path: Path) -> None:
+    from agents_b2g.news.agent import _last_hash
+
+    oldest = tmp_path / "news_scores.jsonl.2.gz"
+    middle = tmp_path / "news_scores.jsonl.1"
+    active = tmp_path / "news_scores.jsonl"
+    with gzip.open(oldest, "wt", encoding="utf-8") as handle:
+        handle.write(json.dumps({"hash": "from_oldest", "ts": "2026-09-01T08:00:00+00:00"}) + "\n")
+    middle.write_text(
+        json.dumps({"hash": "from_middle", "ts": "2026-09-01T10:00:00+00:00"}) + "\n",
+        encoding="utf-8",
+    )
+    active.write_text("", encoding="utf-8")
+
+    assert _last_hash(active) == "from_middle"
+
+
+def test_iter_record_order_across_numeric_archives(tmp_path: Path) -> None:
+    oldest = tmp_path / "news_scores.jsonl.2.gz"
+    middle = tmp_path / "news_scores.jsonl.1"
+    active = tmp_path / "news_scores.jsonl"
+    with gzip.open(oldest, "wt", encoding="utf-8") as handle:
+        handle.write(json.dumps({"n": 1, "ts": "2026-09-01T08:00:00+00:00"}) + "\n")
+    middle.write_text(
+        json.dumps({"n": 2, "ts": "2026-09-01T10:00:00+00:00"}) + "\n",
+        encoding="utf-8",
+    )
+    _write(active, [{"n": 3, "ts": "2026-09-01T12:00:00+00:00"}])
+
+    assert [r["n"] for r in iter_news_records(tmp_path)] == [1, 2, 3]
+
+
 def test_sort_active_file_last(tmp_path: Path) -> None:
     a = tmp_path / "news_scores.jsonl-20250901"
     b = tmp_path / "news_scores.jsonl"
@@ -131,6 +177,9 @@ def run() -> None:
 
     with TemporaryDirectory() as td:
         root = Path(td)
+        test_sort_logrotate_numeric_suffix()
+        test_last_hash_follows_archive_chain_not_lex(root)
+        test_iter_record_order_across_numeric_archives(root)
         test_sort_active_file_last(root)
         test_iter_only_active(root)
         test_iter_max_files_and_order(root)
@@ -139,7 +188,7 @@ def run() -> None:
         test_load_recent_passes_modified_after(root)
         test_discover_empty_dir(root)
         test_load_seen_and_markers_across_archive(root)
-    print("news_jsonl_loader: 8/8 passed")
+    print("news_jsonl_loader: 11/11 passed")
 
 
 if __name__ == "__main__":
