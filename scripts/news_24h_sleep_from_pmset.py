@@ -17,9 +17,12 @@ from services.news_agent.liveness import (
     parse_marker_ts,
 )
 
-GATE_CLOSE_TS = NEWS_SCHEDULER_GATE_CLOSE_TS
-WINDOW_H = 24.0
-G1_FACTOR = 0.85
+from services.news_agent.gate_g1 import (
+    DEFAULT_G1_FACTOR,
+    g1_n_min,
+    scheduler_interval_minutes,
+    scheduler_interval_with_source,
+)
 
 _LINE_RE = re.compile(
     r"^\s*(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) ([+-]\d{4})\s+"
@@ -122,11 +125,22 @@ def total_sleep_seconds(
     return sum((end - start).total_seconds() for start, end in intervals)
 
 
-def g1_n_min(total_sleep_h: float) -> int:
-    import math
+def g1_n_min_from_sleep(total_sleep_h: float, *, interval_min: int | None = None) -> int:
+    """Backward-compatible wrapper — downtime = sleep on macOS."""
+    return g1_n_min(total_sleep_h, interval_min=interval_min)
 
-    hours_awake = WINDOW_H - total_sleep_h
-    return max(1, math.floor(hours_awake * G1_FACTOR))
+
+# Re-export for tests and gate tooling
+__all__ = [
+    "g1_n_min",
+    "g1_n_min_from_sleep",
+    "merge_sleep_intervals",
+    "pmset_covers_gate_window",
+    "scheduler_interval_minutes",
+    "scheduler_interval_with_source",
+    "sleep_intervals_from_pmset_log",
+    "total_sleep_seconds",
+]
 
 
 def pmset_log_time_span(text: str) -> Tuple[Optional[datetime], Optional[datetime]]:
@@ -224,9 +238,13 @@ def main(argv: List[str] | None = None) -> int:
 
     sleep_s = total_sleep_seconds(intervals)
     sleep_h = round(sleep_s / 3600.0, 2)
-    n_min = g1_n_min(sleep_h)
+    interval, interval_src = scheduler_interval_with_source()
+    n_min = g1_n_min(sleep_h, interval_min=interval)
 
-    print(f"status=OK sleep_source=pmset sleep_h={sleep_h} n_min={n_min} intervals={len(intervals)}")
+    print(
+        f"status=OK sleep_source=pmset sleep_h={sleep_h} "
+        f"interval_min={interval} interval_source={interval_src} n_min={n_min} intervals={len(intervals)}"
+    )
     for start, end in intervals:
         print(f"  sleep_interval {start.isoformat()} .. {end.isoformat()}")
     return 0

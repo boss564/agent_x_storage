@@ -485,6 +485,21 @@ def cmd_status() -> int:
     if sys.platform == "darwin" and not launchd_loaded() and n == 0:
         print("FAIL: LaunchAgent nicht geladen")
         rc = 1
+    from services.news_agent.cron_schedule import (
+        cron_schedule_summary,
+        measure_scheduler_interval_minutes,
+        scheduler_interval_env_mismatch,
+    )
+
+    interval, interval_src = measure_scheduler_interval_minutes()
+    print(f"scheduler_interval_min={interval} source={interval_src}")
+    if interval_src == "crontab" and current:
+        print(f"cron_schedule={cron_schedule_summary(current[0])}")
+    mismatch = scheduler_interval_env_mismatch(interval, interval_src)
+    if mismatch:
+        print("WARN: interval mismatch (non-blocking) — schedule is source of truth for G1")
+        print(f"  {mismatch}")
+        print(f"  G1 uses schedule={interval} min ({interval_src}); env value ignored")
     # Same instrument as feed-gap: mark age is a fault when the cron line exists.
     try:
         from services.news_agent.liveness import run_marker_freshness

@@ -3,6 +3,8 @@
 **Status:** FROZEN (2026-08-31) — Bestehenskriterien **vor** Auswertung festgelegt  
 **Amendment A1 (2026-08-31, vor Gate-Close):** G1 absolut `≥ 20` → **relativ** `n_markers ≥ floor(hours_awake × 0.85)` — Messkorrektur (Widerspruch zu §2 Sleep-Semantik), **kein** HARKing nach Datenblick.  
 **Amendment A2 (2026-09-01, vor Hetzner-Epoche):** G4 auf Linux — `pmset` entfällt; **`downtime_h`** aus Neustart-Lücken (`uptime -s` führend, `journalctl` ergänzend) ersetzt **`total_sleep_h`**. A1-Anker bei `downtime_h=0` → `n_min=20` unverändert. **Kein** HARKing nach Datenblick.  
+**Amendment A3 (2026-09-02, vor Polling-Epoche §8.6):** G1 **`n_min`** skaliert mit **`interval_min`** — `n_min = max(1, floor(hours_up × (60/interval_min) × 0.85))`. A1-Anker bei `interval_min=60`, `downtime_h=0` → **20**. Bei 5 min ohne Downtime → **244** (nicht 20). **Vor** erstem 5-min-Gate festlegen — kein Nachtrag nach 24 h Datenblick. Code: `services/news_agent/gate_g1.py`.  
+**Amendment A3.1 (2026-09-02, nach Gate-Close, vor Polling-Epoche):** **`interval_min`** aus installierter Schedule (Crontab `# AGENTX_NEWS_AGENT` / macOS LaunchAgent-Plist) — **nicht** primär aus `NEWS_SCHEDULER_INTERVAL_MINUTES`. Env nur Fallback wenn Schedule nicht lesbar; `make news-agent-cron-status` **WARN** (non-blocking, exit 0) bei Env↔Schedule-Divergenz. **Methodik A3 unverändert** — Implementierungshärtung. Code: `services/news_agent/cron_schedule.py`.
 **Erstellt:** 2026-08-31  
 **Strang:** Host-Scheduler + `run_marker`-Liveness (Instanz 3) — **kein** Cluster, **kein** Code in diesem Gate  
 **Parent:** [`NEWS_AGENT.md`](NEWS_AGENT.md) · [`NEWS_FEED_STRUCTURE_PREREG.md`](NEWS_FEED_STRUCTURE_PREREG.md) · [`AUDIT_WRITER_LIVENESS.md`](AUDIT_WRITER_LIVENESS.md)  
@@ -53,22 +55,27 @@ Zählen nur `run_marker` mit `ts ≥ NEWS_SCHEDULER_EPOCH_TS` (`measurement_run_
 
 Alle **vier** Bedingungen müssen zur Gate-Close-Zeit erfüllt sein.
 
-### G1 — Marker-Anzahl (**relativ zu wacher Laufzeit**, A1)
+### G1 — Marker-Anzahl (**relativ zu wacher Laufzeit × Abtasttakt**, A1+A3)
 
 G4 (`total_sleep_h` **macOS** / `downtime_h` **Linux** — §8.5.2 A2) muss **vor** G1 bekannt sein (Betriebszeit-Protokoll zuerst).
 
 ```text
 hours_awake     = 24 − total_sleep_h          # macOS (LaunchAgent + Sleep)
 hours_up        = 24 − downtime_h             # Linux/Hetzner (Neustart-Lücken) — §8.5.2
-n_min           = max(1, floor(hours_awake × 0.85))   # bzw. hours_up auf Linux
+interval_min    = crontab/launchd (# AGENTX_NEWS_AGENT) — env nur Fallback §8.6
+n_min           = max(1, floor(hours_up × (60 / interval_min) × 0.85))
 n_markers_post_epoch ≥ n_min
 ```
 
 `n_markers_post_epoch` = Anzahl `run_marker` mit `ts ∈ [NEWS_SCHEDULER_EPOCH_TS, GATE_CLOSE]`.
 
-**Anker (A1, keine Lockerung):** Bei `total_sleep_h = 0` (macOS) bzw. `downtime_h = 0` (Linux, A2) gilt `n_min = floor(24 × 0,85) = 20` — **identisch** zur ursprünglichen absoluten Schwelle.
+**Anker (A1+A3, keine Lockerung):** Bei `downtime_h = 0` und **`interval_min = 60`** gilt `n_min = floor(24 × 1 × 0,85) = 20` — **identisch** zur ursprünglichen absoluten Schwelle und zum A1-only-Fall.
 
-**Beispiel (ein Nacht-Sleep-Block):** `sleep_h = 7.5` → `hours_awake = 16.5` → `n_min = 14`. Erwartung ~17 Marker (16× :00 + 1 Nachhol) — **PASS**, nicht FAIL.
+**Polling-Epoche (A3):** Bei `interval_min = 5`, `hours_up = 24` → `n_min = floor(288 × 0,85) = 244`. Ein Scheduler, der nur jeden 15. Lauf schafft (~19/h), würde mit **`n_min = 20`** trivial PASS — dieselbe Fehlanpassung wie `stale_s=300` am Watchdog, nur am **Nachweis**-Ende. A3 **vor** dem ersten 5-min-Gate schreiben, nicht nach einem scheinbaren PASS.
+
+**Beispiel (ein Nacht-Sleep-Block, stündlich):** `sleep_h = 7.5` → `hours_awake = 16.5` → `n_min = 14`. Erwartung ~17 Marker (16× :00 + 1 Nachhol) — **PASS**, nicht FAIL.
+
+**Watchdog (Transport):** `WATCHDOG_CRON_INTERVAL_MINUTES` muss zur Epoche passen (5 → 7/12 min WARN/CRIT). **G1** leitet `interval_min` aus der installierten Schedule-Zeile ab (`services/news_agent/cron_schedule.py`) — `make news-agent-cron-status` gibt bei Env↔Schedule-Divergenz **WARN** (non-blocking), G1 nutzt trotzdem Schedule.
 
 **Begründung A1:** Absolut `≥ 20` widerspricht §2 (LaunchAgent holt beim Wake **einen** Lauf nach, nicht alle verschlafenen Slots). G2 misst Lücken bereits relativ zur wachen Zeit; G1 zählt jetzt konsistent **Dichte im Wachbetrieb**, nicht gegen ein fixes 24/24-Ziel.
 
@@ -191,7 +198,8 @@ if not sleep_source:
     sleep_source = "manual" if os.environ.get("SLEEP_H") else "pmset"
 
 hours_awake = WINDOW_H - sleep_h
-n_min = max(1, math.floor(hours_awake * 0.85))
+interval_min = int(os.environ.get("NEWS_SCHEDULER_INTERVAL_MINUTES", "60"))
+n_min = max(1, math.floor(hours_awake * (60 / interval_min) * 0.85))
 
 path = Path("data/news_scores.jsonl")
 markers = measurement_run_markers(load_run_markers(path))
@@ -233,7 +241,7 @@ NEWS_24H_GATE=PASS|FAIL|INCOMPLETE n=17 n_min=14 max_gap_awake_s=3600 liveness=A
 |-------------|---------|--------|
 | **pmset-Rotation** / Log deckt Fenster nicht ab | **F4 → INCOMPLETE** | `sleep_source=manual` + dokumentierte `sleep_intervals`. **Nicht** mit halber/truncated `sleep_h` trotzdem G1 rechnen. |
 | **Marker-Liveness** `STALE` oder `MISSING` | **F3 → FAIL** | [`NEWS_AGENT.md`](NEWS_AGENT.md) (`make news-agent-cron-status`, `WRITER_STALE`) · [`AUDIT_WRITER_LIVENESS.md`](AUDIT_WRITER_LIVENESS.md). **Kein** Cluster-Patch — Host-isoliert. |
-| `n_markers < n_min` (nach G4) | **F1 → G1 FAIL** | Urteilszeile dokumentieren. **Keine** Schwelle nachträglich anpassen (A1-Anker: `sleep_h=0 → n_min=20`). |
+| `n_markers < n_min` (nach G4) | **F1 → G1 FAIL** | Urteilszeile dokumentieren. **Keine** Schwelle nachträglich anpassen (A1-Anker: `downtime_h=0`, `interval_min=60` → `n_min=20`). |
 | `max_gap_awake_s > 10_800` (nach Sleep-Overlap-Abzug) | **F2 → G2 FAIL** | Einzeln dokumentieren: welches Marker-Paar, `gap_s`, Sleep-Overlap, `gap_awake_s`. **Nicht** `max_gap_s` (roh) für G2 verwenden. |
 
 **G2-Rechnung (manuell):** pro Marker-Paar `gap_awake_i = gap_i − overlap(gap_i, sleep_intervals)`; Sleep-Intervalle aus pmset-Skript (`sleep_interval …`) oder manuellem G4-Protokoll. Vorlage: **§5.2**.
@@ -299,7 +307,9 @@ G2 ok:  max_gap_awake_s ≤ 10_800   →  ☐ PASS   ☐ FAIL (F2 — Zeile mit 
 1. **G2** Schwellwert **3 h** (`max_gap_awake_s`) wird **nicht** nach dem ersten Blick angepasst.
 2. **G1-A1** Faktor **0,85** und Formel werden **nicht** nach dem ersten Blick auf `n` angepasst.
 3. **A1 (2026-08-31)** ist **Messkorrektur vor Gate-Close** (absolut `≥ 20` widersprach §2) — **kein** nachträgliches Senken auf „was wir gerade haben“.
-4. Feed-Struktur (`structure_ok`) bleibt in [`NEWS_FEED_STRUCTURE_PREREG.md`](NEWS_FEED_STRUCTURE_PREREG.md) — dieses Gate prüft nur **Scheduler + Marker-Liveness**.
+4. **A3 (2026-09-02)** `interval_min` in G1 — **vor** erster Polling-Epoche (§8.6), nicht nach scheinbarem PASS mit `n_min=20`.
+5. **A3.1 (2026-09-02)** Schedule als Source of Truth für `interval_min` — **nach** Gate-Close, **vor** Polling-Epoche; keine nachträgliche Umdeutung der A3-Formel.
+6. Feed-Struktur (`structure_ok`) bleibt in [`NEWS_FEED_STRUCTURE_PREREG.md`](NEWS_FEED_STRUCTURE_PREREG.md) — dieses Gate prüft nur **Scheduler + Marker-Liveness**.
 
 ---
 
@@ -497,11 +507,12 @@ tail -3 /root/agent_x_storage/logs/audit/news_cron.log
 ```text
 downtime_h        = Σ Neustart-Lücken im Fenster [EPOCH, GATE_CLOSE]
 hours_up          = 24 − downtime_h
-n_min             = max(1, floor(hours_up × 0.85))
+interval_min      = crontab/launchd (# AGENTX_NEWS_AGENT) — §8.6; env nur Fallback
+n_min             = max(1, floor(hours_up × (60 / interval_min) × 0.85))
 boot_source       = journalctl | uptime
 ```
 
-**Anker (A1+A2):** `downtime_h = 0` (durchgehend up) → `hours_up = 24` → **`n_min = 20`** — identisch zum eingefrorenen A1-Anker bei `total_sleep_h = 0`.
+**Anker (A1+A2+A3):** `downtime_h = 0`, `interval_min = 60` → `hours_up = 24` → **`n_min = 20`** — identisch zum eingefrorenen A1-Anker.
 
 **G2:** `downtime_union` ersetzt `sleep_union` bei `gap_awake`-Berechnung (Lücken während Reboot zählen nicht als Scheduler-Fehler).
 
@@ -544,6 +555,65 @@ journalctl --list-boots
 
 **Nicht:** `pmset` auf Linux erzwingen oder G4 weglassen — beides würde das Gate strukturell unmöglich machen.
 
+#### 8.6 Polling-Epoche — G1 + Watchdog (Amendment A3, **vor** erstem 5-min-Gate)
+
+**Kontext:** [`H1_M2_EVENT_DRIVEN_SPEC.md`](H1_M2_EVENT_DRIVEN_SPEC.md) §11 — Tag-7 NO-GO → 5-min-RSS **vor** 90-Tage-M2-Sammeln. Eigene **Scheduler-Epoche** (analog §8.5): neues `NEWS_SCHEDULER_EPOCH_TS`, neues 24h-Gate — **nicht** Ad-hoc-Cron ohne Präreg.
+
+| Größe | Stündliche Epoche | 5-min Polling-Epoche |
+|-------|-------------------|----------------------|
+| Cron / LaunchAgent | `0 * * * *` (:00) | `*/5 * * * *` |
+| `interval_min` (G1) | **60** (aus Schedule) | **5** (aus Schedule) |
+| `NEWS_SCHEDULER_INTERVAL_MINUTES` | optional; muss Schedule matchen | optional; muss Schedule matchen |
+| `WATCHDOG_CRON_INTERVAL_MINUTES` | **60** (WARN 90 / CRIT 150 min) | **5** (WARN 7,5 / CRIT 12,5 min) |
+| G1 `n_min` bei `hours_up=24` | **20** | **244** |
+| Erwartete Marker (Vollfenster) | ~24 | ~288 |
+
+**G1-Formel (eingefroren A3):**
+
+```text
+n_min = max(1, floor(hours_up × (60 / interval_min) × 0.85))
+```
+
+**Implementierung:** `services/news_agent/cron_schedule.py` (Schedule → `interval_min`) · `services/news_agent/gate_g1.py` · `scripts/news_24h_sleep_from_pmset.py` (Ausgabe `interval_min=` + `source=`).
+
+**`interval_min`-Quelle (A3.1):** Minute/Stunde der `# AGENTX_NEWS_AGENT`-Zeile (oder LaunchAgent-Plist auf macOS). `NEWS_SCHEDULER_INTERVAL_MINUTES` nur wenn Schedule nicht lesbar; bei Divergenz **WARN** (non-blocking) im Status-Check.
+
+**Epochen-Checkliste (vor Gate-Start):**
+
+1. Cron-Zeile / systemd-Timer auf Ziel-Takt (`0 * * * *` oder `*/5 * * * *`)
+2. `WATCHDOG_CRON_INTERVAL_MINUTES` passend setzen (Transport-Schwellen)
+3. `make news-agent-cron-status` — `scheduler_interval_min=` + `source=crontab`; Divergenz Env → **WARN** (exit 0)
+4. Neues `NEWS_SCHEDULER_EPOCH_TS` setzen (erster **Cron**-Marker der Epoche)
+5. 24 h warten — G1–G4 mit passendem **`n_min`** (20 bzw. 244)
+
+**Verboten:** Erstes 5-min-Fenster mit `n_min=20` auswerten und A3 danach als „Korrektur“ einführen — das wäre HARKing am Nachweis-Ende.
+
+##### 8.6.1 Amendment A3.1 — Schedule als Source of Truth (nach Gate-Close)
+
+**Problem (A3 fragil):** Wenn Crontab `*/5` steht, `NEWS_SCHEDULER_INTERVAL_MINUTES=60` aber gesetzt ist, rechnete G1 mit `n_min=20` → PASS bei ~7 % Zuverlässigkeit — derselbe Fehlertyp wie falscher Watchdog-`stale_s`, nur am Nachweis-Ende.
+
+**Lösung:** Crontab / LaunchAgent-Plist ist Source of Truth. Env nur wenn System-Abfrage fehlschlägt.
+
+**Priorität (`get_scheduler_interval_from_system` / `measure_scheduler_interval_minutes`):**
+
+1. Linux/Hetzner: `crontab -l`, Zeile mit `# AGENTX_NEWS_AGENT` — Minute-Feld (`*/5` → 5, `0` + `* *` → 60)
+2. macOS: `~/Library/LaunchAgents/com.agentx.news-agent.plist` → `StartCalendarInterval` (stündlich → 60)
+3. Fallback: `NEWS_SCHEDULER_INTERVAL_MINUTES`, dann `WATCHDOG_CRON_INTERVAL_MINUTES`
+4. Default: **60** (A1-Anker)
+
+**Validierung:** `make news-agent-cron-status` — bei lesbarer Schedule und gesetzter Env **WARN** (non-blocking, exit 0), wenn Werte divergieren. G1 und Cron-Lauf nutzen Schedule; Operator soll Env bereinigen.
+
+**Deploy-Reihenfolge:**
+
+```text
+Gate-Close (2026-09-02T12:00:01Z)
+  → v1.3 (rss_parser published_at)
+  → A3.1 (cron_schedule.py)
+  → Polling-Epoche (Tag 7+, neues NEWS_SCHEDULER_EPOCH_TS)
+```
+
+**Tests (Pflicht):** Crontab `*/5` → 5 · stündlich `0 * * * *` → 60 · Schedule nicht lesbar → Env · kein Env → 60 · Env≠Schedule → Mismatch-Text.
+
 ---
 
 ## Siehe auch
@@ -551,5 +621,9 @@ journalctl --list-boots
 - [`docs/V13_DEPLOY_RUNBOOK.md`](V13_DEPLOY_RUNBOOK.md) — v1.3 Deploy **post Gate-Close only**
 - [`docs/PAPER_SIZING_PREREG.md`](PAPER_SIZING_PREREG.md) — Strang B, Gate n≥50
 - [`scripts/news_24h_sleep_from_pmset.py`](../scripts/news_24h_sleep_from_pmset.py) — G4 `total_sleep_h` (macOS)
+- [`services/news_agent/gate_g1.py`](../services/news_agent/gate_g1.py) — G1 `n_min` (A1+A3)
+- [`services/news_agent/cron_schedule.py`](../services/news_agent/cron_schedule.py) — `interval_min` aus Schedule (A3.1)
 - §8.5.2 — G4 `downtime_h` (Linux/Hetzner, A2)
+- §8.6 — Polling-Epoche `interval_min` + G1-Skalierung (A3)
+- §8.6.1 — Schedule Source of Truth (A3.1)
 - [`scripts/news_agent_host_cron.py`](../scripts/news_agent_host_cron.py) — LaunchAgent-Plist
