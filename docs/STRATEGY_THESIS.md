@@ -1,7 +1,7 @@
 # Agent-X — Strategy Thesis & Alpha Architecture
 
 **Status:** ACTIVE (iterative hypothesis testing)  
-**Last Updated:** 2026-09-01  
+**Last Updated:** 2026-09-02  
 **Method:** Backtest-driven falsification (Stage A / B2 / H2) · prove-it-first  
 **Parent:** [`NEWS_AGENT.md`](NEWS_AGENT.md) · [`NEWS_24H_SCHEDULER_GATE.md`](NEWS_24H_SCHEDULER_GATE.md) · [`SHADOW_EVALUATOR_PREREG.md`](SHADOW_EVALUATOR_PREREG.md)
 
@@ -79,16 +79,34 @@ H₀ beantwortet nicht „haben wir Edge?“, sondern „läuft die Mess-Infrast
 | **Szenario** | **3 — Falsifiziert** (min. 10 Trades für S1 erforderlich; Best-Cells n≤4) |
 | **Artefakt** | [`results/results_stage_h2_vol_breakout.csv`](../results/results_stage_h2_vol_breakout.csv) |
 
-### 2.4 Orthogonale Schlussfolgerung (Preis-Action abgeschlossen)
+### 2.5 Stage M2b — 15m Volume-Explosion Breakout
+
+| | |
+|--|--|
+| **Hypothese** | Plötzlicher Volumen-Spike (`volume > 5× median(96)`) + gerichtete Bewegung (`\|return\| > 1.5σ`) signalisiert institutionellen Einstieg (Smart Money) |
+| **Skript** | [`scripts/backtest_m2_volume_breakout.py`](../scripts/backtest_m2_volume_breakout.py) |
+| **Grid** | `k_vol ∈ {3, 5, 7}` · `k_entry ∈ {1.5, 2.0, 2.5}` · `k_tp/k_sl` wie A/B2 → **81 Kombinationen × 2 Assets = 162 Zellen** |
+| **Kosten** | 19 bps BTC · 25 bps ETH (Round-Trip) |
+| **E[PnL_net] Default** | −0,233% (BTC, n=545) · −0,278% (ETH, n=729) |
+| **E[PnL_net] best cell** | −21,4 bps (BTC) · −23,3 bps (ETH) — alle Zellen negativ |
+| **Sharpe/trade (Default BTC)** | −0,80 (korrigiert; keine Kerzen-Frequenz-Annualisierung) |
+| **Szenario** | **3 — Falsifiziert** |
+| **Commit** | `PENDING` |
+| **Artefakt** | [`results/stage_m2b_results.csv`](../results/stage_m2b_results.csv) |
+
+**Interpretation:** Volumen-Spikes auf 15m wirken als Retail-FOMO-/Mean-Reversion-Falle, nicht als Smart-Money-Einstieg. Brutto-Edge ≈ 0; Netto ≈ −Kosten.
+
+### 2.6 Orthogonale Schlussfolgerung (Preis-Action abgeschlossen)
 
 ```text
 Long nach 2σ-Dip:         E[R_gross] ≈ 0   (keine Reversion)       — Stage A
 Short nach 2σ-Dip:        E[R_gross] ≈ 0   (keine Fortsetzung)     — Stage B2
 Vol-Kompression→Breakout: E[R_gross] ≈ 0   (keine Expansion-Edge)  — Stage H2
-Netto (alle Stages):      ≈ −19 bps         (Kostenstrafe bei ausreichend n)
+Volumen-Explosion:        E[R_gross] ≈ 0   (kein Smart-Money)      — Stage M2b
+Netto (alle Stages):      ≈ −19..25 bps    (Kostenstrafe bei ausreichend n)
 ```
 
-**Erkenntnis:** Reine Preis-Action auf 15m (Dip-Reversion, Momentum, Vol-Breakout) liefert kein robustes Brutto-Alpha. Der Pivot zu **exogenen Primärsignalen** (News/Regime) ist keine strategische Präferenz mehr, sondern **empirisch erzwungen**.
+**Erkenntnis:** Reine Preis-/Volumen-Action auf 15m (Dip-Reversion, Momentum, Vol-Breakout, Volumen-Spike) liefert kein robustes Brutto-Alpha. Der Pivot zu **exogenen Primärsignalen** (News/Regime, Funding-Extrema) ist keine strategische Präferenz mehr, sondern **empirisch erzwungen**.
 
 ---
 

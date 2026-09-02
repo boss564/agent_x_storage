@@ -20,6 +20,8 @@ import ccxt
 import numpy as np
 import pandas as pd
 
+from scripts.backtest_metrics import metrics_from_trades, years_from_timestamps
+
 DATA_DIR = "data"
 RESULTS_DIR = "results"
 SYMBOLS = ["BTC/USDT", "ETH/USDT"]
@@ -170,54 +172,20 @@ def evaluate_grid(df: pd.DataFrame, symbol: str) -> pd.DataFrame:
     """3D grid search with 60% neighbor plateau robustness."""
     results = []
     grid_dict: dict = {}
+    years = years_from_timestamps(df["timestamp"])
 
     for ke in K_ENTRY_GRID:
         for ktp in K_TP_GRID:
             for ksl in K_SL_GRID:
                 trades = simulate_trade_strategy(df, ke, ktp, ksl)
-                n_trades = len(trades)
-
-                if n_trades == 0:
-                    metrics = {
-                        "symbol": symbol,
-                        "k_entry": ke,
-                        "k_tp": ktp,
-                        "k_sl": ksl,
-                        "trades": 0,
-                        "win_rate": 0.0,
-                        "e_pnl_net": 0.0,
-                        "e_pnl_gross": 0.0,
-                        "sharpe": 0.0,
-                        "profit_factor": 0.0,
-                    }
-                else:
-                    net_pnls = np.array([t["net_pnl"] for t in trades])
-                    wins = net_pnls[net_pnls > 0]
-                    losses = net_pnls[net_pnls < 0]
-                    win_rate = len(wins) / n_trades
-                    e_pnl_net = float(np.mean(net_pnls))
-                    e_pnl_gross = float(np.mean([t["gross_pnl"] for t in trades]))
-
-                    std_pnl = np.std(net_pnls)
-                    sharpe = (e_pnl_net / std_pnl * np.sqrt(365 * 24 * 4)) if std_pnl > 0 else 0.0
-
-                    gross_wins = float(np.sum(wins)) if len(wins) > 0 else 0.0
-                    gross_losses = float(np.abs(np.sum(losses))) if len(losses) > 0 else 0.0
-                    profit_factor = (gross_wins / gross_losses) if gross_losses > 0 else 999.0
-
-                    metrics = {
-                        "symbol": symbol,
-                        "k_entry": ke,
-                        "k_tp": ktp,
-                        "k_sl": ksl,
-                        "trades": n_trades,
-                        "win_rate": win_rate,
-                        "e_pnl_net": e_pnl_net,
-                        "e_pnl_gross": e_pnl_gross,
-                        "sharpe": sharpe,
-                        "profit_factor": profit_factor,
-                    }
-
+                base = metrics_from_trades(trades, years=years)
+                metrics = {
+                    "symbol": symbol,
+                    "k_entry": ke,
+                    "k_tp": ktp,
+                    "k_sl": ksl,
+                    **base,
+                }
                 results.append(metrics)
                 grid_dict[(ke, ktp, ksl)] = metrics
 
@@ -278,7 +246,8 @@ def main() -> None:
                     "win_rate",
                     "e_pnl_gross",
                     "e_pnl_net",
-                    "sharpe",
+                    "sharpe_per_trade",
+                    "sharpe_annualized",
                     "profit_factor",
                     "plateau_robust",
                 ]
