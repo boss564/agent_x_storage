@@ -126,11 +126,27 @@ sudo logrotate -d /etc/logrotate.d/agent-x    # Dry-Run
 |------|--------|
 | `logs/*.log` | 14d, `maxsize 100M`, `0640 root adm` |
 
-### 3.2 Logrotate — Phase B (`news_scores.jsonl`, **nach Soak**)
+### 3.2 Logrotate — Phase B (`news_scores.jsonl`, **Einbahnstraße**)
 
-**Nicht** direkt nach Gate-Close scharfschalten. Erst wenn v1.3 **~3–7 Tage** unauffällig läuft (Watchdog OK, Schema v1.3 stabil) — sonst verengt sich der Rollback-Pfad (§5).
+**Phase B ist irreversibel für den Rollback:** Ab der ersten `news_scores`-Rotation ist Rollback nicht mehr `git checkout` (Pfad A), sondern nur noch Pfad B mit Merge (§5).
 
-`news_scores.jsonl` ist WORM-Zustand. **rename + create** ist sicher mit `iter_jsonl_store`-Readern (`load_seen`, `load_run_markers`, `last_run_marker`). **Kein** `copytruncate`, **kein** `dateformat -%Y%m%d` allein (`maxsize 200M` → Same-Day-Kollisionen).
+**Nicht** direkt nach Gate-Close scharfschalten. Öffnungskriterien sind **Beobachtungen**, kein Kalenderdatum:
+
+| Gate | Kriterium |
+|------|-----------|
+| **Watchdog-Soak** | `make news-watchdog` durchgehend **Exit 0** über die gesamte Soak-Periode (kein WARN `1`, kein CRITICAL `2`). Zweimal WARN an Tag 4 → Phase B verschiebt sich, bis wieder grün — ohne Ops-Entscheid. |
+| **Tag-7 Lag-Report** | `--lag-report` (§4.4): `lag_coverage` und `coverage_by_source` **plausibel** (Spec §5.1.3). Median-GO/NO-GO (§5.1.1) steuert die Polling-Epoche, nicht Phase B — aber Coverage muss vor Rotation Sinn ergeben. |
+
+Beide Gates grün → Phase B installieren. Fehlt eines → bei Phase A bleiben (Rollback-Fenster offen).
+
+Optional: täglichen Soak-Beleg loggen (`logs/watchdog_soak.log`):
+
+```bash
+# Crontab-Ergänzung nur während Soak (nach Deploy, vor Phase B)
+0 12 * * * cd /root/agent_x_storage && PYTHONPATH=. python3 scripts/watchdog_news_ingestion.py >> logs/watchdog_soak.log 2>&1; echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) exit=$?" >> logs/watchdog_soak.log
+```
+
+`news_scores.jsonl` ist WORM-Zustand. **rename + create** mit `iter_jsonl_store`-Readern. **Kein** `copytruncate`, **kein** `dateformat -%Y%m%d` allein.
 
 ```bash
 cd /root/agent_x_storage
@@ -197,16 +213,17 @@ for line in sys.stdin:
 - `published_at`: ISO-UTC oder `null` — **kein** `now()`-Fallback bei fehlendem Datum
 - `detection_lag` / `detection_lag_sec`: Ganzzahl Sekunden oder `null`
 
-### 4.4 Tag-7 Lag-Report (Pflicht vor M2-Live)
+### 4.4 Tag-7 Lag-Report (Soak-Gate + M2-Vorstufe)
 
-7 Tage nach Deploy:
+7 Tage nach Deploy — **Pflicht vor Phase-B-Logrotate** und Vorstufe für M2:
 
 ```bash
 PYTHONPATH=. python3 scripts/backtest_h1_news_m2_skeleton.py \
   --lag-report --jsonl data/news_scores.jsonl
 ```
 
-Frozen GO/NO-GO: Median `detection_lag` ≤ 15 min → GO; sonst Polling-Epoche (Spec §11) vor M2-Replay.
+Frozen GO/NO-GO (Polling-Epoche): Median `detection_lag` ≤ 15 min → GO (§5.1.1).  
+**Phase B:** zusätzlich `lag_coverage` / `coverage_by_source` plausibel (§5.1.3) — unabhängig vom Median-Verdict.
 
 ---
 
@@ -287,7 +304,7 @@ make news-agent-multi-once
 echo "[$(date -u +'%Y-%m-%dT%H:%M:%SZ')] ROLLBACK to $PRE_V13_SHA (post-rotation merge)" >> logs/deploy_incidents.log
 ```
 
-**Prävention:** Phase-B-Logrotate erst nach Soak — in den ersten Tagen nach Deploy bleibt Pfad A verfügbar.
+**Prävention:** Phase B erst wenn Watchdog-Soak + Tag-7 `--lag-report` grün — bis dahin bleibt Pfad A (git-only Rollback) offen.
 
 ---
 
@@ -299,7 +316,7 @@ Nach erfolgreichem Durchlauf in [`STRATEGY_THESIS.md`](STRATEGY_THESIS.md) §6 u
 - [x] **2026-09-02T12:00:01Z:** Gate-Close erreicht (G1 PASS archiviert).
 - [x] **Release v1.3 deployed:** `published_at` + `detection_lag` (schema v1.3).
 - [x] **Logrotate Phase A:** `logs/*.log` (`logrotate.agent-x-logs-only.conf`).
-- [ ] **Logrotate Phase B:** `news_scores.jsonl` — erst nach ~3–7d Soak.
+- [ ] **Logrotate Phase B:** `news_scores.jsonl` — nach Watchdog-Soak (Exit 0) + Tag-7 `--lag-report` (Coverage plausibel).
 - [x] **JSONL store readers:** `iter_jsonl_store` (Dedup + Marker + Hash-Kette).
 - [ ] **Tag-7 `--lag-report`:** GO/NO-GO (§5.1.1 H1_M2_EVENT_DRIVEN_SPEC).
 - [ ] **M2 Live-Replay:** erst ≥90d JSONL + ≥200 gated Events.

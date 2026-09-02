@@ -7,7 +7,7 @@
 | Phase | When | File | What |
 |-------|------|------|------|
 | **A** | Post gate-close + v1.3 deploy | `logrotate.agent-x-logs-only.conf` | `logs/*.log` only — safe immediately |
-| **B** | After v1.3 soak (~3–7 d, Watchdog OK) | append `news_scores` block from `logrotate.agent-x.conf` | WORM data — narrows rollback window |
+| **B** | Watchdog Exit 0 durchgehend + Tag-7 `--lag-report` (Coverage plausibel) | `logrotate.agent-x.conf` (full) | **Einbahnstraße** — Rollback nur noch Pfad B |
 
 **Why phased:** Before the first `news_scores.jsonl` rotation, rollback = `git checkout` + audit restore. After rotation, a legacy reader (v1.2) sees an empty active file and replays the full RSS corpus — worse than no rollback unless archives are merged back. See [`docs/V13_DEPLOY_RUNBOOK.md`](../../docs/V13_DEPLOY_RUNBOOK.md) §5.
 
