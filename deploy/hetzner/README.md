@@ -15,9 +15,9 @@ find /root/agent_x_storage/data -name 'news_scores.jsonl-*.gz' -exec gzip -t {} 
 | Path | Policy | Install |
 |------|--------|---------|
 | `logs/*.log` | 14 days, `maxsize 100M`, `0640 root adm` | Anytime |
-| `data/news_scores.jsonl` | 365 days, **rename + create** (not `copytruncate`), `maxsize 200M`, post-rotate watchdog + `gzip -t` | **After** loader deploy + preferably gate-close |
+| `data/news_scores.jsonl` | 365 days, **rename + create** (not `copytruncate`), `maxsize 200M`, `dateformat -%Y%m%d-%s` (unique per rotation when `maxsize` fires intraday), post-rotate watchdog + `gzip -t` | **After** loader deploy + preferably gate-close |
 
-`news_scores.jsonl` is WORM state, not a throwaway log. The hourly cron opens the file per run and closes it — regular rotation is safe once readers use `iter_jsonl_store` (`load_seen`, `load_run_markers`, `last_run_marker`). Archive sort is logrotate-aware: numeric suffixes (`.2` before `.1` before active), `dateext` ascending by date.
+`news_scores.jsonl` is WORM state, not a throwaway log. The hourly cron opens the file per run and closes it — regular rotation is safe once readers use `iter_jsonl_store` (`load_seen`, `load_run_markers`, `last_run_marker`). Archive sort: `dateext` suffixes lex ascending (`-%Y%m%d-%s` in template); numeric `.N` fallback if convention changes.
 
 `maxsize 200M` can rotate outside the daily window — avoid enabling the data block during the 24h scheduler gate unless ops accepts mid-window archive moves.
 

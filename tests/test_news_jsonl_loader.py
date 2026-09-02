@@ -20,6 +20,20 @@ def _write(path: Path, rows: list[dict]) -> None:
     path.write_text("\n".join(json.dumps(r) for r in rows) + "\n", encoding="utf-8")
 
 
+def test_sort_dateext_with_epoch_same_day() -> None:
+    files = [
+        Path("news_scores.jsonl"),
+        Path("news_scores.jsonl-20260902-1725181200.gz"),
+        Path("news_scores.jsonl-20260902-1725181100"),
+    ]
+    ordered = sort_news_jsonl_files(files)
+    assert [p.name for p in ordered] == [
+        "news_scores.jsonl-20260902-1725181100",
+        "news_scores.jsonl-20260902-1725181200.gz",
+        "news_scores.jsonl",
+    ]
+
+
 def test_sort_logrotate_numeric_suffix() -> None:
     files = [
         Path("news_scores.jsonl"),
@@ -177,6 +191,7 @@ def run() -> None:
 
     with TemporaryDirectory() as td:
         root = Path(td)
+        test_sort_dateext_with_epoch_same_day()
         test_sort_logrotate_numeric_suffix()
         test_last_hash_follows_archive_chain_not_lex(root)
         test_iter_record_order_across_numeric_archives(root)
@@ -188,7 +203,7 @@ def run() -> None:
         test_load_recent_passes_modified_after(root)
         test_discover_empty_dir(root)
         test_load_seen_and_markers_across_archive(root)
-    print("news_jsonl_loader: 11/11 passed")
+    print("news_jsonl_loader: 12/12 passed")
 
 
 if __name__ == "__main__":

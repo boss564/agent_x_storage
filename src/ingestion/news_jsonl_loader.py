@@ -15,15 +15,15 @@ logger = logging.getLogger(__name__)
 DEFAULT_BASENAME = "news_scores.jsonl"
 OpenText = Callable[..., TextIO]
 
-_DATEEXT_SUFFIX_RE = re.compile(r"^(\d{8})$")
+_DATEEXT_SUFFIX_RE = re.compile(r"^\d{8}(?:-\d+)?$")
 _NUMERIC_SUFFIX_RE = re.compile(r"^(\d+)$")
 
 
 def _archive_sort_key(path: Path, *, basename: str = DEFAULT_BASENAME) -> tuple[int, int, str]:
     """Oldest archives first, active file last.
 
-    Logrotate numbering is reverse: ``.1`` is the newest archive, ``.2`` older.
-    ``dateext`` suffixes ``-YYYYMMDD`` sort ascending by date.
+    ``dateext`` with ``-%Y%m%d-%s`` (Hetzner template): lex order = chrono order.
+    Legacy ``-%Y%m%d`` only: same. Numeric ``.N`` (no dateext): higher N = older.
     """
     name = path.name
     if name == basename:
@@ -34,8 +34,10 @@ def _archive_sort_key(path: Path, *, basename: str = DEFAULT_BASENAME) -> tuple[
         return (0, 0, name)
 
     tail = stem[len(basename) :]
-    if tail.startswith("-") and (m := _DATEEXT_SUFFIX_RE.match(tail[1:])):
-        return (0, int(m.group(1)), "")
+    if tail.startswith("-"):
+        suffix = tail[1:]
+        if _DATEEXT_SUFFIX_RE.match(suffix):
+            return (0, 0, suffix)
     if tail.startswith(".") and (m := _NUMERIC_SUFFIX_RE.match(tail[1:])):
         # Higher N = older archive → read first → smaller sort key via negation.
         return (0, -int(m.group(1)), "")
