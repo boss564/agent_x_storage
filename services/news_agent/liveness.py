@@ -9,13 +9,13 @@ price-gap PhaseSource (instance 6).
 """
 from __future__ import annotations
 
-import json
 import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional
 
 from agents_b2g.news.feed_health import classify_transport_health, feed_report
+from src.ingestion.news_jsonl_loader import iter_jsonl_store
 
 INVARIANT = (
     "Jeder Audit-Writer, dessen Normalzustand Schweigen ist, muss pro "
@@ -85,20 +85,25 @@ def measurement_run_markers(
 
 
 def load_run_markers(path: Path) -> List[dict]:
-    rows: List[dict] = []
-    if not path.is_file():
-        return rows
-    for line in path.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
-        if not line:
+    """All run_markers in active JSONL and rotated archives (oldest → newest)."""
+    return [
+        dict(row)
+        for row in iter_jsonl_store(path)
+        if row.get("source_type") == RUN_MARKER_TYPE
+    ]
+
+
+def _newest_run_marker(markers: List[Mapping[str, Any]]) -> Optional[dict]:
+    best: Optional[dict] = None
+    best_ts: Optional[datetime] = None
+    for row in markers:
+        ts = parse_marker_ts(str(row.get("ts") or ""))
+        if ts is None:
             continue
-        try:
-            row = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        if row.get("source_type") == RUN_MARKER_TYPE:
-            rows.append(row)
-    return rows
+        if best_ts is None or ts >= best_ts:
+            best_ts = ts
+            best = dict(row)
+    return best
 
 
 def derive_quiet_streaks(
@@ -174,20 +179,8 @@ def run_marker_record(
 
 
 def last_run_marker(path: Path) -> Optional[dict]:
-    last = None
-    if not path.is_file():
-        return None
-    for line in path.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            row = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        if row.get("source_type") == RUN_MARKER_TYPE:
-            last = row
-    return last
+    """Newest run_marker by ``ts`` across active file and archives."""
+    return _newest_run_marker(load_run_markers(path))
 
 
 def run_marker_freshness(

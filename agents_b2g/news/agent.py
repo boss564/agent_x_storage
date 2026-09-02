@@ -15,6 +15,7 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence, Set
 from agents_b2g.news.scraper import DEFAULT_FEEDS, fetch_news, parse_rss_xml
 from agents_b2g.news.sentiment import is_relevant, score_sentiment
 from services.news_agent.impact import compute_cross_chain_impact
+from src.ingestion.news_jsonl_loader import iter_jsonl_store
 
 SCHEMA = "news_agent_score/v1.3"
 GENESIS = "0" * 64
@@ -30,37 +31,20 @@ def _now() -> str:
 
 
 def _last_hash(path: Path) -> str:
-    if not path.is_file():
-        return GENESIS
-    last = ""
-    with path.open("r", encoding="utf-8") as handle:
-        for line in handle:
-            if line.strip():
-                last = line
-    if not last:
-        return GENESIS
-    try:
-        return str(json.loads(last).get("hash") or GENESIS)
-    except json.JSONDecodeError:
-        return GENESIS
+    last_hash = GENESIS
+    for row in iter_jsonl_store(path):
+        digest = row.get("hash")
+        if digest:
+            last_hash = str(digest)
+    return last_hash
 
 
 def load_seen_ids(path: Path) -> Set[str]:
     seen: Set[str] = set()
-    if not path.is_file():
-        return seen
-    with path.open("r", encoding="utf-8") as handle:
-        for line in handle:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                row = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            item = row.get("item_id") or row.get("id")
-            if item:
-                seen.add(str(item))
+    for row in iter_jsonl_store(path):
+        item = row.get("item_id") or row.get("id")
+        if item:
+            seen.add(str(item))
     return seen
 
 

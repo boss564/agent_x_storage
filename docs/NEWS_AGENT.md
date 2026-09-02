@@ -15,6 +15,8 @@ make news-agent-once         # Legacy-PoC → logs/audit/news_scores.jsonl
 make news-agent-multi-once   # Multi-Scraper → data/news_scores.jsonl
 make news-agent-cron-enable # genau eine Zeile, Marker # AGENTX_NEWS_AGENT
 make news-agent-cron-status   # launchd/cron + marker_liveness (NEWS_MARKER_MAX_AGE_H)
+make news-watchdog            # read-only health; WARN 90m / CRIT 150m (hourly cron); lag/pubdate metrics-only
+make news-watchdog-json       # JSON für Monitoring (GO/NO-GO: Tag-7 --lag-report)
 make news-agent-cron-disable
 make news-agent-gap-report     # Entity-Lücken → exports/reports/gap_analysis.json
 make news-agent-gap-cron-enable  # optional täglich 00:00, Marker # AGENTX_NEWS_GAP
@@ -31,8 +33,9 @@ Stdout des Cron-Laufs: `logs/audit/news_cron.log`. Scores (Cron): `data/news_sco
 
 Optional: `NEWS_AGENT_JSONL=/pfad/news_scores.jsonl`. `--loop` nur bewusst (`scripts/run_news_agent.py --loop`).
 
-## Schema (`news_agent_score/v1.3`)
+## Schema (`news_agent_multi/v1.3`)
 
+`timestamp` = Ingest (`t_ingest`), `published_at` = Feed-Veröffentlichung (RSS `pubDate` / Atom `published`), `detection_lag` = Sekunden Ingest−Published (JSONL, berechnet).  
 `sentiment` −1/0/1, `label`, `confidence`, `symbols` (Ticker), `assets` (Ticker + `MACRO` / `GENERAL`), `entities` (`chains` / `bridges` / `protocols` / `persons`), `cross_chain_impact` (`bridges`, `affected_chains`, `impact_score`), `item_id`, Hash-Kette (`prev_hash`/`hash`). Jede Zeile: `diagnostic_only`, `live_execution=false`, `order_send=false`.
 
 `assets` kommt aus `TOKEN_KEYWORDS`. `entities` aus `CHAIN_KEYWORDS` / `BRIDGE_KEYWORDS` / `PROTOCOL_KEYWORDS` / `PERSON_KEYWORDS` in `agents_b2g/news/config.py`. `cross_chain_impact` aus `config/cross_chain_map.json` via `services/news_agent/impact.py`: passende Bridges (Name oder Chain-Schnitt), `affected_chains` aus `correlation_matrix` (plus Korridor-Ziele), `impact_score` = max `impact_factor` der Treffer. Nicht jede Bridge-Peer-Chain — sonst würden Polygon/Optimism das Solana-Beispiel überdecken. Kurze Tokens nur wortgebunden (`\beth\b`, nicht WHETHER; `matic` nicht automatic). `GENERAL` nur wenn kein Ticker und kein MACRO. `relevant_only` nimmt Ticker + MACRO, nicht GENERAL allein.
@@ -128,5 +131,7 @@ PYTHONPATH=. python3 -m services.news_agent.runner   # → data/news_scores.json
 ```
 
 `impact_level=CRITICAL` ruft Telegram nur bei `NEWS_AGENT_TELEGRAM_CRITICAL=true` (bestehende `send_telegram`, keine neuen Secrets). Host-Cron: `python3 -m services.news_agent.runner --once` → `data/news_scores.jsonl`. Cluster-Cron unverändert.
+
+**Hetzner Logrotate (post gate-close):** `deploy/hetzner/logrotate.agent-x.conf` — rename+create (kein `copytruncate`), 365d Archive, post-rotate Watchdog + `gzip -t`; erst nach `iter_jsonl_store`-Readern (`load_seen`, `load_run_markers`). **Streaming-Loader:** `src/ingestion/news_jsonl_loader.py` (`iter_jsonl_store`, `iter_news_records_tail`).
 
 Pro Lauf schreibt der Runner einen `run_marker` (Transport-Health je Quelle: `ok` / `quiet` / `degraded` / `dead`). `entries==0` ist nicht automatisch tot. **Struktur:** `structure_ok` = Channel-/Feed-Container-Präsenz (nicht Item-Anzahl); `¬structure_ok` → `degraded` (bricht Quiet-Streak). Pre-Reg: `docs/NEWS_FEED_STRUCTURE_PREREG.md`. Aufeinanderfolgendes `quiet` ≥ **72 h** (Pre-Reg `QUIET_STALE_AFTER_S`, nicht nachträglich drehen) → `streaks.*.stale`. Invariante: `docs/AUDIT_WRITER_LIVENESS.md`. `sentiment_score` bleibt kontinuierlich; keine `bullish`/`bearish`-Schwelle.

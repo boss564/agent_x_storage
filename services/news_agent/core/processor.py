@@ -1,7 +1,6 @@
 """Score, multi-asset tags, impact, JSONL dedup."""
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Callable, Iterable, List, Optional, Set
 
@@ -9,6 +8,7 @@ from agents_b2g.news.config import empty_entities
 from agents_b2g.news.sentiment import score_sentiment
 from services.news_agent.impact import compute_cross_chain_impact
 from services.news_agent.models import NewsItem
+from src.ingestion.news_jsonl_loader import iter_jsonl_store
 
 CRITICAL_MARKERS = (
     "hack",
@@ -51,28 +51,21 @@ def enrich(item: NewsItem) -> NewsItem:
 
 
 def load_seen(path: Path) -> Set[str]:
+    """Dedup keys across active JSONL and logrotate archives (read-only)."""
     seen: Set[str] = set()
-    if not path.is_file():
-        return seen
-    with path.open("r", encoding="utf-8") as handle:
-        for line in handle:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                row = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            if row.get("source_type") == "run_marker":
-                continue
-            for key in ("item_id", "url"):
-                val = row.get(key)
-                if val:
-                    seen.add(str(val))
+    for row in iter_jsonl_store(path):
+        if row.get("source_type") == "run_marker":
+            continue
+        for key in ("item_id", "url"):
+            val = row.get(key)
+            if val:
+                seen.add(str(val))
     return seen
 
 
 def append_jsonl(path: Path, item: NewsItem) -> None:
+    import json
+
     path.parent.mkdir(parents=True, exist_ok=True)
     row = item.to_dict()
     if row.get("live_execution") is True or row.get("order_send") is True:
@@ -82,6 +75,8 @@ def append_jsonl(path: Path, item: NewsItem) -> None:
 
 
 def append_run_marker(path: Path, feeds: dict, *, streaks: Optional[dict] = None) -> dict:
+    import json
+
     from services.news_agent.liveness import run_marker_record
 
     path.parent.mkdir(parents=True, exist_ok=True)
