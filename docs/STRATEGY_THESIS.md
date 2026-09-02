@@ -91,7 +91,7 @@ H₀ beantwortet nicht „haben wir Edge?“, sondern „läuft die Mess-Infrast
 | **E[PnL_net] best cell** | −21,4 bps (BTC) · −23,3 bps (ETH) — alle Zellen negativ |
 | **Sharpe/trade (Default BTC)** | −0,80 (korrigiert; keine Kerzen-Frequenz-Annualisierung) |
 | **Szenario** | **3 — Falsifiziert** |
-| **Commit** | `PENDING` |
+| **Commit** | `292765c7` |
 | **Artefakt** | [`results/stage_m2b_results.csv`](../results/stage_m2b_results.csv) |
 
 **Interpretation:** Volumen-Spikes auf 15m wirken als Retail-FOMO-/Mean-Reversion-Falle, nicht als Smart-Money-Einstieg. Brutto-Edge ≈ 0; Netto ≈ −Kosten.
