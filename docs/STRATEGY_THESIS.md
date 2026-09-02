@@ -2,7 +2,7 @@
 
 **Status:** ACTIVE (iterative hypothesis testing)  
 **Last Updated:** 2026-09-01  
-**Method:** Backtest-driven falsification (Stage A / B2) · prove-it-first  
+**Method:** Backtest-driven falsification (Stage A / B2 / H2) · prove-it-first  
 **Parent:** [`NEWS_AGENT.md`](NEWS_AGENT.md) · [`NEWS_24H_SCHEDULER_GATE.md`](NEWS_24H_SCHEDULER_GATE.md) · [`SHADOW_EVALUATOR_PREREG.md`](SHADOW_EVALUATOR_PREREG.md)
 
 ---
@@ -64,15 +64,31 @@ H₀ beantwortet nicht „haben wir Edge?“, sondern „läuft die Mess-Infrast
 | **Szenario** | **3 — Falsifiziert** |
 | **Artefakt** | [`results/results_stage_b2_momentum.csv`](../results/results_stage_b2_momentum.csv) |
 
-### 2.3 Orthogonale Schlussfolgerung
+### 2.3 Stage H2 — Volatility Breakout (letzter reiner Preis-Action-Test)
+
+| | |
+|--|--|
+| **Hypothese** | Nach Vol-Kompression (`σ₁₅ₘ[t−1] < k_low × median(σ, 96)`) folgt Vol-Expansion (`σ₁₅ₘ[t] > k_high × median`) → richtungsgebundener Trade |
+| **Skript** | [`scripts/backtest_h2_vol_breakout.py`](../scripts/backtest_h2_vol_breakout.py) |
+| **Grid** | `k_low ∈ {0.5, 0.7, 0.9}` · `k_high ∈ {1.5, 2.0, 2.5}` · `k_tp/k_sl` wie A/B2 → **81 Kombinationen × Long/Short × 2 Assets = 324 Zellen** |
+| **σ-Definition** | `σ₁₅ₘ` = `std(returns, 15)` · `shift(1)` · Baseline = `median(σ, 96)` |
+| **E[PnL_gross] best** | +0,34% (BTC Long, n=2) · +1,04% (ETH Long, n=4) — **nicht signifikant** |
+| **E[PnL_net] best** | +0,15% (BTC Long, n=2) · +0,85% (ETH Long, n=4) — **nicht signifikant** |
+| **Hochfrequenz-Zelle** | k_low=0.9, k_high=1.5: 36–47 Trades/Jahr → E[PnL_net] ≈ **−0,21% bis −0,27%** |
+| **Grid-Median** | E[PnL_net] = **−0,11%** · nur 9,9% Zellen netto positiv |
+| **Szenario** | **3 — Falsifiziert** (min. 10 Trades für S1 erforderlich; Best-Cells n≤4) |
+| **Artefakt** | [`results/results_stage_h2_vol_breakout.csv`](../results/results_stage_h2_vol_breakout.csv) |
+
+### 2.4 Orthogonale Schlussfolgerung (Preis-Action abgeschlossen)
 
 ```text
-Long nach 2σ-Dip:   E[R_gross] ≈ 0   (keine Reversion)
-Short nach 2σ-Dip:  E[R_gross] ≈ 0   (keine Fortsetzung)
-Netto:              ≈ −19 bps        (reine Kostenstrafe)
+Long nach 2σ-Dip:         E[R_gross] ≈ 0   (keine Reversion)       — Stage A
+Short nach 2σ-Dip:        E[R_gross] ≈ 0   (keine Fortsetzung)     — Stage B2
+Vol-Kompression→Breakout: E[R_gross] ≈ 0   (keine Expansion-Edge)  — Stage H2
+Netto (alle Stages):      ≈ −19 bps         (Kostenstrafe bei ausreichend n)
 ```
 
-**Erkenntnis:** Der 15m-Markt nach Volatilitäts-Injektionen verhält sich wie ein **effizientes Fair Game**. Weder Trend noch Reversion übersteigen 19 bps Reibung. Sentiment darf **nicht** nachträglich als Filter auf dieses Preis-Signal gesetzt werden (Overfitting auf Rauschen).
+**Erkenntnis:** Reine Preis-Action auf 15m (Dip-Reversion, Momentum, Vol-Breakout) liefert kein robustes Brutto-Alpha. Der Pivot zu **exogenen Primärsignalen** (News/Regime) ist keine strategische Präferenz mehr, sondern **empirisch erzwungen**.
 
 ---
 
@@ -89,6 +105,24 @@ Netto:              ≈ −19 bps        (reine Kostenstrafe)
 E[R_priceOnly] ≤ 0  ⟹  Fokus → 100% auf exogene Katalysatoren
 ```
 
+### 3.1 Datenproblem & Stufenplan
+
+| Stufe | Name | Daten | Status |
+|-------|------|-------|--------|
+| **M0** | Null-Injection | Synthetisches Sentiment auf Stage-A-Trade-Pool | ✅ PASS (500 Seeds, 100% within ±5 bps) |
+| **M1** | Oracle-Decke | Lookahead `gross_pnl ≥ +30 bps` | ✅ Decke existiert (n=341, E[net]=+27 bps) — **kein** News-Beweis |
+| **M2** | Live-Replay | `news_scores.jsonl` akkumuliert | **Spezifikation fertig** — Live blockiert bis ≥90d Daten |
+
+**Wichtig:** Stage B („Sentiment filtert Dips“) ist **verworfen** — Base-Signal falsifiziert.  
+M0/M1 fragen nicht „funktioniert News?“, sondern: *Lohnt sich Datensammlung überhaupt?* und *Ist die Methodik sauber?*
+
+→ Vollständige Präreg: [`docs/H1_NEWS_METHODOLOGY_PREREG.md`](H1_NEWS_METHODOLOGY_PREREG.md)  
+→ M2-Spezifikation: [`docs/H1_M2_EVENT_DRIVEN_SPEC.md`](H1_M2_EVENT_DRIVEN_SPEC.md)  
+→ Skripte: M0/M1 [`backtest_h1_news_null_injection.py`](../scripts/backtest_h1_news_null_injection.py) · M2-Skeleton [`backtest_h1_news_m2_skeleton.py`](../scripts/backtest_h1_news_m2_skeleton.py)
+
+**M1-Nuance:** Oracle-Decke zeigt Varianz im Pool (~19% mit gross ≥ +30 bps), nicht dass News sie findet.  
+**M2-Vorbehalt (§2.2.1):** `t₀` = Ingest (stündlicher Cron) — misst nicht die unmittelbare News-Reaktion; `published_at` + `detection_lag` vor Live-Replay Pflicht.
+
 ---
 
 ## 4. Offene Fragen (priorisiert)
@@ -98,24 +132,33 @@ E[R_priceOnly] ≤ 0  ⟹  Fokus → 100% auf exogene Katalysatoren
 - Gleiche Dip-Logik auf 1h/4h? Fee-Last relativ zu σ sinkt — aber A+B2 auf 15m deuten auf Brutto ≈ 0 unabhängig von Richtung.
 - **Erwartung:** Ähnliches Fair-Game — kein Ersatz für orthogonale Tests.
 
-### 4.2 Conditional Signals — News/Regime (MEDIUM, blockiert)
+### 4.2 H₁ News — Daten & Methodik (HIGH, M0/M1 sofort)
 
-- Kann Sentiment die „richtigen“ Dips selektieren?
-- **Blocker:** Basis-Brutto ≈ 0 → Filter müsste >+30 bps Moves isolieren ohne Gewinner zu überfiltrieren.
-- **Regel:** Erst valides Base-Signal, dann Filter — nicht umgekehrt.
+- **Blocker M2:** Keine 12-Monats-News-Historie — Live-JSONL erst ab Epoch.
+- **M0:** Zufälliges Sentiment auf Dip-Trade-Pool → Filter darf kein Schein-Alpha erzeugen.
+- **M1:** Oracle-Decke (`gross ≥ +30 bps`) → selbst perfekter Filter rettet Dip-Pool?
+- **Regel:** Wenn M1 tot → H₁ = **News-first** (Event → Entry), nicht Dip-Filter.
+- **Präreg:** [`H1_NEWS_METHODOLOGY_PREREG.md`](H1_NEWS_METHODOLOGY_PREREG.md)
 
-### 4.3 Alternative Entry-Logik (HIGH)
+### 4.3 Hypothesis H2: Volatility Breakout — **FALSIFIZIERT** (2026-09-01)
 
-Orthogonal zur Dip-Physik — andere Marktineffizienz:
+Orthogonal zur Dip-Physik — andere Marktineffizienz (Kompression → Expansion):
 
-| Kandidat | Trigger-Idee |
-|----------|----------------|
-| Volatility Breakout | σ_spike > k × σ_rolling |
-| Regime Change | Klassifikator stable → volatile |
-| Volume Surge | Volume > k × Volume_rolling |
-| Compression → Expansion | Range-Narrowing dann Break |
+| Feld | Spezifikation |
+|------|----------------|
+| **Kompression** | `σ₁₅ₘ[t−1] < k_low × median(σ, 96)` |
+| **Breakout** | `σ₁₅ₘ[t] > k_high × median(σ, 96)` |
+| **Exit** | TP/SL = `k × σ₁₅ₘ` · Time-Exit 60 min · pessimistic intrabar |
+| **Ergebnis** | Szenario 3 — Grid-Median netto −0,11%; Best-Cells n≤4; Hochfrequenz-Zellen netto ≈ −19 bps |
 
-**Empfehlung:** Pfad 2 vor 1h-Skalierung und vor Sentiment-Filter.
+Verbleibende Kandidaten (nicht mehr Preis-Action):
+
+| Kandidat | Status |
+|----------|--------|
+| Volatility Breakout | ❌ Falsifiziert (H2) |
+| Regime Change | → H₁ News/Regime-Trigger |
+| Volume Surge | LOW — erst nach H₁ |
+| Compression → Expansion (Range) | LOW — orthogonal, aber Preis-Action-Klasse gesperrt |
 
 ### 4.4 Cross-Asset / Cross-Venue (LOW)
 
@@ -143,12 +186,14 @@ Orthogonal zur Dip-Physik — andere Marktineffizienz:
 
 - [x] `STRATEGY_THESIS.md` anlegen (dieses Dokument)
 - [x] Stage A + B2 falsifiziert dokumentieren (`938ec8ce`, `366957a0`)
-- [ ] H₁-Architektur skizzieren: erster **exogener** News-Trigger (Reißbrett, kein Hetzner-Deploy vor Gate-Close)
-
-### Kurzfristig
-
-- [ ] **Pfad 2:** Neue Hypothese definieren + Backtest-Skript (z. B. Vol-Breakout) — gleiches Framework
-- [ ] Optional: 1h-Sanity nur wenn Pfad 2 auch Brutto ≈ 0 → dann Mean-Reversion-Klasse endgültig zu
+- [x] Stage H2 Vol-Breakout getestet — **Szenario 3** (reine Preis-Action abgeschlossen)
+- [x] M2-Reißbrett (`H1_M2_EVENT_DRIVEN_SPEC.md`) + Skeleton
+- [x] M2 Synthetic-Injection Audit lokal — PASS
+- [x] `published_at` + `detection_lag` Scraper-Fix lokal (schema v1.3) — **Deploy nach Gate-Close** → [`V13_DEPLOY_RUNBOOK.md`](V13_DEPLOY_RUNBOOK.md)
+- [ ] **Post-Gate v1.3:** G1-Snapshot archiviert · `make news-agent-test` auf Hetzner · Logrotate-Template · Watchdog OK
+- [ ] Tag-7 `--lag-report` (§5.1.1/§5.1.3) — Verdict + `lag_coverage`/`coverage_by_source` vor Median
+- [ ] Post-Gate: Polling-Epoche (5 min) prüfen **bevor** M2-Parameter — Spec §11
+- [ ] Optional: 1h-Sanity nur wenn H₁-Brutto auch ≈ 0
 
 ### Mittelfristig (nach G1-PASS)
 
@@ -166,9 +211,11 @@ Orthogonal zur Dip-Physik — andere Marktineffizienz:
 
 | Datum | Eintrag |
 |-------|---------|
+| 2026-09-01 | H₁ M0/M1 Methodik-Test — M0 PASS; M1 Oracle-Decke dokumentiert |
 | 2026-09-01 | Stage A 15m Long-Dip falsifiziert (`938ec8ce`) |
 | 2026-09-01 | Stage B2 15m Short-Momentum falsifiziert (`366957a0`) |
 | 2026-09-01 | Dokument angelegt — H₀ Gate LIVE auf Hetzner (`c8755c2e`) |
+| 2026-09-02 | v1.3 Deploy-Runbook (`V13_DEPLOY_RUNBOOK.md`) — post Gate-Close only |
 
 ---
 
@@ -178,3 +225,4 @@ Orthogonal zur Dip-Physik — andere Marktineffizienz:
 - [`docs/NEWS_FEED_STRUCTURE_PREREG.md`](NEWS_FEED_STRUCTURE_PREREG.md) — Feed-Qualität vs. Scheduler-Gate
 - [`results/results_stage_a.csv`](../results/results_stage_a.csv)
 - [`results/results_stage_b2_momentum.csv`](../results/results_stage_b2_momentum.csv)
+- [`results/results_stage_h2_vol_breakout.csv`](../results/results_stage_h2_vol_breakout.csv)
