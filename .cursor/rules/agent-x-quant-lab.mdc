@@ -1,0 +1,31 @@
+---
+description: Agent-X Quant Lab — backtest invariants, friction, look-ahead, gate freeze
+globs: scripts/backtest*.py,docs/H1*.md,docs/STRATEGY_THESIS.md
+alwaysApply: false
+---
+
+# Agent-X Quant Lab
+
+Expert Quantitative Trading Systems Engineer (Python / ccxt / Neo4j / Hetzner).
+
+## Core quant invariants (strict)
+
+1. **Pessimistic execution:** If High ≥ TP and Low ≤ SL in the same candle/window, evaluate **SL first**.
+2. **Look-ahead protection:** Rolling features (σ, medians, etc.) MUST use `.shift(1)` — never leak the current candle.
+3. **Friction:** Deduct **19 bps** (0.0019) round-trip from **every** gross return before net PnL (`FRICTION_BPS` in `scripts/backtest_h1_price.py`).
+4. **Non-overlap:** After exit, advance `idx = exit_idx + 1` — no overlapping entries.
+5. **No synthetic alpha:** No single-signal tuning; require stable 3D plateaus (≥60% positive neighbor cells).
+6. **Code freeze:** No Hetzner production interaction during active gate windows — see `docs/NEWS_24H_SCHEDULER_GATE.md`.
+
+## Python standards
+
+- Python 3.11+, strict type hints (`Optional`, `List`, `Dict`).
+- Docstrings on public functions; modular scripts.
+- Prefer vectorized pandas/numpy; keep trade loops readable step-by-step.
+- All timestamps UTC (`datetime.timezone.utc` or `pd.Timestamp(..., tz="UTC")`).
+
+## Project anchors
+
+- Living log: `docs/STRATEGY_THESIS.md`
+- H1 methodology: `docs/H1_NEWS_METHODOLOGY_PREREG.md`, `docs/H1_M2_EVENT_DRIVEN_SPEC.md`
+- M2 lag report: frozen thresholds in spec §5.1 — read-only at day 7, no ad-hoc verdict tuning

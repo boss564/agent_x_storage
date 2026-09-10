@@ -2,27 +2,42 @@
 
 Isolated from `imports/legacy_daytrading/news_bot/scraper.py` (DeepSeek/Discord).
 Pre-Reg: docs/NEWS_FEED_STRUCTURE_PREREG.md — structure_ok = container presence.
+
+XML/date parsing: ``src.ingestion.rss_parser`` (M2 ``published_at`` / ``detection_lag``).
 """
 from __future__ import annotations
 
-import hashlib
-import html
-import re
 import xml.etree.ElementTree as ET
 from typing import Dict, List, Optional, Tuple
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from agents_b2g.news.feed_health import feed_report
+from src.ingestion.rss_parser import (
+    item_id,
+    parse_feed_datetime,
+    parse_rss_xml,
+    parse_rss_xml_with_structure,
+)
 
 DEFAULT_FEEDS = (
     ("coindesk", "https://www.coindesk.com/arc/outboundfeeds/rss/"),
     ("cointelegraph", "https://cointelegraph.com/rss"),
 )
 
-_ATOM = "{http://www.w3.org/2005/Atom}"
-_HTML_TAG = re.compile(r"<[^>]+>")
 _DEFAULT_USER_AGENT = "agent-x-news/0 (diagnostic_only; no order send)"
+
+__all__ = [
+    "DEFAULT_FEEDS",
+    "fetch_feed",
+    "fetch_feed_report",
+    "fetch_news",
+    "http_user_agent",
+    "item_id",
+    "parse_feed_datetime",
+    "parse_rss_xml",
+    "parse_rss_xml_with_structure",
+]
 
 
 def http_user_agent() -> str:
@@ -33,119 +48,13 @@ def http_user_agent() -> str:
     return raw if raw else _DEFAULT_USER_AGENT
 
 
-def item_id(source: str, link: str, title: str) -> str:
-    """Stable identity: source|link. Title only if link is empty (normalized).
-
-    Title in the hash caused duplicate alerts when editors retitled the same URL.
-    """
-    link_s = (link or "").strip()
-    if link_s:
-        material = f"{source}|{link_s}".encode("utf-8")
-    else:
-        norm = re.sub(r"\s+", " ", (title or "").strip().lower())
-        material = f"{source}|{norm}".encode("utf-8")
-    return hashlib.md5(material).hexdigest()
-
-
-def _text(node: Optional[ET.Element]) -> str:
-    if node is None:
-        return ""
-    cleaned = _HTML_TAG.sub(" ", html.unescape("".join(node.itertext())))
-    return re.sub(r"\s+", " ", cleaned).strip()
-
-
-def feed_structure_present(root: ET.Element) -> bool:
-    """Container presence as used by the item extractor — not item count.
-
-    Pre-Reg Auflage 1/2: True iff parse_rss_xml's paths have a container
-    (RSS ``./channel`` or Atom ``feed`` root), even when zero items.
-    """
-    if root.find("channel") is not None:
-        return True
-    tag = root.tag or ""
-    if tag == f"{_ATOM}feed" or tag == "feed" or tag.endswith("}feed"):
-        return True
-    return False
-
-
-def _find_child(parent: ET.Element, *tags: str) -> Optional[ET.Element]:
-    for tag in tags:
-        el = parent.find(tag)
-        if el is not None:
-            return el
-    return None
-
-
-def _extract_items(root: ET.Element, source: str) -> List[Dict[str, str]]:
-    """Same extraction paths as historical parse_rss_xml (RSS then Atom)."""
-    items: List[Dict[str, str]] = []
-
-    for item in root.findall("./channel/item"):
-        title = _text(item.find("title"))
-        link = _text(item.find("link"))
-        summary = _text(item.find("description"))[:500]
-        if not title and not link:
-            continue
-        items.append(
-            {
-                "id": item_id(source, link, title),
-                "source": source,
-                "title": title,
-                "summary": summary,
-                "link": link,
-            }
-        )
-
-    if items:
-        return items
-
-    for entry in root.findall(f".//{_ATOM}entry") or root.findall("./entry"):
-        title = _text(_find_child(entry, f"{_ATOM}title", "title"))
-        link_el = _find_child(entry, f"{_ATOM}link", "link")
-        href = ""
-        if link_el is not None:
-            href = (link_el.get("href") or "").strip() or _text(link_el)
-        summary = _text(
-            _find_child(entry, f"{_ATOM}summary", "summary", f"{_ATOM}content")
-        )[:500]
-        if not title and not href:
-            continue
-        items.append(
-            {
-                "id": item_id(source, href, title),
-                "source": source,
-                "title": title,
-                "summary": summary,
-                "link": href,
-            }
-        )
-    return items
-
-
-def parse_rss_xml(xml_text: str, *, source: str) -> List[Dict[str, str]]:
-    """Parse RSS 2.0 or Atom into {id, source, title, summary, link}."""
-    root = ET.fromstring(xml_text)
-    return _extract_items(root, source)
-
-
-def parse_rss_xml_with_structure(
-    xml_text: str, *, source: str
-) -> Tuple[List[Dict[str, str]], bool]:
-    """Parse once: items + structure_ok (container presence, Pre-Reg §3)."""
-    root = ET.fromstring(xml_text)
-    return _extract_items(root, source), feed_structure_present(root)
-
-
 def fetch_feed_report(
     url: str,
     *,
     source: str,
     timeout_s: float = 15.0,
 ) -> Tuple[List[Dict[str, str]], dict]:
-    """One feed, isolated. Maps HTTP/parse/structure onto feed_report.
-
-    stdlib urlopen (no feedparser): HTTP status ≈ feed.status; ParseError ≈ bozo.
-    """
+    """One feed, isolated. Maps HTTP/parse/structure onto feed_report."""
     try:
         req = Request(url, headers={"User-Agent": http_user_agent()})
         with urlopen(req, timeout=timeout_s) as resp:
@@ -172,7 +81,7 @@ def fetch_feed_report(
         bozo_exc = None
     except ET.ParseError as exc:
         items = []
-        structure_ok = True  # moot: bozo leads to dead; default keeps field present
+        structure_ok = True
         bozo = 1
         bozo_exc = exc
     return items, feed_report(

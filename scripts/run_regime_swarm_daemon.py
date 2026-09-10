@@ -739,6 +739,12 @@ async def _amain(config_path: Optional[Path]) -> int:
         _start_metrics_server(int(cfg.get("metrics_port", 8080)))
 
     daemon = RegimeSwarmDaemon(cfg)
+    try:
+        from scripts.raas_alert import notify_pod_boot
+
+        notify_pod_boot()
+    except Exception as exc:  # noqa: BLE001 — boot notify must not block daemon
+        print(json.dumps({"boot_notify_error": str(exc), "ts": _now()}), flush=True)
     loop = asyncio.get_running_loop()
     _, live_bridge = _start_live_feed_thread(cfg, daemon._shutdown)
     daemon._live_bridge = live_bridge

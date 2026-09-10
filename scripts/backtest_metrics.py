@@ -95,3 +95,78 @@ def metrics_from_trades(
         "sharpe_annualized": sharpe["sharpe_annualized"],
         "profit_factor": (gross_wins / gross_losses) if gross_losses > 0 else 999.0,
     }
+
+
+def assign_funding_episode_ids(
+    funding_rates: np.ndarray | pd.Series,
+    threshold: float,
+) -> np.ndarray:
+    """
+    Label contiguous runs with |fr| >= threshold (one squeeze episode per id).
+
+    Bars below threshold get episode_id = -1.
+    """
+    fr = np.asarray(funding_rates, dtype=float)
+    ids = np.full(len(fr), -1, dtype=int)
+    ep = 0
+    in_ep = False
+    for i, val in enumerate(fr):
+        if np.isnan(val) or abs(val) < threshold:
+            if in_ep:
+                ep += 1
+                in_ep = False
+            continue
+        if not in_ep:
+            in_ep = True
+        ids[i] = ep
+    return ids
+
+
+def metrics_from_episodes(
+    trades: list[dict[str, Any]],
+    *,
+    years: float | None = None,
+) -> dict[str, float]:
+    """
+    Primary M2a inference: one net return per episode (first trade in episode).
+
+    SE clustered at episode level: std(episode_means) / sqrt(n_episodes).
+    """
+    if not trades:
+        return {
+            "episodes": 0,
+            "trades": 0,
+            "win_rate_episode": 0.0,
+            "e_pnl_net_episode": 0.0,
+            "se_pnl_episode": 0.0,
+            "sharpe_episode": 0.0,
+            "sharpe_episode_annualized": 0.0,
+            "profit_factor_episode": 0.0,
+        }
+
+    tdf = pd.DataFrame(trades)
+    if "episode_id" not in tdf.columns:
+        raise ValueError("trades require episode_id for episode metrics")
+
+    ep_df = tdf.groupby("episode_id", as_index=False).first()
+    ep_net = ep_df["net_pnl"].to_numpy(dtype=float)
+    ep_gross = ep_df["gross_pnl"].to_numpy(dtype=float)
+    n_ep = len(ep_net)
+    wins = ep_net[ep_net > 0]
+    losses = ep_net[ep_net < 0]
+    gross_wins = float(np.sum(wins)) if len(wins) else 0.0
+    gross_losses = float(np.abs(np.sum(losses))) if len(losses) else 0.0
+    sharpe = trade_sharpe_stats(ep_net, years=years)
+    se = float(np.std(ep_net, ddof=1) / np.sqrt(n_ep)) if n_ep > 1 else 0.0
+
+    return {
+        "episodes": n_ep,
+        "trades": len(trades),
+        "win_rate_episode": float(np.mean(ep_net > 0)),
+        "e_pnl_net_episode": sharpe["mean"],
+        "e_pnl_gross_episode": float(np.mean(ep_gross)),
+        "se_pnl_episode": se,
+        "sharpe_episode": sharpe["sharpe_per_trade"],
+        "sharpe_episode_annualized": sharpe["sharpe_annualized"],
+        "profit_factor_episode": (gross_wins / gross_losses) if gross_losses > 0 else 999.0,
+    }

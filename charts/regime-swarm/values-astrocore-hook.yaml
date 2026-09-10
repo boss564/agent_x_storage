@@ -1,0 +1,22 @@
+# AstroCore Hook overlay — opt-in after Pod-Live-Test (P3)
+#
+# Deploy (PVC-safe, empfohlen):
+#   make raas-regime-swarm-astrocore-hook-build
+#   kind load docker-image agentx-regime-swarm:astrocore-hook-v1 --name regime-shadow
+#   make raas-regime-swarm-astrocore-hook-apply
+#   make raas-regime-swarm-astrocore-hook-apply ASTROCORE_HOOK_ENABLED=true
+#
+# Helm upgrade (make raas-regime-swarm-astrocore-hook-install) scheitert oft auf
+# Live-Shadow wegen SSA-Konflikt + immutable volumeClaimTemplates — siehe Runbook.
+
+image:
+  tag: "astrocore-hook-v1"
+
+config:
+  # P3 Class-C liquidation hook (read-only; D1b caps non-neo4j verdicts)
+  ASTROCORE_HOOK_ENABLED: "false"
+  ASTROCORE_DATA_SOURCE: "worm"
+  RAAS_AUDIT_DIR: "/data/audit"
+  ASTROCORE_NEO4J_LOOKBACK_DAYS: "7"
+  ASTROCORE_FUNDING_PERIOD_S: "28800"
+  ASTROCORE_STRICT: "false"

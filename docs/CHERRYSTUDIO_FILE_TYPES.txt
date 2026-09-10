@@ -1,0 +1,15 @@
+# CherryStudio import file types
+# root=/Volumes/THX_OS_ULTRA/Users/olivermueller/agent_x_storage/imports/cherrystudio
+# files=24156 bytes=484269867
+
+   21803 py
+    1313 json
+     419 txt
+     386 js
+     173 md
+      24 toml
+      19 yaml
+       7 yml
+       6 sh
+       5 pyc
+       1 ts

@@ -1,0 +1,54 @@
+[
+  {
+    "symbol": "BTC/USDT",
+    "funding_rows": 7648,
+    "funding_span": [
+      "2019-09-10 08:00:00+00:00",
+      "2026-09-02 08:00:00.001000+00:00"
+    ],
+    "ohlcv_span": [
+      "2019-09-08 17:45:00+00:00",
+      "2026-09-02 09:30:00+00:00"
+    ],
+    "max_abs_fr_in_ohlcv_window": 0.003,
+    "max_abs_fr_cache": 0.003,
+    "cache_vs_api_max_ratio": 1.0,
+    "scale_check_pass": true,
+    "reference_date": "2021-02-21T16:00:00+00:00",
+    "reference_api_fr": 0.0012582,
+    "reference_expected_fr": 0.0012582,
+    "reference_check_pass": true,
+    "prereg_event_counts_in_ohlcv_window": {
+      "0.0005": 346,
+      "0.001": 92,
+      "0.0015": 18
+    },
+    "prereg_testable": true
+  },
+  {
+    "symbol": "ETH/USDT",
+    "funding_rows": 7414,
+    "funding_span": [
+      "2019-11-27 08:00:00+00:00",
+      "2026-09-02 08:00:00.001000+00:00"
+    ],
+    "ohlcv_span": [
+      "2019-11-27 07:45:00+00:00",
+      "2026-09-02 09:30:00+00:00"
+    ],
+    "max_abs_fr_in_ohlcv_window": 0.00375,
+    "max_abs_fr_cache": 0.00375,
+    "cache_vs_api_max_ratio": 1.0,
+    "scale_check_pass": true,
+    "reference_date": "2024-11-12T08:00:00+00:00",
+    "reference_api_fr": 0.0005762,
+    "reference_expected_fr": 0.0005762,
+    "reference_check_pass": true,
+    "prereg_event_counts_in_ohlcv_window": {
+      "0.0005": 459,
+      "0.001": 151,
+      "0.0015": 65
+    },
+    "prereg_testable": true
+  }
+]

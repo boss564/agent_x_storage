@@ -8,6 +8,12 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Union
 
 from prototypes.raas_paper_trading.config_loader import PaperTradingSettings
+from prototypes.raas_paper_trading.paper_exit import (
+    OPTION_B_EXIT_EPOCH_TS,
+    is_abandon_event,
+    ts_ge_epoch,
+)
+from prototypes.raas_paper_trading.worm_io import iter_jsonl_rows
 from prototypes.raas_paper_trading.depth_snapshot import (
     AGE_STRATA_5_30,
     AGE_STRATA_GT_30,
@@ -160,6 +166,118 @@ def load_fills_from_worm(path: Path) -> List[FillTuple]:
             )
         )
     return fills
+
+
+@dataclass
+class OptionBFillPairing:
+    """Option-B epoch fill pairing: SELL closes, abandon excludes, no invented PnL."""
+
+    epoch_start_ts: str
+    n_pre_epoch_buys: int
+    n_buy: int
+    n_sell: int
+    n_abandoned: int
+    n_open: int
+    n_unmatched_sell: int
+    n_duplicate_abandon: int
+    conservation_ok: bool
+    completed: List[tuple]
+    abandoned: List[tuple]
+    open_buy: Optional[Dict[str, Any]]
+
+    def to_dict(self) -> Dict[str, Any]:
+        open_sid = None
+        if self.open_buy:
+            open_sid = self.open_buy.get("signal_id")
+        return {
+            "epoch_start_ts": self.epoch_start_ts,
+            "n_pre_epoch_buys": self.n_pre_epoch_buys,
+            "n_buy": self.n_buy,
+            "n_sell": self.n_sell,
+            "n_abandoned": self.n_abandoned,
+            "n_open": self.n_open,
+            "n_unmatched_sell": self.n_unmatched_sell,
+            "n_duplicate_abandon": self.n_duplicate_abandon,
+            "conservation_ok": self.conservation_ok,
+            "equity_round_trips": len(self.completed),
+            "open_signal_id": open_sid,
+            "diagnostic_only": True,
+            "not_investment_advice": True,
+        }
+
+
+def pair_option_b_fills(
+    path: Path,
+    *,
+    epoch_start_ts: str = OPTION_B_EXIT_EPOCH_TS,
+) -> OptionBFillPairing:
+    """Pair in-epoch SIM_FILL BUY with SELL or POSITION_ABANDONED / legacy RESTART_MARKER.
+
+    Epoch is the ENTRY of the first completed RT, not the SELL ts (see
+    OPTION_B_EXIT_EPOCH_TS). Pre-epoch BUYs are counted then ignored.
+    Abandoned BUYs are excluded from equity; pnl is not invented.
+    conservation_ok is n_buy == n_sell + n_abandoned + n_open with no unmatched SELL.
+    """
+    completed: List[tuple] = []
+    abandoned: List[tuple] = []
+    open_buy: Optional[Dict[str, Any]] = None
+    n_pre = n_buy = n_sell = n_unmatched_sell = n_dup_abandon = 0
+
+    for row in iter_jsonl_rows(path):
+        action = row.get("action")
+        side = str(row.get("side") or "").upper()
+        if action == "SIM_FILL" and side == "BUY":
+            ts = str(row.get("ts") or row.get("entry_tick_ts") or "")
+            if not ts_ge_epoch(ts, epoch_start_ts):
+                n_pre += 1
+                continue
+            open_buy = row
+            n_buy += 1
+            continue
+        if action == "SIM_FILL" and side == "SELL":
+            ts = str(row.get("ts") or row.get("exit_tick_ts") or "")
+            if not ts_ge_epoch(ts, epoch_start_ts):
+                continue
+            n_sell += 1
+            if open_buy is None:
+                n_unmatched_sell += 1
+                continue
+            completed.append((open_buy, row))
+            open_buy = None
+            continue
+        if is_abandon_event(row):
+            entry_ts = str(row.get("entry_tick_ts") or "")
+            row_ts = str(row.get("ts") or row.get("recovery_ts") or "")
+            in_epoch = ts_ge_epoch(entry_ts, epoch_start_ts) or ts_ge_epoch(
+                row_ts, epoch_start_ts
+            )
+            if not in_epoch:
+                continue
+            if open_buy is None:
+                n_dup_abandon += 1
+                continue
+            abandoned.append((open_buy, row))
+            open_buy = None
+
+    n_open = 1 if open_buy is not None else 0
+    n_abandoned = len(abandoned)
+    conservation_ok = (
+        n_buy == n_sell + n_abandoned + n_open and n_unmatched_sell == 0
+    )
+    return OptionBFillPairing(
+        epoch_start_ts=epoch_start_ts,
+        n_pre_epoch_buys=n_pre,
+        n_buy=n_buy,
+        n_sell=n_sell,
+        n_abandoned=n_abandoned,
+        n_open=n_open,
+        n_unmatched_sell=n_unmatched_sell,
+        n_duplicate_abandon=n_dup_abandon,
+        conservation_ok=conservation_ok,
+        completed=completed,
+        abandoned=abandoned,
+        open_buy=open_buy,
+    )
 
 
 def discover_worm_paths(

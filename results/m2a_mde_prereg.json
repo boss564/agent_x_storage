@@ -1,0 +1,36 @@
+{
+  "amendment": "A1",
+  "primary_threshold": 0.0005,
+  "min_episodes_oos": 15,
+  "mde_informative_ceiling_bps": 80.0,
+  "reports": [
+    {
+      "label": "oos_combined",
+      "n_episodes": 33,
+      "sigma_ref_bps": 75.0,
+      "alpha": 0.05,
+      "power": 0.8,
+      "mde_bps": 32.46,
+      "informative": true
+    },
+    {
+      "label": "oos_btc",
+      "n_episodes": 16,
+      "sigma_ref_bps": 75.0,
+      "alpha": 0.05,
+      "power": 0.8,
+      "mde_bps": 46.62,
+      "informative": true
+    },
+    {
+      "label": "oos_eth",
+      "n_episodes": 17,
+      "sigma_ref_bps": 75.0,
+      "alpha": 0.05,
+      "power": 0.8,
+      "mde_bps": 45.23,
+      "informative": true
+    }
+  ],
+  "primary_verdict_gate": true
+}

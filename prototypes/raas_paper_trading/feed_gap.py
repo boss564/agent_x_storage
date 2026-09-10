@@ -16,7 +16,7 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Iterator, List, Optional, Sequence, Tuple
+from typing import Any, ClassVar, Dict, Iterator, List, Optional, Sequence, Tuple
 
 from prototypes.raas_paper_trading.paper_edge_sample import (
     DEFAULT_FREEZE_K,
@@ -175,6 +175,7 @@ class FeedGapStateStore:
     last_symbol: Optional[str] = None
     open_socket_disconnect_ts: Optional[str] = None
     last_heartbeat_ts: Optional[str] = None
+    _save_lock: ClassVar[threading.Lock] = threading.Lock()
 
     def load(self) -> None:
         if not self.path.is_file():
@@ -186,7 +187,6 @@ class FeedGapStateStore:
         self.last_heartbeat_ts = raw.get("last_heartbeat_ts")
 
     def save(self) -> None:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
         payload = {
             "last_tick_ts": self.last_tick_ts,
             "last_symbol": self.last_symbol,
@@ -197,9 +197,14 @@ class FeedGapStateStore:
             "order_send": False,
             "not_investment_advice": True,
         }
-        tmp = self.path.with_suffix(self.path.suffix + ".tmp")
-        tmp.write_text(json.dumps(payload, sort_keys=True) + "\n", encoding="utf-8")
-        tmp.replace(self.path)
+        with FeedGapStateStore._save_lock:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            tmp = self.path.with_name(f"{self.path.name}.{uuid.uuid4().hex}.tmp")
+            try:
+                tmp.write_text(json.dumps(payload, sort_keys=True) + "\n", encoding="utf-8")
+                tmp.replace(self.path)
+            finally:
+                tmp.unlink(missing_ok=True)
 
 
 @dataclass

@@ -1,0 +1,50 @@
+{
+  "class": "regime_rate_shift",
+  "threshold": 0.001,
+  "threshold_label": "0.10% per 8h",
+  "assets": [
+    "BTCUSDT",
+    "ETHUSDT"
+  ],
+  "boundary": {
+    "type": "fixed_exogenous",
+    "split_ts": "2023-11-13T19:12:00+00:00",
+    "source": "M2a/M2 strategy prereg 60/40 calendar split (not breakpoint search)",
+    "reference": "docs/M2A_FUNDING_SQUEEZE_PREREG.md \u00a74"
+  },
+  "thresholds": {
+    "min_rate_ratio_decrease": 0.25,
+    "max_rate_ratio_increase": 4.0,
+    "rationale": "factor-of-4 structural break (reciprocal pair); frozen before second finding"
+  },
+  "citation": {
+    "headline_stat": "rate_ratio_post_pre",
+    "headline_value": 0.014706,
+    "headline_note": "distribution-free; cite this, not p-value precision",
+    "supporting": "68 expected vs 1 observed post",
+    "auxiliary_stat": "p_value_one_sided_poisson",
+    "auxiliary_note": "assumes independent events; clustering would inflate p"
+  },
+  "pre_window": {
+    "start": "2019-09-01T00:00:00+00:00",
+    "end": "2023-11-13T19:12:00+00:00",
+    "episodes": 102,
+    "exposure_months": 50.42,
+    "rate_per_month": 2.0228
+  },
+  "post_window": {
+    "start": "2023-11-13T19:12:00+00:00",
+    "end": "2026-09-02T00:00:00+00:00",
+    "episodes": 1,
+    "exposure_months": 33.62,
+    "rate_per_month": 0.0297
+  },
+  "expected_post_constant_rate": 68.0,
+  "rate_ratio_post_pre": 0.014706,
+  "shift_direction": "decrease",
+  "p_value_lower": 9.83113864642903e-22,
+  "p_value_upper": 1.0,
+  "p_value_one_sided": 9.83113864642903e-22,
+  "verdict": "REGIME_SHIFT_CONFIRMED",
+  "detail": "decrease: rate ratio 0.015 < 0.25; expected 68 vs observed 1; exact p_lower=9.83e-22 (auxiliary)"
+}

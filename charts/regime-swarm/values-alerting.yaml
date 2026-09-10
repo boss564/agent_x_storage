@@ -1,0 +1,25 @@
+# Alerting overlay — Stufe 2 ops (Telegram + RT-Check + pod-restart notify)
+#
+# Secrets NICHT in Git committen. Empfohlen:
+#   make raas-swarm-alerting-secret TELEGRAM_BOT_TOKEN=... TELEGRAM_CHAT_ID=...
+#   make raas-swarm-alerting-enable
+#
+# Oder Helm (nur lokal):
+#   helm template ... --set secrets.telegramBotToken=... --set secrets.telegramChatId=...
+
+secrets:
+  enabled: true
+
+config:
+  RAAS_ALERT_ENABLED: "true"
+  RAAS_ALERT_ON_RT_FAIL: "true"
+  RAAS_ALERT_ON_POD_RESTART: "true"
+  RAAS_ALERT_COOLDOWN_S: "3600"
+  # Must override values-astrocore-hook.yaml default false — otherwise
+  # `make raas-swarm-alerting-config` disables the CronJob hook probe.
+  ASTROCORE_HOOK_ENABLED: "true"
+
+hourlyRtCheck:
+  enabled: true
+  alertOnFail: true
+  useAlertSecret: true

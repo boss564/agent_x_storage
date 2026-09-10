@@ -222,3 +222,7 @@ print('K8 SMOKE PASS', env.status.value, 'tip', env.quadrant_results['operationa
 - **I-4 Gas-BHO:** `Gas_In = Gas_Used + Gas_Refunded + Gas_Budget_Reserve`; Verletzung öffnet den Budget-Circuit.
 - **I-5 Private-Only:** öffentliche Mempool-Submission ⇒ `leakage_count ≥ 1` ⇒ Pipeline nicht `READY`.
 - **I-6 Append-only Forensic:** Tip-Hash = SHA-256-Kette ab Genesis; Replay muss Tip matchen; Auditor-ACL `write_denied=True`.
+
+### Diagnostic Writer Liveness (append-only, nicht K9)
+
+Invariante (Instanz 3 neben Feed-Gap- und Cross-Venue-Heartbeat): *Jeder Audit-Writer, dessen Normalzustand Schweigen ist, muss pro Beobachtungszeitraum mindestens eine Liveness-Marke schreiben; ihr Fehlen ist ein Fehlerzustand.* Spez `docs/AUDIT_WRITER_LIVENESS.md`. News: `source_type=run_marker` + `feeds.*.health` (`dead`≠`quiet`); Verlauf `quiet`≥72 h → `stale` (`QUIET_STALE_AFTER_S=259200`, Pre-Reg 2026-08-30). Reproduktion: `PYTHONPATH=. python3 tests/test_news_agent.py`.

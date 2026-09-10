@@ -5,6 +5,9 @@ on:
     paths:
       - "charts/regime-swarm/**"
       - "Dockerfile.regime-swarm"
+      - "agents_b2g/astrocore_hook/**"
+      - "imports/cherrystudio/astrocore/**"
+      - "scripts/helm_astrocore_hook_smoke.py"
       - "scripts/run_regime_swarm_daemon.py"
       - "scripts/helm_pod_smoke.py"
       - "scripts/run_regime_swarm_cluster_smoke.sh"
@@ -14,6 +17,9 @@ on:
     paths:
       - "charts/regime-swarm/**"
       - "Dockerfile.regime-swarm"
+      - "agents_b2g/astrocore_hook/**"
+      - "imports/cherrystudio/astrocore/**"
+      - "scripts/helm_astrocore_hook_smoke.py"
       - "scripts/run_regime_swarm_daemon.py"
       - "scripts/helm_pod_smoke.py"
       - "scripts/run_regime_swarm_cluster_smoke.sh"

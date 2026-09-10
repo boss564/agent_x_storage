@@ -191,6 +191,27 @@ make news-watchdog-json
 Exit `1` = WARN (Datenalter), Exit `2` = CRITICAL (Marker/Data stale).  
 `detection_lag` / `published_at` sind **Metriken only** — kein Exit-WARN (Tag-7 `--lag-report`).
 
+### 4.2.1 Täglicher M2-Ingest-Status (informativ)
+
+Separater Cron — **kein Alarm**, Fortschritt und Lag-Verteilung. Installiert von `deploy/hetzner/phase1-m2-install.sh` (`# AGENTX_M2_INGEST_STATUS`).
+
+```cron
+5 6 * * * cd /root/agent_x_storage && PYTHONPATH=. python3 scripts/m2_ingest_status.py --data data/news_scores.jsonl >> logs/m2_ingest_status.log 2>&1
+```
+
+| | |
+|--|--|
+| **Zeit** | 06:05 UTC (nach nächtlichem Ingest-Peak, vor Tagschicht) |
+| **Zweck** | Tage seit Gate-Close, Zeilenzahl, Tail-Lag-Buckets (`LT_15M`/`M15_60`/`GT_60`), 90-Tage-Prognose |
+| **Log** | `logs/m2_ingest_status.log` — bei Bedarf `grep WARN` oder `--json` manuell |
+
+**Nicht** im Watchdog: Watchdog = stündlich, Exit-Codes, Stale/Schema; Status-Skript = täglich, menschenlesbar, ohne Alarmlast. Auffällige Werte (z. B. `GT_60` > 50 % im Tail) → separater Alert-Wrapper optional.
+
+```bash
+PYTHONPATH=. python3 scripts/m2_ingest_status.py --data data/news_scores.jsonl
+PYTHONPATH=. python3 scripts/m2_ingest_status.py --json | jq .recommendation
+```
+
 ### 4.3 Live-Schema (v1.3)
 
 Nach dem ersten post-deploy `:00`-Lauf:
@@ -223,6 +244,7 @@ PYTHONPATH=. python3 scripts/backtest_h1_news_m2_skeleton.py \
 ```
 
 Frozen GO/NO-GO (Polling-Epoche): Median `detection_lag` ≤ 15 min → GO (§5.1.1).  
+Bei NO-GO: **Polling-Epoche zuerst** (§11), dann 90-Tage-M2-Sammeln — nicht umgekehrt; Tag-7 genügt, kein Warten auf 90 Tage für die §11-Entscheidung.  
 **Phase B:** zusätzlich `lag_coverage` / `coverage_by_source` plausibel (§5.1.3) — unabhängig vom Median-Verdict.
 
 ---

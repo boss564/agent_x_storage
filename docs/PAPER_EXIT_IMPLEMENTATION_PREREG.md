@@ -173,9 +173,13 @@ EXIT_PENDING + gültiger Tick    → EXITED → IDLE            (SELL SIM_FILL +
 | **E5** | Gap > 30 s bei Exit | Warten; kein Exit auf Gap-Tick (I3) |
 | **E6** | Force-Exit | Nur `HUMAN_FORCE_EXIT` (Env/API); `exit_reason=force_exit`; **nie** aus Regime/A7/Daemon-Heuristik |
 | **E7** | Pod-Restart während `HOLDING` | Rekonstruktion aus `/data/state/paper_position.json` (+ Konsistenzcheck mit letztem unpaired BUY in WORM); Hold **ohne Reset** (Wall-clock seit `entry_tick_ts`) |
+| **E8** | Ops-Recover (`recover_regime_swarm_rt_abort`) | IDLE; **kein** synthetischer SELL. WORM: `POSITION_ABANDONED` (`pnl_eur=null`, `diagnostic_only`) als Replay-Gegenstück, plus `RESTART_MARKER` (Feed-Gap). Legacy-Marker mit `prior_state=HOLDING` zählen als dasselbe Gegenstück. |
 
 **B2 — `exit_reason`:** Nur `hold_expired` | `force_exit`.  
-`graceful_shutdown` ist **kein** Exit-Grund — Shutdown persistiert Zustand, schließt nicht.
+`graceful_shutdown` ist **kein** Exit-Grund — Shutdown persistiert Zustand, schließt nicht.  
+`POSITION_ABANDONED` ist **kein** Edge und **kein** `exit_reason` — Strang B zählt nur `paper_edges.jsonl`.
+
+**Option-B-Epochenmarke (Fill-Replay):** `OPTION_B_EXIT_EPOCH_TS = 2026-08-29T08:30:22.486000+00:00` — **Einstieg** des ersten abgeschlossenen Round-Trips (nicht der SELL-`ts`). Provenienz: `entry_tick_ts` des ersten I4-`SIM_FILL` SELL (`sig-32310` @ `2026-08-29T09:53:10Z`). Eine Marke am SELL würde diesen BUY (~4966 s früher) in die Altlast legen; die Bilanz wäre dann 11 + 2 + 1 = 14 statt 15 = 12 + 2 + 1. Replay ab der Entry-Marke ignoriert Vor-Option-B-BUYs. `pair_option_b_fills` in `replay.py`.
 
 ---
 

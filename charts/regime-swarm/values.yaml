@@ -81,12 +81,39 @@ config:
   LIVE_FEED_WS_URL: "wss://stream.binance.com:9443/ws"
   LIVE_FEED_WORM_DIR: "/data/worm/live"
   SWARM_LIVE_EXECUTION: "false"
+  # AstroCore Class-C hook (P3) — default OFF; enable via values-astrocore-hook.yaml
+  ASTROCORE_HOOK_ENABLED: "false"
+  ASTROCORE_DATA_SOURCE: "synthetic"
+  RAAS_AUDIT_DIR: "/data/audit"
+  ASTROCORE_NEO4J_LOOKBACK_DAYS: "7"
+  ASTROCORE_FUNDING_PERIOD_S: "28800"
+  ASTROCORE_STRICT: "false"
 
 infrastructureGates:
   enabled: true
   G0_MAX_PRICE_CHANGE_PCT: 20
   G0_MAX_SPREAD_PCT: 5
   G25_MAX_LATENCY_MS: 500
+
+hourlyRtCheck:
+  enabled: false
+  schedule: "14 * * * *"
+  auditDir: /data/audit
+  maxAgeSeconds: "3900"
+  alertOnFail: true
+  useAlertSecret: false
+  existingClaim: ""
+  startingDeadlineSeconds: 600
+  ttlSecondsAfterFinished: 86400
+  successfulJobsHistoryLimit: 24
+  failedJobsHistoryLimit: 6
+  resources:
+    limits:
+      cpu: 200m
+      memory: 256Mi
+    requests:
+      cpu: 50m
+      memory: 128Mi
 
 smokeTest:
   enabled: false
@@ -108,6 +135,8 @@ secrets:
   enabled: false
   slackWebhookUrl: ""
   pagerdutyIntegrationKey: ""
+  telegramBotToken: ""
+  telegramChatId: ""
 
 resources:
   limits:

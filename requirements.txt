@@ -38,6 +38,7 @@ eth-hash[pycryptodome]>=0.5.0
 flask>=3.0.0
 flask-cors>=4.0.0
 
-# Dashboards (Waves 35–36) — Streamlit + Plotly
+# Public market data (gap detector — Binance, no API key)
+ccxt>=4.4.0
 streamlit>=1.32.0
 plotly>=5.18.0

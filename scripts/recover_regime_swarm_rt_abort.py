@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Recover stuck paper RT after crash/OOM: IDLE reset + WORM RESTART_MARKER + feed gap marker.
+"""Recover stuck paper RT after crash/OOM: IDLE + POSITION_ABANDONED + RESTART_MARKER.
+
+POSITION_ABANDONED is the fill-replay counterpart (no SIM_FILL, pnl_eur=null).
+RESTART_MARKER remains the feed-gap unobservable marker. No synthetic SELL.
 
 Usage (cluster paths):
   PYTHONPATH=. python3 scripts/recover_regime_swarm_rt_abort.py \\
@@ -23,7 +26,12 @@ if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
 from prototypes.raas_paper_trading.feed_gap import FeedGapMonitor  # noqa: E402
-from prototypes.raas_paper_trading.paper_exit import PaperPositionStore, PositionState  # noqa: E402
+from prototypes.raas_paper_trading.paper_exit import (  # noqa: E402
+    ACTION_POSITION_ABANDONED,
+    PaperPositionStore,
+    PositionState,
+    position_abandoned_payload,
+)
 from prototypes.raas_paper_trading.worm_log import PaperWormLog  # noqa: E402
 
 
@@ -79,6 +87,19 @@ def main() -> int:
     if edges_path.is_file():
         rt_n = sum(1 for ln in edges_path.read_text(encoding="utf-8").splitlines() if ln.strip()) + 1
 
+    abandon_payload = None
+    if prev["state"] in (
+        PositionState.HOLDING.value,
+        PositionState.EXIT_PENDING.value,
+    ):
+        abandon_payload = position_abandoned_payload(
+            signal_id=prev["entry_signal_id"],
+            reason=args.reason,
+            entry_price=prev["entry_price"],
+            entry_tick_ts=prev["entry_tick_ts"],
+            prior_state=prev["state"],
+        )
+
     worm_row = {
         "action": "RESTART_MARKER",
         "symbol": args.symbol.upper(),
@@ -97,6 +118,7 @@ def main() -> int:
         "prior": prev,
         "aborted_round_trip": rt_n,
         "worm_action": "RESTART_MARKER",
+        "worm_abandoned_action": ACTION_POSITION_ABANDONED if abandon_payload else None,
         "dry_run": args.dry_run,
     }
 
@@ -109,6 +131,13 @@ def main() -> int:
         run_id=args.symbol.lower(),
         data_root=args.worm_root,
     )
+    if abandon_payload:
+        abandoned = worm.append(abandon_payload)
+        report["worm_abandoned_hash"] = abandoned.get("hash")
+        if abandoned.get("side") is not None or abandoned.get("realized_pnl_eur") is not None:
+            raise RuntimeError("POSITION_ABANDONED must not carry fill/PnL fields")
+        if abandoned.get("pnl_eur") is not None:
+            raise RuntimeError("POSITION_ABANDONED pnl_eur must be null")
     appended = worm.append(worm_row)
     report["worm_hash"] = appended.get("hash")
 

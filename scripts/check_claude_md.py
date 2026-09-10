@@ -256,6 +256,11 @@ NO_TEST_SUMMARY: set[str] = {
     "scripts/run_regime_swarm_cluster_smoke.sh",  # Cluster helm test runbook
     "scripts/swarm_health.py",  # Schwarm-Log-Status (keine x/y-Bilanz)
     "scripts/audit_feed_gap_worm.py",  # W-Studie WORM Δt audit CLI
+    "scripts/test_astrocore_hook_integration.py",  # AstroCore hook integration smoke
+    "scripts/test_astrocore_neo4j_reader.py",  # AstroCore Neo4j reader smoke
+    "scripts/test_astrocore_raas_ingest.py",  # AstroCore RaaS ingest smoke
+    "scripts/test_news_agent.py",  # News-agent unit suite (pytest under tests/)
+    "scripts/test_raas_alert.py",  # RaaS Telegram alert smoke
 }
 
 # Inventar-Dokumente: Abschnitte, Pflicht-Erwähnungen, referenzierte Artefakte.

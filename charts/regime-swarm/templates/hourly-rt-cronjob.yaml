@@ -1,0 +1,72 @@
+{{- if and .Values.hourlyRtCheck.enabled .Values.persistence.enabled }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "regime-swarm.fullname" . }}-hourly-rt
+  labels:
+    {{- include "regime-swarm.labels" . | nindent 4 }}
+    app.kubernetes.io/component: hourly-rt-check
+spec:
+  schedule: {{ .Values.hourlyRtCheck.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: {{ .Values.hourlyRtCheck.successfulJobsHistoryLimit }}
+  failedJobsHistoryLimit: {{ .Values.hourlyRtCheck.failedJobsHistoryLimit }}
+  startingDeadlineSeconds: {{ .Values.hourlyRtCheck.startingDeadlineSeconds }}
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      ttlSecondsAfterFinished: {{ .Values.hourlyRtCheck.ttlSecondsAfterFinished }}
+      template:
+        metadata:
+          labels:
+            {{- include "regime-swarm.selectorLabels" . | nindent 12 }}
+            app.kubernetes.io/component: hourly-rt-check
+        spec:
+          restartPolicy: Never
+          {{- with .Values.imagePullSecrets }}
+          imagePullSecrets:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- if or .Values.serviceAccount.create .Values.serviceAccount.name }}
+          serviceAccountName: {{ include "regime-swarm.serviceAccountName" . }}
+          {{- end }}
+          containers:
+            - name: rt-check
+              image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+              imagePullPolicy: {{ .Values.image.pullPolicy }}
+              envFrom:
+                - configMapRef:
+                    name: {{ include "regime-swarm.fullname" . }}-config
+                {{- if .Values.secrets.enabled }}
+                - secretRef:
+                    name: {{ include "regime-swarm.fullname" . }}-secrets
+                {{- else if .Values.hourlyRtCheck.useAlertSecret }}
+                - secretRef:
+                    name: {{ include "regime-swarm.fullname" . }}-secrets
+                    optional: true
+                {{- end }}
+              env:
+                - name: PYTHONPATH
+                  value: /app
+                - name: RAAS_AUDIT_DIR
+                  value: {{ .Values.hourlyRtCheck.auditDir | quote }}
+                - name: HOURLY_RT_MAX_AGE_S
+                  value: {{ .Values.hourlyRtCheck.maxAgeSeconds | quote }}
+              command:
+                - python3
+                - scripts/raas_hourly_rt_check.py
+                - --append-log
+                - --json
+                {{- if .Values.hourlyRtCheck.alertOnFail }}
+                - --alert-on-fail
+                {{- end }}
+              volumeMounts:
+                - name: audit-data
+                  mountPath: /data
+              resources:
+                {{- toYaml .Values.hourlyRtCheck.resources | nindent 16 }}
+          volumes:
+            - name: audit-data
+              persistentVolumeClaim:
+                claimName: {{ .Values.hourlyRtCheck.existingClaim | default (printf "data-%s-0" (include "regime-swarm.fullname" .)) }}
+{{- end }}

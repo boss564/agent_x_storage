@@ -21,14 +21,31 @@ COPY services/__init__.py ./services/
 COPY services/fail_closed_gate/ ./services/fail_closed_gate/
 COPY agents_b2g/__init__.py ./agents_b2g/
 COPY agents_b2g/emergence/ ./agents_b2g/emergence/
+# P3 AstroCore hook (read-only Class-C; worm/neo4j/synthetic — no order send)
+COPY agents_b2g/astrocore_hook/ ./agents_b2g/astrocore_hook/
+COPY imports/cherrystudio/astrocore/test_liquidation_coupling.py \
+     imports/cherrystudio/astrocore/astrocore_coupling.py \
+     imports/cherrystudio/astrocore/neo4j_reader.py \
+     imports/cherrystudio/astrocore/raas_ingest.py \
+     ./imports/cherrystudio/astrocore/
 COPY prototypes/raas_paper_trading/ ./prototypes/raas_paper_trading/
 COPY scripts/run_regime_swarm_daemon.py ./scripts/
 COPY scripts/run_regime_swarm_infra_smoke.py ./scripts/
 COPY scripts/recover_regime_swarm_rt_abort.py ./scripts/
 COPY scripts/helm_pod_smoke.py ./scripts/
+COPY scripts/helm_astrocore_hook_smoke.py ./scripts/
+COPY scripts/raas_hourly_rt_check.py ./scripts/
+COPY scripts/raas_alert.py ./scripts/
+COPY scripts/telegram_alert.py ./scripts/
 COPY config/regime_swarm.json ./config/
 
 RUN mkdir -p /data/audit /data/state /data/reports /data/worm/paper_runs /data/worm/live
+
+# Import smoke — fails build if hook modules missing
+RUN python3 -c "\
+from agents_b2g.astrocore_hook import AstrocoreHookClient, parse_gap_logs; \
+from pathlib import Path; \
+print('astrocore_hook import ok')"
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \

@@ -35,8 +35,10 @@ from prototypes.raas_paper_trading.ledger import (
 )
 from prototypes.raas_paper_trading.replay import (
     FillTuple,
+    OptionBFillPairing,
     load_all_fills,
     load_fills_from_worm,
+    pair_option_b_fills,
     replay_slippage_ab,
 )
 from prototypes.raas_paper_trading.slippage import (
@@ -54,8 +56,10 @@ __all__ = [
     "PaperTradingSettings",
     "PaperTick",
     "FillTuple",
+    "OptionBFillPairing",
     "load_all_fills",
     "load_fills_from_worm",
+    "pair_option_b_fills",
     "replay_slippage_ab",
     "PaperTradingRunner",
     "PaperWormLog",

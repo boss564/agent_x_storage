@@ -78,4 +78,5 @@ class RssScraper(BaseScraper):
             url=str(row.get("link") or ""),
             summary=str(row.get("summary") or ""),
             item_id=str(row.get("id") or ""),
+            published_at=str(row.get("published_at") or ""),
         )

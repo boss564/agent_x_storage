@@ -10,7 +10,9 @@ build/
 # Environment
 .env
 .env.local
+.venv/
 config/raas_ops.env
+config/news_watchdog.env
 
 # Generated / cache
 logs/

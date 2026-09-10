@@ -10,12 +10,13 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import threading
 import time
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import Any, ClassVar, Dict, List, Optional, Sequence, Tuple
 
 from prototypes.raas_paper_trading.paper_exit import parse_ts_unix
 
@@ -132,6 +133,8 @@ class CrossVenueState:
         default_factory=lambda: {"v1": None, "v2": None}
     )
     dual_start_ts: Optional[str] = None
+    # Feed V1 + V2 + heartbeat share one JSON path; class lock (not instance).
+    _save_lock: ClassVar[threading.Lock] = threading.Lock()
 
     def load(self) -> None:
         if not self.path.is_file():
@@ -150,7 +153,7 @@ class CrossVenueState:
         self.dual_start_ts = raw.get("dual_start_ts")
 
     def save(self) -> None:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
+        """Atomic write; exclusive vs V1 ingest / V2 recv / heartbeat."""
         payload = {
             "last_recv_ts": self.last_recv_ts,
             "last_heartbeat_ts": self.last_heartbeat_ts,
@@ -160,9 +163,14 @@ class CrossVenueState:
             "order_send": False,
             "not_investment_advice": True,
         }
-        tmp = self.path.with_suffix(self.path.suffix + ".tmp")
-        tmp.write_text(json.dumps(payload, sort_keys=True) + "\n", encoding="utf-8")
-        tmp.replace(self.path)
+        with CrossVenueState._save_lock:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            tmp = self.path.with_name(f"{self.path.name}.{uuid.uuid4().hex}.tmp")
+            try:
+                tmp.write_text(json.dumps(payload, sort_keys=True) + "\n", encoding="utf-8")
+                tmp.replace(self.path)
+            finally:
+                tmp.unlink(missing_ok=True)
 
 
 @dataclass

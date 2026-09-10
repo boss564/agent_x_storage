@@ -1,12 +1,33 @@
 # Audit-Writer Liveness (erzwungene Invariante)
 
-**Stand:** 2026-08-30
+**Stand:** 2026-08-31
 
 ## Invariante
 
 > Jeder Audit-Writer, dessen Normalzustand Schweigen ist, muss pro Beobachtungszeitraum mindestens eine Liveness-Marke schreiben; ihr Fehlen ist ein Fehlerzustand.
 
 Schweigen im Datensatz ist **kein** Nachweis, dass beobachtet wurde. Marker-Absenz = der Writer lief nicht oder starb vor dem Marker.
+
+### Geltungsbereich: zeitgesteuert vs. Inline-Gate
+
+Die Invariante gilt für **zeitgesteuert aufgerufene** Writer (Cron, LaunchAgent, stündlicher RT-Takt). Sie gilt **nicht** mechanisch für Inline-Gates, die nur laufen, wenn Payload durchgeht.
+
+| Sorte | Beispiel | Wird aufgerufen | Schweigen heißt |
+|-------|----------|-----------------|-----------------|
+| **Zeitgesteuert** | Scraper, Gap-Detektor, News-Phase | nach Plan, unabhängig vom Inhalt | lief und fand nichts — **oder** lief nicht |
+| **Inline-Gate** | D-Suite (`d_suite_enforcer`), Ethical Boundary (Wave 39) | nur wenn Payload durchgeht | nichts kam durch |
+
+Bei Inline-Gates gibt es keinen Aufruf, der hätte scheitern können. Ein `run_marker` würde dort Beobachtung **vortäuschen** — er bezeugte nur, dass ein Zeitgeber lief, nicht dass das Gate funktioniert.
+
+> **Abgrenzung:** Lebendigkeit eines Inline-Gates ist eine Eigenschaft des **Aufrufers** (Pipeline, Gatekeeper, RT-Job), nicht des Writers. Instanz 7/8 als Liveness-Marker für D-Suite oder Ethical Boundary sind **nicht** vorgesehen.
+
+### Post-Gate: Kopplungsprüfung Ethical Boundary ↔ Wave-38-Gatekeeper
+
+Wenn der Wave-39-Hook vor jedem Gatekeeper laufen soll und still übersprungen wird, ist das ein realer blinder Fleck — sichtbar nicht durch Herzschlag, sondern durch **Paarung** (analog BUY↔SELL im Paper-WORM: 147 verwaiste Einstiege, die keine Zeitmessung gefunden hätte).
+
+**Befund:** `n_gatekeeper_verdicts` gegen `n_certificates` (`certificate_id` im `EthicalBoundaryEnvelope` bei CERTIFIED). Jedes Gatekeeper-Urteil muss ein zugehöriges `certificate_id` tragen; fehlt eines, wurde der Hook umgangen.
+
+Backlog-Eintrag (nach News-24h-Gate, nur wenn Traffic zum Messen da ist): Kopplungsprüfung Hook ↔ Gatekeeper — **kein** Liveness-`run_marker`.
 
 ## Instanzen (nicht jedes Mal neu herleiten)
 
@@ -19,6 +40,9 @@ Schweigen im Datensatz ist **kein** Nachweis, dass beobachtet wurde. Marker-Abse
 | 4 | Price-Gap-Detector | `kind=run_marker` in `data/gap_reports.jsonl` | Marker fehlt = Cron/Skript tot; `coverage_gaps=0` bei vorhandenem Marker = ruhiger Markt |
 | 5 | News-Sentiment PhaseSource | `kind=run_marker` in `data/phase_signals/news_sentiment.jsonl` | Marker fehlt = Cron/Adapter tot; `status=empty` bei vorhandenem Marker = kein News-Fenster |
 | 6 | Price-Gap PhaseSource | `kind=run_marker` in `data/phase_signals/price_gap.jsonl` | Marker fehlt = Cron/Adapter tot; `status=empty` bei vorhandenem Marker = keine COVERAGE_GAP |
+| 7 | M2 live monitor | `kind=run_marker` in `data/m2_live_monitor.jsonl` (`writer=m2_live_monitor`) | Marker fehlt/STALE = systemd-Timer tot; `lag_samples=0` bei vorhandenem Marker = ruhiges Fenster. Hetzner: `phase1-m2-install.sh` setzt `WATCHDOG_M2_MONITOR=1` (nicht nur `auto`) — fehlende Audit-Datei = CRITICAL, auch wenn der Timer nie lief |
+
+Code: `agents_b2g/news/feed_health.py` · `agents_b2g/news/scraper.py` · `services/news_agent/liveness.py` · Instanz 4: `services/gap_detector/detector.py` · Instanz 5: `astrocore/sources/news_sentiment_source.py` · Instanz 6: `astrocore/sources/price_gap_source.py` · Instanz 7: `services/m2_live_monitor/liveness.py` · `scripts/m2_live_monitor.py`.
 
 ## News: Transport-Klassifikation (kein Sammelalarm)
 
@@ -35,8 +59,6 @@ Schweigen im Datensatz ist **kein** Nachweis, dass beobachtet wurde. Marker-Abse
 | 200 | 1 | >0 | * | **degraded** |
 
 `structure_ok` = Container-Präsenz (`channel` / Atom `feed`), nicht Item-Anzahl — Pre-Reg [`NEWS_FEED_STRUCTURE_PREREG.md`](NEWS_FEED_STRUCTURE_PREREG.md). `degraded` bricht die Quiet-Streak in `derive_quiet_streaks`.
-
-Code: `agents_b2g/news/feed_health.py` · `agents_b2g/news/scraper.py` · `services/news_agent/liveness.py` · Instanz 4: `services/gap_detector/detector.py` (`kind=run_marker` in `data/gap_reports.jsonl`) · Instanz 5: `astrocore/sources/news_sentiment_source.py` · Instanz 6: `astrocore/sources/price_gap_source.py` (`kind=run_marker` in `data/phase_signals/price_gap.jsonl`).
 
 Ein toter Feed darf den Lauf nicht abbrechen (sonst fehlt der Marker). Ein harter Absturz **vor** dem Marker ist das gewollte Liveness-Negativ. Dasselbe für den Preis-Cron: fehlende Marke in `gap_reports.jsonl` ist nicht „keine Lücken“.
 

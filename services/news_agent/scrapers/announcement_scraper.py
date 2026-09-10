@@ -18,13 +18,16 @@ DEFAULT_BINANCE_URL = (
 
 
 def _ms_to_iso(value: Any) -> str:
+    """Map Binance releaseDate (ms) to UTC ISO-8601; empty when missing/unparsable."""
+    if value is None or value == "":
+        return ""
     try:
         ms = int(value)
         if ms > 10_000_000_000:
             ms = ms / 1000.0
         return datetime.fromtimestamp(ms, tz=timezone.utc).isoformat()
     except (TypeError, ValueError, OSError):
-        return datetime.now(timezone.utc).isoformat()
+        return ""
 
 
 def parse_binance_payload(payload: Dict[str, Any]) -> List[NewsItem]:
@@ -51,15 +54,17 @@ def parse_binance_payload(payload: Dict[str, Any]) -> List[NewsItem]:
         url = str(art.get("url") or "")
         if not url and code:
             url = f"https://www.binance.com/en/support/announcement/{code}"
+        published = _ms_to_iso(art.get("releaseDate") or art.get("releaseDateStr"))
         out.append(
             NewsItem(
-                timestamp=_ms_to_iso(art.get("releaseDate") or art.get("releaseDateStr")),
+                timestamp=now,
                 source_type="announcement",
                 source_name="Binance",
                 title=title,
                 url=url,
                 summary=str(art.get("body") or art.get("brief") or "")[:500],
                 item_id=f"binance:{code or title}",
+                published_at=published,
             )
         )
     if not out and payload.get("title"):

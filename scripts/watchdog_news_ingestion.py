@@ -31,7 +31,31 @@ if str(_ROOT) not in sys.path:
 from services.news_agent.liveness import NEWS_MARKER_MAX_AGE_H, last_run_marker, parse_marker_ts
 from src.ingestion.news_jsonl_loader import tail_jsonl_lines
 
+try:
+    from scripts.backtest_h1_news_m2_shadow_lag import assign_lag_bucket
+except ImportError:
+    assign_lag_bucket = None  # type: ignore[misc, assignment]
+
 RUN_MARKER_TYPE = "run_marker"
+NEWS_WATCHDOG_ENV = _ROOT / "config" / "news_watchdog.env"
+
+
+def load_news_watchdog_env() -> None:
+    """Load config/news_watchdog.env if present (phase1-m2-install sets WATCHDOG_M2_MONITOR=1)."""
+    override = os.environ.get("NEWS_WATCHDOG_ENV_FILE")
+    path = Path(override) if override else NEWS_WATCHDOG_ENV
+    if not path.is_file():
+        return
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, val = line.partition("=")
+        key = key.strip()
+        val = val.strip().strip('"').strip("'")
+        if key and key not in os.environ:
+            os.environ[key] = val
+
 
 # Hourly host cron (:00) — thresholds scale with WATCHDOG_CRON_INTERVAL_MINUTES.
 # WARN ≈ 1.5×, CRITICAL ≈ 2.5× interval (e.g. 60→90/150 min; 5→7.5/12.5 min post §11).
@@ -53,7 +77,21 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     "REQUIRED_FIELDS": ["timestamp", "sentiment_score"],
     "SAMPLE_SIZE": 50,
     "OUTPUT_FORMAT": "text",
+    "M2_MONITOR_AUDIT_JSONL": os.environ.get(
+        "M2_LIVE_MONITOR_AUDIT_JSONL", "data/m2_live_monitor.jsonl"
+    ),
 }
+
+
+def m2_monitor_check_enabled(config: Mapping[str, Any]) -> bool:
+    """Enforce instance-7 liveness when WATCHDOG_M2_MONITOR=1 or audit file exists (auto)."""
+    flag = os.environ.get("WATCHDOG_M2_MONITOR", "auto").strip().lower()
+    audit = Path(str(config["M2_MONITOR_AUDIT_JSONL"]))
+    if flag in ("0", "false", "no", "off"):
+        return False
+    if flag in ("1", "true", "yes", "on"):
+        return True
+    return audit.is_file()
 
 
 def derive_interval_thresholds(interval_min: int) -> Dict[str, int]:
@@ -125,6 +163,18 @@ def extract_lag(record: Mapping[str, Any]) -> Optional[float]:
         return float(lag)
     except (TypeError, ValueError):
         return None
+
+
+def lag_bucket_counts(lags: Sequence[float]) -> Dict[str, int]:
+    """Spec §2.2.1 buckets — metrics only (no exit-code impact)."""
+    counts = {"LT_15M": 0, "M15_60": 0, "GT_60": 0}
+    if assign_lag_bucket is None:
+        return counts
+    for lag in lags:
+        bucket = assign_lag_bucket(lag)
+        if bucket is not None:
+            counts[bucket] += 1
+    return counts
 
 
 def parse_record_timestamp(ts: Any) -> Optional[datetime]:
@@ -312,6 +362,7 @@ def analyze_jsonl(file_path: Path, config: Mapping[str, Any]) -> Tuple[int, Watc
         result.metrics["p95_lag_sec"] = compute_percentile(lags, 95)
         result.metrics["max_lag_sec"] = max(lags)
         result.metrics["lag_samples"] = len(lags)
+        result.metrics["lag_bucket_counts"] = lag_bucket_counts(lags)
         result.messages.append(
             f"INFO: detection_lag median={result.metrics['median_lag_sec'] / 60:.1f} min "
             f"(n={len(lags)}) — use Tag-7 --lag-report for GO/NO-GO"
@@ -324,6 +375,7 @@ def analyze_jsonl(file_path: Path, config: Mapping[str, Any]) -> Tuple[int, Watc
                 "p95_lag_sec": None,
                 "max_lag_sec": None,
                 "lag_samples": 0,
+                "lag_bucket_counts": {"LT_15M": 0, "M15_60": 0, "GT_60": 0},
             }
         )
         if content_rows:
@@ -369,10 +421,24 @@ def analyze_jsonl(file_path: Path, config: Mapping[str, Any]) -> Tuple[int, Watc
         result.metrics["newest_run_marker_age_hours"] = None
         result.checks["run_marker_fresh"] = None
 
+    if m2_monitor_check_enabled(config):
+        from services.m2_live_monitor.liveness import run_marker_freshness as m2_marker_freshness
+
+        m2_audit = Path(str(config["M2_MONITOR_AUDIT_JSONL"]))
+        m2_live = m2_marker_freshness(m2_audit)
+        result.metrics["m2_monitor_liveness"] = m2_live
+        result.checks["m2_monitor_fresh"] = bool(m2_live.get("ok"))
+        if not m2_live.get("ok"):
+            result.messages.append(
+                f"CRITICAL: M2 live monitor run_marker {m2_live.get('status')} "
+                f"(audit={m2_audit}; lag_samples in news JSONL ≠ monitor liveness)"
+            )
+
     critical = [
         not result.checks.get("file_freshness", True),
         result.checks.get("data_freshness") is False,
         result.checks.get("run_marker_fresh") is False,
+        result.checks.get("m2_monitor_fresh") is False,
         not result.checks.get("valid_records", True),
     ]
     if any(critical):
@@ -423,8 +489,22 @@ def print_text_report(file_path: Path, exit_code: int, result: WatchdogResult) -
         print(f"Median lag:        {m['median_lag_sec'] / 60:.2f} min")
         print(f"95th percentile:   {m['p95_lag_sec'] / 60:.2f} min")
         print(f"Lag samples:       {m['lag_samples']}")
+        buckets = m.get("lag_bucket_counts") or {}
+        if buckets:
+            print(
+                "Lag buckets (§2.2.1): "
+                f"LT_15M={buckets.get('LT_15M', 0)} "
+                f"M15_60={buckets.get('M15_60', 0)} "
+                f"GT_60={buckets.get('GT_60', 0)}"
+            )
     else:
         print("Detection lag:     keine Daten")
+    m2 = m.get("m2_monitor_liveness") or {}
+    if m2:
+        print(
+            f"M2 monitor:      {m2.get('status')} "
+            f"(age={m2.get('age_s')}s max={m2.get('max_age_s')}s)"
+        )
     if result.messages:
         print("\nMessages:")
         for msg in result.messages:
@@ -444,6 +524,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser.add_argument("--config", action="store_true", help="Konfiguration anzeigen")
     args = parser.parse_args(list(argv) if argv is not None else None)
 
+    load_news_watchdog_env()
     config = get_config()
     if args.config:
         print(json.dumps(config, indent=2, ensure_ascii=False))

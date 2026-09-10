@@ -1,8 +1,8 @@
 # Agent-X — Strategy Thesis & Alpha Architecture
 
 **Status:** ACTIVE (iterative hypothesis testing)  
-**Last Updated:** 2026-09-02  
-**Method:** Backtest-driven falsification (Stage A / B2 / H2) · prove-it-first  
+**Last Updated:** 2026-09-02 (Post-Gate v1.3 verification — deploy pending Hetzner `sudo`)  
+**Method:** Backtest-driven falsification (Stage A / B2 / H2 / M2a / M2b) · M2 live replay blocked ≥90d · prove-it-first  
 **Parent:** [`NEWS_AGENT.md`](NEWS_AGENT.md) · [`NEWS_24H_SCHEDULER_GATE.md`](NEWS_24H_SCHEDULER_GATE.md) · [`SHADOW_EVALUATOR_PREREG.md`](SHADOW_EVALUATOR_PREREG.md)
 
 ---
@@ -28,7 +28,7 @@ Wenn unkonditionierte Preis-Trigger kein Brutto-Alpha liefern, ist ein Sentiment
 | **Status** | Aktiv — 24h-Gate §8.5 auf Hetzner (`NEWS_SCHEDULER_EPOCH_TS` ab `2026-09-01T12:00:01.615076Z`, Commit `c8755c2e`) |
 | **Funktion** | Negativkontrolle: Scheduler, WORM-Marker, Liveness, Kosten-Eichung (Fenster W) |
 | **Invariante** | `E[PnL_net] ≤ 0` ohne validiertes Primärsignal — prove-it-first |
-| **Gate-Close** | `2026-09-02T12:00:01.615076Z` |
+| **Gate-Close** | `2026-09-02T12:00:01.615076Z` — **abgelaufen**; v1.3-Deploy auf Hetzner (Phase A) ausstehend |
 
 H₀ beantwortet nicht „haben wir Edge?“, sondern „läuft die Mess-Infrastruktur zuverlässig?“. Alpha-Claims kommen erst nach H₀-PASS.
 
@@ -79,6 +79,21 @@ H₀ beantwortet nicht „haben wir Edge?“, sondern „läuft die Mess-Infrast
 | **Szenario** | **3 — Falsifiziert** (min. 10 Trades für S1 erforderlich; Best-Cells n≤4) |
 | **Artefakt** | [`results/results_stage_h2_vol_breakout.csv`](../results/results_stage_h2_vol_breakout.csv) |
 
+### 2.4 Stage M2a — Funding Rate Squeeze (Perp-Hebel-Überhang)
+
+**Regime-Beobachtung (Funding-only, unabhängig vom Strategie-Urteil):** Extremes Funding (≥ **0,10 % / 8h**) Sep 2019–Nov 2023: **102 Episoden** (BTC 43, ETH 59). OOS-Hälfte (ab 2023-11-13): **1** Episode (ETH). Post-2023 praktisch verschwunden — Basis-Arbitrage räumt Prämie ab, bevor sie 0,10 % erreicht.
+
+| | |
+|--|--|
+| **Hypothese** | Funding-Extrem → Squeeze/Gegenbewegung |
+| **Amendment A1 (vor PnL)** | **Primär-θ = 0,05 %** — lebende Frage, 33 OOS-Episoden; 0,10 % = historisch/OOS-leer |
+| **Pilot 365d** | NOT TESTABLE @ 0,10 %; Skalierung ratio **1,0** |
+| **MDE OOS (n=33, σ=75 bps)** | **~32 bps** (< 80 bps → informativ) |
+| **Präreg** | [`M2A_FUNDING_SQUEEZE_PREREG.md`](M2A_FUNDING_SQUEEZE_PREREG.md) |
+| **Vollhistorie-Lauf** | **SCENARIO 3 — Falsifiziert** @ θ=0,05 % OOS (BTC −21,9 bps · ETH −20,4 bps · n_oos 16/17) |
+
+Artefakte: [`m2a_funding_feasibility.json`](../results/m2a_funding_feasibility.json) · [`m2a_mde_prereg.json`](../results/m2a_mde_prereg.json)
+
 ### 2.5 Stage M2b — 15m Volume-Explosion Breakout
 
 | | |
@@ -96,32 +111,60 @@ H₀ beantwortet nicht „haben wir Edge?“, sondern „läuft die Mess-Infrast
 
 **Interpretation:** Volumen-Spikes auf 15m wirken als Retail-FOMO-/Mean-Reversion-Falle, nicht als Smart-Money-Einstieg. Brutto-Edge ≈ 0; Netto ≈ −Kosten.
 
-### 2.6 Orthogonale Schlussfolgerung (Preis-Action abgeschlossen)
+### 2.6 Orthogonale Schlussfolgerung (Preis-/Struktur-Baselines abgeschlossen)
 
 ```text
-Long nach 2σ-Dip:         E[R_gross] ≈ 0   (keine Reversion)       — Stage A
-Short nach 2σ-Dip:        E[R_gross] ≈ 0   (keine Fortsetzung)     — Stage B2
-Vol-Kompression→Breakout: E[R_gross] ≈ 0   (keine Expansion-Edge)  — Stage H2
-Volumen-Explosion:        E[R_gross] ≈ 0   (kein Smart-Money)      — Stage M2b
-Netto (alle Stages):      ≈ −19..25 bps    (Kostenstrafe bei ausreichend n)
+Long nach 2σ-Dip:              E[R_gross] ≈ 0   — Stage A
+Short nach 2σ-Dip:             E[R_gross] ≈ 0   — Stage B2
+Vol-Kompression→Breakout:      E[R_gross] ≈ 0   — Stage H2
+Funding-Squeeze (θ=0,05 % OOS): E[R_gross] ≈ 0   — Stage M2a (s.u.)
+Volumen-Explosion:             E[R_gross] ≈ 0   — Stage M2b
+Netto (alle Stages):           ≈ −Kosten        (Reibungsstrafe bei ausreichend n)
 ```
 
-**Erkenntnis:** Reine Preis-/Volumen-Action auf 15m (Dip-Reversion, Momentum, Vol-Breakout, Volumen-Spike) liefert kein robustes Brutto-Alpha. Der Pivot zu **exogenen Primärsignalen** (News/Regime, Funding-Extrema) ist keine strategische Präferenz mehr, sondern **empirisch erzwungen**.
+**M2a — präzise Lesart (erster vollständig sauberer Negativbefund):** OOS @ θ=0,05 %: BTC **−21,9 bps** netto, ETH **−20,4 bps** netto (Episode-Inferenz, periodenabhängige Kosten, MDE vorab bestanden). In der OOS-Hälfte (ab 2022) dominiert **19 bps** Reibung → **Brutto ≈ −3 bps** (BTC) bzw. **≈ −1 bps** (ETH). Der Funding-Wert trägt **keine Richtungsinformation**; der Verlust ist Reibung, nicht falsche Vorhersage — dieselbe Struktur wie Fenster W (H₀: `E[PnL_net] ≈ −Kosten` bei `E[R_gross] ≈ 0`).
+
+**Fünf Baselines, fünfmal Scenario 3:** Kein Pech — das ist die erwartbare Antwort einfacher Preis-/Volumen-/Finanzierungsregeln auf liquide Majors im 15m-Takt. Unabhängig und methodisch sauber bestätigt; das wiegt schwerer als die meisten positiven Backtests.
+
+### 2.7 Regime-Befunde (Primärprodukt, charter-konform)
+
+**Statistische Frage:** Raten & Bruchpunkte — nicht Renditeverteilungen. Vorreg: **Zeitfenster** (exogener Schnitt, nicht Bruchpunktsuche). Urteilsschema: [`REGIME_DOCUMENTATION_PREREG.md`](REGIME_DOCUMENTATION_PREREG.md).
+
+**Befund 1 — Extremes Funding (θ = 0,10 % / 8h, BTC+ETH, fixed-boundary):**
+
+| | Pre (→ 2023-11-13) | Post (→ 2026-09-02) |
+|--|---------------------|----------------------|
+| Episoden | **102** (~50 mo) | **1** (~34 mo) |
+| Rate | **2,02 / Monat** | **0,03 / Monat** |
+| Erwartung post (konstante Rate) | — | **~68** |
+| **Rate-Ratio post/pre** | — | **0,015** |
+
+**Kopfzahl: Rate-Ratio 0,015** (68 erwartet, 1 beobachtet). Poisson-p nur Hilfskriterium (Clustering würde p vergrößern; Größenordnung des Kontrasts bleibt). Schnitt **exogen** aus M2a-60/40-Kalender — kein geschätzter Bruchpunkt.
+
+**Verdict: `REGIME_SHIFT_CONFIRMED`** — struktureller Regime-Wechsel, gleicher methodischer Rang wie die fünf Strategie-Falsifikationen.
+
+Artefakt: [`results/regime_funding_extreme_shift.json`](../results/regime_funding_extreme_shift.json)
+
+**Charter:** `DEFENSIVE_CAUSAL_GROUNDING` — Messapparat (Episoden, Clusterung, WORM, Raten-Test) für Regime-Erkennung und Risikoschranken.
 
 ---
 
-## 3. Strategische Neuausrichtung — Event-Driven Primär-Signale (H₁)
+## 3. Strategische Einordnung — H₁ News & Mess-Infrastruktur
 
 | Rolle | Inhalt |
 |-------|--------|
 | **Preis** | Ausführungsmedium, **nicht** Primär-Trigger |
-| **Primärsignal** | Muss **exogen** sein — strukturelle News, On-Chain-Net-Flows, Cross-Graph-Entitäten (Neo4j), Regime-Wechsel mit kausaler Story |
-| **News-Agent** | Liefert diagnostische Events + Liveness — Kandidat für H₁, **nach** G1-PASS und Fenster W |
-| **Shadow Evaluator** | Strang B.1 — erst nach sauberem Scheduler-Gate |
+| **Primärsignal (H₁)** | Exogen — News, Regime, strukturelle Katalysatoren |
+| **News-Agent / M2** | **Letzter übriger** struktureller Testpfad — **nicht** automatisch aussichtsreichster |
+| **Shadow Evaluator** | Strang B.1 — passiv, nach G1-PASS |
 
 ```text
-E[R_priceOnly] ≤ 0  ⟹  Fokus → 100% auf exogene Katalysatoren
+E[R_priceOnly] ≤ 0  — empirisch bestätigt (A/B2/H2/M2a/M2b)
 ```
+
+**Ehrliche M2-Prior-Einschätzung:** Derselbe Grund, der die fünf Baselines erledigt hat — liquide Instrumente, viele Teilnehmer, Signal eingepreist — gilt für Nachrichten analog: Wenn eine Meldung 15 min nach Veröffentlichung noch vorhersagbar bewegte, wäre es arbitriert. Tag-7-Lag-Erwartung ist **vorregistriert NO-GO** (`T_max = 15 min`, stündlicher Cron). M2 bleibt **real und billig nach Polling-Epoche** (Latenzfrage, Infrastruktur-Beweis) — aber Ausschluss der fünf anderen hebt den Prior **nicht**.
+
+**Charter:** Fünf Alpha-Suchen gescheitert; Wertabschöpfung war nie die Projektrichtung (`DEFENSIVE_CAUSAL_GROUNDING`, `live_execution=false`). Die entstandene Infrastruktur ist der eigentliche Gewinn — H₀/Fenster W, Gates, Replay-Specs, Regime-Dokumentation.
 
 ### 3.1 Datenproblem & Stufenplan
 
@@ -174,8 +217,9 @@ Verbleibende Kandidaten (nicht mehr Preis-Action):
 | Kandidat | Status |
 |----------|--------|
 | Volatility Breakout | ❌ Falsifiziert (H2) |
+| Funding Squeeze (M2a) | ❌ Falsifiziert @ θ=0,05 % OOS — Brutto ≈ 0, Reibung |
 | Regime Change | → H₁ News/Regime-Trigger |
-| Volume Surge | LOW — erst nach H₁ |
+| Volume Surge | ❌ Falsifiziert (M2b) |
 | Compression → Expansion (Range) | LOW — orthogonal, aber Preis-Action-Klasse gesperrt |
 
 ### 4.4 Cross-Asset / Cross-Venue (LOW)
@@ -205,10 +249,14 @@ Verbleibende Kandidaten (nicht mehr Preis-Action):
 - [x] `STRATEGY_THESIS.md` anlegen (dieses Dokument)
 - [x] Stage A + B2 falsifiziert dokumentieren (`938ec8ce`, `366957a0`)
 - [x] Stage H2 Vol-Breakout getestet — **Szenario 3** (reine Preis-Action abgeschlossen)
+- [x] Stage M2b Volume-Breakout — **Szenario 3** (`292765c7`)
+- [x] Stage M2a Funding-Squeeze 1. Versuch — **NOT TESTABLE** (Datenvalidierung + Machbarkeit 103 Episoden)
+- [x] Stage M2a Vollhistorie — Scenario 3 @ θ=0,05 % OOS (2026-09-02)
 - [x] M2-Reißbrett (`H1_M2_EVENT_DRIVEN_SPEC.md`) + Skeleton
 - [x] M2 Synthetic-Injection Audit lokal — PASS
-- [x] `published_at` + `detection_lag` Scraper-Fix lokal (schema v1.3) — **Deploy nach Gate-Close** → [`V13_DEPLOY_RUNBOOK.md`](V13_DEPLOY_RUNBOOK.md)
-- [ ] **Post-Gate v1.3:** G1-Snapshot + `pre_v13_deploy_sha` · Phase A Logrotate · Watchdog-Soak · Tag-7 `--lag-report` · dann Phase B
+- [x] `published_at` + `detection_lag` Scraper-Fix (schema v1.3) — Code in `main`; **Live-JSONL noch v1.2 bis Hetzner-Deploy**
+- [x] Gate-Close abgelaufen (`2026-09-02T12:00:01Z`) — Post-Gate-Fenster offen
+- [ ] **Post-Gate v1.3 (Hetzner):** `sudo bash deploy/hetzner/phase1-m2-install.sh --phase-a` · G1-Snapshot · Cron `# AGENTX_M2_INGEST_STATUS` · Watchdog-Soak · Tag-7 `--lag-report` · dann Phase B
 - [ ] Tag-7 `--lag-report` (§5.1.1/§5.1.3) — Verdict + `lag_coverage`/`coverage_by_source` vor Median
 - [ ] Post-Gate: Polling-Epoche (5 min) prüfen **bevor** M2-Parameter — Spec §11
 - [ ] Optional: 1h-Sanity nur wenn H₁-Brutto auch ≈ 0
@@ -233,7 +281,12 @@ Verbleibende Kandidaten (nicht mehr Preis-Action):
 | 2026-09-01 | Stage A 15m Long-Dip falsifiziert (`938ec8ce`) |
 | 2026-09-01 | Stage B2 15m Short-Momentum falsifiziert (`366957a0`) |
 | 2026-09-01 | Dokument angelegt — H₀ Gate LIVE auf Hetzner (`c8755c2e`) |
-| 2026-09-02 | v1.3 Deploy-Runbook (`V13_DEPLOY_RUNBOOK.md`) — post Gate-Close only |
+| 2026-09-02 | M2a Vollhistorie: Scenario 3 @ θ=0,05 % OOS; Brutto≈0-Lesart; Regime-Befund 102→1 @0,10 % |
+| 2026-09-02 | Regime: Rate-Ratio 0,015 fixed-boundary; Zitierregel + estimated-breakpoint-Regel in Präreg |
+| 2026-09-02 | M2a Amendment A1: Primär-θ → 0,05 % (vor PnL); Regime 102→1 Episoden @0,10 % |
+| 2026-09-02 | Stage M2b Volume-Breakout falsifiziert (`292765c7`) |
+| 2026-09-02 | Stage M2a Funding-Squeeze: NOT TESTABLE (365d); Skalierung verifiziert; Feasibility 103 Episoden ≥ 0,10 % |
+| 2026-09-02 | Post-Gate verify: `git pull` OK · RSS tests 13/13 · local watchdog CRITICAL (stale v1.2 JSONL) · Hetzner deploy pending `sudo` |
 
 ---
 
@@ -243,4 +296,8 @@ Verbleibende Kandidaten (nicht mehr Preis-Action):
 - [`docs/NEWS_FEED_STRUCTURE_PREREG.md`](NEWS_FEED_STRUCTURE_PREREG.md) — Feed-Qualität vs. Scheduler-Gate
 - [`results/results_stage_a.csv`](../results/results_stage_a.csv)
 - [`results/results_stage_b2_momentum.csv`](../results/results_stage_b2_momentum.csv)
-- [`results/results_stage_h2_vol_breakout.csv`](../results/results_stage_h2_vol_breakout.csv)
+- [`results/stage_m2b_results.csv`](../results/stage_m2b_results.csv)
+- [`results/m2a_data_validation.json`](../results/m2a_data_validation.json)
+- [`results/m2a_funding_feasibility.json`](../results/m2a_funding_feasibility.json)
+- [`docs/REGIME_DOCUMENTATION_PREREG.md`](REGIME_DOCUMENTATION_PREREG.md)
+- [`results/regime_funding_extreme_shift.json`](../results/regime_funding_extreme_shift.json)

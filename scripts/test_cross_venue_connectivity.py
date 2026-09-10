@@ -19,6 +19,7 @@ if str(_ROOT) not in sys.path:
 
 from prototypes.raas_paper_trading.cross_venue import (  # noqa: E402
     CrossVenueMonitor,
+    CrossVenueState,
     analyze_cross_venue_h2,
     assert_no_price_fields,
     load_jsonl,
@@ -266,6 +267,87 @@ def test_restart_marker_seeds_liveness() -> None:
         _ok("restart_marker on from_paths → ACTIVE restart_only (no false OBSERVER_DOWN)")
 
 
+def test_concurrent_cross_venue_state_save() -> None:
+    import threading
+
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "cross_venue_state.json"
+        errors: list[str] = []
+
+        def worker(n: int) -> None:
+            st = CrossVenueState(path=path)
+            for i in range(40):
+                st.last_recv_ts["v1"] = f"t-{n}-{i}"
+                st.last_recv_ts["v2"] = f"u-{n}-{i}"
+                try:
+                    st.save()
+                except Exception as exc:  # noqa: BLE001 — test captures race
+                    errors.append(f"{type(exc).__name__}:{exc}")
+
+        threads = [threading.Thread(target=worker, args=(i,)) for i in range(8)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        if errors:
+            _fail("concurrent_save", str(errors[:3]))
+            return
+        if not path.is_file():
+            _fail("concurrent_save", "missing state file")
+            return
+        try:
+            raw = json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            _fail("concurrent_save", f"corrupt json: {exc}")
+            return
+        if "last_recv_ts" not in raw:
+            _fail("concurrent_save", str(raw)[:120])
+            return
+        leftovers = list(Path(tmp).glob("*.tmp"))
+        if leftovers:
+            _fail("concurrent_save", f"tmp leftovers {leftovers}")
+            return
+        _ok("concurrent CrossVenueState.save (8×40, no FileNotFoundError)")
+
+
+def test_feed_loop_survives_ingest_error() -> None:
+    import threading
+
+    from prototypes.raas_paper_trading.feed import PaperTick, ReplayFeed
+    from prototypes.raas_paper_trading.paper_runner import LivePaperBridge
+
+    base = datetime.now(timezone.utc)
+    ticks = [
+        PaperTick(symbol="ETHUSDT", ts=_iso(base, i), price=2000.0 + i, source="replay")
+        for i in range(3)
+    ]
+    with tempfile.TemporaryDirectory() as tmp:
+        bridge = LivePaperBridge(
+            symbol="ETHUSDT",
+            worm_dir=Path(tmp),
+            feed=ReplayFeed(ticks),
+            enable_cross_venue=False,
+        )
+        calls: list[int] = []
+        orig = bridge.ingest_tick
+
+        def wrapped(tick: PaperTick) -> dict:
+            calls.append(1)
+            if len(calls) == 1:
+                raise FileNotFoundError("cross_venue_state.json.tmp")
+            return orig(tick)
+
+        bridge.ingest_tick = wrapped  # type: ignore[method-assign]
+        stop = threading.Event()
+        t = bridge.start_background(stop=stop)
+        t.join(timeout=5)
+        stop.set()
+        if len(calls) < 3:
+            _fail("ingest_survive", f"calls={len(calls)} (loop died after save error)")
+            return
+        _ok("feed loop continues after FileNotFoundError")
+
+
 def main() -> int:
     print("=== cross-venue connectivity smoke ===")
     test_price_field_rejected()
@@ -278,6 +360,8 @@ def main() -> int:
     test_per_venue_heartbeat()
     test_h2_observer_down_blocks_verdict()
     test_restart_marker_seeds_liveness()
+    test_concurrent_cross_venue_state_save()
+    test_feed_loop_survives_ingest_error()
     print(f"--- {_PASS} passed, {_FAIL} failed ---")
     return 1 if _FAIL else 0
 

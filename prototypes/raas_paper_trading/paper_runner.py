@@ -6,6 +6,7 @@ Cross-venue connectivity: t_recv only (Pre-Reg CROSS_VENUE_FEED_VALIDATION_PRERE
 """
 from __future__ import annotations
 
+import json
 import os
 import threading
 import time
@@ -217,12 +218,25 @@ class LivePaperBridge:
             while True:
                 if stop is not None and stop.is_set():
                     break
-                mon = self.runner.feed_gap
-                if mon is not None:
-                    mon.maybe_emit_heartbeat()
-                cv = self.cross_venue
-                if cv is not None:
-                    cv.maybe_emit_all_heartbeats()
+                try:
+                    mon = self.runner.feed_gap
+                    if mon is not None:
+                        mon.maybe_emit_heartbeat()
+                    cv = self.cross_venue
+                    if cv is not None:
+                        cv.maybe_emit_all_heartbeats()
+                except Exception as exc:  # noqa: BLE001 — writer must not kill the loop
+                    print(
+                        json.dumps(
+                            {
+                                "event": "audit_heartbeat_error",
+                                "error": type(exc).__name__,
+                                "detail": str(exc)[:240],
+                                "live_execution": False,
+                            }
+                        ),
+                        flush=True,
+                    )
                 if stop is None:
                     time.sleep(check_s)
                 elif stop.wait(check_s):
@@ -232,7 +246,20 @@ class LivePaperBridge:
             for tick in self.feed:
                 if stop is not None and stop.is_set():
                     break
-                self.ingest_tick(tick)
+                try:
+                    self.ingest_tick(tick)
+                except Exception as exc:  # noqa: BLE001 — FileNotFoundError on state save must not kill feed
+                    print(
+                        json.dumps(
+                            {
+                                "event": "live_paper_ingest_error",
+                                "error": type(exc).__name__,
+                                "detail": str(exc)[:240],
+                                "live_execution": False,
+                            }
+                        ),
+                        flush=True,
+                    )
 
         t = threading.Thread(target=_loop, name="live-paper-feed", daemon=True)
         t.start()
@@ -269,7 +296,20 @@ class LivePaperBridge:
             for pulse in feed:
                 if self._v2_stop is not None and self._v2_stop.is_set():
                     break
-                self.cross_venue.on_recv(pulse.venue, recv_ts=pulse.recv_ts)
+                try:
+                    self.cross_venue.on_recv(pulse.venue, recv_ts=pulse.recv_ts)
+                except Exception as exc:  # noqa: BLE001 — state-save race must not kill V2
+                    print(
+                        json.dumps(
+                            {
+                                "event": "cross_venue_v2_recv_error",
+                                "error": type(exc).__name__,
+                                "detail": str(exc)[:240],
+                                "live_execution": False,
+                            }
+                        ),
+                        flush=True,
+                    )
 
         self._v2_thread = threading.Thread(
             target=_loop, name="cross-venue-v2", daemon=True

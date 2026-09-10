@@ -21,6 +21,14 @@ if TYPE_CHECKING:
 
 SCOPE = "DEFENSIVE_CAUSAL_GROUNDING"
 EXIT_REASONS = frozenset({"hold_expired", "force_exit"})
+ACTION_POSITION_ABANDONED = "POSITION_ABANDONED"
+ACTION_RESTART_MARKER = "RESTART_MARKER"
+# Anchor: ENTRY of the first completed Option-B round-trip (ETHUSDT live paper WORM).
+# Do NOT set this to the SELL timestamp. A SELL-anchored epoch cuts the first RT in
+# half: that BUY is ~hold_seconds earlier and falls into pre-epoch debt, so
+# conservation reads 11+2+1=14 instead of 15=12+2+1. Provenance of this value is
+# entry_tick_ts on the first I4 SIM_FILL SELL (sig-32310 @ 2026-08-29T09:53:10Z).
+OPTION_B_EXIT_EPOCH_TS = "2026-08-29T08:30:22.486000+00:00"
 FORBIDDEN_PAPER_KEYS = frozenset(
     {
         "kelly_fraction_computed",
@@ -71,6 +79,58 @@ def parse_ts_unix(ts: str) -> float:
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=timezone.utc)
     return dt.timestamp()
+
+
+def ts_ge_epoch(ts: Optional[str], epoch_ts: str = OPTION_B_EXIT_EPOCH_TS) -> bool:
+    """True if ts is parseable and >= epoch (inclusive)."""
+    if not ts:
+        return False
+    try:
+        return parse_ts_unix(str(ts)) >= parse_ts_unix(epoch_ts)
+    except ValueError:
+        return False
+
+
+def is_abandon_event(row: Dict[str, Any]) -> bool:
+    """Replay counterpart for an unpaired BUY — not a fill, not a PnL.
+
+    Forward: explicit POSITION_ABANDONED.
+    Legacy: RESTART_MARKER with prior HOLDING/EXIT_PENDING (no invented SELL).
+    """
+    action = row.get("action")
+    if action == ACTION_POSITION_ABANDONED:
+        return True
+    if action == ACTION_RESTART_MARKER:
+        prior = str(row.get("prior_state") or "")
+        if prior not in (
+            PositionState.HOLDING.value,
+            PositionState.EXIT_PENDING.value,
+        ):
+            return False
+        return bool(row.get("entry_signal_id") or row.get("entry_tick_ts"))
+    return False
+
+
+def position_abandoned_payload(
+    *,
+    signal_id: Optional[str],
+    reason: str,
+    entry_price: Optional[str],
+    entry_tick_ts: Optional[str],
+    prior_state: Optional[str],
+) -> Dict[str, Any]:
+    """E8 — diagnostic counterpart for recover; pnl_eur is always null."""
+    return {
+        "action": ACTION_POSITION_ABANDONED,
+        "signal_id": signal_id,
+        "reason": reason,
+        "entry_price": entry_price,
+        "entry_tick_ts": entry_tick_ts,
+        "pnl_eur": None,
+        "prior_state": prior_state,
+        "diagnostic_only": True,
+        "not_investment_advice": True,
+    }
 
 
 def human_force_exit_requested(*, flag: Optional[bool] = None) -> bool:

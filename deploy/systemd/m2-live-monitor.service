@@ -1,0 +1,16 @@
+[Unit]
+Description=Agent-X M2 live lag monitor (single shot)
+After=network.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=@AGENT_X_ROOT@
+Environment=PYTHONPATH=@AGENT_X_ROOT@
+Environment=NEWS_AGENT_MULTI_JSONL=@AGENT_X_ROOT@/data/news_scores.jsonl
+Environment=M2_LIVE_MONITOR_AUDIT_JSONL=@AGENT_X_ROOT@/data/m2_live_monitor.jsonl
+ExecStart=@AGENT_X_ROOT@/.venv/bin/python @AGENT_X_ROOT@/scripts/m2_live_monitor.py --once --log-file @AGENT_X_ROOT@/logs/m2_live_monitor.log
+# Fallback if no venv:
+# ExecStart=/usr/bin/python3 @AGENT_X_ROOT@/scripts/m2_live_monitor.py --once --log-file @AGENT_X_ROOT@/logs/m2_live_monitor.log
+
+[Install]
+WantedBy=multi-user.target

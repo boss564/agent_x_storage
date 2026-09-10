@@ -119,8 +119,50 @@ def test_announcement_parser_fixture():
     assert len(items) == 1
     assert items[0].source_type == "announcement"
     assert items[0].source_name == "Binance"
-    scored = enrich(items[0])
-    assert "SOL" in scored.target_assets
+    assert items[0].published_at.startswith("2023-")
+    row = enrich(items[0]).to_dict()
+    assert row.get("detection_lag") is not None
+    assert row["detection_lag"] > 0
+    assert "SOL" in row["target_assets"]
+
+
+def test_rss_published_at_and_detection_lag():
+    from agents_b2g.news.scraper import parse_rss_xml
+
+    xml = """<?xml version="1.0"?>
+<rss version="2.0"><channel>
+  <item>
+    <title>Bitcoin rises</title>
+    <link>https://example.test/btc</link>
+    <pubDate>Mon, 01 Sep 2025 10:03:00 GMT</pubDate>
+    <description>BTC up</description>
+  </item>
+</channel></rss>"""
+    rows = parse_rss_xml(xml, source="fixture")
+    assert len(rows) == 1
+    assert rows[0]["published_at"].startswith("2025-09-01")
+
+    ingest = "2025-09-01T11:00:00+00:00"
+    item = RssScraper._item(rows[0], ingest)
+    scored = enrich(item)
+    row = scored.to_dict()
+    assert row["timestamp"] == ingest
+    assert row["published_at"].startswith("2025-09-01T10:03")
+    assert row["detection_lag"] == 3420  # 57 minutes
+
+
+def test_newsitem_published_at_optional():
+    item = NewsItem(
+        timestamp="2026-08-30T14:00:00+00:00",
+        source_type="rss",
+        source_name="CoinDesk",
+        title="Bitcoin rises",
+        url="https://example.test/btc",
+        published_at="",
+    )
+    row = enrich(item).to_dict()
+    assert not row.get("published_at")
+    assert row.get("detection_lag") is None
 
 
 def test_processor_dedup_and_critical_notify():
@@ -604,7 +646,7 @@ def test_entities_on_enrich_and_jsonl():
     assert scored.entities["persons"] == []
     assert scored.target_assets == ["SOL"]
     row = scored.to_dict()
-    assert row["schema"] == "news_agent_multi/v1.2"
+    assert row["schema"] == "news_agent_multi/v1.3"
     assert row["entities"]["bridges"] == ["wormhole"]
     assert row["cross_chain_impact"]["bridges"] == ["wormhole"]
     assert row["cross_chain_impact"]["affected_chains"] == [

@@ -11,6 +11,8 @@ from scripts.watchdog_news_ingestion import (
     analyze_jsonl,
     derive_interval_thresholds,
     get_config,
+    load_news_watchdog_env,
+    m2_monitor_check_enabled,
 )
 
 
@@ -168,6 +170,86 @@ def test_critical_stale_data_age(tmp_path: Path) -> None:
     assert result.checks["data_freshness"] is False
 
 
+def test_critical_m2_monitor_stale(tmp_path: Path, monkeypatch) -> None:
+    """Stale audit marker is CRITICAL when instance-7 check is armed."""
+    monkeypatch.setenv("WATCHDOG_M2_MONITOR", "1")
+    now = datetime.now(timezone.utc)
+    news = tmp_path / "news.jsonl"
+    audit = tmp_path / "m2_live_monitor.jsonl"
+    marker_ts = (now - timedelta(hours=3)).isoformat()
+    _write_jsonl(
+        news,
+        [{"timestamp": now.isoformat(), "source_type": "run_marker"}],
+    )
+    audit.write_text(
+        json.dumps(
+            {
+                "kind": "run_marker",
+                "writer": "m2_live_monitor",
+                "ts": marker_ts,
+                "status": "ok",
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    news.touch()
+    os.utime(news, (time.time(), time.time()))
+
+    cfg = get_config()
+    cfg["M2_MONITOR_AUDIT_JSONL"] = str(audit)
+    code, result = analyze_jsonl(news, cfg)
+    assert code == 2
+    assert result.checks.get("m2_monitor_fresh") is False
+
+
+def test_critical_m2_monitor_missing(tmp_path: Path, monkeypatch) -> None:
+    """WATCHDOG_M2_MONITOR=1 without audit file → CRITICAL (never-started timer)."""
+    monkeypatch.setenv("WATCHDOG_M2_MONITOR", "1")
+    now = datetime.now(timezone.utc)
+    news = tmp_path / "news.jsonl"
+    audit = tmp_path / "m2_live_monitor.jsonl"
+    _write_jsonl(
+        news,
+        [
+            {
+                "timestamp": now.isoformat(),
+                "source_type": "rss",
+                "sentiment_score": 0.1,
+            }
+        ],
+    )
+    news.touch()
+    os.utime(news, (time.time(), time.time()))
+
+    cfg = get_config()
+    cfg["M2_MONITOR_AUDIT_JSONL"] = str(audit)
+    assert m2_monitor_check_enabled(cfg) is True
+    code, result = analyze_jsonl(news, cfg)
+    assert code == 2
+    assert result.checks.get("m2_monitor_fresh") is False
+    assert (result.metrics.get("m2_monitor_liveness") or {}).get("status") == "MISSING"
+
+
+def test_load_news_watchdog_env(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.delenv("WATCHDOG_M2_MONITOR", raising=False)
+    env_file = tmp_path / "news_watchdog.env"
+    env_file.write_text(
+        "# comment\nWATCHDOG_M2_MONITOR=1\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("NEWS_WATCHDOG_ENV_FILE", str(env_file))
+    load_news_watchdog_env()
+    assert os.environ.get("WATCHDOG_M2_MONITOR") == "1"
+
+
+def test_m2_monitor_auto_off_without_audit_file(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("WATCHDOG_M2_MONITOR", "auto")
+    cfg = get_config()
+    cfg["M2_MONITOR_AUDIT_JSONL"] = str(tmp_path / "missing.jsonl")
+    assert m2_monitor_check_enabled(cfg) is False
+
+
 def run() -> None:
     from tempfile import TemporaryDirectory
 
@@ -180,7 +262,7 @@ def run() -> None:
         test_pooled_pubdate_does_not_warn_with_announcements(root)
         test_lag_median_30min_does_not_warn(root)
         test_critical_stale_data_age(root)
-    print("watchdog_news_ingestion: 7/7 passed")
+    print("watchdog_news_ingestion: 7/7 passed (run pytest for m2 monitor test)")
 
 
 if __name__ == "__main__":

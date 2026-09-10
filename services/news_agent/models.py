@@ -6,16 +6,17 @@ from typing import Dict, List, Literal
 
 from agents_b2g.news.config import empty_entities
 from services.news_agent.impact import empty_cross_chain_impact
+from src.ingestion.rss_parser import compute_detection_lag_seconds as detection_lag_seconds
 
 SourceType = Literal["rss", "announcement", "social", "regulatory"]
 ImpactLevel = Literal["LOW", "MEDIUM", "HIGH", "CRITICAL"]
 
-SCHEMA = "news_agent_multi/v1.2"
+SCHEMA = "news_agent_multi/v1.3"
 
 
 @dataclass
 class NewsItem:
-    timestamp: str
+    timestamp: str  # server ingest time (t_ingest)
     source_type: SourceType
     source_name: str
     title: str
@@ -28,6 +29,7 @@ class NewsItem:
     summary: str = ""
     item_id: str = ""
     feed_error: str = ""
+    published_at: str = ""  # feed publication time when available
 
     def to_dict(self) -> dict:
         row = asdict(self)
@@ -50,4 +52,9 @@ class NewsItem:
         row["live_execution"] = False
         row["order_send"] = False
         row["not_investment_advice"] = True
+        lag = detection_lag_seconds(str(row.get("timestamp") or ""), str(row.get("published_at") or ""))
+        row["detection_lag"] = lag
+        row["detection_lag_sec"] = lag
+        if not row.get("published_at"):
+            row["published_at"] = None
         return row

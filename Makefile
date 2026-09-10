@@ -247,7 +247,7 @@ test-all:
 	@echo "✅ All test suites complete"
 	@echo "✅ Alle Container, Images und Volumes entfernt"
 
-.PHONY: son-report backup raas-smoke raas-portal raas-swarm-health raas-swarm-inventory-sync raas-swarm-inventory-drift-check news-agent-cluster-build news-agent-cluster-apply news-agent-cluster-disable news-agent-cluster-plumbing news-agent-cluster-pvc-tail
+.PHONY: son-report backup raas-smoke raas-portal raas-swarm-health raas-swarm-health-no-alert raas-swarm-telegram-alert raas-swarm-inventory-sync raas-swarm-inventory-drift-check raas-swarm-hourly-rt-check raas-hourly-rt-tick-smoke raas-swarm-hourly-rt-cron-enable raas-swarm-hourly-rt-cron-disable raas-swarm-alerting-secret raas-swarm-alerting-config raas-swarm-alerting-apply raas-swarm-alerting-rollback raas-swarm-alert-test raas-swarm-alerting-test-local news-agent-test news-agent-once news-agent-cron-enable news-agent-cron-disable news-agent-cron-status news-agent-multi-once news-agent-multi-cron-enable news-agent-multi-cron-disable news-agent-cluster-build news-agent-cluster-apply news-agent-cluster-disable news-agent-cluster-plumbing news-agent-cluster-pvc-tail cross-chain-validate news-agent-gap-report news-agent-gap-cron-enable news-agent-gap-cron-disable news-agent-gap-cron-status gap-detector-once gap-detector-cron-enable gap-detector-cron-disable gap-detector-cron-status satellites-cron-enable news-sentiment-phase news-sentiment-phase-once news-sentiment-phase-cron-enable news-sentiment-phase-cron-disable news-sentiment-phase-cron-status price-gap-phase price-gap-phase-once price-gap-phase-cron-enable price-gap-phase-cron-disable price-gap-phase-cron-status
 
 raas-smoke: ## RaaS prototype E2E (upload→stress→certificate, gate sim)
 	PYTHONPATH=. python3 scripts/test_raas_smoke.py
@@ -375,8 +375,14 @@ raas-position-sizing-smoke: ## B0–B8 Kelly boundary sub-swarm (charter §4)
 raas-paper-exit-smoke: ## Option B exit state machine (S1–S6 Pre-Reg)
 	PYTHONPATH=. python3 scripts/test_paper_exit_implementation.py
 
+raas-paper-abandon-smoke: ## E8 POSITION_ABANDONED + Option-B epoch pairing (no synthetic SELL)
+	PYTHONPATH=. python3 scripts/test_position_abandoned.py
+
 raas-feed-gap-smoke: ## Feed-gap JSONL + socket↔tick concordance (Pre-Reg)
 	PYTHONPATH=. python3 scripts/test_feed_gap_concordance.py
+
+raas-hourly-rt-tick-smoke: ## Hourly RT paper last_tick_ts vs heartbeat.ts
+	PYTHONPATH=. python3 scripts/test_hourly_rt_tick_liveness.py
 
 raas-cross-venue-smoke: ## Cross-venue connectivity 2×2 (t_recv only, Pre-Reg)
 	PYTHONPATH=. python3 scripts/test_cross_venue_connectivity.py
@@ -406,11 +412,218 @@ raas-worm-streaming-oom-smoke: ## WORM streaming reader OOM regression (no read_
 raas-swarm-health: ## Schwarm-Inventar: aktive Logs/Agenten (scripts/swarm_health.py)
 	PYTHONPATH=. python3 scripts/swarm_health.py
 
+raas-swarm-health-no-alert: ## Health ohne Telegram
+	PYTHONPATH=. python3 scripts/swarm_health.py --no-alert
+
+raas-swarm-telegram-alert: ## Telegram-Test (lädt .env; Token nicht echo)
+	PYTHONPATH=. python3 scripts/telegram_alert.py "Regime-Swarm Alert-Test"
+
 raas-swarm-inventory-sync: ## Laufzeit-Block in docs/SWARM_INVENTORY.md schreiben
 	PYTHONPATH=. python3 scripts/swarm_health.py --sync-inventory
 
 raas-swarm-inventory-drift-check: ## Live Laufzeit vs Inventar (CI/Ops — nicht Pre-Commit)
 	PYTHONPATH=. python3 scripts/swarm_health.py --check-runtime-drift
+
+raas-swarm-hourly-rt-check: ## Stündlicher RT-Check im Pod (W_xv + Feed-Gap + AstroCore)
+	kubectl exec -n $(RAAS_NS) regime-swarm-0 -- \
+	  python3 scripts/raas_hourly_rt_check.py
+
+raas-swarm-hourly-rt-cron-enable: ## CronJob stündlich :14 UTC (PVC-Mount, JSONL-Log)
+	helm template regime-swarm charts/regime-swarm \
+		-f charts/regime-swarm/values-dev.yaml \
+		-f charts/regime-swarm/values-live-shadow.yaml \
+		-f charts/regime-swarm/values-astrocore-hook.yaml \
+		$(if $(RAAS_ALERTING),-f charts/regime-swarm/values-alerting.yaml,) \
+		--set hourlyRtCheck.enabled=true \
+		--set image.tag=$(RAAS_IMAGE_TAG) \
+		--show-only templates/hourly-rt-cronjob.yaml | kubectl apply -n $(RAAS_NS) -f -
+
+raas-swarm-hourly-rt-cron-disable: ## CronJob entfernen
+	kubectl delete cronjob regime-swarm-hourly-rt -n $(RAAS_NS) --ignore-not-found
+
+raas-swarm-alerting-secret: ## Telegram-Secret anlegen (Token/Chat-ID nicht committen)
+	@test -n "$(TELEGRAM_BOT_TOKEN)" || (echo "Usage: make raas-swarm-alerting-secret TELEGRAM_BOT_TOKEN=... TELEGRAM_CHAT_ID=..."; exit 1)
+	@test -n "$(TELEGRAM_CHAT_ID)" || (echo "Usage: make raas-swarm-alerting-secret TELEGRAM_BOT_TOKEN=... TELEGRAM_CHAT_ID=..."; exit 1)
+	kubectl create secret generic regime-swarm-secrets \
+		--from-literal=TELEGRAM_BOT_TOKEN="$(TELEGRAM_BOT_TOKEN)" \
+		--from-literal=TELEGRAM_CHAT_ID="$(TELEGRAM_CHAT_ID)" \
+		-n $(RAAS_NS) --dry-run=client -o yaml | kubectl apply -f -
+
+raas-swarm-alerting-config: ## ConfigMap: RAAS_ALERT_* (PVC-sicher, kein StatefulSet)
+	helm template regime-swarm charts/regime-swarm \
+		-f charts/regime-swarm/values-dev.yaml \
+		-f charts/regime-swarm/values-live-shadow.yaml \
+		-f charts/regime-swarm/values-astrocore-hook.yaml \
+		-f charts/regime-swarm/values-alerting.yaml \
+		--show-only templates/configmap.yaml | kubectl apply -n $(RAAS_NS) -f -
+
+raas-swarm-alerting-apply: ## Alerting live: Secret + Config + Pod/Cron (PVC-sicher)
+	@echo "→ Secret muss existieren (regime-swarm-secrets)"
+	$(MAKE) raas-swarm-alerting-config RAAS_NS=$(RAAS_NS)
+	kubectl set env statefulset/regime-swarm -n $(RAAS_NS) \
+		--from=secret/regime-swarm-secrets \
+		--keys=TELEGRAM_BOT_TOKEN,TELEGRAM_CHAT_ID
+	kubectl rollout restart statefulset/regime-swarm -n $(RAAS_NS)
+	kubectl rollout status statefulset/regime-swarm -n $(RAAS_NS) --timeout=180s
+	$(MAKE) raas-swarm-hourly-rt-cron-enable RAAS_NS=$(RAAS_NS) RAAS_IMAGE_TAG=$(RAAS_IMAGE_TAG) RAAS_ALERTING=1
+
+raas-swarm-alerting-rollback: ## Alert-Flags aus ConfigMap, Telegram-Env vom STS, Cron ohne Alert-Overlay
+	helm template regime-swarm charts/regime-swarm \
+		-f charts/regime-swarm/values-dev.yaml \
+		-f charts/regime-swarm/values-live-shadow.yaml \
+		-f charts/regime-swarm/values-astrocore-hook.yaml \
+		--show-only templates/configmap.yaml | kubectl apply -n $(RAAS_NS) -f -
+	kubectl set env statefulset/regime-swarm -n $(RAAS_NS) \
+		TELEGRAM_BOT_TOKEN- TELEGRAM_CHAT_ID- || true
+	kubectl rollout restart statefulset/regime-swarm -n $(RAAS_NS)
+	kubectl rollout status statefulset/regime-swarm -n $(RAAS_NS) --timeout=180s
+	$(MAKE) raas-swarm-hourly-rt-cron-enable RAAS_NS=$(RAAS_NS) RAAS_IMAGE_TAG=$(RAAS_IMAGE_TAG)
+
+raas-swarm-alert-test: ## Test-Telegram aus dem Pod senden
+	kubectl exec -n $(RAAS_NS) regime-swarm-0 -- \
+	  python3 scripts/raas_alert.py "✅ Regime-Swarm Alert-Test $(date -u +%Y-%m-%dT%H:%MZ)"
+
+raas-swarm-alerting-test-local: ## Unit-Tests scripts/test_raas_alert.py
+	PYTHONPATH=. python3 scripts/test_raas_alert.py
+
+news-agent-test: ## News-Agent unit tests (fixture RSS + multi-scraper, no cluster)
+	PYTHONPATH=. python3 scripts/test_news_agent.py
+	PYTHONPATH=. python3 tests/test_news_agent.py
+	PYTHONPATH=. python3 tests/test_news_agent_host_cron.py
+	PYTHONPATH=. python3 tests/test_cross_chain_impact.py
+	PYTHONPATH=. python3 tests/test_gap_detector.py
+	PYTHONPATH=. python3 tests/test_swarm_gap_detector.py
+	PYTHONPATH=. python3 tests/test_phase_source_news.py
+	PYTHONPATH=. python3 tests/test_phase_source_price_gap.py
+	PYTHONPATH=. python3 tests/test_rss_parser.py
+	PYTHONPATH=. python3 tests/test_watchdog_news_ingestion.py
+	PYTHONPATH=. python3 tests/test_news_jsonl_loader.py
+
+news-watchdog: ## Read-only JSONL health (exit 0/1/2) → data/news_scores.jsonl
+	PYTHONPATH=. python3 scripts/watchdog_news_ingestion.py
+
+news-watchdog-json: ## JSON report for monitoring hooks
+	PYTHONPATH=. python3 scripts/watchdog_news_ingestion.py --json
+
+news-agent-once: ## One RSS pass → logs/audit/news_scores.jsonl (not the cluster)
+	PYTHONPATH=. python3 scripts/run_news_agent.py --once
+
+news-agent-multi-once: ## Multi-scraper pass → data/news_scores.jsonl (not the cluster)
+	PYTHONPATH=. python3 -m services.news_agent.runner --once
+
+# News-Agent Cluster CronJob — Phase A (suspend=true; §8.4)
+NEWS_AGENT_IMAGE_REPO ?= agentx-news-agent
+NEWS_AGENT_IMAGE_TAG ?= phase-a-v1
+
+news-agent-cluster-build: ## Build news-agent image (RSS/announcements, diagnostic_only)
+	docker build -f Dockerfile.news-agent -t $(NEWS_AGENT_IMAGE_REPO):$(NEWS_AGENT_IMAGE_TAG) .
+
+news-agent-cluster-apply: ## Phase A: PVC + CronJob (suspend=true, no autonomous :00)
+	{ helm template regime-swarm charts/regime-swarm \
+		-f charts/regime-swarm/values-news-agent.yaml \
+		--set newsAgent.enabled=true \
+		--set newsAgent.image.repository=$(NEWS_AGENT_IMAGE_REPO) \
+		--set newsAgent.image.tag=$(NEWS_AGENT_IMAGE_TAG) \
+		--show-only templates/news-agent-pvc.yaml; \
+	  helm template regime-swarm charts/regime-swarm \
+		-f charts/regime-swarm/values-news-agent.yaml \
+		--set newsAgent.enabled=true \
+		--set newsAgent.image.repository=$(NEWS_AGENT_IMAGE_REPO) \
+		--set newsAgent.image.tag=$(NEWS_AGENT_IMAGE_TAG) \
+		--show-only templates/news-agent-cronjob.yaml; } \
+		| kubectl apply -n $(RAAS_NS) -f -
+
+news-agent-cluster-disable: ## CronJob + PVC entfernen (Phase A/B teardown)
+	kubectl delete cronjob regime-swarm-news-agent -n $(RAAS_NS) --ignore-not-found
+	kubectl delete pvc regime-swarm-news-data -n $(RAAS_NS) --ignore-not-found
+
+news-agent-cluster-plumbing: ## Phase A manual job (NOT gate epoch — §8.4)
+	@job=news-agent-plumbing-$$(date -u +%Y%m%d%H%M%S); \
+	cronjob=$$(kubectl get cronjob -n $(RAAS_NS) -l app.kubernetes.io/component=news-agent -o jsonpath='{.items[0].metadata.name}' 2>/dev/null); \
+	test -n "$$cronjob" || (echo "FAIL: no news-agent CronJob in namespace $(RAAS_NS)"; exit 1); \
+	kubectl create job "$$job" --from=cronjob/$$cronjob -n $(RAAS_NS); \
+	echo "→ waiting for job $$job …"; \
+	kubectl wait --for=condition=complete "job/$$job" -n $(RAAS_NS) --timeout=300s; \
+	echo "→ logs (run_marker JSON):"; \
+	kubectl logs -n $(RAAS_NS) "job/$$job" | python3 -c "import sys,json,re; t='\n'.join(l for l in sys.stdin.read().splitlines() if 'RuntimeWarning' not in l and not l.startswith('<frozen')); d=json.loads(t); print(json.dumps(d.get('run_marker',d), indent=2)); feeds=d.get('run_marker',{}).get('feeds',{}); print('--- feed health ---'); [print(f'{k}: health={v.get(\"health\")} status={v.get(\"status\")}') for k,v in feeds.items()]"
+
+news-agent-cluster-pvc-tail: ## Debug: tail PVC (busybox; needs completed plumbing job or manual pod)
+	@echo "PVC regime-swarm-news-data — run after plumbing:"
+	@echo "  kubectl run news-pvc-debug --rm -i --restart=Never -n $(RAAS_NS) --image=busybox:1.36 -- sh -c 'tail -n 5 /data/news_scores.jsonl' --overrides='{\"spec\":{\"volumes\":[{\"name\":\"d\",\"persistentVolumeClaim\":{\"claimName\":\"regime-swarm-news-data\"}}],\"containers\":[{\"name\":\"news-pvc-debug\",\"image\":\"busybox:1.36\",\"stdin\":true,\"tty\":true,\"command\":[\"tail\",\"-n\",\"5\",\"/data/news_scores.jsonl\"],\"volumeMounts\":[{\"name\":\"d\",\"mountPath\":\"/data\"}]}]}}'"
+
+news-agent-cron-enable: ## Host crontab hourly :00 → exactly one multi-scraper line
+	PYTHONPATH=. python3 scripts/news_agent_host_cron.py enable
+
+news-agent-cron-disable: ## Host crontab: News-Agent-Zeile entfernen
+	PYTHONPATH=. python3 scripts/news_agent_host_cron.py disable
+
+news-agent-cron-status: ## Host crontab: News-Agent-Zeile anzeigen (count/unique)
+	PYTHONPATH=. python3 scripts/news_agent_host_cron.py status
+
+news-agent-multi-cron-enable: news-agent-cron-enable
+
+news-agent-multi-cron-disable: news-agent-cron-disable
+
+cross-chain-validate: ## JSON-Matrix config/cross_chain_map.json laden + Struktur prüfen
+	PYTHONPATH=. python3 -c "from services.news_agent.impact import validate_default_map; validate_default_map(); print('OK: cross-chain map valid')"
+
+news-agent-gap-report: ## Entity-Lücken aus data/news_scores.jsonl → exports/reports/
+	PYTHONPATH=. python3 -m services.news_agent.gap_detector --output exports/reports/gap_analysis.json --md exports/reports/gap_analysis.md
+	@echo "OK: gap report → exports/reports/gap_analysis.json"
+
+news-agent-gap-cron-enable: ## Host crontab täglich 00:00, Marker # AGENTX_NEWS_GAP
+	PYTHONPATH=. python3 scripts/news_agent_host_cron.py gap-enable
+
+news-agent-gap-cron-disable: ## Gap-Detector-Cron entfernen (News-Job bleibt)
+	PYTHONPATH=. python3 scripts/news_agent_host_cron.py gap-disable
+
+news-agent-gap-cron-status: ## Gap-Cron: count=1 unique=1
+	PYTHONPATH=. python3 scripts/news_agent_host_cron.py gap-status
+
+gap-detector-once: ## Preis-Anomalie + Cashtags (ccxt Binance, kein API-Key)
+	PYTHONPATH=. python3 scripts/run_gap_detector.py --once
+
+gap-detector-cron-enable: ## Host crontab stündlich :05, Marker # AGENTX_PRICE_GAP
+	PYTHONPATH=. python3 scripts/news_agent_host_cron.py price-gap-enable
+
+gap-detector-cron-disable: ## Price-Gap-Cron entfernen (News-Job bleibt)
+	PYTHONPATH=. python3 scripts/news_agent_host_cron.py price-gap-disable
+
+gap-detector-cron-status: ## Price-Gap-Cron: count=1 unique=1
+	PYTHONPATH=. python3 scripts/news_agent_host_cron.py price-gap-status
+
+satellites-cron-enable: ## News :00 + Price-Gap :05 (Cluster unberührt)
+	PYTHONPATH=. python3 scripts/news_agent_host_cron.py satellites-enable
+
+news-sentiment-phase: ## News JSONL → AstroCore PhaseSignals (stdout, kein Cluster)
+	PYTHONPATH=. python3 -m astrocore.sources.news_sentiment_source --lookback-hours 24
+
+news-sentiment-phase-once: ## Append PhaseSignals + run_marker → data/phase_signals/news_sentiment.jsonl
+	PYTHONPATH=. python3 -m astrocore.sources.news_sentiment_source --output-jsonl data/phase_signals/news_sentiment.jsonl --lookback-hours 24
+
+news-sentiment-phase-cron-enable: ## Host crontab stündlich :06, Marker # AGENTX_NEWS_PHASE
+	PYTHONPATH=. python3 scripts/news_agent_host_cron.py phase-enable
+
+news-sentiment-phase-cron-disable: ## PhaseSource-Cron entfernen (News/Price-Gap bleiben)
+	PYTHONPATH=. python3 scripts/news_agent_host_cron.py phase-disable
+
+news-sentiment-phase-cron-status: ## Phase-Cron: count=1 unique=1
+	PYTHONPATH=. python3 scripts/news_agent_host_cron.py phase-status
+
+price-gap-phase: ## gap_reports.jsonl → AstroCore PhaseSignals (stdout, kein Cluster)
+	PYTHONPATH=. python3 -m astrocore.sources.price_gap_source --lookback-hours 24
+
+price-gap-phase-once: ## Append PhaseSignals + run_marker → data/phase_signals/price_gap.jsonl
+	PYTHONPATH=. python3 -m astrocore.sources.price_gap_source --output-jsonl data/phase_signals/price_gap.jsonl --lookback-hours 24
+
+price-gap-phase-cron-enable: ## Host crontab stündlich :07, Marker # AGENTX_GAP_PHASE
+	PYTHONPATH=. python3 scripts/news_agent_host_cron.py gap-phase-enable
+
+price-gap-phase-cron-disable: ## Price-Gap-PhaseSource-Cron entfernen
+	PYTHONPATH=. python3 scripts/news_agent_host_cron.py gap-phase-disable
+
+price-gap-phase-cron-status: ## Gap-Phase-Cron: count=1 unique=1
+	PYTHONPATH=. python3 scripts/news_agent_host_cron.py gap-phase-status
 
 raas-paper-hold-calibrate: ## Calibrate PAPER_HOLD_SECONDS from WORM (WORM= path required)
 	@test -n "$(WORM)" || (echo "Usage: make raas-paper-hold-calibrate WORM=path/to/paper_trades.worm.jsonl"; exit 1)
@@ -422,6 +635,88 @@ raas-paper-hold-calibrate-1s: ## §7 amendment: 1s last-price bars (not trade ti
 
 raas-regime-swarm-build: ## Build regime swarm production image
 	docker build -f Dockerfile.regime-swarm -t agentx-regime-swarm .
+
+raas-regime-swarm-astrocore-hook-build: ## Build regime swarm image (tag=$(RAAS_IMAGE_TAG))
+	docker build -f Dockerfile.regime-swarm -t $(RAAS_IMAGE_REPO):$(RAAS_IMAGE_TAG) .
+
+# PVC-safe deploy: ConfigMap via helm template + kubectl set image (see docs/ASTROCORE_HOOK_DEPLOY.md)
+RAAS_NS ?= trading
+RAAS_IMAGE_REPO ?= agentx-regime-swarm
+RAAS_IMAGE_TAG ?= astrocore-hook-v1
+RAAS_IMAGE_ROLLBACK_TAG ?= xv-observer-v1
+ASTROCORE_HOOK_ENABLED ?= false
+
+raas-regime-swarm-astrocore-hook-config: ## Apply astrocore ConfigMap only (no StatefulSet/PVC touch)
+	helm template regime-swarm charts/regime-swarm \
+		-f charts/regime-swarm/values-dev.yaml \
+		-f charts/regime-swarm/values-live-shadow.yaml \
+		-f charts/regime-swarm/values-astrocore-hook.yaml \
+		--show-only templates/configmap.yaml | kubectl apply -n $(RAAS_NS) -f -
+
+raas-regime-swarm-astrocore-hook-apply: ## PVC-safe rollout: configmap + image + restart (ASTROCORE_HOOK_ENABLED=?)
+	$(MAKE) raas-regime-swarm-astrocore-hook-config RAAS_NS=$(RAAS_NS)
+	kubectl set image statefulset/regime-swarm \
+		regime-swarm=$(RAAS_IMAGE_REPO):$(RAAS_IMAGE_TAG) -n $(RAAS_NS)
+	kubectl patch configmap regime-swarm-config -n $(RAAS_NS) --type merge \
+		-p '{"data":{"ASTROCORE_HOOK_ENABLED":"$(ASTROCORE_HOOK_ENABLED)"}}'
+	kubectl rollout restart statefulset/regime-swarm -n $(RAAS_NS)
+	kubectl rollout status statefulset/regime-swarm -n $(RAAS_NS) --timeout=180s
+
+raas-regime-swarm-astrocore-hook-rollback: ## Roll back hook env + previous image tag
+	kubectl patch configmap regime-swarm-config -n $(RAAS_NS) --type merge \
+		-p '{"data":{"ASTROCORE_HOOK_ENABLED":"false"}}'
+	kubectl set image statefulset/regime-swarm \
+		regime-swarm=$(RAAS_IMAGE_REPO):$(RAAS_IMAGE_ROLLBACK_TAG) -n $(RAAS_NS)
+	kubectl rollout restart statefulset/regime-swarm -n $(RAAS_NS)
+	kubectl rollout status statefulset/regime-swarm -n $(RAAS_NS) --timeout=180s
+
+raas-regime-swarm-astrocore-hook-install: ## Helm upgrade (may fail on live PVC/SSA — prefer -apply)
+	@echo "WARN: may fail on live clusters (SSA conflict / immutable PVC). Use: make raas-regime-swarm-astrocore-hook-apply"
+	helm upgrade --install regime-swarm charts/regime-swarm -n $(RAAS_NS) --create-namespace \
+		-f charts/regime-swarm/values-dev.yaml \
+		-f charts/regime-swarm/values-live-shadow.yaml \
+		-f charts/regime-swarm/values-astrocore-hook.yaml \
+		--set image.repository=$(RAAS_IMAGE_REPO) \
+		--set image.tag=$(RAAS_IMAGE_TAG) \
+		--set image.pullPolicy=IfNotPresent
+
+raas-regime-swarm-astrocore-hook-smoke: ## P3 hook smoke (local; pod: kubectl exec … helm_astrocore_hook_smoke.py)
+	PYTHONPATH=. python3 scripts/helm_astrocore_hook_smoke.py
+
+# P4 lab: throwaway Neo4j on 127.0.0.1:17687 — does NOT touch host :7687 or the cluster.
+P4_NEO4J_PASS ?= p4lab-local-only
+P4_NEO4J_CONTAINER ?= astrocore-p4-lab
+P4_VENV ?= /tmp/astrocore-p4-venv
+
+raas-p4-lab-up: ## Start throwaway Neo4j :17687 for P4 dual-schema lab
+	-docker rm -f $(P4_NEO4J_CONTAINER) >/dev/null 2>&1
+	docker run -d --name $(P4_NEO4J_CONTAINER) \
+		-p 127.0.0.1:17687:7687 \
+		-p 127.0.0.1:17474:7474 \
+		-e NEO4J_AUTH=neo4j/$(P4_NEO4J_PASS) \
+		neo4j:5.26-community
+	@echo "Waiting for Bolt on 127.0.0.1:17687 ..."
+	@i=0; \
+	until docker exec $(P4_NEO4J_CONTAINER) cypher-shell -u neo4j -p "$(P4_NEO4J_PASS)" "RETURN 1" >/dev/null 2>&1; do \
+		i=$$((i+1)); \
+		if [ $$i -ge 40 ]; then echo "Neo4j lab did not become ready"; exit 1; fi; \
+		sleep 2; \
+	done
+	@echo "P4 lab ready: bolt://127.0.0.1:17687  (Browser http://127.0.0.1:17474)"
+
+raas-p4-lab-down: ## Stop throwaway P4 Neo4j
+	-docker rm -f $(P4_NEO4J_CONTAINER)
+
+raas-p4-lab-smoke: ## Dual-schema seed + hook smoke against lab Neo4j (not the cluster)
+	@test -x $(P4_VENV)/bin/python || python3 -m venv --system-site-packages $(P4_VENV)
+	@$(P4_VENV)/bin/pip install -q neo4j
+	PYTHONPATH=. $(P4_VENV)/bin/python scripts/p4_local_neo4j_lab.py --uri bolt://127.0.0.1:17687 --password $(P4_NEO4J_PASS)
+
+P4_LISTENER_SECONDS ?= 120
+raas-p4-lab-listener: ## Binance !forceOrder@arr → lab Neo4j, then hook (not the cluster)
+	@test -x $(P4_VENV)/bin/python || python3 -m venv --system-site-packages $(P4_VENV)
+	@$(P4_VENV)/bin/pip install -q neo4j websockets
+	PYTHONPATH=. $(P4_VENV)/bin/python scripts/p4_local_neo4j_lab.py --uri bolt://127.0.0.1:17687 --password $(P4_NEO4J_PASS) --listener-seconds $(P4_LISTENER_SECONDS)
 
 raas-regime-swarm-up: ## Start regime swarm daemon (compose, detached)
 	docker compose -f docker-compose.regime-swarm.yml up -d regime-swarm
@@ -526,44 +821,3 @@ son-report: ## Regenerate SON report (24h validity for compliance gate)
 
 backup: ## Nightly backup (compose + env + Neo4j dump + retention)
 	bash scripts/backup_agent_x.sh
-
-# News-Agent Cluster CronJob — Phase A (suspend=true; §8.4 NEWS_24H_SCHEDULER_GATE)
-RAAS_NS ?= trading
-NEWS_AGENT_IMAGE_REPO ?= agentx-news-agent
-NEWS_AGENT_IMAGE_TAG ?= phase-a-v1
-
-news-agent-cluster-build: ## Build news-agent image (RSS/announcements, diagnostic_only)
-	docker build -f Dockerfile.news-agent -t $(NEWS_AGENT_IMAGE_REPO):$(NEWS_AGENT_IMAGE_TAG) .
-
-news-agent-cluster-apply: ## Phase A: PVC + CronJob (suspend=true, no autonomous :00)
-	{ helm template regime-swarm charts/regime-swarm \
-		-f charts/regime-swarm/values-news-agent.yaml \
-		--set newsAgent.enabled=true \
-		--set newsAgent.image.repository=$(NEWS_AGENT_IMAGE_REPO) \
-		--set newsAgent.image.tag=$(NEWS_AGENT_IMAGE_TAG) \
-		--show-only templates/news-agent-pvc.yaml; \
-	  helm template regime-swarm charts/regime-swarm \
-		-f charts/regime-swarm/values-news-agent.yaml \
-		--set newsAgent.enabled=true \
-		--set newsAgent.image.repository=$(NEWS_AGENT_IMAGE_REPO) \
-		--set newsAgent.image.tag=$(NEWS_AGENT_IMAGE_TAG) \
-		--show-only templates/news-agent-cronjob.yaml; } \
-		| kubectl apply -n $(RAAS_NS) -f -
-
-news-agent-cluster-disable: ## CronJob + PVC entfernen (Phase A/B teardown)
-	kubectl delete cronjob regime-swarm-news-agent -n $(RAAS_NS) --ignore-not-found
-	kubectl delete pvc regime-swarm-news-data -n $(RAAS_NS) --ignore-not-found
-
-news-agent-cluster-plumbing: ## Phase A manual job (NOT gate epoch — §8.4)
-	@job=news-agent-plumbing-$$(date -u +%Y%m%d%H%M%S); \
-	cronjob=$$(kubectl get cronjob -n $(RAAS_NS) -l app.kubernetes.io/component=news-agent -o jsonpath='{.items[0].metadata.name}' 2>/dev/null); \
-	test -n "$$cronjob" || (echo "FAIL: no news-agent CronJob in namespace $(RAAS_NS)"; exit 1); \
-	kubectl create job "$$job" --from=cronjob/$$cronjob -n $(RAAS_NS); \
-	echo "→ waiting for job $$job …"; \
-	kubectl wait --for=condition=complete "job/$$job" -n $(RAAS_NS) --timeout=300s; \
-	echo "→ logs (run_marker JSON):"; \
-	kubectl logs -n $(RAAS_NS) "job/$$job" | python3 -c "import sys,json; t='\n'.join(l for l in sys.stdin.read().splitlines() if 'RuntimeWarning' not in l and not l.startswith('<frozen')); d=json.loads(t); print(json.dumps(d.get('run_marker',d), indent=2)); feeds=d.get('run_marker',{}).get('feeds',{}); print('--- feed health ---'); [print(f'{k}: health={v.get(\"health\")} status={v.get(\"status\")}') for k,v in feeds.items()]"
-
-news-agent-cluster-pvc-tail: ## Debug: tail PVC (busybox; after plumbing)
-	@echo "PVC regime-swarm-news-data — run after plumbing:"
-	@echo "  kubectl run news-pvc-debug --rm -i --restart=Never -n $(RAAS_NS) --image=busybox:1.36 -- sh -c 'tail -n 5 /data/news_scores.jsonl' --overrides='{\"spec\":{\"volumes\":[{\"name\":\"d\",\"persistentVolumeClaim\":{\"claimName\":\"regime-swarm-news-data\"}}],\"containers\":[{\"name\":\"news-pvc-debug\",\"image\":\"busybox:1.36\",\"stdin\":true,\"tty\":true,\"command\":[\"tail\",\"-n\",\"5\",\"/data/news_scores.jsonl\"],\"volumeMounts\":[{\"name\":\"d\",\"mountPath\":\"/data\"}]}]}}'"
