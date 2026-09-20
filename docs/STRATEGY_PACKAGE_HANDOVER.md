@@ -196,7 +196,7 @@ Gefordert ist beides:
 | Richtung | Fixture | Erwartung |
 |---|---|---|
 | Falsch-Grün | Wert nur in einem **Vergleich** | **rot** |
-| Falsch-Grün | Wert nur in einem **Docstring** | **rot** |
+| Falsch-Grün | Wert nur in einem **Docstring** | **rot** *(instrumentabhängig)* |
 | Falsch-Grün | Wert nur als Argument eines **prüfenden Callees** | **rot** |
 | Falsch-Grün | Wert nur in einer **Membership** (`Set`/`Tuple`) | **rot** |
 | Falsch-Rot | Wert in Form `keyword` | grün |
@@ -206,6 +206,36 @@ Gefordert ist beides:
 | Falsch-Rot | Wert in Form `Dict` | grün |
 | Falsch-Rot | Wert in Form `IfExp` | grün |
 | Falsch-Rot | Wert in Form `Call` (delegierender Callee) | grün |
+
+**Eine Zeile dieser Matrix ist instrumentabhängig.** Die Docstring-Fixture
+(„Wert nur im Docstring → muss rot werden") ist unter AST **tautologisch grün**:
+Der Syntaxbaum sieht Stringinhalte nicht. Gemessen sind es **9 Enum-Nennungen
+in String-/Docstring-Konstanten** im Package:
+
+```
+models.py:1                        RejectReason.NONE
+models.py:188                      OrderSide.BUY · OrderSide.SELL
+models.py:241                      ExecutionMode.DISABLED
+persistence.py:249                 RejectReason.NONE
+shadow_execution_engine.py:387     RejectReason.NONE
+shadow_execution_engine.py:438     RejectReason.NONE
+test_persistence.py:111/211        RejectReason.NONE
+```
+
+Alle neun sind für den **Regex** sichtbar, für den **AST** unsichtbar. Der Fund
+von damals verschwindet also nicht, weil er behoben wurde, sondern weil das
+Instrument gewechselt hat.
+
+**Die Fixture bleibt — aber mit Etikett:** *instrumentabhängig.* Sie ist Zeuge
+gegen einen **Rückfall auf Textmessung**, nicht Zeuge für die Sehschärfe des
+AST-Ankers. Ohne dieses Etikett zählt der Nachweis vier Falsch-Grün-Richtungen
+und belegt drei.
+
+**Der Regressionswert ist real:** Der Regex wird nicht verschwinden — die
+F2b-Demo will genau den Vergleich zeigen (ein Kommentar löscht eine Waise aus
+der Liste), und ein Leser, der den Befund nachstellt, greift zum naheliegenden
+Werkzeug. Die Fixture steht damit an derselben Stelle wie `--self-test` beim
+Checker: ein Zeuge, der über den gezogenen Vorgänger wacht.
 
 **Warum die sieben Formen nötig sind (AST-verifiziert):** Eine naive Regel
 („Elternknoten ist `Assign`/`keyword`") erwischt nur einen Teil und meldet

@@ -1124,9 +1124,24 @@ explizite Restmenge (`Call`-Callee-Rumpf), alles Übrige ist Produktion.
 als **Kriterium**. Als Kriterium erben sie das Nachwachsen; als Testdaten
 belegen sie eine Regel, die ohne sie auskommt.
 
-**Beleg für die Lücke:** Die naive Regel meldet
+**Die Konsummenge war schon vorher geschlossen — der Regex war nur verlustfrei
+genug, um es zu verbergen.** Der Produktivcode enthält **keine** Enum-Nennung in
+einem String: Regex- und AST-Treffer decken sich dort exakt. Die Differenz
+zwischen den Instrumenten ist heute **null** — der alte Fund hätte also auch
+unter dem neuen Anker überlebt. Damit zählt die Fixture-Matrix **vier
+Falsch-Grün-Richtungen**, nicht drei; der Regex war ein Glücksfall, kein
+fehlendes Kriterium.
 
-```
+**Eine Zeile bleibt instrumentabhängig.** Die Docstring-Fixture („Wert nur im
+Docstring → rot") ist unter AST **tautologisch grün**: Der Syntaxbaum sieht
+Stringinhalte nicht. Gemessen sind **9 Enum-Nennungen in String-Konstanten**
+(`RejectReason.NONE`, `OrderSide.BUY/SELL`, `ExecutionMode.DISABLED`) — alle
+für den Regex sichtbar, für den AST unsichtbar. Die Fixture bleibt als **Zeuge
+gegen einen Rückfall auf Textmessung**, ist aber **kein Zeuge für die
+Sehschärfe des AST-Ankers**. Ohne dieses Etikett zählt der Nachweis vier
+Falsch-Grün-Richtungen und belegt drei.
+
+**Beleg für die Lücke:** Die naive Regel meldet```
 RejectReason : ['DRAWDOWN_LOCKOUT', 'INSUFFICIENT_CASH',
                 'MAX_EVENT_EXPOSURE', 'MAX_POSITION_SIZE']
 OrderStatus  : ['CANCELLED', 'EXPIRED', 'REJECTED_BY_RISK']
