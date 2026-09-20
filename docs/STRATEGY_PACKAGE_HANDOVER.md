@@ -124,10 +124,14 @@ def test_meta_every_reason_has_a_producer() -> None:
 
     WARNUNG — die Regex-Variante unten ist die SCHWACHE Form: Sie zaehlt
     Vorkommen, nicht Produktion, und liest eine Datei. Ein reiner Konsument
-    (`if status == Enum.CANCELLED:`) macht ein Phantom-Label gruen. Fuer den
-    dauerhaften Waechter: Package lesen und Produzent von Erwaehnung
-    unterscheiden (Zuweisung/Default/Konstruktion, nicht Vergleich), plus
-    Mutationsnachweis (Fixture-Wert nur im Vergleich -> muss rot werden).
+    (`if status == Enum.CANCELLED:`) macht ein Phantom-Label gruen; ein
+    Docstring genuegt ebenfalls. Fuer den dauerhaften Waechter: Package lesen,
+    Code statt Text (AST), und Produzent von Erwaehnung unterscheiden.
+
+    KALIBRIERUNG: Produktion hat fuenf Formen (keyword, Assign, Dict, IfExp,
+    Call). Eine naive "Elternknoten ist Assign/keyword"-Regel meldet sechs
+    falsch-rote Waisen. Der Mutationsnachweis muss BEIDE Richtungen pruefen:
+    Vergleich/Docstring -> rot, alle fuenf Formen -> gruen.
     """
     import re
     from pathlib import Path
@@ -168,6 +172,30 @@ Anker liest deshalb Code (AST), nicht Text.
 Package umstellen, dann ein Enum aufnehmen. Für `OrderStatus.PENDING` — dessen
 einziger Produzent in `models.py:227` steht — erzeugt die Ein-Datei-Lesart sonst
 ein Falsch-Rot, das kein Fund ist.
+
+### Der Mutationsnachweis braucht beide Richtungen
+
+Ein Nachweis, der nur die Falsch-Grün-Richtung prüft („Vergleich darf nicht als
+Produzent zählen"), lässt die Falsch-Rot-Richtung genau so unbelegt wie der
+heutige Anker seine Sehschärfe — **dieselbe Lücke, eine Ebene höher.**
+Gefordert ist beides:
+
+| Richtung | Fixture | Erwartung |
+|---|---|---|
+| Falsch-Grün | Wert nur in einem **Vergleich** | **rot** |
+| Falsch-Grün | Wert nur in einem **Docstring** | **rot** |
+| Falsch-Rot | Wert in Form `keyword` | grün |
+| Falsch-Rot | Wert in Form `Assign` | grün |
+| Falsch-Rot | Wert in Form `Dict` | grün |
+| Falsch-Rot | Wert in Form `IfExp` | grün |
+| Falsch-Rot | Wert in Form `Call` | grün |
+
+**Warum die fünf Formen nötig sind (AST-verifiziert):** Eine naive Regel
+(„Elternknoten ist `Assign`/`keyword`") erwischt nur einen Teil und meldet
+**sechs falsch-rote Waisen** — darunter vier der sechs `RejectReason`-Werte,
+die real über `Call` bzw. `Dict`/`IfExp` produziert werden. Ein AST-Anker, der
+so kalibriert ist, tauscht Falsch-Grün gegen Falsch-Rot — und die erste
+Reaktion auf ein Falsch-Rot ist eine Ausnahmeliste, die den Wächter aufweicht.
 
 **Er hat sich an Tag 1 bezahlt:** Er fand bei seinem ersten Lauf zwei Waisen
 (`EXPIRED`, `SAFETY_GUARD`), die auf keiner Liste standen, plus die verwaiste

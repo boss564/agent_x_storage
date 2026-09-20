@@ -991,9 +991,46 @@ startet F2b mit einem roten Bestand, der kein Fund ist.
    Konsument, ein Docstring ist gar nichts.
 3. **Schrittordnung: Zeugenquelle zuerst, Enum-Aufnahme danach** — sonst
    erzeugt die Ausweitung das Falsch-Rot, statt es zu vermeiden.
-4. **Mutationsnachweis als Akzeptanzkriterium:** ein Fixture-Enum mit einem
-   Wert, der ausschließlich in einem **Vergleich** vorkommt, muss den Anker
-   rot machen. Fällt er grün aus, sind Punkt 1 und 4 belegt statt behauptet.
+4. **Mutationsnachweis in BEIDEN Richtungen (Akzeptanzkriterium).**
+   - *Falsch-Grün:* ein Fixture-Wert, der nur in einem **Vergleich** vorkommt,
+     muss den Anker rot machen. Fällt er grün aus, sind Punkt 1 und 4 belegt.
+   - *Falsch-Rot:* **jede im Modul tatsächlich verwendete Produktionsform muss
+     grün bleiben** — mit den realen Formen als Fixtures (siehe Kalibrierung
+     unten). Ein Nachweis, der nur die Falsch-Grün-Richtung prüft, lässt die
+     Falsch-Rot-Richtung genau so unbelegt, wie der heutige Anker seine
+     Sehschärfe unbelegt lässt: **dieselbe Lücke, eine Ebene höher.**
+
+### Instrument-Kalibrierung: Produktionsformen (AST-verifiziert)
+
+Ein AST-Anker mit der naiven Regel „Elternknoten ist `Assign`/`keyword`"
+erwischt **die Hälfte** und tauscht Falsch-Grün gegen Falsch-Rot. Gemessen:
+
+| Produktionsform | Beispiel | Ort |
+|---|---|---|
+| `keyword` | `Field(default=OrderStatus.PENDING)` | `models.py:227` |
+| `Assign` | `status = OrderStatus.FILLED` | `engine:368` |
+| `Dict` | `model_copy(update={..., "status": OrderStatus.REJECTED_BY_RISK})` | `engine:676` |
+| `IfExp` | `OrderSide.BUY if ... else OrderSide.SELL` | `models.py:196` |
+| `Call` | `RiskDecision.reject(RejectReason.MAX_POSITION_SIZE)` | `engine:142` |
+
+**Beleg für die Lücke:** Die naive Regel meldet
+
+```
+RejectReason : ['DRAWDOWN_LOCKOUT', 'INSUFFICIENT_CASH',
+                'MAX_EVENT_EXPOSURE', 'MAX_POSITION_SIZE']
+OrderStatus  : ['CANCELLED', 'EXPIRED', 'REJECTED_BY_RISK']
+OrderSide    : ['SELL']
+```
+
+— **sechs falsch-rote Waisen**, darunter vier der sechs `RejectReason`-Werte,
+die real produziert werden (über `Call`).
+
+> **Der AST-Anker tauscht Falsch-Grün gegen Falsch-Rot — und die erste
+> Reaktion auf ein Falsch-Rot ist eine Ausnahmeliste, die den Wächter
+> aufweicht.**
+
+Die fünf Formen gehören als Fixtures in den Mutationsnachweis: jeder Fixture-
+Wert in genau einer dieser Formen muss grün bleiben.
 5. **Ausnahmeliste pro Enum, nicht global.** Marker werden erklärt
    (`RejectReason.NONE`) — und die Erklärung ist selbst prüfbar: Eine Ausnahme
    ohne Begründung im Docstring ist ein Fund.
