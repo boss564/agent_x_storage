@@ -919,15 +919,51 @@ Akzeptanzkriterium eine Rotfärbung, die kein Fund ist. Die erste Reaktion
 darauf wäre eine Ausnahmeliste — und die weicht den Anker wieder auf, gegen
 genau die Fehlerklasse, für die er gebaut wurde.
 
-### Konkret
+### F2b-Ergänzung (Gegenprüfung): Die Präzisierung heilt den Umfang, nicht das Instrument
 
-1. **Richtung deklarieren, nicht generalisieren.** Eine Tabelle
-   *Enum → Richtung*, im Test sichtbar, nicht im Kommentar.
-2. **Ausnahmeliste pro Enum, nicht global.** Das Enum darf Marker erklären
+Der Anker misst `re.findall(r"RejectReason\.([A-Z_]+)", src)` — also
+**Vorkommen**, nicht Produktion, und aus **einer** Datei. Drei Konsequenzen:
+
+**1. Falsch-Grün (belegt, nicht behauptet).** Ein reiner Konsument macht ein
+Phantom-Label grün. Eingebaut wurde testweise:
+
+```python
+if order.status == OrderStatus.CANCELLED:   # nur Vergleich, kein Produzent
+```
+
+Ergebnis: `orphans = ['EXPIRED']` — `CANCELLED` verschwindet aus der
+Waisenliste. Die beiden heutigen `OrderStatus`-Waisen werden nur gefunden, weil
+sie **buchstäblich nirgends** vorkommen. **Ein Wächter, der durchwinkt, ist
+schlimmer als einer, der falsch anschlägt: Falsch-Rot wird untersucht,
+Falsch-Grün nie.**
+
+**2. Ein-Datei-Blindheit.** Der Anker liest `shadow_execution_engine.py`.
+Für `RejectReason` stimmt das heute zufällig — `RejectReason.NONE` wird auch in
+`persistence.py:270` produziert (unsichtbar, durch die Allowlist gedeckt).
+Bei F2b beißt es: `OrderStatus.PENDING` hat seinen einzigen Produzenten in
+**`models.py:227`** (`Field(default=OrderStatus.PENDING)`). Übernimmt F2b die
+Ein-Datei-Lesart, ist `PENDING` die nächste falsch-positive Waise — dieselbe
+Rotfärbung, diesmal aus dem Instrument statt aus dem Umfang.
+
+**3. Kein Mutationsnachweis.** Der Checker hat seit `fcd08391` einen
+`--self-test` (5/5). Der Wächter gegen Behauptungen, die aussehen wie
+Zusicherungen, ist **selbst eine** — niemand hat ihn je rot gesehen.
+
+### Konkret (ergänzt)
+
+1. **Richtung deklarieren, nicht generalisieren.** Tabelle *Enum → Richtung*,
+   im Test sichtbar, nicht im Kommentar.
+2. **Zeugenquelle deklarieren:** Dateimenge (**Package**, nicht Datei) und
+   Produzenten-Begriff (**Zuweisung / Default / Konstruktion** — nicht
+   Vorkommen). Ein Vergleich ist ein Konsument, kein Produzent.
+3. **Mutationsnachweis als Akzeptanzkriterium:** ein Fixture-Enum mit einem
+   Wert, der ausschließlich in einem **Vergleich** vorkommt, muss den Anker
+   rot machen. Fällt er grün aus, ist Punkt 1 belegt statt behauptet.
+4. **Ausnahmeliste pro Enum, nicht global.** Marker werden erklärt
    (`RejectReason.NONE`) — und die Erklärung ist selbst prüfbar: Eine Ausnahme
    ohne Begründung im Docstring ist ein Fund.
-3. **Die zwei `OrderStatus`-Waisen klassifizieren** — dieselbe Regel wie F2:
-   *Produzent herstellen* oder *Wert entfernen*.
+5. **Die zwei `OrderStatus`-Waisen klassifizieren** — *Produzent herstellen*
+   oder *Wert entfernen*.
    - `CANCELLED`: echter CLOB-Zustand (Order zurückgezogen), aber die Engine
      cancel't nie. Vermutlich **Wert entfernen** oder Produzent für einen
      Cancel-Pfad.
@@ -936,13 +972,16 @@ genau die Fehlerklasse, für die er gebaut wurde.
      zurück, dann mit Produzent *und* Zeuge.
 
 **Reihenfolge:** F2b nach F2, weil die Pydantic-Migration `OrderStatus`
-ohnehin anfasst. Feld und Wächter reisen im selben Schritt — dieselbe Logik wie
-beim Strategy-Package-Handover.
+ohnehin anfasst. Feld und Wächter reisen im selben Schritt.
 
 **Akzeptanzkriterium (korrigiert):** Jedes Enum ist einer Richtung zugeordnet.
 Ausgangs-Enums: jeder Wert hat einen Produzenten **oder** ist ein begründeter
-Marker. Eingangs-Enums: jeder Wert hat eine sichtbare Behandlung. Ein neuer
-produzentenloser Wert in einem **Ausgangs-Enum** macht die Suite rot.
+Marker. Eingangs-Enums: jeder Wert hat eine sichtbare Behandlung. Die
+Zeugenquelle ist deklariert (Package, Produktion-nicht-Vorkommen) und der Anker
+hat einen Mutationsnachweis.
+
+> **Sonst erbt F2b einen Wächter, dessen Reichweite deklariert, aber dessen
+> Sehschärfe ungeprüft ist.**
 
 ### ADR 12 muss mitreisen
 

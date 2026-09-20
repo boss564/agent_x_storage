@@ -70,6 +70,15 @@ ein Test das?"**
   Konfiguration → ausgenommen mit Begründung. Sonst meldet der Anker falsch
   positiv: `Direction.DOWN` hat null Code-Produzenten, ist aber im `else`-Zweig
   behandelt — ein produzentenbasierter Anker sähe eine Waise, wo keine ist.
+
+  **Und die Richtung allein genügt nicht:** Das Instrument muss Produktion von
+  Erwähnung unterscheiden. `re.findall(r"Enum\.[A-Z_]+", src)` zählt
+  **Vorkommen** — ein reiner Vergleich (`if status == Enum.CANCELLED:`)
+  erscheint darin als Produzent und lässt ein Phantom-Label grün durch. Der
+  dauerhafte Anker liest das **Package** und erkennt als Produzent nur
+  Zuweisung, Default oder Konstruktion — nie einen Vergleich. Bewiesen wird das
+  durch einen Mutationsnachweis: ein Fixture-Wert, der **nur im Vergleich**
+  vorkommt, muss den Anker rot machen.
 - **Toter Wahr-Zweig** — ein Prädikat, dessen `True` unerreichbar ist
   (vierte Schicht).
 - **Schweigepflicht** — ein Validator, der weitergestellt wurde, bis die Tests
@@ -112,6 +121,13 @@ def test_meta_every_reason_has_a_producer() -> None:
     Gilt fuer Ausgangs-Enums (RejectReason, OrderStatus). Eingangs-Enums
     (Direction) brauchen eine Behandlungs-Pruefung, Konfigurations-Enums
     (ExecutionMode) sind mit Begruendung ausgenommen.
+
+    WARNUNG — die Regex-Variante unten ist die SCHWACHE Form: Sie zaehlt
+    Vorkommen, nicht Produktion, und liest eine Datei. Ein reiner Konsument
+    (`if status == Enum.CANCELLED:`) macht ein Phantom-Label gruen. Fuer den
+    dauerhaften Waechter: Package lesen und Produzent von Erwaehnung
+    unterscheiden (Zuweisung/Default/Konstruktion, nicht Vergleich), plus
+    Mutationsnachweis (Fixture-Wert nur im Vergleich -> muss rot werden).
     """
     import re
     from pathlib import Path
@@ -127,6 +143,19 @@ def test_meta_every_reason_has_a_producer() -> None:
         f"oder Wert entfernen."
     )
 ```
+
+**Die Vorlage trägt ihre eigene Grenze mit.** Sie ist als Startpunkt
+brauchbar — für `RejectReason`/`OrderStatus` bei Ein-Datei-Produktion —, aber
+ihre Sehschärfe ist ungeprüft:
+
+| Schwachstelle | Beleg | Folge |
+|---|---|---|
+| Zählt **Vorkommen**, nicht Produktion | `if status == Enum.CANCELLED:` → Waise verschwindet | **Falsch-Grün** |
+| Liest **eine** Datei | `RejectReason.NONE` wird in `persistence.py:270` produziert | Falsch-Rot bei Package-Verteilung |
+| **Kein Mutationsnachweis** | niemand hat ihn rot gesehen | Reichweite deklariert, Sehschärfe unbelegt |
+
+> **Ein Wächter, der durchwinkt, ist schlimmer als einer, der falsch
+> anschlägt: Falsch-Rot wird untersucht, Falsch-Grün nie.**
 
 **Er hat sich an Tag 1 bezahlt:** Er fand bei seinem ersten Lauf zwei Waisen
 (`EXPIRED`, `SAFETY_GUARD`), die auf keiner Liste standen, plus die verwaiste
