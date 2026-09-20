@@ -949,20 +949,55 @@ Rotfärbung, diesmal aus dem Instrument statt aus dem Umfang.
 `--self-test` (5/5). Der Wächter gegen Behauptungen, die aussehen wie
 Zusicherungen, ist **selbst eine** — niemand hat ihn je rot gesehen.
 
+**4. Ein Docstring genügt (Zugabe aus der Gegenprüfung).** `re.findall` liest
+die Datei als **Text**, nicht als Programm. Die dokumentierende Erwähnung eines
+Phantom-Labels tarnt es. Gemessen mit dem Instrument des Ankers gegen
+`OrderStatus`:
+
+```
+Ist-Zustand          : ['CANCELLED', 'EXPIRED']
++ Vergleich CANCELLED : ['EXPIRED']        ← Falsch-Grün, belegt
++ Docstring EXPIRED   : ['CANCELLED']      ← ein Kommentar reicht
++ Package-Lesart      : ['CANCELLED', 'EXPIRED']  ← heute identisch
+```
+
+> **Damit löst sich die Lücke beim Aufschreiben des Befunds selbst aus:** Wer
+> in der Engine-Datei notiert, *warum* ein Wert keinen Produzenten hat, nimmt
+> dem Anker den Fund. Eine Lücke, die sich beim Dokumentieren schließt, ohne
+> dass sich etwas geändert hat.
+
+**Gegenprobe zur Zeugenquellen-Regel:** Die Package-Lesart ändert für
+`OrderStatus` heute **nichts** — die Ausweitung ist sicher einführbar, sie
+bringt keine neue Rotfärbung mit.
+
+### Reihenfolge ist eine harte Abhängigkeit
+
+Für `OrderStatus.PENDING` wird die Package-Lesart zum **Erzeuger** eines
+Falsch-Rot, nicht zu seiner Heilung: Sein einziger Produzent steht in
+`models.py:227` (`Field(default=OrderStatus.PENDING)`). Wird `OrderStatus` in
+den Anker genommen, **bevor** die Zeugenquelle auf Package umgestellt ist,
+startet F2b mit einem roten Bestand, der kein Fund ist.
+
+> **Erst Zeugenquelle auf Package umstellen, dann `OrderStatus` aufnehmen.**
+> Nicht umgekehrt.
+
 ### Konkret (ergänzt)
 
 1. **Richtung deklarieren, nicht generalisieren.** Tabelle *Enum → Richtung*,
    im Test sichtbar, nicht im Kommentar.
 2. **Zeugenquelle deklarieren:** Dateimenge (**Package**, nicht Datei) und
    Produzenten-Begriff (**Zuweisung / Default / Konstruktion** — nicht
-   Vorkommen). Ein Vergleich ist ein Konsument, kein Produzent.
-3. **Mutationsnachweis als Akzeptanzkriterium:** ein Fixture-Enum mit einem
+   Vorkommen, nicht Vergleich, nicht Erwähnung). Ein Vergleich ist ein
+   Konsument, ein Docstring ist gar nichts.
+3. **Schrittordnung: Zeugenquelle zuerst, Enum-Aufnahme danach** — sonst
+   erzeugt die Ausweitung das Falsch-Rot, statt es zu vermeiden.
+4. **Mutationsnachweis als Akzeptanzkriterium:** ein Fixture-Enum mit einem
    Wert, der ausschließlich in einem **Vergleich** vorkommt, muss den Anker
-   rot machen. Fällt er grün aus, ist Punkt 1 belegt statt behauptet.
-4. **Ausnahmeliste pro Enum, nicht global.** Marker werden erklärt
+   rot machen. Fällt er grün aus, sind Punkt 1 und 4 belegt statt behauptet.
+5. **Ausnahmeliste pro Enum, nicht global.** Marker werden erklärt
    (`RejectReason.NONE`) — und die Erklärung ist selbst prüfbar: Eine Ausnahme
    ohne Begründung im Docstring ist ein Fund.
-5. **Die zwei `OrderStatus`-Waisen klassifizieren** — *Produzent herstellen*
+6. **Die zwei `OrderStatus`-Waisen klassifizieren** — *Produzent herstellen*
    oder *Wert entfernen*.
    - `CANCELLED`: echter CLOB-Zustand (Order zurückgezogen), aber die Engine
      cancel't nie. Vermutlich **Wert entfernen** oder Produzent für einen

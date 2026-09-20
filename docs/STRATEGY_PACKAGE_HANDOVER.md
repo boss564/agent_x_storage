@@ -151,11 +151,23 @@ ihre Sehschärfe ist ungeprüft:
 | Schwachstelle | Beleg | Folge |
 |---|---|---|
 | Zählt **Vorkommen**, nicht Produktion | `if status == Enum.CANCELLED:` → Waise verschwindet | **Falsch-Grün** |
+| **Ein Docstring genügt** | `"""siehe Enum.EXPIRED"""` → Waise verschwindet, ohne Code | **Falsch-Grün ohne Codeänderung** |
 | Liest **eine** Datei | `RejectReason.NONE` wird in `persistence.py:270` produziert | Falsch-Rot bei Package-Verteilung |
 | **Kein Mutationsnachweis** | niemand hat ihn rot gesehen | Reichweite deklariert, Sehschärfe unbelegt |
 
 > **Ein Wächter, der durchwinkt, ist schlimmer als einer, der falsch
 > anschlägt: Falsch-Rot wird untersucht, Falsch-Grün nie.**
+
+Die Docstring-Zeile ist die unangenehmste: `re.findall` liest die Datei als
+**Text**, nicht als Programm. Wer in der Engine-Datei notiert, *warum* ein Wert
+keinen Produzenten hat, nimmt dem Anker den Fund — **eine Lücke, die sich beim
+Dokumentieren schließt, ohne dass sich etwas geändert hat.** Der dauerhafte
+Anker liest deshalb Code (AST), nicht Text.
+
+**Schrittordnung (Abhängigkeit, nicht Empfehlung):** Erst die Zeugenquelle auf
+Package umstellen, dann ein Enum aufnehmen. Für `OrderStatus.PENDING` — dessen
+einziger Produzent in `models.py:227` steht — erzeugt die Ein-Datei-Lesart sonst
+ein Falsch-Rot, das kein Fund ist.
 
 **Er hat sich an Tag 1 bezahlt:** Er fand bei seinem ersten Lauf zwei Waisen
 (`EXPIRED`, `SAFETY_GUARD`), die auf keiner Liste standen, plus die verwaiste
