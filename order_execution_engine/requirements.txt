@@ -1,0 +1,7 @@
+# Shadow Execution Engine — Paper-Trading-Satellit (diagnostic_only)
+#
+# PIN-REGEL: Nur die Version, die im Betrieb GEMESSEN wurde. Das Modul hat
+# genau EINE Laufzeitabhaengigkeit; alles andere ist Standardbibliothek.
+# Charter-Parameter (diagnostic_only/live_execution/order_send) sind bewusst
+# KEINE Environment-Variablen und stehen nicht in der Config.
+pydantic==2.12.5
