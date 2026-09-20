@@ -1126,8 +1126,8 @@ belegen sie eine Regel, die ohne sie auskommt.
 
 **Die Konsummenge war schon vorher geschlossen — nur hat der Regex sie nicht
 gezeigt.** Der Produktivcode enthält **7** Enum-Nennungen in Strings (Regex 51
-gegen AST 23 auf distinkten Werten); keine davon betrifft ein `OrderStatus`-
-Label:
+gegen AST 44, Differenz 7 — Textstellen, nicht distinkte Werte); keine davon
+betrifft ein `OrderStatus`-Label:
 
 ```
 models.py:23     RejectReason.NONE      (Feldbeschreibung)
