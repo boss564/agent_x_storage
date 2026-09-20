@@ -364,16 +364,21 @@ class PaperMatchEngine:
 # ---------------------------------------------------------------------------
 
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class TelemetryRecord:
     """Ein Telemetrie-Ereignis (Signal -> virtuelle Ausführung).
+
+    Unveraenderlich (frozen): Ein Record beschreibt ein abgeschlossenes
+    Ereignis und darf nachtraeglich nicht manipuliert werden — sonst waere
+    die Wache in __post_init__ nur latenter Schutz.
 
     Attribute:
         signal_id: Signal-UUID.
         order_id: Order-UUID (None bei Risiko-Ablehnung vor Ordererstellung).
         latency_ms: Signal-Eingang bis Fill-Abschluss.
         approved: Risikoentscheid.
-        reject_reason: Ablehnungsgrund.
+        reject_reason: Ablehnungsgrund. Vertrag: immer ein RejectReason-Enum,
+            niemals None — auf dem genehmigten Pfad `RejectReason.NONE`.
         status: Finaler Orderstatus.
     """
 
@@ -381,8 +386,25 @@ class TelemetryRecord:
     order_id: Optional[uuid.UUID]
     latency_ms: float
     approved: bool
-    reject_reason: RejectReason
     status: Optional[OrderStatus]
+    reject_reason: RejectReason = RejectReason.NONE
+
+    def __post_init__(self) -> None:
+        """Erzwingt den Enum-Typ.
+
+        Dataclasses validieren ihre Annotationen nicht. Ohne diese Wache
+        nimmt der Record jeden Wert an — auch None oder den Rohstring
+        "invalid_price" — und der Fehler faellt erst tief in der
+        Persistenz auf. `isinstance` statt `is None`, weil der Bug nur
+        ein Symptom des eigentlichen Problems war: fehlende Typpruefung.
+        """
+        if not isinstance(self.reject_reason, RejectReason):
+            raise TypeError(
+                "TelemetryRecord.reject_reason muss ein RejectReason-Enum sein, "
+                f"nicht {type(self.reject_reason).__name__!r}. "
+                "Die Engine setzt auf jedem on_signal-Pfad ein Enum "
+                "(RejectReason.NONE inklusive)."
+            )
 
 
 class TelemetryLogger:

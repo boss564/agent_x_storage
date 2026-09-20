@@ -16,6 +16,7 @@ Vorgaben (Vereinbarung aus dem Review):
 from __future__ import annotations
 
 import json
+import logging
 import re
 import sqlite3
 import threading
@@ -24,8 +25,10 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Optional, Protocol, runtime_checkable
 
-from order_execution_engine.models import FillResult, VirtualPortfolio
+from order_execution_engine.models import FillResult, RejectReason, VirtualPortfolio
 from order_execution_engine.shadow_execution_engine import TelemetryRecord
+
+_LOG = logging.getLogger(__name__)
 
 SCHEMA_VERSION = 1
 _USER_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
@@ -179,7 +182,28 @@ class SQLiteShadowStorage:
         return cls(directory / "shadow.db")
 
     def write_telemetry(self, record: TelemetryRecord) -> None:
-        """Persistiert einen Telemetrie-Eintrag (append-only)."""
+        """Persistiert einen Telemetrie-Eintrag (append-only).
+
+        Defensive Normalisierung: `TelemetryRecord` verhindert None bereits
+        an der Konstruktion (siehe `__post_init__`), aber ein typ-ignorierender
+        Aufrufer kann die Wache umgehen. Charter `diagnostic_only=true` heisst:
+        Telemetrie darf den Engine-Loop nie crashen. Die Boundary ist der
+        letzte Punkt, an dem das garantiert werden kann.
+
+        Die Normalisierung ist bewusst NICHT still — sie loggt eine Warnung,
+        sonst maskiert sie genau die Bugs, die sie ueberleben laesst.
+        Zielwert ist `RejectReason.NONE` (Semantik: "kein Reject erfasst"),
+        nicht NULL: die Spalte ist NOT NULL per Vertrag.
+        """
+        reason = record.reject_reason
+        if not isinstance(reason, RejectReason):
+            _LOG.warning(
+                "TelemetryRecord.reject_reason ist kein RejectReason (%r) — "
+                "normalisiert zu NONE. Der Aufrufer ignoriert den Typvertrag; "
+                "produktiv ist das unerreichbar.",
+                reason,
+            )
+            reason = RejectReason.NONE
         with self._lock:
             self._conn.execute(
                 "INSERT INTO telemetry (signal_id, order_id, latency_ms, approved,"
@@ -189,9 +213,7 @@ class SQLiteShadowStorage:
                     str(record.order_id) if record.order_id else None,
                     record.latency_ms,
                     1 if record.approved else 0,
-                    # reject_reason ist bei genehmigten Signalen None — das ist
-                    # der Normalfall jeder gefuellten Order, nicht ein Randfall.
-                    record.reject_reason.value if record.reject_reason else None,
+                    reason.value,
                     record.status.value if record.status else None,
                 ),
             )
