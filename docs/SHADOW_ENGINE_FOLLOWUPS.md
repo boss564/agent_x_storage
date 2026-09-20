@@ -9,70 +9,139 @@
 
 ---
 
-## F1 — `MAX_POSITION_SIZE` in `RiskController.check()` ist strukturell unerreichbar
+## F1 — Sizing und Positions-Schranke ausrichten
 
-**Schwere:** hoch (simulierte Sicherheit, kein Ausfallrisiko)
-**Ort:** `order_execution_engine/shadow_execution_engine.py`
-`RiskController.check()` (~Z. 116) vs. `ShadowExecutionEngine.on_signal()` (~Z. 500)
+**Schwere:** hoch (Schichtverletzung, nicht Ausfallrisiko)
+**Ort:** `order_execution_engine/shadow_execution_engine.py` —
+`ShadowExecutionEngine.on_signal()` (Sizing) vs. `RiskController.check()`
 
-### Befund
+### Befund (korrigiert, verifiziert am 2026-09-20)
 
-`on_signal()` leitet die Ordergröße direkt aus dem Risiko-Limit ab:
+Eine frühere Fassung dieses Tickets behauptete, *der* `MAX_POSITION_SIZE`-Check
+sei unerreichbar. Das war falsch zugeschnitten. `RiskController.check()` enthält
+**vier** Prüfungen, die `MAX_POSITION_SIZE` zurückgeben — zwei sind tot, zwei
+arbeiten, aber auf unterschiedlicher Granularität:
 
-```python
-size = self.risk.config.max_order_size_shares  # Max-Größe als Test-Default
+| Zeile | Prüfung | Granularität | Status | Warum |
+|---|---|---|---|---|
+| ~116 | `order.size > max_order_size_shares` | Order | **tot** | `on_signal` setzt `size = risk.config.max_order_size_shares` — die Order ist per Konstruktion *exakt* das Limit, nie darüber |
+| ~118 | `order.notional > max_position_size_usdc` | Order | **tot** unter F1-Regime | folgt aus der Config-Invariante `per_order_cap ≤ max_position_size`; heute nur bei fehlerhafter Config erreichbar |
+| ~122 | `current_notional + order.notional > max_position_size_usdc` | **Position** | **funktioniert** | aggregiert über bestehende Position — zweiter Kauf erreicht sie |
+| ~130 | `available <= 0 or order.size > available` (SELL) | Position | funktioniert | Short-Verbot |
+
+Empirischer Nachweis für Zeile 122 (`max_position_size_usdc=100`,
+Kaufs-Erinnerung auf dasselbe Token):
+
+```
+Fill 1: approved=True   position=100 shares / 61.00 USDC
+Fill 2: approved=False  reason=MAX_POSITION_SIZE   ← greift
+Fill 3: approved=False  reason=MAX_POSITION_SIZE
 ```
 
-Die Order ist damit **immer exakt das Limit**, nie darüber. Die nachfolgenden
-Prüfungen in `check()` können nicht greifen:
+Isoliert mit vorbelegter Position (90 USDC) + Order (~61 USDC) = 151 USDC:
+`approved=False, reason=MAX_POSITION_SIZE`.
 
-| Check | Zeile | Warum unerreichbar |
-|---|---|---|
-| `order.size > max_order_size_shares` | ~116 | `size` ist per Konstruktion `== limit` |
-| `order.notional > max_position_size_usdc` | ~118 | `≤` per Konstruktion, solange `max_order_size_shares` klein genug |
-| `current_notional + order.notional > max_position_size_usdc` | ~122 | dito |
+**Korrigierte Implikation:** Der Risk-Layer ist nicht zahnlos. Er hat genau
+**eine** funktionierende aggregierte Pre-Trade-Bremse auf Positionsebene
+(Zeile 122) plus das Short-Verbot — und **zwei tote Order-Level-Checks**.
+Was fehlt, ist die Order-/Positions-Granularität als *bewusste* Ausrichtung,
+nicht der Schutz selbst. „Teilweise tot" erfordert Chirurgie; „ganz tot" hätte
+Neubau erfordert. Das ist eine andere Schwere und eine andere Geschichte für
+den nächsten Leser.
 
-Reproduziert: `max_order_size_shares` von `100` über `1` bis `0.001` gesetzt —
-alle drei Läufe `approved=True`, `RejectReason.NONE`.
-
-Eine Pre-Trade-Regel, die nie greifen kann, ist schlechter als keine Regel:
-Im Review wirkt sie wie eine Risikobremse, ist aber eine Tautologie.
+Beide toten Checks tragen dasselbe `RejectReason.MAX_POSITION_SIZE` wie der
+funktionierende — deshalb sahen sie im Review wie derselbe Check aus. Die
+Unterscheidung ist nicht im Code sichtbar; sie gehört in Kommentar oder Ticket.
 
 ### Entscheidung, die zu treffen ist: Sizing-Quelle
 
-Das ist die Wurzel — sie entscheidet, ob der Check ein Check bleibt.
-
 **Option A — Signal-getriebenes Sizing (empfohlen).**
-`size = f(confidence, bankroll_fraction, book_depth)`, geklemmt durch
-`min(..., max_order_size_shares)`. Dann ist das Limit ein echter Clamp und
-der Check wird beobachtbar. Erfordert die Policy-Entscheidung unten.
+Die Conviction gehört zum Signal (NewsBank/NewsBot liefert sie als Confidence).
+Die Umrechnung in eine Größe gehört in eine explizite, konfigurierbare
+Sizing-Funktion auf **Strategy-Ebene** — nicht in die `RiskConfig`.
+`RiskConfig` enthält Schranken, keine Sizing-Logik.
+
+Damit bleibt die Engine, was sie sein soll: Execution. Eine Engine, die sich
+ihre Ordergrößen aus dem Risikolimit ableitet, misst nicht die Strategie,
+sondern ihre eigene Konstante — genau der Zustand, der abgeschafft werden soll.
 
 **Option B — Config-abgeleitet belassen (ehrlich deklarieren).**
-Wenn `size` immer aus der Config kommt, ist die Regel eine *Invariante*,
-kein Check. Dann als Config-Validierung ausdrücken
-(`max_order_size_shares <= max_position_size`) oder den Check streichen.
+Wenn `size` immer aus der Config kommt, ist Zeile 116 eine *Invariante*,
+kein Check. Dann als Config-Validierung ausdrücken oder streichen — und nicht
+als „Risikobremse" stehen lassen.
 
-### Policy bei Überschreitung (Vorab-Position, im Ticket zu bestätigen)
+### Entscheidung vom 2026-09-20 (ersetzt die frühere Vorab-Position)
 
-**Reject am Risk-Layer; Clamp nur als expliziter Sizing-Schritt.**
+**1. Sizing-Quelle: das Signal, nicht die Config.**
+Sizing-Funktion auf Strategy-Ebene, konfigurierbar. `RiskConfig` bleibt
+schranken-only.
 
-Begründung aus der Charter: Der Trockenmodus existiert, um das
-*Strategieverhalten* zu messen. „Die Strategie wollte das Limit überschreiten"
-ist ein Signal **über die Strategie** — ein stiller Clamp löscht genau die
-Ereignisse, die ausgewertet werden sollen. Ein Reject mit Telemetrie-Eintrag
-bewahrt die Information vollständig.
+**2. Clamp: ja — aber im Sizing, niemals im Risk-Layer.**
+`size = min(desired, per_order_cap)`. Bedingung: Telemetrie führt
+`requested_size` und `executed_size` **getrennt**, damit Kappung messbar ist
+statt still. Produktionsnahe Variante ohne Informationsverlust.
 
-Wenn eine spätere Live-Engine Capping braucht, gehört das als **sichtbarer
-Sizing-Schritt mit eigenem Telemetrie-Event** modelliert — nicht als
-Nebenwirkung des Risk-Layers.
+**3. Reject: ausschließlich am Risk-Layer, auf kumulierter Ebene.**
+Semantik: `current_position + order_size > max_position_size →
+RejectReason.MAX_POSITION_SIZE`. Mit dem funktionierenden Zeile-122-Check ist
+das **teilweise bereits Realität** — F1 führt die Semantik nicht neu ein,
+sondern richtet sie aus: Event-Exposure existiert, Per-Token-Position kommt
+dazu, Order-Level fällt weg.
+
+Beim Feuern: Order wird nicht ausgeführt, Telemetrie zeichnet den Versuch auf.
+„Die Strategie wollte über das Limit" ist ein Befund über die Strategie.
+
+**4. Config-Invariante beim Laden:** `per_order_cap (Sizing) ≤
+max_position_size (Risk)`, validiert beim Start. Verletzung ist ein
+Config-Fehler, kein Laufzeitverhalten. Schichtung damit explizit:
+**Sizing kappt weich, Risk rejectet hart**, keiner kommt dem anderen still
+ins Gehege.
+
+### Akzeptanzkriterien (Regressionsanker, heute unmöglich)
+
+- [ ] (a) Zwei Orders auf dasselbe Token — erste füllt, zweite kippt die
+      Position über das Limit → Reject.
+- [ ] (b) `requested > per_order_cap` → Ausführung am Cap, Telemetrie zeigt
+      **beide** Größen.
+- [ ] (c) Config mit `per_order_cap > max_position_size` → Start scheitert.
+- [ ] Mutationsnachweis: Wird die Sizing-Quelle auf „immer Limit" zurückgedreht
+      oder der Positions-Check entfernt, stirbt der jeweilige Test.
+
+---
+
+## F1b — Tote Order-Level-Checks entfernen (Zeilen ~116 und ~118)
+
+**Schwere:** niedrig (mechanisch)
+**Abhängigkeit:** **blocked by F1-Umsetzung.**
+**Ort:** `order_execution_engine/shadow_execution_engine.py`,
+`RiskController.check()`
+
+Eigener Commit, weil er **nachweislich kein Verhalten ändert** — reine
+Löschung, mechanisch reviewbar, sauber revertbar. Wer Löschung in den
+Verhaltens-Commit mischt, verwischt genau die Linie, an der ein Reviewer
+„ändert etwas" von „kann nichts ändern" unterscheidet.
+
+### Warum die Kopplung an F1 zwingend ist
+
+Die Löschung von 116/118 ist nur **unter dem F1-Regime** gerechtfertigt:
+Sizing-Clamp plus Config-Invariante `per_order_cap ≤ max_position_size`
+machen die Order-Level-Checks *per Konstruktion* unerreichbar, nicht nur
+empirisch. Ohne diese Kopplung liegt das Ticket im Backlog, und in sechs
+Monaten liest jemand 116/118 wieder als funktionierenden Schutz.
+
+### Streich-Kriterium
+
+> Unerreichbar **per Konstruktion**, Nachweis über die Config-Invariante —
+> nicht „unerreichbar, weil wir es nie getestet haben".
 
 ### Akzeptanzkriterien
 
-- [ ] Ein Test, der eine Order **über** dem Limit erzeugt und einen
-      `RejectReason` prüft (heute unmöglich — das ist der Regressionsanker).
-- [ ] Mutationsnachweis: Wird die Sizing-Quelle auf „immer Limit" zurückgedreht,
-      stirbt der neue Test.
-- [ ] Entscheidung A oder B im Dokument festgehalten, nicht nur im Code.
+- [ ] Vor der Löschung: je ein Mutationstest, der zeigt, dass die Zeilen in
+      keinem Szenario feuern (auch nicht bei Grenzwerten).
+- [ ] Nach der Löschung: 43/43 + die neuen F1-Tests unverändert grün →
+      beweist „kein Verhaltensänderung".
+- [ ] Kommentar an der verbleibenden Positions-Prüfung, dass sie die
+      *einzige* Position-Level-Schranke ist (Abgrenzung zu Event-Exposure).
 
 ---
 

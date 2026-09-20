@@ -659,6 +659,10 @@ GoBD → Ledger (BHO Δ=0,00€) → Chain-Hash → XRechnung → PoPW-Coverage 
 
 11. **RPA Discharge Pipeline:** 8-step audit (GoBD→Ledger→Chain→XRechnung→PoPW→VOB/B→Tax→PDF/A-3) with ENTLASTET/VORBEHALT/ENTLASTUNG_VERWEIGERT verdict.
 
+12. **Modellbasis (Shadow Execution Engine):** Neue Records/Modelle in `order_execution_engine/` sind grundsätzlich **Pydantic BaseModel (strict)**, Dataclass nur mit begründeter Ausnahme. Referenzimplementierung: `PaperOrder`. Begründung: `order_execution_engine/models.py`-Docstring · Ticket: `docs/SHADOW_ENGINE_FOLLOWUPS.md` (F2). **Review-Flag:** jeder Dataclass-Neuzugang in diesem Package.
+
+13. **Telemetrie-Vertrag (Shadow Execution Engine):** `TelemetryRecord.reject_reason` ist immer ein `RejectReason`-Enum (`NONE` inklusive), niemals `None`. Dataclasses validieren Annotationen nicht — die Wache sitzt in `__post_init__` (frozen + slots). Die Storage-Boundary normalisiert defensiv zu `NONE` **mit Warnung** (Charter `diagnostic_only=true`: Telemetrie darf den Engine-Loop nie crashen). Stilles Normalisieren wäre verboten. Tests: `test_record_rejects_none_at_construction`, `test_storage_normalizes_none_at_boundary_defensively`.
+
 ### B2G Test Results
 
 - **BSI Compliance Gate:** `verified=30/42` · `claimed=1` (nur 1.1 NFC AusweisApp2 — dokumentierte Hardware-Ceiling) · `attested=11` · `failed=0` · `gate=PASS` · `KONFORM_MIT_VORBEHALT` (`services/z3_solver/main.py`)

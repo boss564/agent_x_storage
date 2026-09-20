@@ -15,6 +15,21 @@ Härtung (v0.2):
 
 Hinweis: Das Modul enthält KEINE Netzwerk-Calls. Jeglicher Versuch,
 echte Order-Aussendungen auszulösen, führt zu einem harten Abbruch.
+
+Modellbasis-Konvention (Referenz-Begründung, operativ in CLAUDE.md):
+    Neue Records/Modelle in diesem Package sind grundsätzlich Pydantic
+    BaseModel (mit strict=True), Dataclass nur mit begründeter Ausnahme.
+    Referenzimplementierung ist PaperOrder — es hatte
+    `reject_reason: RejectReason = Field(default=RejectReason.NONE)` bereits,
+    während TelemetryRecord als Dataclass danebenstand und dieselbe Prüfung
+    per __post_init__ nachrüsten musste (siehe Commit d5fe4c8d und
+    docs/SHADOW_ENGINE_FOLLOWUPS.md, F2).
+
+    Warum das hier steht: Das war nie eine Wissenslücke, sondern Drift —
+    zwei Modellbasen koexistierten, und neue Klassen wurden im Stil ihrer
+    Nachbarschaft geschrieben, nicht im Stil des Systems. Die Begründung
+    steht an der Entdeckungsstelle (wer in models.py eine Klasse anlegt),
+    die Regel an der Entscheidungsstelle (CLAUDE.md, zum Task-Start).
 """
 
 from __future__ import annotations
