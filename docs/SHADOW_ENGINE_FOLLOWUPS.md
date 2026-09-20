@@ -109,8 +109,58 @@ ins Gehege.
 - [ ] (c) Config mit `per_order_cap > max_position_size` → Start scheitert.
 - [ ] (d) Jede Ablehnungsursache hat einen **unterscheidbaren** RejectReason
       (Addendum unten).
+- [ ] (e) **Test-Sensitivität, nicht Engine-Eigenschaft:** Ersetzt man die
+      neue Sizing-Logik durch die Legacy-Konstante `max_order_size_shares`,
+      muss mindestens ein Anker-Test **rot** werden. Bleibt alles grün, ist
+      der Anker an den alten Pfad gekoppelt und beweist das neue Verhalten
+      nicht. Gleicher Mutationsstandard wie bei `TelemetryRecord`, hier auf
+      Testebene: Der Test muss am Mutanten sterben, sonst bewacht er nichts.
 - [ ] Mutationsnachweis: Wird die Sizing-Quelle auf „immer Limit" zurückgedreht
       oder der Positions-Check entfernt, stirbt der jeweilige Test.
+
+### Schema-Migration: `requested_size` vs. `executed_size`
+
+**Korrektur einer früheren Annahme:** „keine Schema-Änderung" gilt für die
+getrennten `RejectReasons` (neue Enum-Werte in derselben Spalte) — **nicht**
+für die getrennte Größen-Telemetrie. Die heutige `telemetry`-Tabelle
+(`persistence.py:121`) hat **gar kein Größen-Feld**:
+
+```sql
+CREATE TABLE IF NOT EXISTS telemetry (
+    seq INTEGER PRIMARY KEY AUTOINCREMENT,
+    signal_id TEXT NOT NULL,
+    order_id TEXT,
+    latency_ms REAL NOT NULL,
+    approved INTEGER NOT NULL,
+    reject_reason TEXT,
+    status TEXT
+);
+```
+
+`executed_size` liegt heute ausschließlich in `fills` (`persistence.py:130`)
+und ist dort die *Ausführungsmenge*, nicht die angeforderte. Die angeforderte
+Größe existiert nur flüchtig im `PaperOrder`-Objekt.
+
+F1 braucht damit eine Migration auf zwei Tabellen:
+
+| Tabelle | Änderung | Backfill |
+|---|---|---|
+| `telemetry` | neue Spalte `requested_size TEXT` | nicht möglich — Größe wurde nie persistiert; `NULL` für Althistorie |
+| `fills` | neue Spalte `requested_size TEXT` | `requested_size := executed_size` |
+
+**Backfill-Regel für `fills`:** `requested_size := executed_size` ist für die
+Vergangenheit **wahr**, weil beide historisch identisch waren — die Order war
+per Konstruktion exakt das Limit, es gab keine Kappung. Der Backfill ist
+deshalb keine Näherung, sondern eine korrekte Rekonstruktion.
+
+**Backfill-Regel für `telemetry`:** `NULL` statt eines erfundenen Werts.
+Eine aus `fills` abgeleitete Größe wäre bei abgelehnten Orders (kein Fill)
+nicht rekonstruierbar und bei gefüllten Orders eine Scheingenauigkeit.
+`NULL` heißt hier ehrlich „vor der Messung".
+
+- [ ] `SCHEMA_VERSION` erhöhen (aktuell `1`), Migration idempotent.
+- [ ] Test, der eine v1-DB öffnet und die Migration prüft (inkl. Backfill).
+- [ ] `fills.requested_size = executed_size` in Altdaten nachgewiesen.
 
 ---
 
@@ -211,10 +261,21 @@ Telemetrie-Felder `requested_size`/`executed_size`, getrennte RejectReasons
 
 ### Akzeptanzkriterien
 
+- [ ] **43/43 grün mit null geänderten Tests.** Der Seam-Commit ist ein
+      Refactoring — der Default-Adapter reproduziert das heutige Verhalten
+      (`max_order_size_shares`) exakt. Wird auch nur eine Testerwartung
+      angefasst, war F1c kein reines Refactoring, sondern hat Verhalten
+      untergeschmuggelt. Das ist der billigste und schärfste Nachweis, den
+      ein Reviewer bekommen kann: „Tests unverändert grün" heißt „Verhalten
+      unverändert".
 - [ ] `size_fn` injizierbar, Default-Adapter funktioniert ohne Strategie.
-- [ ] Mutationsnachweis: Default-Adapter, der `max_order_size_shares`
-      zurückgibt, lässt den Regressionsanker (a) **nicht** feuern — beweist,
-      dass Sizing und Risikoschranke entkoppelt sind.
+- [ ] Mutationsnachweis: Ersetzt man die neue Sizing-Logik durch die
+      Legacy-Konstante, wird mindestens ein Anker-Test rot (siehe F1, Kriterium e).
+
+**Reihenfolge im Verhältnis zu F1:** F1c ist „make the change easy", F1 ist
+„make the easy change". Der Seam-Commit ändert kein Verhalten, F1 ändert
+Verhalten als erster Commit seit Entstehung der Engine, F1b löscht unter
+Beweislast.
 
 ---
 
