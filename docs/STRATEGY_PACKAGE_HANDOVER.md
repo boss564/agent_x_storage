@@ -56,6 +56,20 @@ ein Test das?"**
 - **Phantom-Label** — ein Enum-Wert ohne Produzenten. Ein Leser, der das Enum
   als Dokumentation liest, muss ihn für möglich halten; er kommt nie.
   Der schlimmste Fall heißt wie sein Gegenteil (`SAFETY_GUARD`).
+
+  **Präzise Fassung:** Die Fehlerklasse ist nicht „Wert ohne Produzent",
+  sondern *ein Wert, den kein Pfad hervorbringen kann, obwohl das Enum ihn als
+  möglich ausweist*. Das gilt für **Ausgangs-Enums** (`RejectReason`,
+  `OrderStatus`) — dort ist der Produzent der richtige Zeuge. Für
+  **Eingangs-Enums** (z. B. `Direction`) lautet die gleichwertige Frage: *hat
+  jeder Wert eine sichtbare Behandlung?* Für **Konfigurations-Enums** (z. B.
+  `ExecutionMode`) ist Produktion irrelevant.
+
+  **Deshalb wird pro Enum die Richtung deklariert, nicht eine Liste geführt:**
+  Ausgang → Produzenten-Prüfung · Eingang → Behandlungs-Prüfung ·
+  Konfiguration → ausgenommen mit Begründung. Sonst meldet der Anker falsch
+  positiv: `Direction.DOWN` hat null Code-Produzenten, ist aber im `else`-Zweig
+  behandelt — ein produzentenbasierter Anker sähe eine Waise, wo keine ist.
 - **Toter Wahr-Zweig** — ein Prädikat, dessen `True` unerreichbar ist
   (vierte Schicht).
 - **Schweigepflicht** — ein Validator, der weitergestellt wurde, bis die Tests
@@ -80,12 +94,24 @@ Der Wächter gegen **Phantom-Labels** — nicht ein Fehler, sondern eine
 Fehlerklasse: Behauptungen, die aussehen wie Zusicherungen. Er fängt beide
 Richtungen und ist als Test zu übernehmen:
 
+**Bevor die Vorlage kopiert wird — die Richtung deklarieren.** Ein Anker, der
+über *alle* Enums läuft, meldet falsch positiv: `Direction.DOWN` hat im
+Engine-Code null explizite Produzenten (nur ein `else`-Zweig), und
+`ExecutionMode.PAPER_TRADING` steht nur in einer Allowlist. Die Vorlage unten
+prüft **Ausgangs-Enums**. Für Eingangs-Enums lautet die gleichwertige Frage
+*hat jeder Wert eine sichtbare Behandlung?*; Konfigurations-Enums sind
+ausgenommen, mit Begründung.
+
 ```python
 def test_meta_every_reason_has_a_producer() -> None:
-    """Jeder Enum-Wert hat einen lebenden Produzenten.
+    """Jeder Wert eines AUSGANGS-Enums hat einen lebenden Produzenten.
 
     Ein Wert ohne Produzenten ist Scheinschutz im Enum — jeder Diagnostics-
     Konsument muss ihn fuer moeglich halten, er kommt nie.
+
+    Gilt fuer Ausgangs-Enums (RejectReason, OrderStatus). Eingangs-Enums
+    (Direction) brauchen eine Behandlungs-Pruefung, Konfigurations-Enums
+    (ExecutionMode) sind mit Begruendung ausgenommen.
     """
     import re
     from pathlib import Path

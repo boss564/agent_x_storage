@@ -874,18 +874,63 @@ kennt nur `RejectReason`.
 
 ### Was F2b tun muss
 
-1. **Generalisieren, nicht duplizieren.** Der Anker wird über *alle* Enums des
-   Moduls parametrisiert, die Zustands-/Ablehnungswerte tragen
-   (`RejectReason`, `OrderStatus`, ggf. `Direction`, `ExecutionMode`).
-   Eine Liste von Enum-Klassen, ein Durchlauf, eine Meldung.
-2. **Ausnahmeliste pro Enum, nicht global.** Das Enum muss erklären dürfen,
-   welche Werte Marker sind (`RejectReason.NONE`) — und diese Erklärung ist
-   selbst prüfbar: Eine Ausnahme ohne Begründung im Docstring ist ein Fund.
+**Vorbemerkung: Das Akzeptanzkriterium war zu breit formuliert.** „Der Anker
+prüft jedes Enum des Moduls" — das fällt beim Durchzählen, noch vor dem ersten
+Code:
+
+| Enum | Beispielwert | Code-Produzent | Zeuge | Lage |
+|---|---|---|---|---|
+| `Direction` | `DOWN` | **0** | 1 | `models.py:196` behandelt ihn im `else`-Zweig |
+| `ExecutionMode` | `PAPER_TRADING` | 1 | 1 | nur Element der Allowlist (`models.py:692`), nie zugewiesen |
+
+**Die Fehlerklasse ist nicht „Wert ohne Produzent", sondern spezifischer:**
+
+> **Ein Wert, den kein Pfad hervorbringen kann, obwohl das Enum ihn als
+> möglich ausweist.**
+
+Das gilt für **Ausgangs-Enums** (`RejectReason`, `OrderStatus`) — dort ist der
+Produzent der richtige Zeuge. Für **Eingangs-Enums** lautet die gleichwertige
+Frage: *hat jeder Wert eine sichtbare Behandlung?* Und für
+**Konfigurations-Enums** ist Produktion irrelevant.
+
+`Direction` ist ein Eingangs-Enum: Der Produzent ist der NewsBot, außerhalb des
+Moduls. `DOWN` ist **nicht verwaist**, sondern implizit behandelt. Ein
+produzentenbasierter Anker würde ihn als Waise melden (**falsch positiv**) —
+und ein Anker, der `else`-Zweige als Behandlung akzeptiert, beweist nichts mehr.
+
+### Richtung deklarieren, statt Liste führen
+
+Die Enum-Liste wird **nicht** als „alle Enums des Moduls" geführt. Pro Enum wird
+die **Richtung** deklariert:
+
+| Richtung | Prüfung | Enums |
+|---|---|---|
+| **Ausgang** | Produzenten-Prüfung | `RejectReason`, `OrderStatus` |
+| **Eingang** | Behandlungs-Prüfung | `Direction` |
+| **Konfiguration** | ausgenommen, mit Begründung | `ExecutionMode` |
+
+Bei Eingangs-Enums ist der erste Kandidat `Direction.DOWN` im `else`. Ob das
+eine *sichtbare* Behandlung ist oder eine, die den Wert nur mitschleift, klärt
+F2b — die Entscheidung steht dann in der Zuordnung, nicht in einer
+Ausnahmeliste.
+
+**Warum das vor dem Ticket-Start geklärt wird:** Sonst erbt das
+Akzeptanzkriterium eine Rotfärbung, die kein Fund ist. Die erste Reaktion
+darauf wäre eine Ausnahmeliste — und die weicht den Anker wieder auf, gegen
+genau die Fehlerklasse, für die er gebaut wurde.
+
+### Konkret
+
+1. **Richtung deklarieren, nicht generalisieren.** Eine Tabelle
+   *Enum → Richtung*, im Test sichtbar, nicht im Kommentar.
+2. **Ausnahmeliste pro Enum, nicht global.** Das Enum darf Marker erklären
+   (`RejectReason.NONE`) — und die Erklärung ist selbst prüfbar: Eine Ausnahme
+   ohne Begründung im Docstring ist ein Fund.
 3. **Die zwei `OrderStatus`-Waisen klassifizieren** — dieselbe Regel wie F2:
    *Produzent herstellen* oder *Wert entfernen*.
-   - `CANCELLED`: echter CLOB-Zustand (Order vom Nutzer zurückgezogen), aber
-     die Engine cancel't nie. Vermutlich **Wert entfernen** oder Produzent für
-     ein Cancel-Pfad — Entscheidung bei F2b.
+   - `CANCELLED`: echter CLOB-Zustand (Order zurückgezogen), aber die Engine
+     cancel't nie. Vermutlich **Wert entfernen** oder Produzent für einen
+     Cancel-Pfad.
    - `EXPIRED`: hängt an derselben Bedingung wie `RejectReason.EXPIRED` —
      **resting orders**. Kehrt zusammen mit der Match-Simulations-Erweiterung
      zurück, dann mit Produzent *und* Zeuge.
@@ -894,9 +939,10 @@ kennt nur `RejectReason`.
 ohnehin anfasst. Feld und Wächter reisen im selben Schritt — dieselbe Logik wie
 beim Strategy-Package-Handover.
 
-**Akzeptanzkriterium:** Der Anker prüft jedes Enum des Moduls. Ein neuer,
-produzentenloser Wert — in *jedem* Enum — macht die Suite rot, nicht nur in
-`RejectReason`.
+**Akzeptanzkriterium (korrigiert):** Jedes Enum ist einer Richtung zugeordnet.
+Ausgangs-Enums: jeder Wert hat einen Produzenten **oder** ist ein begründeter
+Marker. Eingangs-Enums: jeder Wert hat eine sichtbare Behandlung. Ein neuer
+produzentenloser Wert in einem **Ausgangs-Enum** macht die Suite rot.
 
 ### ADR 12 muss mitreisen
 
