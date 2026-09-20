@@ -61,7 +61,6 @@ def test_order_validation() -> None:
     o = _make_order()
     assert o.notional == Decimal("93.000000")
     assert o.status == OrderStatus.PENDING
-    assert not o.is_expired()
     try:
         _make_order(expiration=_utcnow() - timedelta(minutes=1))
         raise AssertionError("abgelaufene Order hätte abgelehnt werden müssen")
@@ -73,6 +72,14 @@ def test_order_validation() -> None:
     except PermissionError:
         pass
     print("OK test_order_validation")
+
+
+# Hinweis (F1b): Hier stand bis F1b `assert not o.is_expired()` im
+# `test_order_validation`. Die Methode wurde mit `EXPIRED`/`SAFETY_GUARD`
+# entfernt: Sie war der einzige Grund, aus dem der Enum-Wert EXPIRED
+# existierte, und hatte keinen Caller im Engine-Pfad. Abgelaufene Orders
+# werden weiterhin am Konstruktor abgewiesen (Validator `_reject_expired`,
+# Zeile ~70 darunter) — die Zusicherung, die zählt, ist unverändert.
 
 
 def test_mock_signature() -> None:

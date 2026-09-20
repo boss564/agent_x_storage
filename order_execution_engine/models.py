@@ -234,18 +234,6 @@ class PaperOrder(BaseModel):
         """Rechnet price * size in USDC-Notional um."""
         return (self.price * self.size).quantize(Decimal("0.000001"))
 
-    def is_expired(self, now: Optional[datetime] = None) -> bool:
-        """Prüft, ob die Order abgelaufen ist.
-
-        Args:
-            now: Referenzzeitpunkt (Default: aktuelle UTC-Zeit).
-
-        Returns:
-            True, wenn expiration erreicht/überschritten wurde.
-        """
-        ref = now or _utcnow()
-        return ref >= self.expiration
-
     @model_validator(mode="after")
     def _enforce_dry_run(self) -> "PaperOrder":
         """Verhindert, dass Orders außerhalb erlaubter Dry-Run-Modi existieren."""

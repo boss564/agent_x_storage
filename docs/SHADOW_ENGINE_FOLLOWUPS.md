@@ -359,10 +359,40 @@ persistierte Shadow-Telemetrie (`find . -name shadow.db` leer), das Enum ist
 rein intern (kein Konsument außerhalb `order_execution_engine/`). Die
 Entfernung ist non-breaking.
 
+> **Das DB-Gate gab mehr her als gefragt.** Es gibt **keine** persistierte
+> Shadow-Telemetrie — die Engine lief bisher ausschließlich in-memory bzw. in
+> Tests. Konsequenz für die v2-Migration: Die `NULL`-Doktrin hat **keine
+> Bestandsdaten zu schützen**; sie ist von Tag 1 an *vorausschauend*. Das macht
+> sie nicht weniger wertvoll — der erste echte Run erbt ein Schema, dessen
+> Lücken ehrlich benannt sind, statt nachträglich rekonstruierter
+> Scheingenauigkeit. Wer später nach Altdaten sucht: es gibt keine.
+
+> **Löschung ist ein Urteil über die Gegenwart, nicht über das Konzept.**
+> Order-Expiry ist ein echtes CLOB-Feature (GTD). Wenn die Simulation je
+> Expiry abbildet, kehrt `EXPIRED` zurück — dann mit Produzent *und* Zeuge.
+> Löschen heißt „existiert nicht", nicht „darf nie existieren".
+
 **Zwei zusätzliche Waisen, vom Meta-Anker gefunden.** Er feuerte beim ersten
 Lauf und meldete `['EXPIRED', 'SAFETY_GUARD']` — beide produzentenlos,
 `is_expired()` wird nie im Engine-Pfad aufgerufen. Sie fielen unter dieselbe
 Regel und gingen mit. Das ist der Anker bei seiner ersten Amtshandlung.
+
+**Die Leiche neben der Tür (`is_expired()`).** Der Enum-Wert ging, die
+zugehörige Maschinerie musste separat geprüft werden — tote Maschinerie neben
+einem gelöschten Label ist derselbe Befund einen Meter weiter. Ergebnis:
+`is_expired()` war vollständig verwaist (ein Caller: ein Assert in
+`test_order_validation`). Nach derselben Regel entfernt, mit Protokollzeile.
+**Was bleibt und weiterhin gilt:** Die Altersgrenze wird am Konstruktor
+durchgesetzt (`_reject_expired`) — abgelaufene Orders können nicht entstehen.
+Sie *wurden* nie im Bestand geprüft, weil der Zustand unerreichbar ist. Auch
+`expiration` bleibt als Feld (Konstruktor-Grenze + CLOB-Standardfeld).
+
+**`SAFETY_GUARD` ist die reinste Form des Musters.** Ein Reject-Reason, der
+Sicherheit *verspricht* und nie feuern kann — in einer Engine, deren
+Existenzberechtigung die Vertrauenswürdigkeit ihrer Telemetrie ist. Ein Leser,
+der das Enum als Dokumentation liest, muss eine letzte Schutzinstanz annehmen.
+Das ist schlimmer als der tote 116: Der sah nur *aus* wie Schutz, dieser
+*heißt* so.
 
 **Was von VM1 überlebt: nur `MAX_POSITION_SIZE`** — die ursprüngliche eine
 Reason. War die Trennung umsonst? Nein: Sie war der **Zwischenschritt, der die
