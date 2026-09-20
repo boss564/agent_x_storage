@@ -371,6 +371,15 @@ Entfernung ist non-breaking.
 > Order-Expiry ist ein echtes CLOB-Feature (GTD). Wenn die Simulation je
 > Expiry abbildet, kehrt `EXPIRED` zurück — dann mit Produzent *und* Zeuge.
 > Löschen heißt „existiert nicht", nicht „darf nie existieren".
+>
+> **Der Auslöser ist präzise benennbar:** `EXPIRED` bekommt seinen Produzenten
+> genau dann, wenn die Match-Simulation **resting orders** lernt. Solange
+> Orders nur im Moment des Signals gegen das Buch laufen, kann nichts altern.
+> Sobald virtuelle Orders im Buch liegen und Ticks sie altern lassen, ist
+> Expiry ein echter Zustandsübergang — und der Konstruktor-Guard allein reicht
+> nicht mehr, weil „gültig bei Erstellung" und „gültig bei Fill"
+> auseinanderfallen. Das ist der natürliche Wiedereintrittspunkt, und er kommt
+> mit dem realistischsten Teil der CLOB-Simulation, nicht als Laune.
 
 **Zwei zusätzliche Waisen, vom Meta-Anker gefunden.** Er feuerte beim ersten
 Lauf und meldete `['EXPIRED', 'SAFETY_GUARD']` — beide produzentenlos,
@@ -559,6 +568,34 @@ und neue Klassen werden im Stil ihrer Nachbarschaft geschrieben, nicht im Stil
 des Systems. `TelemetryRecord` (`shadow_execution_engine.py:368`) ist eine
 `@dataclass`, `PaperOrder` ein `BaseModel`.
 
+### Messlatte: F1c-Maßstab, mit einem vorprogrammierten Unterschied
+
+Die Modellbasis-Migration ist verhaltensneutral **im selben Sinne wie F1c**:
+Test-Diff **nur additiv**, Bestand grün. Das ist die Messlatte.
+
+**Der Unterschied gehört vorher benannt:** Pydantic-Validation kann Dinge
+ablehnen, die die Dataclass geschluckt hat. Das eigene Beispiel steht schon im
+Ticket: `Decimal("1.5")` für `latency_ms` (ein Feld, das `int` erwartet). Die
+Dataclass ist permissiv, weil sie nichts erzwingt; Pydantic erzwingt.
+
+> **Wenn F2 also einen Bestandstest rot macht, ist das kein
+> Messlatten-Bruch, sondern ein Fund:** latenter Typ-Schlamm, den die
+> Dataclass nie bemerkt hat.
+
+**Die Regel für jeden so gefundenen Fall:**
+
+1. **Klassifizieren** — *Produzent reparieren* (der Aufrufer liefert den
+   falschen Typ) **oder** *Feld bewusst lockern* (der Typ war zu eng gewählt,
+   etwa `int`, wo `float` korrekt ist).
+2. **Die Entscheidung steht in der nummerierten Zuordnung** — wie in F1b:
+   jede Teständerung hat eine Nummer und eine Begründung.
+
+**Was nicht passiert:** Der Validator wird weitergestellt, bis die Tests wieder
+grün sind. Sonst migriert F2 nicht die Modelle, sondern nur die
+**Schweigepflicht** — von der Dataclass, die nichts sagte, zur Pydantic-Konfig,
+die nichts sagt, aber so aussieht, als würde sie etwas sagen. Das wäre
+Scheinschutz in seiner fünften Geschmacksrichtung.
+
 ### Teil 1 — Konvention (wichtiger als die Migration)
 
 > **Neue Records grundsätzlich Pydantic. Dataclass nur mit begründeter Ausnahme.**
@@ -692,13 +729,25 @@ feuern.**
 > Dekoration — und Dekoration im Risk-Pfad ist schlimmer als Abwesenheit, weil
 > sie Vertrauen besetzt, das der Code nicht einlöst.
 
-Ein Prinzip, drei Schichten:
+Ein Prinzip, vier Schichten:
 
 | Angewandt auf | Zeuge |
 |---|---|
 | Risk-Check | Anker-Test: zweiter Fill kippt die Position über das Limit → Reject |
 | Test | Sensitivitäts-Kriterium (e): der Test **muss rot werden**, wenn der Mutant eingebaut wird |
 | Refactoring / Seam | Coverage auf den neuen Zeilen: der Seam wird tatsächlich durchlaufen |
+| **Prädikat** | **Erreichbarkeits-Nachweis: der Wahr-Zweig muss erzeugbar sein.** `is_expired()` konnte nie `True` liefern, weil `_reject_expired` den Zustand am Konstruktor unerzeugbar macht. |
+
+Die vierte Schicht ist die subtilste: Ein Prädikat, dessen Wahr-Zweig
+**unerreichbar** ist, sieht wie eine Zusicherung aus und ist eine Behauptung.
+Sie ist dieselbe Architektur-Philosophie wie bei `TelemetryRecord` —
+*unmöglich schlägt prüfbar* — nur dass hier die Altlast die Philosophie schon
+kannte und das Werkzeug der alten Denkweise stehen ließ.
+
+**Reihenfolge ist Teil des Befunds:** Die Maschinerie überlebte ihr Label um
+exakt einen Commit. Das ist richtig so — F1b musste zuerst beweisen, dass das
+Label keinen Produzenten hat; die Frage „was ruft diese Methode?" war erst
+danach scharf zu stellen.
 
 Die Frage ist nie „ist es vorhanden?", sondern **„kann es feuern, und beweist
 ein Test das?"**. Deshalb zwei komplementäre Nachweise in F1c (Unverändertheit
@@ -734,6 +783,50 @@ Aus zwei konkreten Squash-Entscheidungen dieses Zyklus:
 oder lebt sie nur in der Commit-Message? Nur im ersten Fall ist der Squash
 verlustfrei. Wird gesquasht, obwohl die Message der einzige Träger ist, muss
 die kombinierte Message den widerrufenen Inhalt explizit benennen.
+
+---
+
+## F1-Cluster: geschlossen (2026-09-20)
+
+**F1c** (Seam, verhaltensneutral, bezeugt) → **F1** (signal-getriebenes Sizing,
+engine-seitiger Clamp, getrennte Reject-Reasons, Schema v2 — fünf
+Mutanten-Leichen, ein Selbstfang der Invariante) → **F1b** (Falle entschärft:
+`SAFETY_GUARD`/`MAX_ORDER_SIZE`/`MAX_ORDER_NOTIONAL` weg, Enum ehrlich,
+Meta-Anker installiert) → **F1b-Nachlauf** (`is_expired()` und seine Maschinerie
+entfernt).
+
+### Endzustand des Enums
+
+```
+NONE, MAX_POSITION_SIZE, MAX_EVENT_EXPOSURE,
+DRAWDOWN_LOCKOUT, INSUFFICIENT_CASH, INVALID_PRICE
+```
+
+Das Enum ist eine **garantiert wahre Spezifikation** dessen, was die Engine
+ablehnen kann. Der Meta-Anker
+(`test_ankerd_meta_every_reject_reason_has_a_producer`) prüft das bei jedem
+Lauf: **kein Label ohne Produzenten.** Er hat sich an Tag 1 bezahlt — zwei
+Waisen (`EXPIRED`, `SAFETY_GUARD`), die auf keiner Liste standen, plus die
+verwaiste Maschinerie dahinter (`is_expired()`).
+
+### Was der Zyklus über den Prozess sagt
+
+Der Zyklus begann mit einer falschen Alarmmeldung und endete mit einem
+Review-Standard, der aus der Praxis geboren statt dekretiert wurde. Der
+wertvollste Ertrag sind nicht die gehärteten Checks, sondern der **Präzedenzfall
+dafür, wie mit Unsicherheit umgegangen wird**: verifizieren, korrigieren,
+stehen lassen. Zeugen werden gelöscht, nicht umgeschrieben, wenn ihr Gegenstand
+stirbt; Enum-Werte brauchen einen Produzenten; tote Maschinerie neben einem
+gelöschten Label ist derselbe Befund einen Meter weiter.
+
+### Offen
+
+**F2** (Pydantic-Parität — jetzt mit dem dokumentierten
+`max_order_size_shares`-Umzug als Anhängsel; Messlatte und Fund-Regel oben),
+**F3**, Strategy-Package.
+
+**Der aktuelle Merksatz gilt bis dahin:** Die Engine kann nicht mehr lügen,
+ohne dass es jemand merkt — und sie kann es ab jetzt **beweisen**.
 
 
 
