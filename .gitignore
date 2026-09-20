@@ -87,3 +87,10 @@ bridge_stufe_a_v3_*.jsonl
 
 # Wave 38 Live-Archive (lokal; Referenz: docs/reanalysis_closing_evidence.md)
 archive_b2g/diagnostic/
+
+# Arbeitsartefakte (nicht Teil des Projekts)
+.coverage
+shadow_engine_commits.patch
+kimi_codebase_snapshot.txt
+SCHWARM_STATUS.md
+imports/

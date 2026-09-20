@@ -8,6 +8,7 @@ Zeilennummer.
 
     python3 check_claude_md.py [projektpfad]     # ohne Tests (schnell)
     python3 check_claude_md.py --run-tests       # inkl. Testlaeufe
+    python3 check_claude_md.py --self-test       # Mutationsnachweis check_counts
     python3 check_claude_md.py --json            # maschinenlesbar
 
 Exit-Code 0 = konsistent, 1 = Abweichungen gefunden.
@@ -22,6 +23,11 @@ import sys
 from pathlib import Path
 
 AGENTS_PER_WAVE = 9
+# Compliance-Modul (außerhalb ×9-Wellen) — Teil der 277-Gesamtformel.
+COMPLIANCE_AGENTS = 25
+# Fenster um eine Agentenzahl-Fundstelle: „total“/„insgesamt“ → 277 erlaubt.
+_COUNT_CONTEXT_CHARS = 48
+_TOTAL_MARK = re.compile(r"\b(?:total|insgesamt)\b", re.I)
 
 # Accumulator für --json-report (wird von check_tests befüllt)
 _test_results: dict = {}
@@ -370,27 +376,90 @@ def check_dead_refs(text: str, root: Path, rep: Report) -> None:
 
 
 def check_counts(text: str, waves: list[str], per: int | None, rep: Report) -> None:
-    """Jede '<N> agents'/'<N> waves'-Angabe gegen die Tabelle."""
+    """Jede '<N> agents'/'<N> waves'-Angabe gegen die Tabelle.
+
+    ×9-Summe (243) ist der Default. Steht „total“/„insgesamt“ im Kontextfenster
+    um die Fundstelle, wird auf die Gesamtzahl (277) **umgeschaltet** — nicht
+    erweitert. Beide Richtungen bleiben geprüft.
+    """
     # Unterwellen (3.5 etc.) zählen nicht als Hauptwellen — Konvention im Dokument.
     main = [w for w in waves if "." not in w]
-    n_waves, n_agents = len(main), len(main) * (per or AGENTS_PER_WAVE)
+    n_per = per or AGENTS_PER_WAVE
+    n_waves = len(main)
+    n_agents = n_waves * n_per  # 243 = nur Hauptwellen
+    n_total = len(waves) * n_per + COMPLIANCE_AGENTS  # 252 + 25 = 277
+    agent_pat = re.compile(r"(\d+)\s+(agents?|waves?|Wellen|B2G-Agenten)", re.I)
     for lineno, raw in enumerate(text.splitlines(), 1):
         # Skip lines that are test results (x/y fractions), not head counts
         if re.search(r"\d+/\d+\s+(?:tests?|waves|WAVES)(?:\s+passed|\))", raw):
             continue
-        for num, unit in re.findall(r"(\d+)\s+(agents?|waves?|Wellen|B2G-Agenten)",
-                                    raw, re.I):
-            n = int(num)
+        for m in agent_pat.finditer(raw):
+            n = int(m.group(1))
+            unit = m.group(2)
             if unit.lower().startswith(("wave", "wellen")):
                 if n != n_waves:
                     rep.fail(lineno, "Wellenzahl", n, str(n_waves))
                 else:
                     rep.ok()
-            elif n >= 50:  # kleine Zahlen sind Subagenten-Angaben, nicht die Summe
-                if n != n_agents:
-                    rep.fail(lineno, "Agentenzahl", n, str(n_agents))
-                else:
-                    rep.ok()
+                continue
+            if n < 50:  # kleine Zahlen sind Subagenten-Angaben, nicht die Summe
+                continue
+            lo = max(0, m.start() - _COUNT_CONTEXT_CHARS)
+            hi = min(len(raw), m.end() + _COUNT_CONTEXT_CHARS)
+            ctx = raw[lo:hi]
+            # total/insgesamt schaltet um (nur 277), erweitert nicht {243, 277}.
+            expected = n_total if _TOTAL_MARK.search(ctx) else n_agents
+            if n != expected:
+                rep.fail(lineno, "Agentenzahl", n, str(expected))
+            else:
+                rep.ok()
+
+
+def _fixture_waves() -> list[str]:
+    """Kanonische Wellen-IDs wie in CLAUDE.md (27 Haupt + 3.5), ohne Datei-IO."""
+    main = (
+        list(range(1, 11))
+        + [15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 27, 28, 29, 31, 32, 33]
+    )
+    ids = [str(n) for n in main]
+    ids.insert(3, "3.5")  # nach Welle 3
+    return ids
+
+
+def self_test_check_counts() -> list[str]:
+    """Mutationsnachweis: total schaltet um, weicht nicht auf.
+
+    Text-Fixtures — kein CLAUDE.md. Beide Richtungen müssen greifen:
+      277 agents (ohne Mark) → erwartet 243
+      243 agents total       → erwartet 277
+    """
+    waves = _fixture_waves()
+    assert len([w for w in waves if "." not in w]) == 27
+    assert len(waves) == 28
+    cases: list[tuple[str, bool, str | None]] = [
+        ("277 agents without mark", False, "243"),
+        ("243 agents total", False, "277"),
+        ("277 agents total (243 in 27 main waves)", True, None),
+        ("243 agents in 27 main waves", True, None),
+        ("insgesamt 277 agents im System", True, None),
+    ]
+    failures: list[str] = []
+    for text, should_pass, expected_real in cases:
+        rep = Report()
+        check_counts(text, waves, AGENTS_PER_WAVE, rep)
+        ok = not rep.problems
+        if ok != should_pass:
+            failures.append(
+                f"{text!r}: expected_pass={should_pass} got_problems={rep.problems}"
+            )
+            continue
+        if not should_pass:
+            got = str(rep.problems[0]["real"])
+            if got != expected_real:
+                failures.append(
+                    f"{text!r}: expected real={expected_real!r} got={got!r}"
+                )
+    return failures
 
 
 def _resolve_test_root(doc_root: Path) -> Path:
@@ -696,6 +765,16 @@ def check_undocumented_tests(root: Path, rep: Report) -> None:
 
 
 def main() -> int:
+    if "--self-test" in sys.argv:
+        fails = self_test_check_counts()
+        if fails:
+            print(f"check_counts self-test: {len(fails)} FAIL")
+            for f in fails:
+                print(f"  {f}")
+            return 1
+        print("check_counts self-test: 5/5 passed (Umschaltung, Text-Fixtures)")
+        return 0
+
     # Filtere Flags und deren Werte (--json-report <path>)
     raw = sys.argv[1:]
     positional = []
@@ -751,10 +830,14 @@ def main() -> int:
 
     main_waves = [w for w in waves if "." not in w]
     print(f"CLAUDE.md — {len(text.splitlines())} Zeilen")
+    n_per = per or AGENTS_PER_WAVE
+    n_main = len(main_waves) * n_per
+    n_sub = len(waves) * n_per
+    n_all = n_sub + COMPLIANCE_AGENTS
     print(f"Wellen-Tabelle: {len(waves)} Zeilen ({', '.join(waves)})")
-    print(f"  -> {len(main_waves)} Hauptwellen x {per or AGENTS_PER_WAVE} "
-          f"= {len(main_waves)*(per or AGENTS_PER_WAVE)} Agenten")
-    print(f"  -> mit Unterwellen: {len(waves)*(per or AGENTS_PER_WAVE)}")
+    print(f"  -> {len(main_waves)} Hauptwellen x {n_per} = {n_main} Agenten")
+    print(f"  -> mit Unterwellen: {n_sub}")
+    print(f"  -> Gesamt (+{COMPLIANCE_AGENTS} Compliance): {n_all}")
     skipped = len(rep.env_skips)
     status = f"{rep.checked} Angaben geprueft, {len(rep.problems)} Abweichungen"
     if skipped:
