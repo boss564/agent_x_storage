@@ -113,13 +113,22 @@ class RiskController:
             self._lockout_active = True
             return RiskDecision.reject(RejectReason.DRAWDOWN_LOCKOUT)
 
-        # --- Order-Level (F1, VM1): drei Checks, drei unterscheidbare Labels ---
-        # Vorher teilten sich alle drei das Label MAX_POSITION_SIZE; aus der
-        # Telemetrie war damit nicht rekonstruierbar, welcher gefeuert hat.
-        if order.size > self.config.max_order_size_shares:
-            return RiskDecision.reject(RejectReason.MAX_ORDER_SIZE)
-        if order.notional > self.config.max_position_size_usdc:
-            return RiskDecision.reject(RejectReason.MAX_ORDER_NOTIONAL)
+        # --- Order-Level-Checks (F1b: entfernt) ---
+        # Zwei Checks wurden hier gelöscht, mit unterschiedlicher Begründung:
+        #
+        # 116 (`order.size > max_order_size_shares`) war eine FALLE, kein
+        # Schutz. Mit F1 hat `max_order_size_shares` seine Schranken-Semantik
+        # verloren: Es ist nur noch die Größe, die der Default-Adapter ordert
+        # (Strategie-Platzhalter), keine Obergrenze. Die Obergrenze ist
+        # `per_order_cap_shares` (engine-seitig geklemmt). Der Check bestrafte
+        # damit genau die Orders, die das Cap explizit erlaubt: cap=300,
+        # Strategy will 250, legacy=100 → Clamp lässt 250 durch, 116 rejectet.
+        # Das Cap-Feature wäre nach oben unbenutzbar gewesen.
+        #
+        # 118 (`order.notional > max_position_size_usdc`) war per Konstruktion
+        # tot. Die Invarianten-Kette trägt: `notional = size × price ≤ size`
+        # (Polymarket-Preise in (0, 1]) `≤ cap ≤ max_position_size_usdc`.
+        # Der kumulierte Positions-Check unten deckt den Bestandsfall ab.
 
         market_exposure = portfolio.exposure_per_market().get(order.token_id, Decimal("0"))
         pos = portfolio.positions.get(order.token_id)

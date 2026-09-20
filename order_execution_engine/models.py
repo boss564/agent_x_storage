@@ -125,30 +125,31 @@ class Direction(str, Enum):
 class RejectReason(str, Enum):
     """Begründung für Risiko-Ablehnungen (Telemetrie).
 
-    Jede Ursache trägt einen eigenen Wert (F1). Vorher teilten sich drei
-    verschiedene Checks (Order-Größe, Order-Notional, kumulierte Position)
-    das Label `MAX_POSITION_SIZE` — aus der Telemetrie war damit nicht
-    rekonstruierbar, *welcher* Check gefeuert hat. In einer
-    `diagnostic_only`-Engine ist das eine Diagnostik-Lücke, kein Detail.
+    **Invariante (Meta-Anker): Jeder Wert hat einen lebenden Produzenten.**
+    Ein Wert ohne Produzenten wäre Scheinschutz im Enum — jeder Diagnostics-
+    Konsument müsste ihn für möglich halten, er käme nie.
+
+    Historie: F1 (VM1) trennte das mehrdeutige `MAX_POSITION_SIZE` in drei
+    Labels, um sichtbar zu machen, *welche* Check-Site feuerte. Damit wurde
+    überprüfbar, welche Sites überhaupt feuern können. F1b entfernte zwei
+    Sites (eine Falle, eine Tautologie) und mit ihnen ihre Labels:
+    `MAX_ORDER_SIZE` und `MAX_ORDER_NOTIONAL` haben keinen Produzenten mehr.
+    Das Enum zählt nach F1b genau die Ablehnungen auf, die auftreten können.
+    Die Trennung war der Zwischenschritt, der die Sites sichtbar machte.
     """
 
     NONE = "NONE"
-    MAX_ORDER_SIZE = "MAX_ORDER_SIZE"
-    """Order-Größe überschreitet `max_order_size_shares` (Order-Level)."""
-    MAX_ORDER_NOTIONAL = "MAX_ORDER_NOTIONAL"
-    """Order-Notional überschreitet `max_position_size_usdc` (Order-Level)."""
+    """Marker für genehmigte Signale — kein Reject, aber ein Enum-Wert."""
     MAX_POSITION_SIZE = "MAX_POSITION_SIZE"
-    """Kumulierte Position überschreitet `max_position_size_usdc` (bestandsbildend).
+    """Kumulierte Position überschreitet `max_position_size_usdc`.
 
-    Das ist die alleinige Pre-Trade-Positionsbremse: Vor F1 war der Check
-    strukturell unerreichbar, weil `size` aus der Config abgeleitet wurde.
+    Die alleinige Pre-Trade-Positionsbremse. Vor F1 strukturell unerreichbar
+    (Ordergröße = Config-Konstante), jetzt der bestandsbildende Check.
     """
     MAX_EVENT_EXPOSURE = "MAX_EVENT_EXPOSURE"
     DRAWDOWN_LOCKOUT = "DRAWDOWN_LOCKOUT"
     INSUFFICIENT_CASH = "INSUFFICIENT_CASH"
     INVALID_PRICE = "INVALID_PRICE"
-    EXPIRED = "EXPIRED"
-    SAFETY_GUARD = "SAFETY_GUARD"
 
 
 # ---------------------------------------------------------------------------

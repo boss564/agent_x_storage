@@ -319,6 +319,74 @@ Akzeptanzkriterium: Ein Test, der für jede Ablehnungsursache den
 *unterscheidbaren* RejectReason prüft. Die Mehrdeutigkeit, die den falschen
 Befund ermöglichte, ist dann strukturell beseitigt.
 
+### F1b-Ausführung (2026-09-20): definiert statt rein — die Falle war das Erbe von VM1
+
+**Korrektur der F1b-Prämisse.** Das Ticket sagte „116/118 per Konstruktion
+unerreichbar". Verifiziert stimmt das für 118, **nicht** für 116:
+
+```
+RiskConfig(max_order_size_shares=50, per_order_cap_shares=200, max_position_size_usdc=500)
+size_fn -> 200
+reject_reason: MAX_ORDER_SIZE   ← 116 feuert
+```
+
+Ursache: VM4 hat `max_order_size_shares` die Schranken-Semantik genommen. Es
+ist nur noch die Größe, die der Default-Adapter ordert (Strategie-Platzhalter),
+keine Obergrenze. Die Obergrenze ist `per_order_cap_shares`. **116 ist damit
+keine tote Leiche, sondern eine Fehl-Reject-Falle:** `cap=300`, Strategy will
+250, legacy-const 100 → Clamp lässt 250 durch, 116 rejectet. Der Check bestraft
+eine Order, die das Cap explizit erlaubt hat — das Cap-Feature wäre nach oben
+unbenutzbar.
+
+**Der subtilste Befund des Zyklus:** Der F1-Zeuge für `MAX_ORDER_SIZE` bewies
+mechanisch korrekt, dass 116 feuert — und kanonisierte damit die Falle als
+erwartetes Verhalten. Ein Test, der grün ist, einen Mutanten tötet und trotzdem
+Unsinn dokumentiert: Er beantwortete „feuert der Check?" mit ja, ohne „sollte
+er?" zu fragen. **Mechanisch richtig, semantisch falsch.**
+
+**F1b, definiert (vier Zuordnungen, nicht mehr „reine Löschung"):**
+
+| # | Änderung | Begründung |
+|---|---|---|
+| Z1 | 116 + 118 entfernt | 116 = Falle (bestraft legitimes Cap); 118 = Tautologie (`notional ≤ size ≤ cap ≤ max_position`) |
+| Z2 | `MAX_ORDER_SIZE`, `MAX_ORDER_NOTIONAL` entfernt | produzentenlos — Scheinschutz im Enum |
+| Z3 | F1-Zeugen für beide gelöscht, nicht umgeschrieben | ihr Gegenstand existiert nicht mehr |
+| Z4 | **Meta-Anker (d)** ersetzt den alten Anker (d) | jeder `RejectReason`-Wert hat einen lebenden Produzenten |
+
+**DB-Gate vor Z2:** `COUNT(*) FROM telemetry WHERE reject_reason IN
+('MAX_ORDER_SIZE','MAX_ORDER_NOTIONAL')` → **0**. Es existiert keine
+persistierte Shadow-Telemetrie (`find . -name shadow.db` leer), das Enum ist
+rein intern (kein Konsument außerhalb `order_execution_engine/`). Die
+Entfernung ist non-breaking.
+
+**Zwei zusätzliche Waisen, vom Meta-Anker gefunden.** Er feuerte beim ersten
+Lauf und meldete `['EXPIRED', 'SAFETY_GUARD']` — beide produzentenlos,
+`is_expired()` wird nie im Engine-Pfad aufgerufen. Sie fielen unter dieselbe
+Regel und gingen mit. Das ist der Anker bei seiner ersten Amtshandlung.
+
+**Was von VM1 überlebt: nur `MAX_POSITION_SIZE`** — die ursprüngliche eine
+Reason. War die Trennung umsonst? Nein: Sie war der **Zwischenschritt, der die
+Sites sichtbar machte.** Erst als jeder Check sein eigenes Label trug, wurde
+überprüfbar, welche Sites feuern können und welche nicht. VM1 löste die
+Mehrdeutigkeit durch Benennung, F1b endgültig durch Entfernen der
+Phantom-Referenten.
+
+**Verifiziert:**
+```
+Falle entschärft:  cap 300, Strategy 250, legacy 100
+                   vorher: approved=False (MAX_ORDER_SIZE)
+                   nachher: approved=True, Order=250, requested=250
+Enum:              NONE, MAX_POSITION_SIZE, MAX_EVENT_EXPOSURE,
+                   DRAWDOWN_LOCKOUT, INSUFFICIENT_CASH, INVALID_PRICE
+Meta-Anker:        PHANTOM_CHECK-Mutant -> rot
+Anker (a)-(e):     alle fünf leben, (a) stirbt weiter am Mutanten
+Tests: 53/53
+```
+
+**Offen (F2-Nachbarschaft):** `max_order_size_shares` ist Strategie-
+Konfiguration in `RiskConfig`-Kleidung. Wenn das Strategy-Package landet,
+wandert das Feld dorthin oder wird umbenannt.
+
 ---
 
 ## F1c — Sizing-Schnittstelle auf Engine-Seite definieren
@@ -564,6 +632,13 @@ ist noch nicht verifiziert.**
 ### Dritter Fall derselben Krankheit: Scheinschutz
 
 **Ein fehlender Check fällt auf; ein scheinender nicht.**
+
+Der schärfste Beleg kam zum Schluss, aus den F1-Defaults: `max_order_size_shares
+= 1000` gegen `max_position_size_usdc = 500` hieße, die Engine hätte bei jedem
+Preis über 0,50 ihre eigene Default-Order abgelehnt. Der tote Check 116 hätte
+genau das **nicht** gefangen (`1000 > 1000` ist false). Der Check sah also nicht
+nur *aus* wie Schutz — er sah aus wie **genau der** Schutz für genau diesen
+Fehler, und hätte ihn trotzdem durchgelassen.
 
 Dasselbe Muster trat in diesem Zyklus **dreimal** auf, in drei verschiedenen
 Schichten — es ist ein wiederkehrender Modus, kein Einzelfall:

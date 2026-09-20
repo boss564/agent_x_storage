@@ -154,23 +154,9 @@ def test_risk_controller() -> None:
     from order_execution_engine.models import VirtualPortfolio
     rc = RiskController(RiskConfig())
     pf = VirtualPortfolio()
-    # Order zu groß (Notional)
-    big = _order(size=Decimal("2000"))  # 0.61*2000 = 1220 > 500
-    d = rc.check(big, pf, {})
-    assert not d.approved and d.reason == RejectReason.MAX_ORDER_SIZE
-    # Order-Notional zu groß (Größe ok, Notional über Limit). Der Cap muss
-    # <= Limit sein (Invariante); der Notional-Pfad feuert, wenn die Größe
-    # unter dem Size-Limit liegt, das Notional aber über dem Positionslimit.
-    rc_notional = RiskController(
-        RiskConfig(max_order_size_shares=Decimal("500"),
-                   per_order_cap_shares=Decimal("150"),
-                   max_position_size_usdc=Decimal("200")))
-    wide = _order(size=Decimal("400"))  # Size-Check: 400 < 500 -> weiter
-    # Size 400 > cap 150, aber der Risk-Size-Check liest max_order_size_shares
-    # (500). Damit laeuft die Pruefung bis zum Notional-Check: 244 > 200.
-    dn = rc_notional.check(wide, pf, {})
-    assert not dn.approved and dn.reason == RejectReason.MAX_ORDER_NOTIONAL
-    # OK
+    # Positions-Check (kumuliert) — die einzige Order-Grenze, die bleibt.
+    # F1b: Die Order-Level-Checks (ehemals 116/118) sind entfernt. Der
+    # Notional-Fall landet jetzt hier, wenn Bestand + Order das Limit kippen.
     ok = _order(size=Decimal("100"))  # 61 USDC
     assert rc.check(ok, pf, {}).approved
     # Cash-Limit: BUY über Cash
@@ -419,33 +405,39 @@ def test_ankerc_config_invariant_blocks_start() -> None:
     raise AssertionError("Invariante hat nicht gefeuert — Start war faelschlich ok")
 
 
-def test_ankerd_reject_reasons_are_distinct() -> None:
-    """Anker (d): Jede Ablehnungsursache hat einen unterscheidbaren Reason."""
-    pf = VirtualPortfolio()
-    # (1) MAX_ORDER_SIZE
-    rc1 = RiskController(RiskConfig(max_order_size_shares=Decimal("100")))
-    r1 = rc1.check(_order(size=Decimal("200")), pf, {})
-    # (2) MAX_ORDER_NOTIONAL
-    rc2 = RiskController(RiskConfig(max_order_size_shares=Decimal("500"),
-                                    per_order_cap_shares=Decimal("150"),
-                                    max_position_size_usdc=Decimal("200")))
-    r2 = rc2.check(_order(size=Decimal("400")), pf, {})
-    # (3) MAX_POSITION_SIZE (kumuliert)
-    rc3 = RiskController(RiskConfig(per_order_cap_shares=Decimal("100"),
-                                    max_position_size_usdc=Decimal("100")))
-    pf3 = VirtualPortfolio(cash=Decimal("10000"))
-    o = _order(size=Decimal("90"), price=Decimal("0.90"))
-    pf3.apply_fill(o, FillResult(order_id=o.order_id, executed_size=Decimal("90"),
-                                 execution_price=Decimal("0.90"), fee=Decimal("0"),
-                                 status=OrderStatus.FILLED), "mkt-1")
-    r3 = rc3.check(_order(size=Decimal("40")), pf3, {})
+def test_ankerd_meta_every_reject_reason_has_a_producer() -> None:
+    """Anker (d, Meta): Jeder `RejectReason`-Wert hat einen lebenden Produzenten.
 
-    reasons = {r1.reason, r2.reason, r3.reason}
-    assert len(reasons) == 3, f"nicht unterscheidbar: {[r.value for r in reasons]}"
-    assert r1.reason == RejectReason.MAX_ORDER_SIZE
-    assert r2.reason == RejectReason.MAX_ORDER_NOTIONAL
-    assert r3.reason == RejectReason.MAX_POSITION_SIZE
-    print("OK test_ankerd_reject_reasons_are_distinct")
+    Ersetzt den alten Anker (d), der die drei F1-Labels auf Unterscheidbarkeit
+    prüfte. Mit F1b sterben zwei der Label-Sites (eine Falle, eine Tautologie),
+    also auch ihr Zeuge. An seine Stelle tritt der Wächter gegen die nächste
+    Scheinschutz-Generation: ein Enum-Wert, den jeder Diagnostics-Konsument
+    für möglich halten muss, der aber nie kommt.
+
+    Dieser Anker fängt beide Richtungen:
+      - Enum-Wert ohne Produzenten -> Wert muss weg (oder ein Produzent her).
+      - Produzent ohne Enum-Wert   -> strukturell unmöglich (Code nutzt das Enum).
+
+    Bewusste Ausnahmen: `NONE` (Marker für genehmigte Signale) und Werte, die
+    ausschliesslich über `OrderStatus` laufen, nicht über `RejectReason`.
+    """
+    import re
+    from pathlib import Path as _P
+
+    src = _P("order_execution_engine/shadow_execution_engine.py").read_text()
+    produced = set(re.findall(r"RejectReason\.([A-Z_]+)", src))
+    allowed_without_producer = {"NONE"}
+
+    orphans = [
+        r.name for r in RejectReason
+        if r.name not in produced and r.name not in allowed_without_producer
+    ]
+    assert not orphans, (
+        f"RejectReason ohne Produzenten: {orphans}. "
+        f"Ein Wert ohne Produzenten ist Scheinschutz im Enum — entweder "
+        f"Produzent herstellen oder Wert entfernen."
+    )
+    print("OK test_ankerd_meta_every_reject_reason_has_a_producer")
 
 
 def test_anker_counter_lifetime_across_restart() -> None:
