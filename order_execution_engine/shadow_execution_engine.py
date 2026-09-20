@@ -113,14 +113,22 @@ class RiskController:
             self._lockout_active = True
             return RiskDecision.reject(RejectReason.DRAWDOWN_LOCKOUT)
 
+        # --- Order-Level (F1, VM1): drei Checks, drei unterscheidbare Labels ---
+        # Vorher teilten sich alle drei das Label MAX_POSITION_SIZE; aus der
+        # Telemetrie war damit nicht rekonstruierbar, welcher gefeuert hat.
         if order.size > self.config.max_order_size_shares:
-            return RiskDecision.reject(RejectReason.MAX_POSITION_SIZE)
+            return RiskDecision.reject(RejectReason.MAX_ORDER_SIZE)
         if order.notional > self.config.max_position_size_usdc:
-            return RiskDecision.reject(RejectReason.MAX_POSITION_SIZE)
+            return RiskDecision.reject(RejectReason.MAX_ORDER_NOTIONAL)
 
         market_exposure = portfolio.exposure_per_market().get(order.token_id, Decimal("0"))
         pos = portfolio.positions.get(order.token_id)
         current_notional = pos.size * pos.avg_entry_price if pos else Decimal("0")
+        # --- Bestandsbildend (F1, VM1): die eigentliche Positions-Schranke ---
+        # Das ist der Check, der vor F1 strukturell unerreichbar war, weil die
+        # Ordergröße aus der Config abgeleitet wurde (size == Limit). Mit
+        # signal-getriebenem Sizing und engine-seitigem Clamp ist er die
+        # alleinige Pre-Trade-Positionsbremse.
         if order.side == OrderSide.BUY and current_notional + order.notional > self.config.max_position_size_usdc:
             return RiskDecision.reject(RejectReason.MAX_POSITION_SIZE)
 
@@ -389,6 +397,14 @@ class TelemetryRecord:
     approved: bool
     status: Optional[OrderStatus]
     reject_reason: RejectReason = RejectReason.NONE
+    requested_size: Optional[Decimal] = None
+    """Ungekappte, von der Strategie angeforderte Größe (Shares).
+
+    `None` bedeutet: Es kam nie zu einem Sizing-Vorschlag (Pre-Order-Ablehnung
+    bei ungültigem Preis). Bewusst `None` statt `0` — „nicht angefragt" ist
+    etwas anderes als „null angefragt". Genau die Unterscheidung, die bei
+    `requested_size := 0` verloren ginge.
+    """
     decision_seq: int = 0
     """Engine-seitige, monotone Entscheidungs-Id.
 
@@ -431,10 +447,19 @@ class TelemetryLogger:
     Engine vergibt die Id, die Storage übernimmt sie später.
     """
 
-    def __init__(self) -> None:
-        """Initialisiert den Logger (leerer Puffer, Zähler bei 0)."""
+    def __init__(self, initial_decision_seq: int = 0) -> None:
+        """Initialisiert den Logger (leerer Puffer).
+
+        Args:
+            initial_decision_seq: Startwert des Zählers. Nach einem
+                Prozessneustart MUSS hier `storage.latest_decision_seq()`
+                übergeben werden — sonst beginnt der Zähler wieder bei 1 und
+                die Snapshot<->Record-Korrelation kollidiert still über
+                Sessions hinweg. Der Zähler ist nur replaysicher, solange er
+                die Historie kennt (F1, VM3).
+        """
         self._records: list[TelemetryRecord] = []
-        self._decision_seq: int = 0
+        self._decision_seq: int = initial_decision_seq
 
     def next_decision_seq(self) -> int:
         """Vergibt die nächste Entscheidungs-Id (monoton, engine-seitig).
@@ -520,6 +545,7 @@ class ShadowExecutionEngine:
         invert_weak_signals: bool = False,
         confidence_threshold: Decimal = Decimal("55"),
         size_fn: Optional[SizeFn] = None,
+        telemetry: Optional[TelemetryLogger] = None,
     ) -> None:
         """Initialisiert die Engine.
 
@@ -535,12 +561,15 @@ class ShadowExecutionEngine:
                 davon unberührt und greifen danach. Default
                 (`_default_size_fn`) reproduziert das bisherige Verhalten
                 exakt: fixe Größe aus `max_order_size_shares`.
+            telemetry: Optionaler Logger. Nach einem Prozessneustart mit
+                `TelemetryLogger(initial_decision_seq=storage.latest_decision_seq())`
+                übergeben, sonst kollidiert der Zähler über Sessions hinweg.
         """
         self.guard = SafetyGuard(mode=mode)
         self.risk = RiskController(risk_config or RiskConfig())
         self.matcher = PaperMatchEngine(fee_bps=(risk_config or RiskConfig()).fee_bps)
         self.portfolio = VirtualPortfolio()
-        self.telemetry = TelemetryLogger()
+        self.telemetry = telemetry or TelemetryLogger()
         self.invert_weak_signals = invert_weak_signals
         self.confidence_threshold = confidence_threshold
         self.size_fn: SizeFn = size_fn or self._default_size_fn
@@ -607,7 +636,22 @@ class ShadowExecutionEngine:
             mark_prices={signal.target_token_id: ref_price},
             as_of_seq=decision_seq,
         )
-        size = self.size_fn(signal, portfolio_snapshot)
+        # --- Sizing-Seam (F1c) + engine-seitiger Clamp (F1, VM2) ---
+        # `desired` ist der ungekappte Strategie-Vorschlag. Er wird *immer*
+        # aufgezeichnet (requested_size), auch wenn er verworfen oder gekappt
+        # wird — sonst wäre die Kappung still, und genau das war der Bug.
+        #
+        # Der Clamp liegt bewusst hier und nicht im Adapter: Ein
+        # adapter-interner Clamp würde `desired` verschlucken, `requested_size`
+        # wäre der bereits gekappte Wert, und `requested != executed` wäre nie
+        # beobachtbar. Die Telemetrie-Motivation stürbe per Konstruktion.
+        #
+        # Eine Zusicherung im Strategie-Code wäre ein Versprechen, hier ist es
+        # eine Garantie — dieselbe Validierung, die der Rückgabewert ohnehin
+        # erfährt (negativ/null/NaN), eine Zeile weiter.
+        desired = self.size_fn(signal, portfolio_snapshot)
+        requested_size = desired
+        size = min(desired, self.risk.config.effective_per_order_cap_shares)
         order = PaperOrder(
             signal_id=signal.signal_id,
             token_id=signal.target_token_id,
@@ -626,7 +670,7 @@ class ShadowExecutionEngine:
                 signal_id=signal.signal_id, order_id=order.order_id,
                 latency_ms=self._elapsed_ms(t0), approved=False,
                 reject_reason=decision.reason, status=order.status,
-                decision_seq=decision_seq,
+                requested_size=requested_size, decision_seq=decision_seq,
             )
             self.telemetry.log(record)
             return record
@@ -643,7 +687,7 @@ class ShadowExecutionEngine:
             signal_id=signal.signal_id, order_id=order.order_id,
             latency_ms=self._elapsed_ms(t0), approved=True,
             reject_reason=RejectReason.NONE, status=order.status,
-            decision_seq=decision_seq,
+            requested_size=requested_size, decision_seq=decision_seq,
         )
         self.telemetry.log(record)
         return record

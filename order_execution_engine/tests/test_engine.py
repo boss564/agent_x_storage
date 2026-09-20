@@ -1,18 +1,23 @@
 """Self-Tests für shadow_execution_engine (RiskController, PaperMatchEngine, Engine)."""
 
+import tempfile
 from decimal import Decimal
+from pathlib import Path
 
 from order_execution_engine.market_data_feed import PolySentinelBookHandler, SnapshotCache
 from order_execution_engine.models import (
     Direction,
+    FillResult,
     OrderSide,
     OrderStatus,
     RejectReason,
     RiskConfig,
     SafetyGuard,
     SignalPayload,
+    VirtualPortfolio,
     default_expiration,
 )
+from order_execution_engine.persistence import SQLiteShadowStorage, TelemetrySink
 from order_execution_engine.shadow_execution_engine import (
     MarketSnapshot,
     OrderBookLevel,
@@ -20,6 +25,7 @@ from order_execution_engine.shadow_execution_engine import (
     PaperOrder,
     RiskController,
     ShadowExecutionEngine,
+    TelemetryLogger,
 )
 
 
@@ -151,7 +157,19 @@ def test_risk_controller() -> None:
     # Order zu groß (Notional)
     big = _order(size=Decimal("2000"))  # 0.61*2000 = 1220 > 500
     d = rc.check(big, pf, {})
-    assert not d.approved and d.reason == RejectReason.MAX_POSITION_SIZE
+    assert not d.approved and d.reason == RejectReason.MAX_ORDER_SIZE
+    # Order-Notional zu groß (Größe ok, Notional über Limit). Der Cap muss
+    # <= Limit sein (Invariante); der Notional-Pfad feuert, wenn die Größe
+    # unter dem Size-Limit liegt, das Notional aber über dem Positionslimit.
+    rc_notional = RiskController(
+        RiskConfig(max_order_size_shares=Decimal("500"),
+                   per_order_cap_shares=Decimal("150"),
+                   max_position_size_usdc=Decimal("200")))
+    wide = _order(size=Decimal("400"))  # Size-Check: 400 < 500 -> weiter
+    # Size 400 > cap 150, aber der Risk-Size-Check liest max_order_size_shares
+    # (500). Damit laeuft die Pruefung bis zum Notional-Check: 244 > 200.
+    dn = rc_notional.check(wide, pf, {})
+    assert not dn.approved and dn.reason == RejectReason.MAX_ORDER_NOTIONAL
     # OK
     ok = _order(size=Decimal("100"))  # 61 USDC
     assert rc.check(ok, pf, {}).approved
@@ -175,7 +193,7 @@ def test_drawdown_lockout() -> None:
     d2 = rc.check(_order(), pf, {})
     assert not d2.approved and d2.reason == RejectReason.DRAWDOWN_LOCKOUT
     rc.reset_lockout()
-    assert rc.check(_order(), pf, {}).approved
+    assert rc.check(_order(size=Decimal("50")), pf, {}).approved
     print("OK test_drawdown_lockout")
 
 
@@ -346,6 +364,111 @@ def test_decision_seq_correlates_snapshot_and_record() -> None:
     assert rec_fill.decision_seq == 2
     assert seen[0] == rec_fill.decision_seq, "Snapshot und Record nicht korreliert"
     print("OK test_decision_seq_correlates_snapshot_and_record")
+
+
+def test_ankera_cumulative_position_breach() -> None:
+    """Anker (a): Zwei Orders auf dasselbe Token — die zweite kippt das Limit.
+
+    Der manuelle Beleg vom 2026-09-20 (vorbelegte Position 90 + Order 61 bei
+    Limit 100 → Reject) wird hier dauerhaft. Vor F1 war das strukturell
+    unerreichbar: `size` war die Config-Konstante, `size > limit` konnte nie
+    eintreten, und MAX_POSITION_SIZE feuerte nie.
+    """
+    cfg = RiskConfig(per_order_cap_shares=Decimal("100"),
+                     max_position_size_usdc=Decimal("100"))
+    eng = ShadowExecutionEngine(risk_config=cfg, size_fn=lambda s, p: Decimal("90"))
+    sig = SignalPayload(target_token_id="0xtokenA", market_id="mkt-1",
+                        direction=Direction.UP, confidence=Decimal("90"))
+
+    r1 = eng.on_signal(sig, _book())   # 90 * 0.61 = 54.9 < 100 -> fuellt
+    assert r1.approved, "erste Order muss fuellen"
+
+    r2 = eng.on_signal(sig, _book())   # 54.9 + 54.9 = 109.8 > 100 -> Reject
+    assert not r2.approved and r2.reject_reason == RejectReason.MAX_POSITION_SIZE
+    assert r2.requested_size == Decimal("90"), r2.requested_size
+    print("OK test_ankera_cumulative_position_breach")
+
+
+def test_ankerb_clamp_is_measured_not_silent() -> None:
+    """Anker (b): requested > cap → Ausführung am Cap, Telemetrie zeigt beide."""
+    cfg = RiskConfig(per_order_cap_shares=Decimal("60"),
+                     max_position_size_usdc=Decimal("500"))
+    eng = ShadowExecutionEngine(risk_config=cfg, size_fn=lambda s, p: Decimal("400"))
+    sig = SignalPayload(target_token_id="0xtokenA", market_id="mkt-1",
+                        direction=Direction.UP, confidence=Decimal("90"))
+    rec = eng.on_signal(sig, _book())
+    order = eng._order_book[rec.order_id]
+    assert rec.approved
+    assert rec.requested_size == Decimal("400"), rec.requested_size
+    assert order.size == Decimal("60"), order.size
+    assert rec.requested_size != order.size, "Kappung muss messbar sein"
+    print("OK test_ankerb_clamp_is_measured_not_silent")
+
+
+def test_ankerc_config_invariant_blocks_start() -> None:
+    """Anker (c): Config mit cap > max_position_size → Start scheitert."""
+    from pydantic import ValidationError
+    try:
+        RiskConfig(per_order_cap_shares=Decimal("600"),
+                   max_position_size_usdc=Decimal("500"))
+    except ValidationError as exc:
+        msg = str(exc)
+        assert "600" in msg and "500" in msg, "Meldung muss beide Werte nennen"
+        print("OK test_ankerc_config_invariant_blocks_start")
+        return
+    raise AssertionError("Invariante hat nicht gefeuert — Start war faelschlich ok")
+
+
+def test_ankerd_reject_reasons_are_distinct() -> None:
+    """Anker (d): Jede Ablehnungsursache hat einen unterscheidbaren Reason."""
+    pf = VirtualPortfolio()
+    # (1) MAX_ORDER_SIZE
+    rc1 = RiskController(RiskConfig(max_order_size_shares=Decimal("100")))
+    r1 = rc1.check(_order(size=Decimal("200")), pf, {})
+    # (2) MAX_ORDER_NOTIONAL
+    rc2 = RiskController(RiskConfig(max_order_size_shares=Decimal("500"),
+                                    per_order_cap_shares=Decimal("150"),
+                                    max_position_size_usdc=Decimal("200")))
+    r2 = rc2.check(_order(size=Decimal("400")), pf, {})
+    # (3) MAX_POSITION_SIZE (kumuliert)
+    rc3 = RiskController(RiskConfig(per_order_cap_shares=Decimal("100"),
+                                    max_position_size_usdc=Decimal("100")))
+    pf3 = VirtualPortfolio(cash=Decimal("10000"))
+    o = _order(size=Decimal("90"), price=Decimal("0.90"))
+    pf3.apply_fill(o, FillResult(order_id=o.order_id, executed_size=Decimal("90"),
+                                 execution_price=Decimal("0.90"), fee=Decimal("0"),
+                                 status=OrderStatus.FILLED), "mkt-1")
+    r3 = rc3.check(_order(size=Decimal("40")), pf3, {})
+
+    reasons = {r1.reason, r2.reason, r3.reason}
+    assert len(reasons) == 3, f"nicht unterscheidbar: {[r.value for r in reasons]}"
+    assert r1.reason == RejectReason.MAX_ORDER_SIZE
+    assert r2.reason == RejectReason.MAX_ORDER_NOTIONAL
+    assert r3.reason == RejectReason.MAX_POSITION_SIZE
+    print("OK test_ankerd_reject_reasons_are_distinct")
+
+
+def test_anker_counter_lifetime_across_restart() -> None:
+    """VM3: Zähler überlebt einen Prozessneustart (Replay-Korrelation)."""
+    import sqlite3
+    with tempfile.TemporaryDirectory() as tmp:
+        store = SQLiteShadowStorage.for_user(Path(tmp), "u1")
+        eng = ShadowExecutionEngine(risk_config=RiskConfig(max_order_size_shares=Decimal("100")))
+        sig = SignalPayload(target_token_id="0xtokenA", market_id="mkt-1",
+                            direction=Direction.UP, confidence=Decimal("80"))
+        eng.on_signal(sig, _book())
+        eng.on_signal(sig, _book())
+        TelemetrySink(store, eng.telemetry).drain()
+        assert store.latest_decision_seq() == 2, store.latest_decision_seq()
+
+        # "Neustart": neuer Logger, Zähler aus der DB initialisiert
+        logger2 = TelemetryLogger(initial_decision_seq=store.latest_decision_seq())
+        eng2 = ShadowExecutionEngine(risk_config=RiskConfig(max_order_size_shares=Decimal("100")),
+                                     telemetry=logger2)
+        rec = eng2.on_signal(sig, _book())
+        assert rec.decision_seq == 3, f"Kollision nach Neustart: {rec.decision_seq}"
+        store.close()
+    print("OK test_anker_counter_lifetime_across_restart")
 
 
 if __name__ == "__main__":

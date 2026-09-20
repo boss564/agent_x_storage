@@ -61,6 +61,7 @@ ORDER_SEND: Literal[False] = False
 DEFAULT_VIRTUAL_CASH: Decimal = Decimal("10000.00")  # 10.000 virtuelles USDC
 DEFAULT_MAX_POSITION_SIZE: Decimal = Decimal("500.00")  # Max. $ pro Position
 DEFAULT_MAX_EVENT_EXPOSURE: Decimal = Decimal("1000.00")  # Max. $ pro Event
+DEFAULT_MAX_ORDER_SIZE_SHARES: Decimal = Decimal("100.0")  # Max. Shares pro Order
 DEFAULT_DRAWDOWN_LIMIT_PCT: Decimal = Decimal("10.0")  # 10 % Drawdown-Lockout
 DEFAULT_FEE_BPS: Decimal = Decimal("0.0")  # Gebühren in Basispunkten (taker=0 auf Polymarket)
 
@@ -122,10 +123,26 @@ class Direction(str, Enum):
 
 
 class RejectReason(str, Enum):
-    """Begründung für Risiko-Ablehnungen (Telemetrie)."""
+    """Begründung für Risiko-Ablehnungen (Telemetrie).
+
+    Jede Ursache trägt einen eigenen Wert (F1). Vorher teilten sich drei
+    verschiedene Checks (Order-Größe, Order-Notional, kumulierte Position)
+    das Label `MAX_POSITION_SIZE` — aus der Telemetrie war damit nicht
+    rekonstruierbar, *welcher* Check gefeuert hat. In einer
+    `diagnostic_only`-Engine ist das eine Diagnostik-Lücke, kein Detail.
+    """
 
     NONE = "NONE"
+    MAX_ORDER_SIZE = "MAX_ORDER_SIZE"
+    """Order-Größe überschreitet `max_order_size_shares` (Order-Level)."""
+    MAX_ORDER_NOTIONAL = "MAX_ORDER_NOTIONAL"
+    """Order-Notional überschreitet `max_position_size_usdc` (Order-Level)."""
     MAX_POSITION_SIZE = "MAX_POSITION_SIZE"
+    """Kumulierte Position überschreitet `max_position_size_usdc` (bestandsbildend).
+
+    Das ist die alleinige Pre-Trade-Positionsbremse: Vor F1 war der Check
+    strukturell unerreichbar, weil `size` aus der Config abgeleitet wurde.
+    """
     MAX_EVENT_EXPOSURE = "MAX_EVENT_EXPOSURE"
     DRAWDOWN_LOCKOUT = "DRAWDOWN_LOCKOUT"
     INSUFFICIENT_CASH = "INSUFFICIENT_CASH"
@@ -596,9 +613,57 @@ class RiskConfig(BaseModel):
     max_position_size_usdc: PositiveDecimal = Field(default=DEFAULT_MAX_POSITION_SIZE)
     max_event_exposure_usdc: PositiveDecimal = Field(default=DEFAULT_MAX_EVENT_EXPOSURE)
     max_drawdown_pct: ProbabilityPct = Field(default=DEFAULT_DRAWDOWN_LIMIT_PCT)
-    max_order_size_shares: PositiveDecimal = Field(default=Decimal("1000.0"))
+    max_order_size_shares: PositiveDecimal = Field(default=DEFAULT_MAX_ORDER_SIZE_SHARES)
+    per_order_cap_shares: Optional[PositiveDecimal] = Field(default=None)
+    """Obergrenze für die *angeforderte* Ordergröße (Shares), Sizing-Seam.
+
+    Zwei Rollen, zwei Felder (F1): `max_order_size_shares` ist die Größe, die
+    der Default-Adapter ordert (Legacy-Verhalten); `per_order_cap_shares` ist
+    das, was *keine* Order überschreiten darf — unabhängig davon, welcher
+    `size_fn` injiziert wurde. Zwei Rollen in einem Feld wären dieselbe
+    Mehrdeutigkeit wie die alte `MAX_POSITION_SIZE`-Label-Kollision.
+
+    `None` bedeutet: kein separater Cap, es gilt `max_order_size_shares`.
+    Der Clamp selbst passiert **engine-seitig**, nie im Adapter — ein
+    adapter-interner Clamp machte die Kappung unsichtbar (`requested_size`
+    wäre bereits gekappt, `requested != executed` nie beobachtbar).
+    """
     fee_bps: Decimal = Field(default=DEFAULT_FEE_BPS, ge=Decimal("0"))
     slippage_bps: Decimal = Field(default=Decimal("5.0"), ge=Decimal("0"))
+
+    @property
+    def effective_per_order_cap_shares(self) -> Decimal:
+        """Wirksamer Order-Cap: explizit gesetzt oder die Legacy-Konstante."""
+        return self.per_order_cap_shares or self.max_order_size_shares
+
+    @model_validator(mode="after")
+    def _validate_per_order_cap(self) -> "RiskConfig":
+        """Erzwingt `per_order_cap_shares ≤ max_position_size_usdc`.
+
+        **Einheiten-Hinweis (wichtig, nicht wegoptimieren):** Hier werden
+        Shares gegen USDC verglichen — formal ein Einheitenunterschied. Der
+        Vergleich ist trotzdem korrekt und konservativ, weil Polymarket-Preise
+        in (0, 1] USDC liegen: `notional = size × price ≤ size`. Damit
+        impliziert `cap_shares ≤ max_position_usdc` für *jeden* möglichen
+        Preis auch `order_notional ≤ max_position_usdc`.
+
+        Der Vergleich hier ist bewusst ohne Preis: Zum Ladezeitpunkt existiert
+        kein Marktpreis, und ein hypothetischer Preis wäre eine Scheingenauigkeit.
+
+        Eine Verletzung ist ein **Config-Fehler beim Laden**, kein
+        Laufzeitverhalten (F1, VM5). Wer sie erst beim ersten Trade entdeckt,
+        hat eine Engine, die Signale schluckt, statt eine, die laut verweigert.
+        """
+        cap = self.effective_per_order_cap_shares
+        if cap > self.max_position_size_usdc:
+            raise ValueError(
+                f"RiskConfig-Invariante verletzt: per_order_cap_shares="
+                f"{cap} > max_position_size_usdc={self.max_position_size_usdc}. "
+                f"Der Order-Cap muss die Positions-Schranke respektieren, "
+                f"sonst ist der kumulierte Positions-Check (MAX_POSITION_SIZE) "
+                f"per Konstruktion unerreichbar."
+            )
+        return self
 
 
 # ---------------------------------------------------------------------------

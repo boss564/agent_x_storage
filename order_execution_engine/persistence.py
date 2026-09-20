@@ -30,7 +30,7 @@ from order_execution_engine.shadow_execution_engine import TelemetryRecord
 
 _LOG = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 _USER_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
 
 
@@ -125,7 +125,9 @@ class SQLiteShadowStorage:
         latency_ms REAL NOT NULL,
         approved INTEGER NOT NULL,
         reject_reason TEXT,  -- NULL bei genehmigten Signalen (Normalfall)
-        status TEXT
+        status TEXT,
+        requested_size TEXT,  -- NULL = vor Messbeginn, nicht: fehlend
+        decision_seq INTEGER   -- NULL = vor Messbeginn, nicht: fehlend
     );
     CREATE TABLE IF NOT EXISTS fills (
         order_id TEXT NOT NULL,
@@ -136,6 +138,7 @@ class SQLiteShadowStorage:
         fee TEXT NOT NULL,
         filled_at TEXT NOT NULL,
         latency_ms REAL,
+        requested_size TEXT,
         PRIMARY KEY (order_id, fill_idx)
     );
     CREATE TABLE IF NOT EXISTS portfolio_snapshots (
@@ -149,8 +152,28 @@ class SQLiteShadowStorage:
     );
     """
 
+    # Migration v1 -> v2 (F1, VM3). Drei Spalten, zwei Backfill-Semantiken.
+    # Idempotent: ADD COLUMN schlägt fehl, wenn die Spalte existiert; das
+    # wird gefangen, weil SQLite kein "IF NOT EXISTS" für Spalten kennt.
+    _MIGRATIONS_V2 = (
+        # requested_size (telemetry): nie persistiert, nicht rekonstruierbar.
+        # NULL heisst "vor Messbeginn", NICHT "fehlend". Ins Schema, nicht nur
+        # ins Ticket: ein undokumentiertes NULL lädt den Nächsten dazu ein,
+        # es per Join aus fills zu "reparieren" — Scheingenauigkeit.
+        "ALTER TABLE telemetry ADD COLUMN requested_size TEXT",
+        # decision_seq (telemetry): existierte nicht; "vor der Messung".
+        "ALTER TABLE telemetry ADD COLUMN decision_seq INTEGER",
+        # requested_size (fills): hier ist der Backfill `:= executed_size`
+        # HISTORISCH WAHR, keine Näherung. In der Vergangenheit wurde nur eine
+        # Größe erfasst, und sie war definitionsgemäß die ausgeführte: Die
+        # Engine orderte die Konstante (max_order_size_shares) und lehnte
+        # alles darüber ab, statt zu kappen. Also kein Platzhalter.
+        "ALTER TABLE fills ADD COLUMN requested_size TEXT",
+        "UPDATE fills SET requested_size = executed_size WHERE requested_size IS NULL",
+    )
+
     def __init__(self, db_path: Path) -> None:
-        """Öffnet (und initialisiert) die SQLite-Datei.
+        """Öffnet (und initialisiert/migriert) die SQLite-Datei.
 
         Args:
             db_path: Zieldatei, z. B. data/{user_id}/shadow/shadow.db.
@@ -161,11 +184,52 @@ class SQLiteShadowStorage:
         self._lock = threading.Lock()
         self._conn = sqlite3.connect(str(self._db_path), check_same_thread=False)
         self._conn.executescript(self._DDL)
+        self._migrate_v2()
         self._conn.execute(
             "INSERT OR REPLACE INTO schema_meta (key, value) VALUES ('schema_version', ?)",
             (str(SCHEMA_VERSION),),
         )
         self._conn.commit()
+
+    def _migrate_v2(self) -> None:
+        """Bringt eine v1-Datei auf v2 (idempotent, additiv)."""
+        existing = {
+            row[0]
+            for row in self._conn.execute(
+                "SELECT name FROM pragma_table_info('telemetry')"
+            ).fetchall()
+        }
+        fill_cols = {
+            row[0]
+            for row in self._conn.execute(
+                "SELECT name FROM pragma_table_info('fills')"
+            ).fetchall()
+        }
+        for stmt in self._MIGRATIONS_V2:
+            table = "fills" if "fills" in stmt else "telemetry"
+            cols = fill_cols if table == "fills" else existing
+            # ADD COLUMN nur, wenn die Spalte fehlt; das UPDATE immer (es ist
+            # idempotent, weil es nur NULL-Zeilen anfasst).
+            if stmt.startswith("ALTER TABLE"):
+                col = stmt.rsplit("ADD COLUMN ", 1)[1].split()[0]
+                if col in cols:
+                    continue
+            self._conn.execute(stmt)
+
+    def latest_decision_seq(self) -> int:
+        """Höchster persistierter `decision_seq` (0, wenn keiner existiert).
+
+        Für die Zähler-Initialisierung nach Prozessneustart: Ohne sie beginnt
+        jeder Start wieder bei 1, und die Korrelation Snapshot<->Record
+        kollidiert über Sessions hinweg still. `decision_seq` ist nur
+        replaysicher, solange der Zähler die Historie kennt.
+        """
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT MAX(decision_seq) FROM telemetry WHERE decision_seq IS NOT NULL"
+            ).fetchone()
+        value = row[0] if row and row[0] is not None else 0
+        return int(value)
 
     @classmethod
     def for_user(cls, base_dir: Path, user_id: str) -> "SQLiteShadowStorage":
@@ -207,7 +271,8 @@ class SQLiteShadowStorage:
         with self._lock:
             self._conn.execute(
                 "INSERT INTO telemetry (signal_id, order_id, latency_ms, approved,"
-                " reject_reason, status) VALUES (?, ?, ?, ?, ?, ?)",
+                " reject_reason, status, requested_size, decision_seq)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     str(record.signal_id),
                     str(record.order_id) if record.order_id else None,
@@ -215,21 +280,31 @@ class SQLiteShadowStorage:
                     1 if record.approved else 0,
                     reason.value,
                     record.status.value if record.status else None,
+                    _dec_to_text(record.requested_size)
+                    if record.requested_size is not None else None,
+                    record.decision_seq if record.decision_seq else None,
                 ),
             )
             self._conn.commit()
 
-    def write_fill(self, fill: FillResult, fill_idx: int = 0) -> None:
+    def write_fill(self, fill: FillResult, fill_idx: int = 0,
+                   requested_size: Optional[Decimal] = None) -> None:
         """Persistiert einen Fill (Decimal als TEXT).
 
         Args:
             fill: Das FillResult.
             fill_idx: Index bei Partial Fills einer Order (Default 0).
+            requested_size: Ungekappte angeforderte Größe. `None` = vor
+                Messbeginn. Ohne Angabe wird der ausgeführte Wert verwendet —
+                das ist für neue Fills korrekt (der Default-Adapter kappt
+                nicht) und macht den Aufruf rückwärtskompatibel.
         """
+        req = requested_size if requested_size is not None else fill.executed_size
         with self._lock:
             self._conn.execute(
                 "INSERT INTO fills (order_id, fill_idx, execution_price, executed_size,"
-                " slippage, fee, filled_at, latency_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                " slippage, fee, filled_at, latency_ms, requested_size)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     str(fill.order_id),
                     fill_idx,
@@ -239,6 +314,7 @@ class SQLiteShadowStorage:
                     _dec_to_text(fill.fee),
                     fill.filled_at.isoformat(),
                     fill.latency_ms,
+                    _dec_to_text(req),
                 ),
             )
             self._conn.commit()

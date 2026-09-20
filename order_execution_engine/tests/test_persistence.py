@@ -70,9 +70,14 @@ def test_schema_version_and_tables() -> None:
         store = SQLiteShadowStorage.for_user(Path(tmp), "u1")
         conn = sqlite3.connect(str(Path(tmp) / "u1" / "shadow" / "shadow.db"))
         version = conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'").fetchone()[0]
-        assert version == "1"
+        assert version == "2"  # F1, VM3: Schema v2 (requested_size, decision_seq)
         for table in ("telemetry", "fills", "portfolio_snapshots"):
             conn.execute(f"SELECT 1 FROM {table} LIMIT 0")
+        # Die neuen Spalten sind da
+        tcols = {r[1] for r in conn.execute("PRAGMA table_info(telemetry)")}
+        fcols = {r[1] for r in conn.execute("PRAGMA table_info(fills)")}
+        assert {"requested_size", "decision_seq"} <= tcols
+        assert "requested_size" in fcols
         conn.close()
         store.close()
     print("OK test_schema_version_and_tables")
@@ -223,6 +228,7 @@ def test_storage_normalizes_none_at_boundary_defensively() -> None:
         stub = SimpleNamespace(
             signal_id=uuid.uuid4(), order_id=None, latency_ms=1.0,
             approved=False, reject_reason=None, status=None,
+            requested_size=None, decision_seq=0,
         )
         with __import__("unittest").TestCase().assertLogs(
                 "order_execution_engine.persistence", level="WARNING") as captured:
