@@ -1075,6 +1075,55 @@ Der `PAPER_TRADING`-Fall von ganz oben hat jetzt seinen AST-Namen:
 Im Produktivcode: `models.py:692` (`frozenset`, die Guard-Allowlist). In Tests:
 `test_engine.py:192` (`in (OrderStatus.FILLED, OrderStatus.PARTIALLY_FILLED)`).
 
+### Konstruktionsprinzip: Die Frage umkehren (statt Formen aufzählen)
+
+Die Kalibrierungsliste wuchs in vier Runden von 2 auf 11 Einträge. Jede Runde
+fand eine Form, die im Modul existierte und in der Liste fehlte — und **jede
+Fassung sah vollständig aus**. Das ist ehrlich, aber kein Konvergenzbeleg:
+Python hat mehr Ausdruckskontexte als das Modul heute benutzt (`List`,
+`Starred`, `BoolOp`, Walrus, Comprehension, Lambda-Default, `match`-Pattern,
+`setattr`-String, `**{...}`-Unpacking). Jede kann morgen im Package auftauchen,
+ohne dass sich an der Regel etwas ändert.
+
+> **Eine Liste, die mit dem Code nachwachsen muss, ist genau das, was dieser
+> Zyklus sonst als Scheinschutz behandelt:** Sie sichert zu, dass sie die
+> Formen kennt, und kann das nur für die Vergangenheit belegen.
+
+**Die strukturell geschlossene Alternative ist die Umkehr der Frage.** Nicht
+„welche Elternknoten bedeuten Produktion?" (offene Menge), sondern:
+
+> **Erreicht der Wert ein Ziel?** — landet er auf einem Feld, in einem
+> Rückgabewert oder in einem Argument eines Callees, der ihn zuweist.
+
+Die **Konsum**gestalten sind dagegen die geschlossene Menge: Sie teilen eine
+Eigenschaft — *der Wert wird gelesen und verworfen*:
+
+| Konsumgestalt | Beispiel |
+|---|---|
+| Vergleich | `if status == OrderStatus.CANCELLED:` |
+| Membership | `frozenset({ExecutionMode.DRY_RUN, ...})` |
+| prüfender Callee | `guard.assert_safe(ExecutionMode.PAPER_TRADING)` |
+| Docstring | `"""siehe OrderStatus.EXPIRED"""` |
+
+**Regel:** *Alles, was nicht nachweislich konsumiert wird, gilt als
+Produktion.* Dann irrt der Anker im Zweifel nach **Falsch-Rot** — und das ist
+die Richtung, die untersucht wird statt durchgewinkt.
+
+**Am Code verifiziert** (Package, Produktivcode + Tests):
+
+```
+Alle Ausdruckskontexte: Compare 37 · keyword 36 · Call 8 · Assign 5 · IfExp 4
+                        arguments 3 · Set 2 · AnnAssign 2 · Tuple 2 · Dict 1
+Nach Umkehr-Regel:      PRODUKTION 51 · KONSUM 41 · KLASSIFIZIERBAR 8
+```
+
+Die drei Mengen sind klein und benannt: eine geschlossene Konsummenge, eine
+explizite Restmenge (`Call`-Callee-Rumpf), alles Übrige ist Produktion.
+
+**Konsequenz für F2b:** Die sieben Formen bleiben — als **Testdaten**, nicht
+als **Kriterium**. Als Kriterium erben sie das Nachwachsen; als Testdaten
+belegen sie eine Regel, die ohne sie auskommt.
+
 **Beleg für die Lücke:** Die naive Regel meldet
 
 ```

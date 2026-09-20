@@ -241,6 +241,36 @@ zwar ein `Compare`, aber die Werte hängen am `Set`/`Tuple` darunter. Eine Regel
 „alles außer `Compare` ist Produktion" winkt ihn durch: **dieselbe Lücke wie
 beim Regex, nur mit Syntaxbaum.**
 
+### Die Formen sind Testdaten, nicht das Kriterium
+
+Die Formliste wuchs in vier Runden von 2 auf 11 Einträge — und **jede Fassung
+sah vollständig aus.** Python hat mehr Ausdruckskontexte als das Modul heute
+benutzt (`List`, `Starred`, `BoolOp`, Walrus, Comprehension, Lambda-Default,
+`match`-Pattern, `setattr`-String, `**{...}`). Eine Liste, die mit dem Code
+nachwachsen muss, sichert zu, dass sie die Formen *kennt*, und kann das nur für
+die Vergangenheit belegen.
+
+> **Deshalb steht am Anfang nicht die Frage „welche Elternknoten bedeuten
+> Produktion?" (offene Menge), sondern: Erreicht der Wert ein Ziel?**
+
+Die **Konsum**gestalten sind die geschlossene Menge — sie teilen eine
+Eigenschaft (*der Wert wird gelesen und verworfen*):
+
+| Konsumgestalt | Beispiel |
+|---|---|
+| Vergleich | `if status == OrderStatus.CANCELLED:` |
+| Membership | `frozenset({ExecutionMode.DRY_RUN, …})` |
+| prüfender Callee | `guard.assert_safe(ExecutionMode.PAPER_TRADING)` |
+| Docstring | `"""siehe OrderStatus.EXPIRED"""` |
+
+**Regel:** *Alles, was nicht nachweislich konsumiert wird, gilt als
+Produktion.* Dann irrt der Anker im Zweifel nach **Falsch-Rot** — die Richtung,
+die untersucht wird statt durchgewinkt.
+
+**Die Formen bleiben — als Testdaten für diese Regel, nicht als Kriterium.**
+Als Kriterium erben sie das Nachwachsen; als Testdaten belegen sie eine Regel,
+die ohne sie auskommt.
+
 **Er hat sich an Tag 1 bezahlt:** Er fand bei seinem ersten Lauf zwei Waisen
 (`EXPIRED`, `SAFETY_GUARD`), die auf keiner Liste standen, plus die verwaiste
 Maschinerie dahinter (`is_expired()`, ein Prädikat mit totem Wahr-Zweig).
