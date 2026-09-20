@@ -326,6 +326,50 @@ bliebe über `snapshot.positions["x"] = ...` änderbar. Ohne
 diese Option in der Umsetzung typischerweise kippt. Eigener Test:
 `test_portfolio_snapshot_is_deeply_frozen`.
 
+### Nachtrag (2026-09-20): `as_of_seq` — Korrelationsrichtung korrigiert
+
+Ein Review-Befund unmittelbar nach F1c, **vor** F1, weil F1 sonst Daten gegen
+eine geratene Sequenz persistiert hätte.
+
+**Befund.** F1c baute den Snapshot mit
+`as_of_seq=len(self.telemetry._records)`. Drei Probleme, aufsteigend:
+
+1. **Privatattribut-Zugriff.** `telemetry._records` ist die Implementierung
+   der In-Memory-Senke. Der Seam, der gerade die Strategie vom Engine-Inneren
+   entkoppelt hatte, koppelte sich selbst ans Innere der Senke. Eine DB-backed
+   Senke hat kein `_records` — beim ersten Sink-Wechsel bricht das, oder
+   schlimmer: Es liefert still falsche Werte.
+2. **Die Seq ist vorhersagend, nicht zugewiesen.** `telemetry.seq` ist
+   `INTEGER PRIMARY KEY AUTOINCREMENT` (`persistence.py:122`), wird also beim
+   INSERT vergeben. Der Snapshot entsteht *vor* dem Schreiben und rät die
+   nächste Nummer. Korrekt nur unter vier ungeschriebenen Invarianten: genau
+   eine Senke, genau ein Record pro Signal, keine Lücken, keine parallelen
+   Writer. Keine davon ist im Code erzwungen.
+3. **Korrelationsrichtung rückwärts.** Der Snapshot soll nicht die künftige
+   Telemetrie-Seq erraten — die Engine soll die Identität vergeben, und beide
+   Seiten tragen sie.
+
+**Fix.** Eigener monotoner Zähler der Engine:
+`TelemetryLogger.next_decision_seq()`. `TelemetryRecord` hat ein neues Feld
+`decision_seq`; der Sizing-Snapshot und der zugehörige Record teilen denselben
+Wert. Die Datenbank-`seq` bleibt davon unberührt und wird durch die
+Storage-Schicht übernommen.
+
+**Verifiziert:**
+```
+Record decision_seqs:      [1, 2]   # Pre-Order-Reject, Fill
+Snapshot-Ids (Sizing):     [2]      # derselbe Wert wie der Fill-Record
+monoton + luecklos:        True
+```
+Mutationsnachweis: Rückkehr zu `len(self.telemetry._records)` →
+`AssertionError: [1, 0]`.
+Test: `test_decision_seq_correlates_snapshot_and_record`.
+
+**Nicht in F1c:** `decision_seq` ist noch nicht im Persistenzschema. Das
+gehört in F1 zusammen mit `requested_size`/`executed_size` in die
+Schema-Migration auf v2 — die Korrelation ist erst dann dauerhaft, wenn sie
+die DB erreicht.
+
 ### Akzeptanzkriterien (ursprüngliche Fassung, historisch)
 
 - [x] `size_fn` injizierbar, Default-Adapter funktioniert ohne Strategie.

@@ -389,6 +389,14 @@ class TelemetryRecord:
     approved: bool
     status: Optional[OrderStatus]
     reject_reason: RejectReason = RejectReason.NONE
+    decision_seq: int = 0
+    """Engine-seitige, monotone Entscheidungs-Id.
+
+    Korreliert den Record mit dem `PortfolioSnapshot`, gegen den entschieden
+    wurde (`as_of_seq`). Wird von `TelemetryLogger.next_decision_seq()`
+    vergeben — *nicht* von der Datenbank: Die ADO-`seq` entsteht erst beim
+    INSERT, der Snapshot aber vorher. Umgekehrte Korrelationsrichtung.
+    """
 
     def __post_init__(self) -> None:
         """Erzwingt den Enum-Typ.
@@ -409,11 +417,33 @@ class TelemetryRecord:
 
 
 class TelemetryLogger:
-    """Latenz- und Performance-Logging für den Dry-Run."""
+    """Latenz- und Performance-Logging für den Dry-Run.
+
+    Führt einen engine-eigenen, monotonen `decision_seq`-Zähler. Zweck:
+    Sizing-Snapshots und Telemetrie-Records mit *derselben* Id stempeln,
+    damit eine Entscheidung später rekonstruierbar ist (Replay).
+
+    Warum nicht die Datenbank-`seq`: Die wird per AUTOINCREMENT erst beim
+    INSERT vergeben, also *nach* der Entscheidung. Ein Snapshot müsste sie
+    raten — und das stimmt nur unter vier ungeschriebenen Invarianten
+    (genau eine Senke, genau ein Record pro Signal, keine Lücken, keine
+    parallelen Writer). Die Korrelationsrichtung gehört umgekehrt: Die
+    Engine vergibt die Id, die Storage übernimmt sie später.
+    """
 
     def __init__(self) -> None:
-        """Initialisiert den Logger (leerer Ringpuffer)."""
+        """Initialisiert den Logger (leerer Puffer, Zähler bei 0)."""
         self._records: list[TelemetryRecord] = []
+        self._decision_seq: int = 0
+
+    def next_decision_seq(self) -> int:
+        """Vergibt die nächste Entscheidungs-Id (monoton, engine-seitig).
+
+        Returns:
+            Fortlaufende Id, beginnend bei 1.
+        """
+        self._decision_seq += 1
+        return self._decision_seq
 
     def log(self, record: TelemetryRecord) -> None:
         """Schreibt einen Telemetrie-Eintrag.
@@ -550,6 +580,7 @@ class ShadowExecutionEngine:
                 signal_id=signal.signal_id, order_id=None,
                 latency_ms=self._elapsed_ms(t0), approved=False,
                 reject_reason=RejectReason.INVALID_PRICE, status=None,
+                decision_seq=self.telemetry.next_decision_seq(),
             )
             self.telemetry.log(record)
             return record
@@ -561,6 +592,7 @@ class ShadowExecutionEngine:
                 signal_id=signal.signal_id, order_id=None,
                 latency_ms=self._elapsed_ms(t0), approved=False,
                 reject_reason=RejectReason.INVALID_PRICE, status=None,
+                decision_seq=self.telemetry.next_decision_seq(),
             )
             self.telemetry.log(record)
             return record
@@ -568,9 +600,12 @@ class ShadowExecutionEngine:
         # Sizing über den injizierbaren Seam. Der Portfolio-Snapshot ist
         # read-only; die Sizing-Funktion sieht den Zustand, kann ihn aber
         # nicht mutieren. Der Default reproduziert das bisherige Verhalten.
+        # Die Entscheidungs-Id vergibt die Engine — Snapshot und
+        # Telemetrie-Record teilen sie (Replay-Korrelation).
+        decision_seq = self.telemetry.next_decision_seq()
         portfolio_snapshot = self.portfolio.snapshot(
             mark_prices={signal.target_token_id: ref_price},
-            as_of_seq=len(self.telemetry._records),
+            as_of_seq=decision_seq,
         )
         size = self.size_fn(signal, portfolio_snapshot)
         order = PaperOrder(
@@ -591,6 +626,7 @@ class ShadowExecutionEngine:
                 signal_id=signal.signal_id, order_id=order.order_id,
                 latency_ms=self._elapsed_ms(t0), approved=False,
                 reject_reason=decision.reason, status=order.status,
+                decision_seq=decision_seq,
             )
             self.telemetry.log(record)
             return record
@@ -607,6 +643,7 @@ class ShadowExecutionEngine:
             signal_id=signal.signal_id, order_id=order.order_id,
             latency_ms=self._elapsed_ms(t0), approved=True,
             reject_reason=RejectReason.NONE, status=order.status,
+            decision_seq=decision_seq,
         )
         self.telemetry.log(record)
         return record

@@ -315,6 +315,39 @@ def test_portfolio_snapshot_is_deeply_frozen() -> None:
     print("OK test_portfolio_snapshot_is_deeply_frozen")
 
 
+def test_decision_seq_correlates_snapshot_and_record() -> None:
+    """Snapshot und Telemetrie-Record teilen dieselbe Entscheidungs-Id.
+
+    Regression für die fragile Kopplung `as_of_seq=len(telemetry._records)`:
+    Die DB-`seq` wird per AUTOINCREMENT erst beim INSERT vergeben, der
+    Sizing-Snapshot entsteht aber vorher. Die Engine muss die Id selbst
+    vergeben, sonst rät der Snapshot die künftige Zeilennummer — korrekt
+    nur unter vier ungeschriebenen Invarianten.
+    """
+    seen: list[int] = []
+
+    def spy(signal, snap):
+        seen.append(snap.as_of_seq)
+        return Decimal("50")
+
+    engine = ShadowExecutionEngine(
+        risk_config=RiskConfig(max_order_size_shares=Decimal("100")), size_fn=spy)
+    neutral = SignalPayload(target_token_id="0xtokenA", market_id="mkt-1",
+                            direction=Direction.NEUTRAL, confidence=Decimal("80"))
+    up = SignalPayload(target_token_id="0xtokenA", market_id="mkt-1",
+                       direction=Direction.UP, confidence=Decimal("80"))
+
+    engine.on_signal(neutral, _book())   # Pre-Order-Reject: Id 1
+    rec_fill = engine.on_signal(up, _book())  # Fill: Snapshot + Record teilen Id 2
+
+    seqs = [r.decision_seq for r in engine.telemetry._records]
+    assert seqs == [1, 2], seqs
+    assert seen == [2], seen
+    assert rec_fill.decision_seq == 2
+    assert seen[0] == rec_fill.decision_seq, "Snapshot und Record nicht korreliert"
+    print("OK test_decision_seq_correlates_snapshot_and_record")
+
+
 if __name__ == "__main__":
     for fn in list(globals().values()):
         if callable(fn) and fn.__name__.startswith("test_"):
