@@ -1,0 +1,164 @@
+# Übergabe an das Strategy-Package — Konvention, Standard, Kontext
+
+**Zweck:** Dieses Dokument ist der **erste Commit** des Strategy-Packages, nicht
+Code. Es trägt die Konventionen mit, die im Agent-X-Repo entstanden sind, aber
+dort *nicht* gelten. Ein Standard, der im Nachbar-Repo bleibt, wirkt an genau
+dem Ort nicht, an dem der nächste Record geboren wird.
+
+**Herkunft:** Erarbeitet im F1-Zyklus der Shadow Execution Engine (2026-09-20),
+`agent_x_storage/docs/SHADOW_ENGINE_FOLLOWUPS.md`.
+
+**Was dieses Dokument ist:** eine Übernahme, kein Entwurf. Die Regeln sind
+nicht neu zu verhandeln; sie wurden in der Praxis geboren und haben sich an
+Tag 1 bezahlt. Abweichungen brauchen eine Begründung, keine Mehrheit.
+
+---
+
+## 1. ADR 12 (Übernahme) — Modellbasis
+
+> **Neue Records/Modelle im Strategy-Package sind grundsätzlich Pydantic
+> `BaseModel`, Dataclass nur mit begründeter Ausnahme.**
+>
+> **Referenzimplementierung:** `PaperOrder` (`order_execution_engine/models.py`).
+> **Begründung** (gehört als Docstring an die Klassen, nicht in diese Regel):
+> der Drift-Befund — zwei Modellbasen koexistieren, neue Klassen werden im Stil
+> ihrer Nachbarschaft geschrieben, nicht im Stil des Systems.
+> **Review-Flag:** jeder Dataclass-Neuzugang.
+
+Zwei Träger, zwei Rollen, kein duplizierter Text:
+
+| Ort | Rolle | Inhalt |
+|---|---|---|
+| Diese Datei / CLAUDE.md | operative Stelle | die Regel, imperativ |
+| Der `models.py`-Docstring | Entdeckungsstelle | die Begründung |
+
+Die Trennung ist Absicht: Eine Regel ohne Begründung überlebt den ersten
+Deadline-Konflikt nicht; eine Begründung ohne Regel wird nicht gelesen.
+
+---
+
+## 2. Der Scheinschutz-Standard — vier Schichten
+
+**Die Frage ist nie „ist es vorhanden?", sondern „kann es feuern, und beweist
+ein Test das?"**
+
+| Angewandt auf | Zeuge |
+|---|---|
+| Risk-Check | Anker-Test: zweiter Fill kippt die Position über das Limit → Reject |
+| Test | Sensitivitäts-Kriterium: der Test **muss rot werden**, wenn der Mutant eingebaut wird |
+| Refactoring / Seam | Coverage auf den neuen Zeilen: der Seam wird tatsächlich durchlaufen |
+| **Prädikat** | **Erreichbarkeits-Nachweis: der Wahr-Zweig muss erzeugbar sein.** |
+
+### Die Namen der Krankheit, an denen sie im Review aufrufbar ist
+
+- **Scheinschutz** — ein Check, der wie eine Zusicherung aussieht und nie
+  feuern kann. (Erste drei Schichten.)
+- **Phantom-Label** — ein Enum-Wert ohne Produzenten. Ein Leser, der das Enum
+  als Dokumentation liest, muss ihn für möglich halten; er kommt nie.
+  Der schlimmste Fall heißt wie sein Gegenteil (`SAFETY_GUARD`).
+- **Toter Wahr-Zweig** — ein Prädikat, dessen `True` unerreichbar ist
+  (vierte Schicht).
+- **Schweigepflicht** — ein Validator, der weitergestellt wurde, bis die Tests
+  grün waren. Migriert nicht die Modelle, sondern nur die Stille.
+- **Mechanisch richtig, semantisch falsch** — ein Zeuge, der eine Falle korrekt
+  als erwartetes Verhalten kanonisiert. Er beantwortet „feuert der Check?" mit
+  ja, ohne „sollte er?" zu fragen.
+
+### Zwei Regeln, die aus dem Standard folgen
+
+1. **Kein Label ohne Produzenten.** Jeder Enum-Wert hat einen lebenden
+   Erzeuger. Prüfbar als Meta-Anker (siehe unten), nicht als Absichtserklärung.
+2. **Tote Maschinerie neben einem gelöschten Label ist derselbe Befund einen
+   Meter weiter.** Wird ein Wert entfernt, ist zu prüfen, was ihn einst
+   plausibel machte.
+
+---
+
+## 3. Der Meta-Anker (Vorlage, mitzunehmen)
+
+Der Wächter gegen **Phantom-Labels** — nicht ein Fehler, sondern eine
+Fehlerklasse: Behauptungen, die aussehen wie Zusicherungen. Er fängt beide
+Richtungen und ist als Test zu übernehmen:
+
+```python
+def test_meta_every_reason_has_a_producer() -> None:
+    """Jeder Enum-Wert hat einen lebenden Produzenten.
+
+    Ein Wert ohne Produzenten ist Scheinschutz im Enum — jeder Diagnostics-
+    Konsument muss ihn fuer moeglich halten, er kommt nie.
+    """
+    import re
+    from pathlib import Path
+
+    src = Path("<modul-mit-den-produzenten>.py").read_text()
+    produced = set(re.findall(r"<EnumName>\.([A-Z_]+)", src))
+    allowed_without_producer = {"NONE"}  # Marker, kein Reject
+
+    orphans = [r.name for r in <EnumName>
+               if r.name not in produced and r.name not in allowed_without_producer]
+    assert not orphans, (
+        f"Werte ohne Produzenten: {orphans}. Entweder Produzent herstellen "
+        f"oder Wert entfernen."
+    )
+```
+
+**Er hat sich an Tag 1 bezahlt:** Er fand bei seinem ersten Lauf zwei Waisen
+(`EXPIRED`, `SAFETY_GUARD`), die auf keiner Liste standen, plus die verwaiste
+Maschinerie dahinter (`is_expired()`, ein Prädikat mit totem Wahr-Zweig).
+
+---
+
+## 4. Was hierher umzieht
+
+**`max_order_size_shares`** — derzeit ein Feld in `RiskConfig`
+(`order_execution_engine/models.py`). Es ist **Strategie-Konfiguration in
+Engine-Kleidung**: Seit der Sizing-Schnittstelle (F1/VM4) hat es keine
+Schranken-Semantik mehr, es ist nur die Größe, die der Default-Adapter ordert
+(ein Platzhalter für genau die Conviction-Logik, die hier entsteht).
+
+Die Engine-Obergrenze ist `per_order_cap_shares` — engine-seitig geklemmt, mit
+Config-Invariante `per_order_cap_shares <= max_position_size_usdc`.
+
+**Der Umzug erfolgt in dem Commit, der die Conviction-Logik einführt.** Dann
+reisen Feld und Konvention im selben Schritt.
+
+---
+
+## 5. Der Merksatz
+
+> **Verifizieren, korrigieren, stehen lassen.**
+>
+> Der Zyklus, aus dem dieser Standard stammt, begann mit einer falschen
+> Alarmmeldung und endete mit einer Engine, die nicht mehr lügen kann, ohne
+> dass es jemand merkt. Der wertvollste Ertrag waren nicht die gehärteten
+> Checks, sondern der Präzedenzfall dafür, wie mit Unsicherheit umgegangen
+> wird.
+>
+> Zeugen werden **gelöscht, nicht umgeschrieben**, wenn ihr Gegenstand stirbt.
+> Löschen heißt „existiert nicht", nicht „darf nie existieren" — ein Wert darf
+> zurückkehren, dann mit Produzent *und* Zeuge.
+
+---
+
+## 6. Herkunft der Entscheidungen (für Rückfragen)
+
+| Entscheidung | Begründung | Ort |
+|---|---|---|
+| Pydantic für neue Modelle | Drift-Befund, zwei Modellbasen | dieses Dok., §1 |
+| Kein Label ohne Produzenten | Phantom-Label als Scheinschutz | dieses Dok., §2 |
+| Vier-Schichten-Tabelle | Prädikat mit totem Wahr-Zweig | dieses Dok., §2 |
+| `max_order_size_shares` gehört hierher | Strategie-Konfiguration, keine Schranke | dieses Dok., §4 |
+| Sizing über injizierte `SizeFn` | Engine bleibt ohne Strategie lauffähig | `SHADOW_ENGINE_FOLLOWUPS.md`, F1c |
+
+**Schnittstelle (unverändert, Engine-seitig definiert):**
+
+```python
+SizeFn = Callable[[SignalPayload, PortfolioState], Decimal]
+
+def sizing(signal, portfolio_state) -> desired_size
+```
+
+Die Engine injiziert sie (`ShadowExecutionEngine(..., size_fn=...)`), klemmt
+das Ergebnis auf `per_order_cap_shares` und protokolliert beide Größen
+(`requested_size` = Wunsch, `executed_size` = geklemmt). Hier entsteht die
+echte Conviction-Logik gegen dieselbe Schnittstelle — ohne Engine-Änderung.

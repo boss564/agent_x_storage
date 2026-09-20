@@ -424,7 +424,8 @@ Tests: 53/53
 
 **Offen (F2-Nachbarschaft):** `max_order_size_shares` ist Strategie-
 Konfiguration in `RiskConfig`-Kleidung. Wenn das Strategy-Package landet,
-wandert das Feld dorthin oder wird umbenannt.
+wandert das Feld dorthin oder wird umbenannt. Der Umzug ist jetzt Teil des
+Übergabepakets (`docs/STRATEGY_PACKAGE_HANDOVER.md`, §4).
 
 ---
 
@@ -825,8 +826,27 @@ gelöschten Label ist derselbe Befund einen Meter weiter.
 `max_order_size_shares`-Umzug als Anhängsel; Messlatte und Fund-Regel oben),
 **F3**, Strategy-Package.
 
+### ADR 12 muss mitreisen
+
+ADR 12 steht in der Root-`CLAUDE.md` **dieses** Repos. Das Strategy-Package
+lebt außerhalb — dort gilt die Konvention nicht, und der nächste
+`TelemetryRecord` wird genau dort geboren: neue Modelle, neue Entscheidungen,
+kein Meta-Anker, keine Vier-Schichten-Tabelle.
+
+> **Der erste Commit des Strategy-Packages ist deshalb kein Code, sondern die
+> Übernahme.** ADR 12 in dessen `CLAUDE.md`, die Scheinschutz-Tabelle als
+> Referenz, der Merksatz als Arbeitsgrundlage.
+
+Der `max_order_size_shares`-Umzug gehört ohnehin dorthin — dann reisen Feld und
+Konvention im selben Schritt. Das Übergabedokument liegt als
+**`docs/STRATEGY_PACKAGE_HANDOVER.md`** bereit: ADR 12, Vier-Schichten-Tabelle,
+Meta-Anker-Vorlage (lauffähig), Sizing-Schnittstelle, Herkunftstabelle.
+
 **Der aktuelle Merksatz gilt bis dahin:** Die Engine kann nicht mehr lügen,
 ohne dass es jemand merkt — und sie kann es ab jetzt **beweisen**.
+
+Nach der Übernahme prüft das Strategy-Package seine eigenen Versprechen, bevor
+es Strategien prüft. Das ist die richtige Reihenfolge.
 
 
 
