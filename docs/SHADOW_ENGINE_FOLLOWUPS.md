@@ -1009,9 +1009,38 @@ erwischt **die Hälfte** und tauscht Falsch-Grün gegen Falsch-Rot. Gemessen:
 |---|---|---|
 | `keyword` | `Field(default=OrderStatus.PENDING)` | `models.py:227` |
 | `Assign` | `status = OrderStatus.FILLED` | `engine:368` |
+| `AnnAssign` | `reason: RejectReason = RejectReason.NONE` | `engine:61`, `:408` |
 | `Dict` | `model_copy(update={..., "status": OrderStatus.REJECTED_BY_RISK})` | `engine:676` |
 | `IfExp` | `OrderSide.BUY if ... else OrderSide.SELL` | `models.py:196` |
 | `Call` | `RiskDecision.reject(RejectReason.MAX_POSITION_SIZE)` | `engine:142` |
+
+**Sechs Formen, nicht fünf.** `AnnAssign` ist weder `Assign` noch `keyword`
+(7 Vorkommen im Modul). Heute **folgenlos**, weil `NONE` auf der Ausnahmeliste
+steht — und genau deshalb heikel:
+
+> **Eine Fixture-Liste mit fünf Formen wäre an allen fünf grün und trotzdem
+> unvollständig.** Die Form ist im Modul vorhanden, aber durch die Ausnahme
+> unsichtbar. Grün durch Ausnahme beweist nichts.
+
+### `Call` ist zwei Klassen, nicht eine
+
+`RiskDecision.reject(RejectReason.MAX_POSITION_SIZE)` **produziert** durch
+Delegation — der Callee weist den Wert zu. `guard.assert_safe(ExecutionMode.PAPER_TRADING)`
+**prüft nur** (`test_models.py:140`). Syntaktisch identisch.
+
+> **Wer `Call` pauschal als Produzent führt, holt die Falsch-Grün-Lücke über
+> die Hintertür zurück.**
+
+Kriterium deshalb nicht „Elternknoten ist `Call`", sondern:
+**`Call`-Argument, dessen Callee den Wert zuweist oder zurückgibt** —
+also eine intra-prozedurale Prüfung des Callee-Rumpfs, nicht ein
+Elternknoten-Vergleich.
+
+**Gegenrichtungs-Fixture (Pflicht):** ein Wert, der **nur als Argument eines
+prüfenden Callees** vorkommt, muss **rot** werden. Im Package gibt es dafür
+aktuell kein Gegenbeispiel (alle `Call`-Argumente sind Factories), der Punkt
+ist **strukturell, nicht akut**. Er entscheidet aber, ob die Fixture-Zeile
+`Call → grün` beweist, was sie behauptet.
 
 **Beleg für die Lücke:** Die naive Regel meldet
 
@@ -1029,8 +1058,18 @@ die real produziert werden (über `Call`).
 > Reaktion auf ein Falsch-Rot ist eine Ausnahmeliste, die den Wächter
 > aufweicht.**
 
-Die fünf Formen gehören als Fixtures in den Mutationsnachweis: jeder Fixture-
+Die sechs Formen gehören als Fixtures in den Mutationsnachweis: jeder Fixture-
 Wert in genau einer dieser Formen muss grün bleiben.
+
+**Nachtrag (Gegenprüfung) — sechs Formen, und `Call` zerfällt in zwei Klassen:**
+`AnnAssign` (7 Vorkommen, `engine:61`/`:408`) fehlte in der Fünferliste. Er ist
+heute folgenlos (Ausnahme `NONE`), aber eine Fixture-Liste wäre an allen fünf
+Formen grün und trotzdem unvollständig — **grün durch Ausnahme beweist nichts.**
+Und `Call` ist nicht ein Zeuge, sondern zwei: `RiskDecision.reject(...)`
+delegiert (Produzent), `guard.assert_safe(...)` prüft nur (Konsument) —
+syntaktisch identisch. Kriterium ist deshalb der **Callee-Rumpf** (weist er den
+Wert zu oder gibt er ihn zurück?), nicht der Elternknoten. Gegenrichtungs-
+Fixture: *Wert nur als Argument eines prüfenden Callees* → **rot**.
 5. **Ausnahmeliste pro Enum, nicht global.** Marker werden erklärt
    (`RejectReason.NONE`) — und die Erklärung ist selbst prüfbar: Eine Ausnahme
    ohne Begründung im Docstring ist ein Fund.

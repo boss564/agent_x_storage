@@ -128,10 +128,17 @@ def test_meta_every_reason_has_a_producer() -> None:
     Docstring genuegt ebenfalls. Fuer den dauerhaften Waechter: Package lesen,
     Code statt Text (AST), und Produzent von Erwaehnung unterscheiden.
 
-    KALIBRIERUNG: Produktion hat fuenf Formen (keyword, Assign, Dict, IfExp,
-    Call). Eine naive "Elternknoten ist Assign/keyword"-Regel meldet sechs
-    falsch-rote Waisen. Der Mutationsnachweis muss BEIDE Richtungen pruefen:
-    Vergleich/Docstring -> rot, alle fuenf Formen -> gruen.
+    KALIBRIERUNG: Produktion hat SECHS Formen (keyword, Assign, AnnAssign,
+    Dict, IfExp, Call). Eine naive "Elternknoten ist Assign/keyword"-Regel
+    meldet sechs falsch-rote Waisen. Zwei Fallstricke:
+      - AnnAssign ist keine Assign (engine:61) und wird heute nur durch die
+        Ausnahme NONE unsichtbar — gruen durch Ausnahme beweist nichts.
+      - Call ist zwei Klassen: delegierender Callee (RejectReason via
+        RiskDecision.reject) produziert; pruefender Callee (assert_safe)
+        konsumiert. Kriterium ist der Callee-Rumpf, nicht der Elternknoten.
+    Der Mutationsnachweis muss BEIDE Richtungen pruefen:
+      Vergleich/Docstring/pruefender-Callee -> rot,
+      alle sechs Produktionsformen         -> gruen.
     """
     import re
     from pathlib import Path
@@ -184,18 +191,34 @@ Gefordert ist beides:
 |---|---|---|
 | Falsch-Grün | Wert nur in einem **Vergleich** | **rot** |
 | Falsch-Grün | Wert nur in einem **Docstring** | **rot** |
+| Falsch-Grün | Wert nur als Argument eines **prüfenden Callees** | **rot** |
 | Falsch-Rot | Wert in Form `keyword` | grün |
 | Falsch-Rot | Wert in Form `Assign` | grün |
+| Falsch-Rot | Wert in Form `AnnAssign` | grün |
 | Falsch-Rot | Wert in Form `Dict` | grün |
 | Falsch-Rot | Wert in Form `IfExp` | grün |
-| Falsch-Rot | Wert in Form `Call` | grün |
+| Falsch-Rot | Wert in Form `Call` (delegierender Callee) | grün |
 
-**Warum die fünf Formen nötig sind (AST-verifiziert):** Eine naive Regel
+**Warum die sechs Formen nötig sind (AST-verifiziert):** Eine naive Regel
 („Elternknoten ist `Assign`/`keyword`") erwischt nur einen Teil und meldet
 **sechs falsch-rote Waisen** — darunter vier der sechs `RejectReason`-Werte,
 die real über `Call` bzw. `Dict`/`IfExp` produziert werden. Ein AST-Anker, der
 so kalibriert ist, tauscht Falsch-Grün gegen Falsch-Rot — und die erste
 Reaktion auf ein Falsch-Rot ist eine Ausnahmeliste, die den Wächter aufweicht.
+
+**Zwei Fallstricke, die die Matrix adressiert:**
+
+- **`AnnAssign` ist keine `Assign`.** `reason: RejectReason = RejectReason.NONE`
+  (`engine:61`, `:408`) — weder `Assign` noch `keyword`, 7 Vorkommen im Modul.
+  Heute folgenlos, weil `NONE` auf der Ausnahmeliste steht: **Die Form ist
+  vorhanden, aber durch die Ausnahme unsichtbar.** Eine Fixture-Liste ohne sie
+  wäre an allen Einträgen grün und trotzdem unvollständig.
+- **`Call` ist zwei Klassen.** `RiskDecision.reject(...)` **produziert** durch
+  Delegation; `guard.assert_safe(...)` **prüft nur** — syntaktisch identisch.
+  Wer `Call` pauschal als Produzent führt, holt die Falsch-Grün-Lücke über die
+  Hintertür zurück. Kriterium ist der **Callee-Rumpf** (weist er den Wert zu
+  oder gibt er ihn zurück?), nicht der Elternknoten. Dafür die
+  Gegenrichtungs-Fixture oben.
 
 **Er hat sich an Tag 1 bezahlt:** Er fand bei seinem ersten Lauf zwei Waisen
 (`EXPIRED`, `SAFETY_GUARD`), die auf keiner Liste standen, plus die verwaiste
