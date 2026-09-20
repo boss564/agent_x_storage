@@ -401,6 +401,8 @@ ist noch nicht verifiziert.**
 
 ### Dritter Fall derselben Krankheit: Scheinschutz
 
+**Ein fehlender Check fällt auf; ein scheinender nicht.**
+
 Dasselbe Muster trat in diesem Zyklus **dreimal** auf, in drei verschiedenen
 Schichten — es ist ein wiederkehrender Modus, kein Einzelfall:
 
