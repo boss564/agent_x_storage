@@ -128,17 +128,23 @@ def test_meta_every_reason_has_a_producer() -> None:
     Docstring genuegt ebenfalls. Fuer den dauerhaften Waechter: Package lesen,
     Code statt Text (AST), und Produzent von Erwaehnung unterscheiden.
 
-    KALIBRIERUNG: Produktion hat SECHS Formen (keyword, Assign, AnnAssign,
-    Dict, IfExp, Call). Eine naive "Elternknoten ist Assign/keyword"-Regel
-    meldet sechs falsch-rote Waisen. Zwei Fallstricke:
-      - AnnAssign ist keine Assign (engine:61) und wird heute nur durch die
-        Ausnahme NONE unsichtbar — gruen durch Ausnahme beweist nichts.
+    KALIBRIERUNG: Produktion hat SIEBEN Formen (keyword, Assign, AnnAssign,
+    arguments, Dict, IfExp, Call-delegierend). Eine naive "Elternknoten ist
+    Assign/keyword"-Regel meldet sechs falsch-rote Waisen. Drei Fallstricke:
+      - AnnAssign ist keine Assign (engine:61, 2 Stellen) und wird heute nur
+        durch die Ausnahme NONE unsichtbar — gruen durch Ausnahme beweist nichts.
+      - arguments (Default im Funktionskopf, models.py:698) produziert beim
+        Weglassen des Arguments, ganz ohne Aufruf.
       - Call ist zwei Klassen: delegierender Callee (RejectReason via
         RiskDecision.reject) produziert; pruefender Callee (assert_safe)
         konsumiert. Kriterium ist der Callee-Rumpf, nicht der Elternknoten.
+    FALSCH-GRUEN hat vier Gestalten: Vergleich, Docstring, pruefender Callee,
+    Membership. Die vierte haengt AST-seitig unter Set/Tuple, nicht unter
+    Compare (models.py:692) — "alles ausser Compare ist Produktion" winkt sie
+    durch.
     Der Mutationsnachweis muss BEIDE Richtungen pruefen:
-      Vergleich/Docstring/pruefender-Callee -> rot,
-      alle sechs Produktionsformen         -> gruen.
+      Vergleich/Docstring/pruefender-Callee/Membership -> rot,
+      alle sieben Produktionsformen                    -> gruen.
     """
     import re
     from pathlib import Path
@@ -192,33 +198,48 @@ Gefordert ist beides:
 | Falsch-Grün | Wert nur in einem **Vergleich** | **rot** |
 | Falsch-Grün | Wert nur in einem **Docstring** | **rot** |
 | Falsch-Grün | Wert nur als Argument eines **prüfenden Callees** | **rot** |
+| Falsch-Grün | Wert nur in einer **Membership** (`Set`/`Tuple`) | **rot** |
 | Falsch-Rot | Wert in Form `keyword` | grün |
 | Falsch-Rot | Wert in Form `Assign` | grün |
 | Falsch-Rot | Wert in Form `AnnAssign` | grün |
+| Falsch-Rot | Wert in Form `arguments` (Default im Funktionskopf) | grün |
 | Falsch-Rot | Wert in Form `Dict` | grün |
 | Falsch-Rot | Wert in Form `IfExp` | grün |
 | Falsch-Rot | Wert in Form `Call` (delegierender Callee) | grün |
 
-**Warum die sechs Formen nötig sind (AST-verifiziert):** Eine naive Regel
+**Warum die sieben Formen nötig sind (AST-verifiziert):** Eine naive Regel
 („Elternknoten ist `Assign`/`keyword`") erwischt nur einen Teil und meldet
 **sechs falsch-rote Waisen** — darunter vier der sechs `RejectReason`-Werte,
 die real über `Call` bzw. `Dict`/`IfExp` produziert werden. Ein AST-Anker, der
 so kalibriert ist, tauscht Falsch-Grün gegen Falsch-Rot — und die erste
 Reaktion auf ein Falsch-Rot ist eine Ausnahmeliste, die den Wächter aufweicht.
 
-**Zwei Fallstricke, die die Matrix adressiert:**
+**Drei Fallstricke, die die Matrix adressiert:**
 
 - **`AnnAssign` ist keine `Assign`.** `reason: RejectReason = RejectReason.NONE`
-  (`engine:61`, `:408`) — weder `Assign` noch `keyword`, 7 Vorkommen im Modul.
-  Heute folgenlos, weil `NONE` auf der Ausnahmeliste steht: **Die Form ist
-  vorhanden, aber durch die Ausnahme unsichtbar.** Eine Fixture-Liste ohne sie
-  wäre an allen Einträgen grün und trotzdem unvollständig.
+  (`engine:61`, `:408`, 2 Stellen) — weder `Assign` noch `keyword`. Heute
+  folgenlos, weil `NONE` auf der Ausnahmeliste steht: **Die Form ist
+  vorhanden, aber durch die Ausnahme unsichtbar.** Grün durch Ausnahme beweist
+  nichts.
+- **`arguments` ist ein Produzent ohne Aufruf.** Ein Default im Funktionskopf
+  (`def __init__(self, mode: ExecutionMode = ExecutionMode.DRY_RUN)`,
+  `models.py:698`) landet auf dem Objekt, wenn der Aufrufer das Argument
+  weglässt. Im Produktivcode trifft es heute nur ein ausgenommenes
+  Konfigurations-Enum — die Form existiert aber auch an `OrderSide`
+  (`test_engine.py:45`).
 - **`Call` ist zwei Klassen.** `RiskDecision.reject(...)` **produziert** durch
   Delegation; `guard.assert_safe(...)` **prüft nur** — syntaktisch identisch.
   Wer `Call` pauschal als Produzent führt, holt die Falsch-Grün-Lücke über die
   Hintertür zurück. Kriterium ist der **Callee-Rumpf** (weist er den Wert zu
-  oder gibt er ihn zurück?), nicht der Elternknoten. Dafür die
-  Gegenrichtungs-Fixture oben.
+  oder gibt er ihn zurück?), nicht der Elternknoten.
+
+**Und `Membership` heißt AST-seitig nicht `Compare`.** Der `PAPER_TRADING`-Fall
+von ganz oben hat endlich seinen Namen:
+`frozenset({ExecutionMode.DRY_RUN, ExecutionMode.PAPER_TRADING})`
+(`models.py:692`) hängt unter `Set`, nicht unter `Compare` — `x in (a, b)` ist
+zwar ein `Compare`, aber die Werte hängen am `Set`/`Tuple` darunter. Eine Regel
+„alles außer `Compare` ist Produktion" winkt ihn durch: **dieselbe Lücke wie
+beim Regex, nur mit Syntaxbaum.**
 
 **Er hat sich an Tag 1 bezahlt:** Er fand bei seinem ersten Lauf zwei Waisen
 (`EXPIRED`, `SAFETY_GUARD`), die auf keiner Liste standen, plus die verwaiste

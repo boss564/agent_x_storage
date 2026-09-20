@@ -1003,24 +1003,37 @@ startet F2b mit einem roten Bestand, der kein Fund ist.
 ### Instrument-Kalibrierung: Produktionsformen (AST-verifiziert)
 
 Ein AST-Anker mit der naiven Regel „Elternknoten ist `Assign`/`keyword`"
-erwischt **die Hälfte** und tauscht Falsch-Grün gegen Falsch-Rot. Gemessen:
+erwischt nur einen Teil und tauscht Falsch-Grün gegen Falsch-Rot. Gemessen
+(Produktivcode + Tests):
 
 | Produktionsform | Beispiel | Ort |
 |---|---|---|
 | `keyword` | `Field(default=OrderStatus.PENDING)` | `models.py:227` |
 | `Assign` | `status = OrderStatus.FILLED` | `engine:368` |
-| `AnnAssign` | `reason: RejectReason = RejectReason.NONE` | `engine:61`, `:408` |
+| `AnnAssign` | `reason: RejectReason = RejectReason.NONE` | `engine:61`, `:408` **(2 Stellen)** |
+| `arguments` | `def __init__(self, mode: ExecutionMode = ExecutionMode.DRY_RUN)` | `models.py:698` |
 | `Dict` | `model_copy(update={..., "status": OrderStatus.REJECTED_BY_RISK})` | `engine:676` |
 | `IfExp` | `OrderSide.BUY if ... else OrderSide.SELL` | `models.py:196` |
-| `Call` | `RiskDecision.reject(RejectReason.MAX_POSITION_SIZE)` | `engine:142` |
+| `Call` | `RiskDecision.reject(RejectReason.MAX_POSITION_SIZE)` (delegierend) | `engine:142` |
 
-**Sechs Formen, nicht fünf.** `AnnAssign` ist weder `Assign` noch `keyword`
-(7 Vorkommen im Modul). Heute **folgenlos**, weil `NONE` auf der Ausnahmeliste
-steht — und genau deshalb heikel:
+**Sieben Formen.** Zwei davon sind besonders heikel:
 
-> **Eine Fixture-Liste mit fünf Formen wäre an allen fünf grün und trotzdem
-> unvollständig.** Die Form ist im Modul vorhanden, aber durch die Ausnahme
-> unsichtbar. Grün durch Ausnahme beweist nichts.
+- **`AnnAssign`** (2 Stellen) ist weder `Assign` noch `keyword`. Heute
+  folgenlos, weil `NONE` auf der Ausnahmeliste steht — und genau deshalb
+  gefährlich: **Eine Fixture-Liste ohne sie wäre an allen Einträgen grün und
+  trotzdem unvollständig. Grün durch Ausnahme beweist nichts.**
+- **`arguments`** (Default im Funktionskopf) ist ein echter Produzent: Lässt
+  der Aufrufer das Argument weg, landet genau dieser Wert auf dem Objekt.
+  Im Produktivcode trifft es heute nur `ExecutionMode.DRY_RUN`
+  (`models.py:698`, `engine:553`) — ein ausgenommenes Konfigurations-Enum.
+  Die dritte Stelle (`test_engine.py:45`, `OrderSide.BUY`) zeigt die Form aber
+  an einem Enum, das der Anker prüfen wird.
+
+> **Zahlkorrektur im Protokoll:** Eine frühere Fassung nannte „7 Vorkommen" für
+> `AnnAssign`. Nachgemessen sind es **2** (`engine:61`, `:408`). Eine
+> unbelegte Zahl im Fundprotokoll ist dieselbe Gattung wie eine Zusammenfassung,
+> die einen Vollzug beschreibt, wo eine Zusage stand — nur kleiner. Die Aussage
+> bleibt, die Zahl ist korrigiert.
 
 ### `Call` ist zwei Klassen, nicht eine
 
@@ -1042,6 +1055,26 @@ aktuell kein Gegenbeispiel (alle `Call`-Argumente sind Factories), der Punkt
 ist **strukturell, nicht akut**. Er entscheidet aber, ob die Fixture-Zeile
 `Call → grün` beweist, was sie behauptet.
 
+### Falsch-Grün hat vier Gestalten — `Membership` heißt AST-seitig nicht `Compare`
+
+Der `PAPER_TRADING`-Fall von ganz oben hat jetzt seinen AST-Namen:
+
+| Gestalt | Beispiel | Elternknoten |
+|---|---|---|
+| Vergleich | `if status == OrderStatus.CANCELLED:` | `Compare` |
+| Docstring | `"""siehe OrderStatus.EXPIRED"""` | — |
+| prüfender Callee | `guard.assert_safe(ExecutionMode.PAPER_TRADING)` | `Call` |
+| **Membership** | `frozenset({ExecutionMode.DRY_RUN, ExecutionMode.PAPER_TRADING})` | `Set` |
+
+`x in (a, b)` ist zwar ein `Compare` — aber die Werte hängen am `Set`/`Tuple`
+**darunter**. Eine Elternknoten-Prüfung sieht den Vergleich nicht.
+
+> **Eine Regel „alles außer `Compare` ist Produktion" winkt `Membership`
+> durch — dieselbe Lücke wie beim Regex, nur mit Syntaxbaum.**
+
+Im Produktivcode: `models.py:692` (`frozenset`, die Guard-Allowlist). In Tests:
+`test_engine.py:192` (`in (OrderStatus.FILLED, OrderStatus.PARTIALLY_FILLED)`).
+
 **Beleg für die Lücke:** Die naive Regel meldet
 
 ```
@@ -1058,18 +1091,28 @@ die real produziert werden (über `Call`).
 > Reaktion auf ein Falsch-Rot ist eine Ausnahmeliste, die den Wächter
 > aufweicht.**
 
-Die sechs Formen gehören als Fixtures in den Mutationsnachweis: jeder Fixture-
+Die sieben Formen gehören als Fixtures in den Mutationsnachweis: jeder Fixture-
 Wert in genau einer dieser Formen muss grün bleiben.
 
-**Nachtrag (Gegenprüfung) — sechs Formen, und `Call` zerfällt in zwei Klassen:**
-`AnnAssign` (7 Vorkommen, `engine:61`/`:408`) fehlte in der Fünferliste. Er ist
-heute folgenlos (Ausnahme `NONE`), aber eine Fixture-Liste wäre an allen fünf
-Formen grün und trotzdem unvollständig — **grün durch Ausnahme beweist nichts.**
-Und `Call` ist nicht ein Zeuge, sondern zwei: `RiskDecision.reject(...)`
-delegiert (Produzent), `guard.assert_safe(...)` prüft nur (Konsument) —
-syntaktisch identisch. Kriterium ist deshalb der **Callee-Rumpf** (weist er den
-Wert zu oder gibt er ihn zurück?), nicht der Elternknoten. Gegenrichtungs-
-Fixture: *Wert nur als Argument eines prüfenden Callees* → **rot**.
+**Nachtrag (Gegenprüfung) — sieben Formen, und `Call` zerfällt in zwei Klassen:**
+`AnnAssign` ist weder `Assign` noch `keyword` und wird heute nur durch die
+Ausnahme `NONE` unsichtbar — **grün durch Ausnahme beweist nichts.**
+`arguments` (Default im Funktionskopf) ist ein echter Produzent, der beim
+Weglassen des Arguments greift. Und `Call` ist nicht ein Zeuge, sondern zwei:
+`RiskDecision.reject(...)` delegiert (Produzent), `guard.assert_safe(...)`
+prüft nur (Konsument) — syntaktisch identisch. Kriterium ist deshalb der
+**Callee-Rumpf** (weist er den Wert zu oder gibt er ihn zurück?), nicht der
+Elternknoten.
+
+**Falsch-Grün hat vier Gestalten:** Vergleich · Docstring · prüfender Callee ·
+**Membership**. Die vierte ist der `PAPER_TRADING`-Fall, endlich mit AST-Namen:
+`frozenset({ExecutionMode.DRY_RUN, ExecutionMode.PAPER_TRADING})`
+(`models.py:692`) hängt unter `Set`, nicht unter `Compare` — eine Regel „alles
+außer `Compare` ist Produktion" winkt ihn durch.
+
+> **Ein Muster, das inzwischen selbst eine Aussage ist:** Jede Runde fand die
+> nächste Form, weil gemessen und nicht aufgezählt wurde — und die Aufzählung
+> war jedes Mal die, die vollständig aussah.
 5. **Ausnahmeliste pro Enum, nicht global.** Marker werden erklärt
    (`RejectReason.NONE`) — und die Erklärung ist selbst prüfbar: Eine Ausnahme
    ohne Begründung im Docstring ist ein Fund.
