@@ -637,27 +637,27 @@ GoBD → Ledger (BHO Δ=0,00€) → Chain-Hash → XRechnung → PoPW-Coverage 
 
 ### Key B2G Decisions (ADR)
 
-1. **Non-custodial Escrow:** EscrowVault.sol has no emergency withdraw. Platform = software provider, never custodian. (ADR in Schwesterprojekt `craft-procurement-engine`)
+**ADR 1 — Non-custodial Escrow:** EscrowVault.sol has no emergency withdraw. Platform = software provider, never custodian. (ADR in Schwesterprojekt `craft-procurement-engine`)
 
-2. **BHO Zero-Sum:** Every payment: Deposits = Paid + Retained + Vault_Balance. |Δ|>0.01€ halts all payments. Decimal arithmetic.
+**ADR 2 — BHO Zero-Sum:** Every payment: Deposits = Paid + Retained + Vault_Balance. |Δ|>0.01€ halts all payments. Decimal arithmetic.
 
-3. **VOB/B §17 Retention:** 5% per installment, held in separate sub-account, released 95% at acceptance.
+**ADR 3 — VOB/B §17 Retention:** 5% per installment, held in separate sub-account, released 95% at acceptance.
 
-4. **VOB/B §13 Defects:** State machine: IDLE→DEFECT→DEADLINE(14d)→RESOLVED/REDUCTION.
+**ADR 4 — VOB/B §13 Defects:** State machine: IDLE→DEFECT→DEADLINE(14d)→RESOLVED/REDUCTION.
 
-5. **§13b UStG:** Reverse-charge for construction services.
+**ADR 5 — §13b UStG:** Reverse-charge for construction services.
 
-6. **BundID/eIDAS Auth:** SSO via BundID-Proxy, JWT-Validierung, 5 Rollen mit granularer Permission-Matrix.
+**ADR 6 — BundID/eIDAS Auth:** SSO via BundID-Proxy, JWT-Validierung, 5 Rollen mit granularer Permission-Matrix.
 
-7. **DSGVO Compliance:** Pseudonymisierung (SHA-256), Consent-Management, Löschanträge <30 Tage, AVV.
+**ADR 7 — DSGVO Compliance:** Pseudonymisierung (SHA-256), Consent-Management, Löschanträge <30 Tage, AVV.
 
-8. **Multi-Chain Notarization:** Gnosis Chain (EVM) + peaq (Substrate). EscrowVault.sol on Gnosis, DID-based PoPW proofs on peaq.
+**ADR 8 — Multi-Chain Notarization:** Gnosis Chain (EVM) + peaq (Substrate). EscrowVault.sol on Gnosis, DID-based PoPW proofs on peaq.
 
-9. **GAEB DA XML 3.3:** Bidirectional X83↔X84 with official XSD validation. BVBS certification files for regression testing. VHB-221/222 PDF for authority acceptance.
+**ADR 9 — GAEB DA XML 3.3:** Bidirectional X83↔X84 with official XSD validation. BVBS certification files for regression testing. VHB-221/222 PDF for authority acceptance.
 
-10. **XRechnung 3.0 EN 16931:** KoSIT Schematron validation (graceful degradation). ZUGFeRD PDF embedding. §13b UStG Reverse-Charge compliance.
+**ADR 10 — XRechnung 3.0 EN 16931:** KoSIT Schematron validation (graceful degradation). ZUGFeRD PDF embedding. §13b UStG Reverse-Charge compliance.
 
-11. **RPA Discharge Pipeline:** 8-step audit (GoBD→Ledger→Chain→XRechnung→PoPW→VOB/B→Tax→PDF/A-3) with ENTLASTET/VORBEHALT/ENTLASTUNG_VERWEIGERT verdict.
+**ADR 11 — RPA Discharge Pipeline:** 8-step audit (GoBD→Ledger→Chain→XRechnung→PoPW→VOB/B→Tax→PDF/A-3) with ENTLASTET/VORBEHALT/ENTLASTUNG_VERWEIGERT verdict.
 
 **ADR 12 — Modellbasen (Shadow Execution Engine):** Neue Records/Modelle in `order_execution_engine/` sind grundsätzlich **Pydantic BaseModel (strict)**, Dataclass nur mit begründeter Ausnahme. Referenzimplementierung: `PaperOrder`. Begründung: `order_execution_engine/models.py`-Docstring · Ticket: `docs/SHADOW_ENGINE_FOLLOWUPS.md` (F2). **Review-Flag:** jeder Dataclass-Neuzugang in diesem Package.
 

@@ -796,6 +796,27 @@ Mutanten-Leichen, ein Selbstfang der Invariante) → **F1b** (Falle entschärft:
 Meta-Anker installiert) → **F1b-Nachlauf** (`is_expired()` und seine Maschinerie
 entfernt).
 
+### Korrektur am Protokoll: `EXPIRED` ist *nicht* zurückgekehrt
+
+Eine frühere Fassung dieses Abschnitts (und eine Zusammenfassung im Chat) las
+sich so, als sei das falsifizierte `EXPIRED` „zurück ins Enum gekommen". Das ist
+**falsch** und wird hiermit widerrufen. Der Code-Stand ist:
+
+| Objekt | Status | Beleg |
+|---|---|---|
+| `RejectReason.EXPIRED` | **entfernt**, nicht zurück | `0dc9d65f` |
+| `OrderStatus.EXPIRED` | **nie entfernt** (seit `35160b77` unverändert) | existiert weiterhin |
+| `43613391` | dokumentierte die *Wiedereintritts-Bedingung* | eine Datei, `docs/` only |
+
+Was `43613391` eingetragen hat, ist eine **Zusage**, kein Vollzug: die Bedingung,
+unter der `EXPIRED` dereinst zurückkehrt (wenn die Match-Simulation resting
+orders lernt). Der Wiedereintritt selbst ist nicht erfolgt und steht nicht an.
+
+**Warum das notiert wird:** Die Historie soll ihre Irrtümer nicht verstecken —
+auch die eigenen, nachträglich formulierten. Eine Zusammenfassung, die einen
+Vollzug beschreibt, wo eine Zusage steht, ist selbst die Fehlerklasse, gegen die
+dieser Zyklus gebaut hat: eine Behauptung, die aussieht wie eine Zusicherung.
+
 ### Endzustand des Enums
 
 ```
@@ -809,6 +830,11 @@ ablehnen kann. Der Meta-Anker
 Lauf: **kein Label ohne Produzenten.** Er hat sich an Tag 1 bezahlt — zwei
 Waisen (`EXPIRED`, `SAFETY_GUARD`), die auf keiner Liste standen, plus die
 verwaiste Maschinerie dahinter (`is_expired()`).
+
+**Grenze des Ankers (offen, siehe F2b):** Er bewacht `RejectReason`. Dasselbe
+Muster lebt in `OrderStatus` weiter — `CANCELLED` und `EXPIRED` haben dort
+keinen Produzenten im Engine-Pfad. Der Wächter fängt die Fehlerklasse, aber nur
+in seinem Zimmer.
 
 ### Was der Zyklus über den Prozess sagt
 
@@ -824,7 +850,53 @@ gelöschten Label ist derselbe Befund einen Meter weiter.
 
 **F2** (Pydantic-Parität — jetzt mit dem dokumentierten
 `max_order_size_shares`-Umzug als Anhängsel; Messlatte und Fund-Regel oben),
-**F3**, Strategy-Package.
+**F2b** (Meta-Anker-Generalisierung, unten), **F3**, Strategy-Package.
+
+---
+
+## F2b — Der Meta-Anker bewacht nur sein Zimmer
+
+**Schwere:** mittel (strukturell — dieselbe Fehlerklasse, ein Enum weiter)
+**Auslöser:** Die Prüfung des F1-Abschlusses fand in `OrderStatus` exakt das
+Muster, gegen das der Anker gebaut wurde:
+
+| Enum | Werte | mit Produzent im Engine-Pfad | ohne |
+|---|---|---|---|
+| `RejectReason` | 6 | **6** ✅ | — |
+| `OrderStatus` | 6 | 4 | **`CANCELLED`, `EXPIRED`** |
+
+`CANCELLED` und `EXPIRED` haben in `OrderStatus` **null Produzenten und null
+Zeugen**. Das ist dieselbe Krankheit wie `SAFETY_GUARD` in `RejectReason` — nur
+an einer Stelle, die der Anker nicht prüft: Sein `allowed_without_producer`
+kennt nur `RejectReason`.
+
+> **Der Wächter fängt die Fehlerklasse, aber nur in seinem Zimmer.**
+
+### Was F2b tun muss
+
+1. **Generalisieren, nicht duplizieren.** Der Anker wird über *alle* Enums des
+   Moduls parametrisiert, die Zustands-/Ablehnungswerte tragen
+   (`RejectReason`, `OrderStatus`, ggf. `Direction`, `ExecutionMode`).
+   Eine Liste von Enum-Klassen, ein Durchlauf, eine Meldung.
+2. **Ausnahmeliste pro Enum, nicht global.** Das Enum muss erklären dürfen,
+   welche Werte Marker sind (`RejectReason.NONE`) — und diese Erklärung ist
+   selbst prüfbar: Eine Ausnahme ohne Begründung im Docstring ist ein Fund.
+3. **Die zwei `OrderStatus`-Waisen klassifizieren** — dieselbe Regel wie F2:
+   *Produzent herstellen* oder *Wert entfernen*.
+   - `CANCELLED`: echter CLOB-Zustand (Order vom Nutzer zurückgezogen), aber
+     die Engine cancel't nie. Vermutlich **Wert entfernen** oder Produzent für
+     ein Cancel-Pfad — Entscheidung bei F2b.
+   - `EXPIRED`: hängt an derselben Bedingung wie `RejectReason.EXPIRED` —
+     **resting orders**. Kehrt zusammen mit der Match-Simulations-Erweiterung
+     zurück, dann mit Produzent *und* Zeuge.
+
+**Reihenfolge:** F2b nach F2, weil die Pydantic-Migration `OrderStatus`
+ohnehin anfasst. Feld und Wächter reisen im selben Schritt — dieselbe Logik wie
+beim Strategy-Package-Handover.
+
+**Akzeptanzkriterium:** Der Anker prüft jedes Enum des Moduls. Ein neuer,
+produzentenloser Wert — in *jedem* Enum — macht die Suite rot, nicht nur in
+`RejectReason`.
 
 ### ADR 12 muss mitreisen
 
