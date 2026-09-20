@@ -237,6 +237,84 @@ def test_engine_guard_integrity() -> None:
     print("OK test_engine_guard_integrity")
 
 
+def test_size_fn_injection_is_observable() -> None:
+    """Zeuge für den Sizing-Seam: eine injizierte `size_fn` wirkt.
+
+    Der Default-Adapter ist per Definition verhaltensgleich mit der
+    Legacy-Konstante — kein Test, der den Default benutzt, kann den Seam
+    also von der Konstante unterscheiden. Der Zeuge muss sich vom Default
+    *unterscheiden*, sonst beweist er nichts.
+
+    Deshalb: halbierte Größe injizieren und prüfen, dass die Order die
+    injizierte Größe trägt. Wird der Seam durch die Legacy-Konstante
+    ersetzt (Mutant), wird genau dieser Test rot.
+    """
+    half = Decimal("50")
+    calls: list[tuple[str, Decimal]] = []
+
+    def halving_size_fn(signal, snapshot):
+        # Der Snapshot muss ein read-only Zeuge sein, kein VirtualPortfolio.
+        calls.append((type(snapshot).__name__, snapshot.cash))
+        return half
+
+    engine = ShadowExecutionEngine(
+        risk_config=RiskConfig(max_order_size_shares=Decimal("100")),
+        size_fn=halving_size_fn,
+    )
+    sig = SignalPayload(target_token_id="0xtokenA", market_id="mkt-1",
+                        direction=Direction.UP, confidence=Decimal("80"))
+    rec = engine.on_signal(sig, _book())
+
+    assert rec.approved, rec.reject_reason
+    assert calls, "size_fn wurde nie aufgerufen — Seam nicht durchlaufen"
+    assert calls[0][0] == "PortfolioSnapshot", calls[0][0]
+    # Die Order trägt die injizierte Größe, nicht die Konstante.
+    order = engine._order_book[rec.order_id]
+    assert order.size == half, f"erwartet {half}, bekam {order.size}"
+    assert order.size != engine.risk.config.max_order_size_shares
+    print("OK test_size_fn_injection_is_observable")
+
+
+def test_default_size_fn_preserves_legacy_behaviour() -> None:
+    """Der Default-Adapter reproduziert die Legacy-Konstante exakt.
+
+    Komplement zum Zeugen-Test: Er belegt, dass F1c verhaltensneutral ist.
+    """
+    cfg = RiskConfig(max_order_size_shares=Decimal("100"))
+    engine = ShadowExecutionEngine(risk_config=cfg)
+    sig = SignalPayload(target_token_id="0xtokenA", market_id="mkt-1",
+                        direction=Direction.UP, confidence=Decimal("80"))
+    rec = engine.on_signal(sig, _book())
+    assert rec.approved, rec.reject_reason
+    order = engine._order_book[rec.order_id]
+    assert order.size == cfg.max_order_size_shares
+    print("OK test_default_size_fn_preserves_legacy_behaviour")
+
+
+def test_portfolio_snapshot_is_deeply_frozen() -> None:
+    """Der Snapshot ist zur Laufzeit dicht — nicht nur statisch.
+
+    Pydantics `frozen=True` schützt nur die Attribut-Zuweisung. Ohne tiefes
+    Einfrieren könnte die Sizing-Funktion über das Mapping die Positionen
+    mutieren, und der Seam wäre ein `Protocol` mit Umweg.
+    """
+    from order_execution_engine.models import PortfolioSnapshot
+    snap = PortfolioSnapshot(cash=Decimal("1000"), equity=Decimal("1000"),
+                             positions={"0xA": Decimal("10")}, as_of_seq=7)
+    try:
+        snap.positions["0xA"] = Decimal("999999")  # type: ignore[index]
+        raise AssertionError("Mapping war mutierbar — kein tiefer Freeze")
+    except TypeError:
+        pass
+    try:
+        snap.cash = Decimal("0")  # type: ignore[misc]
+        raise AssertionError("Attribut war mutierbar")
+    except Exception as exc:
+        assert "frozen" in str(exc).lower() or isinstance(exc, (AttributeError, TypeError))
+    assert snap.as_of_seq == 7
+    print("OK test_portfolio_snapshot_is_deeply_frozen")
+
+
 if __name__ == "__main__":
     for fn in list(globals().values()):
         if callable(fn) and fn.__name__.startswith("test_"):

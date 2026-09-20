@@ -23,7 +23,7 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from decimal import Decimal
-from typing import Optional
+from typing import Callable, Optional
 
 from order_execution_engine.models import (
     Direction,
@@ -33,6 +33,7 @@ from order_execution_engine.models import (
     OrderSide,
     OrderStatus,
     PaperOrder,
+    PortfolioSnapshot,
     RejectReason,
     RiskConfig,
     SafetyGuard,
@@ -458,6 +459,14 @@ class TelemetryLogger:
 # ---------------------------------------------------------------------------
 
 
+# Signatur des Sizing-Seams. Bewusst schmal:
+#  - Input: Signal (Conviction) + read-only PortfolioSnapshot (Zeuge)
+#  - Output: Decimal (angeforderte Groesse) — kein Ergebnisobjekt.
+#    *Warum* die Groesse so ist, ist Strategie-Telemetrie; *was* angefordert
+#    wurde, ist Engine-Telemetrie (requested_size). Layer-Ehrlichkeit.
+SizeFn = Callable[[SignalPayload, PortfolioSnapshot], Decimal]
+
+
 class ShadowExecutionEngine:
     """Orchestrations-Hauptklasse des Trockenmodus.
 
@@ -480,6 +489,7 @@ class ShadowExecutionEngine:
         mode: ExecutionMode = ExecutionMode.DRY_RUN,
         invert_weak_signals: bool = False,
         confidence_threshold: Decimal = Decimal("55"),
+        size_fn: Optional[SizeFn] = None,
     ) -> None:
         """Initialisiert die Engine.
 
@@ -489,6 +499,12 @@ class ShadowExecutionEngine:
             invert_weak_signals: Globaler Inversions-Schalter für Signale
                 unterhalb des Confidence-Thresholds.
             confidence_threshold: Schwelle für "schwache Signale" (%).
+            size_fn: Injektierbare Sizing-Funktion
+                `(signal, portfolio_snapshot) -> desired_size`. Bestimmt die
+                *angeforderte* Ordergröße — die Risikoschranken bleiben
+                davon unberührt und greifen danach. Default
+                (`_default_size_fn`) reproduziert das bisherige Verhalten
+                exakt: fixe Größe aus `max_order_size_shares`.
         """
         self.guard = SafetyGuard(mode=mode)
         self.risk = RiskController(risk_config or RiskConfig())
@@ -497,7 +513,19 @@ class ShadowExecutionEngine:
         self.telemetry = TelemetryLogger()
         self.invert_weak_signals = invert_weak_signals
         self.confidence_threshold = confidence_threshold
+        self.size_fn: SizeFn = size_fn or self._default_size_fn
         self._order_book: dict[uuid.UUID, PaperOrder] = {}
+
+    def _default_size_fn(self, signal: SignalPayload,
+                         snapshot: PortfolioSnapshot) -> Decimal:
+        """Default-Sizing: fixe Größe aus dem Risiko-Limit.
+
+        Bewahrt das bisherige Verhalten (die Order war immer exakt
+        `max_order_size_shares`) und macht F1c damit zu einem reinen
+        Refactoring. Eine echte Strategie ersetzt diese Funktion über
+        `size_fn=` — sie gehört nicht in die Engine.
+        """
+        return self.risk.config.max_order_size_shares
 
     def on_signal(self, signal: SignalPayload, snapshot: MarketSnapshot) -> TelemetryRecord:
         """Verarbeitet ein eingehendes Signal komplett (Signal -> Fill).
@@ -537,7 +565,14 @@ class ShadowExecutionEngine:
             self.telemetry.log(record)
             return record
 
-        size = self.risk.config.max_order_size_shares  # Max-Größe als Test-Default
+        # Sizing über den injizierbaren Seam. Der Portfolio-Snapshot ist
+        # read-only; die Sizing-Funktion sieht den Zustand, kann ihn aber
+        # nicht mutieren. Der Default reproduziert das bisherige Verhalten.
+        portfolio_snapshot = self.portfolio.snapshot(
+            mark_prices={signal.target_token_id: ref_price},
+            as_of_seq=len(self.telemetry._records),
+        )
+        size = self.size_fn(signal, portfolio_snapshot)
         order = PaperOrder(
             signal_id=signal.signal_id,
             token_id=signal.target_token_id,

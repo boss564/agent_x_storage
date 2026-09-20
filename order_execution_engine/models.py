@@ -39,7 +39,8 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from enum import Enum
-from typing import Annotated, Literal, Optional
+from types import MappingProxyType
+from typing import Annotated, Literal, Mapping, Optional
 
 from pydantic import (
     BaseModel,
@@ -350,6 +351,83 @@ class Position(BaseModel):
         return realized
 
 
+class PositionSnapshot(BaseModel):
+    """Eingefrorener Positions-Stand für den Sizing-Seam.
+
+    Bewusst getrennt von `Position`: Die Sizing-Funktion darf Änderungs-
+    methoden (`add_shares`/`reduce_shares`) nicht einmal *sehen*. Ein
+    frozen Model wäre nicht genug, wenn es dieselbe Klasse bliebe — die
+    Methoden wären weiter aufrufbar und würden nur zur Laufzeit werfen.
+    Ein eigener, methodenfreier Typ schließt das aus.
+
+    Attribute:
+        token_id: Token-Identifikator.
+        market_id: Zugehöriger Markt.
+        size: Gehaltene Shares.
+        avg_entry_price: Durchschnittlicher Einstiegspreis.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    token_id: str
+    market_id: str
+    size: Decimal
+    avg_entry_price: Decimal
+
+
+class PortfolioSnapshot(BaseModel):
+    """Read-only Zeuge eines Portfolio-Moments für den Sizing-Seam.
+
+    Zweck: Eine injizierte Sizing-Funktion (`SizeFn`) bekommt den
+    Portfolio-Zustand zu sehen, ohne ihn ändern zu können. Die Engine
+    übergibt `VirtualPortfolio.snapshot()`, nie das Portfolio selbst —
+    damit ist der Seam zur Laufzeit dicht, nicht nur zur Type-Check-Zeit.
+
+    Warum nicht das `VirtualPortfolio` direkt: Der Sizing-Code ist
+    agentengeneriert; gäbe man ihm `apply_fill`, korrumpierte er genau
+    die Messgröße, für die die Engine existiert.
+
+    Warum nicht ein `Protocol`: Ein Protocol verspricht Read-only nur
+    statisch — zur Laufzeit bliebe das mutable Original übergeben. Der
+    `reject_reason=None`-Bug entstand durch einen typ-ignorierenden
+    Aufrufer, den ein Protocol nicht gebremst hätte.
+
+    Warum `Snapshot` und nicht `State`: Ein Snapshot ist ein Zeuge eines
+    Moments, kein mutierbarer Zustand.
+
+    Attribute:
+        cash: Verfügbares virtuelles USDC-Guthaben.
+        equity: Eigenkapital zum Zeitpunkt der Erstellung.
+        positions: Token-IDs -> Shares. Tief eingefroren (MappingProxyType)
+            — Pydantic friert das Model, nicht den Inhalt eines dict.
+        as_of_seq: Korreliert mit `telemetry.seq`; ermöglicht späteres
+            Replay der Sizing-Entscheidung.
+        mark_prices: Token-IDs -> Bewertungspreise (ebenfalls eingefroren).
+    """
+
+    model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
+
+    cash: Decimal
+    equity: Decimal
+    positions: Mapping[str, Decimal]
+    as_of_seq: int
+    mark_prices: Mapping[str, Decimal] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def _freeze_mappings(self) -> "PortfolioSnapshot":
+        """Friert die Mappings tief ein.
+
+        Pydantics `frozen=True` schützt nur die Attribut-Zuweisung; ein
+        `dict`-Inhalt bliebe über `snapshot.positions["x"] = ...` änderbar.
+        Ohne diesen Schritt wäre der Seam nur ein `Protocol` mit Umweg.
+        `object.__setattr__` ist hier legitim: Es ist der Konstruktions-
+        moment, und Pydantic hat die Werte bereits validiert.
+        """
+        object.__setattr__(self, "positions", MappingProxyType(dict(self.positions)))
+        object.__setattr__(self, "mark_prices", MappingProxyType(dict(self.mark_prices)))
+        return self
+
+
 class VirtualPortfolio(BaseModel):
     """Virtuelles Portfolio (Paper-Trading, kein echtes Geld).
 
@@ -426,6 +504,33 @@ class VirtualPortfolio(BaseModel):
             notional = pos.size * pos.avg_entry_price
             result[pos.market_id] = result.get(pos.market_id, Decimal("0")) + notional
         return result
+
+    def snapshot(self, mark_prices: Optional[dict[str, Decimal]] = None,
+                 as_of_seq: int = 0) -> PortfolioSnapshot:
+        """Erzeugt einen read-only Zeugen des aktuellen Zustands.
+
+        Das Bauwissen über den Snapshot gehört zur Klasse, die den Zustand
+        hält — nicht in `on_signal` verstreut. Die Methode ist der einzige
+        Weg, auf dem eine Sizing-Funktion das Portfolio zu sehen bekommt.
+
+        Args:
+            mark_prices: Aktuelle Preise pro token_id (für `equity`).
+                Fehlt eine Position, wird ihr `avg_entry_price` verwendet
+                (gleiche Regel wie in `equity()`).
+            as_of_seq: Telemetrie-Sequenz, mit der dieser Snapshot
+                korreliert (für späteres Replay).
+
+        Returns:
+            PortfolioSnapshot mit tief eingefrorenen Mappings.
+        """
+        marks = mark_prices or {}
+        return PortfolioSnapshot(
+            cash=self.cash,
+            equity=self.equity(marks),
+            positions={tid: pos.size for tid, pos in self.positions.items()},
+            as_of_seq=as_of_seq,
+            mark_prices=marks,
+        )
 
     def apply_fill(self, order: PaperOrder, fill: FillResult, market_id: str) -> Decimal:
         """Verbucht einen simulierten Fill auf Cash, Position und PnL.

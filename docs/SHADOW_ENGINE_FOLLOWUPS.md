@@ -284,23 +284,56 @@ Telemetrie-Felder `requested_size`/`executed_size`, getrennte RejectReasons
 
 ### Akzeptanzkriterien
 
-- [ ] **43/43 grün mit null geänderten Tests.** Der Seam-Commit ist ein
-      Refactoring — der Default-Adapter reproduziert das heutige Verhalten
-      (`max_order_size_shares`) exakt. Wird auch nur eine Testerwartung
-      angefasst, war F1c kein reines Refactoring, sondern hat Verhalten
-      untergeschmuggelt. Das ist der billigste und schärfste Nachweis, den
-      ein Reviewer bekommen kann: „Tests unverändert grün" heißt „Verhalten
-      unverändert".
-- [ ] **Belegte Durchlaufung, nicht nur Unverändertheit.** Der leere Test-Diff
-      beweist, dass sich nichts *geändert* hat — er beweist nicht, dass der
-      Seam überhaupt *durchlaufen* wird. Kreuzen die bestehenden 43 Tests den
-      neuen Adapter-Pfad nicht, ist der Seam ab Geburt toter Code — dieselbe
-      Krankheit wie `MAX_POSITION_SIZE`, nur im Refactoring.
-      **Review-Befehl: Coverage auf den neuen Zeilen.** Leerer Test-Diff
-      *plus* belegte Durchlaufung, das zusammen ist der Nachweis.
-- [ ] `size_fn` injizierbar, Default-Adapter funktioniert ohne Strategie.
-- [ ] Mutationsnachweis: Ersetzt man die neue Sizing-Logik durch die
-      Legacy-Konstante, wird mindestens ein Anker-Test rot (siehe F1, Kriterium e).
+| Messlatte | Scharfe Fassung |
+|---|---|
+| **1** | `git diff` auf `tests/` **nur additiv** — keine modifizierte oder gelöschte Zeile in bestehenden Tests. Alle 43 bisherigen laufen unverändert grün. |
+| **2** | Coverage auf den neuen Zeilen: `PositionSnapshot`, `PortfolioSnapshot`, `VirtualPortfolio.snapshot()` und der Seam-Block in `on_signal` werden tatsächlich ausgeführt. |
+| **3** | Neuer Zeugen-Test mit **unterscheidbarer** `size_fn`; der Legacy-Mutant (Konstante statt Seam) macht ihn rot. |
+
+**Präzisierung vom 2026-09-20 (ersetzt die frühere Fassung von Messlatte 1):**
+Messlatte 1 lautete ursprünglich „`git diff` auf `tests/` leer" und kollidierte
+damit mit Messlatte 3. Der Default-Adapter ist per Definition verhaltensgleich
+mit der Legacy-Konstante — **kein existierender Test kann den Mutanten also
+unterscheiden**. Ein Zeuge für den Seam ist zwingend ein *neuer* Test.
+
+Aufgelöst durch **Präzisierung, nicht Lockerung**: Der Beweisgehalt von
+Messlatte 1 steckt nie in der Abwesenheit neuer Tests, sondern in der
+**Unverändertheit der bestehenden**. „Alle 43 bisherigen Tests laufen
+unmodifiziert grün" ist der Nachweis, dass Verhalten erhalten blieb. Ein
+hinzugefügter Test, der den neuen Seam beobachtet, schwächt diesen Beweis um
+null — er verändert kein einziges bestehendes Ergebnis.
+
+#### Warum der Zeuge im selben Commit stehen muss
+
+Der F1c-Commit behauptet „der Seam lebt" — sein Zeuge gehört in denselben
+Commit, sonst liegt die Behauptung an einem Punkt der Historie unbewiesen im
+Baum. Und F1 würde sonst eine Verhaltensänderung auf einer unverifizierten
+Schnittstelle aufbauen: Ist der Seam falsch verdrahtet, will man das wissen,
+*bevor* Sizing-Logik darauf läuft.
+
+#### Warum der Zeuge sich vom Default unterscheiden muss
+
+Ein Test, der den Default-Adapter benutzt, kann die Injektion nie belegen
+(Verhaltensgleichheit!). Der Zeuge injiziert eine **unterscheidbare** Funktion
+(z. B. halbierte Größe) und prüft, dass die Order die injizierte Größe trägt.
+Selbstreferenziell: Legacy-Mutant eingesetzt → genau dieser Test wird rot.
+
+#### Warum der Snapshot tief eingefroren sein muss
+
+Pydantics `frozen=True` schützt nur die Attribut-Zuweisung; ein `dict`-Inhalt
+bliebe über `snapshot.positions["x"] = ...` änderbar. Ohne
+`MappingProxyType` wäre Option 3 nur Option 1 mit Umweg — der Punkt, an dem
+diese Option in der Umsetzung typischerweise kippt. Eigener Test:
+`test_portfolio_snapshot_is_deeply_frozen`.
+
+### Akzeptanzkriterien (ursprüngliche Fassung, historisch)
+
+- [x] `size_fn` injizierbar, Default-Adapter funktioniert ohne Strategie.
+      → `test_size_fn_injection_is_observable`,
+      `test_default_size_fn_preserves_legacy_behaviour`
+- [x] Mutationsnachweis: Ersetzt man die neue Sizing-Logik durch die
+      Legacy-Konstante, wird mindestens ein Anker-Test rot.
+      → verifiziert: `AssertionError: size_fn wurde nie aufgerufen`
 
 **Reihenfolge im Verhältnis zu F1:** F1c ist „make the change easy", F1 ist
 „make the easy change". Der Seam-Commit ändert kein Verhalten, F1 ändert
