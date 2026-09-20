@@ -471,6 +471,100 @@ def test_anker_counter_lifetime_across_restart() -> None:
     print("OK test_anker_counter_lifetime_across_restart")
 
 
+def test_requested_size_null_table() -> None:
+    """Pinned die vollständige Erwartungstabelle für `requested_size`.
+
+    Die `NULL`-Doktrin lebt in der DDL (`NULL = vor Messbeginn, nicht:
+    fehlend`), also prüft ihr Zeuge die **Datenbank**, nicht das
+    In-Memory-Record. Diese Tabelle macht eine Semantik zur behaupteten,
+    die sonst implizit von der Reihenfolge im Code getroffen würde:
+
+        Pfad                    | requested_size
+        ------------------------|---------------
+        ungültiger Preis        | NULL   (Sizing lief nie)
+        leere Buchseite         | NULL   (INVALID_PRICE-Pfad)
+        Drawdown-Lockout        | gesetzt (Lockout sitzt NACH dem Sizing)
+        Risk-Reject             | gesetzt
+        Approved                | gesetzt
+
+    Der Lockout ist der interessante Fall: `RiskController.check()` läuft
+    nach dem Sizing, also hat die Strategie bereits angefragt. Eine künftige
+    Pipeline-Umordnung, die das ändert, wird hier rot statt still.
+    """
+    import sqlite3
+
+    def _recorded(engine: ShadowExecutionEngine) -> list[tuple]:
+        conn = sqlite3.connect(str(_db))
+        rows = conn.execute(
+            "SELECT approved, reject_reason, requested_size FROM telemetry ORDER BY seq"
+        ).fetchall()
+        conn.close()
+        return rows
+
+    with tempfile.TemporaryDirectory() as tmp:
+        _db = Path(tmp) / "u1" / "shadow" / "shadow.db"
+
+        # (1) ungültiger Preis: keine Order-Seite -> Sizing lief nie
+        e1 = ShadowExecutionEngine(risk_config=RiskConfig(max_order_size_shares=Decimal("100")))
+        empty = MarketSnapshot(token_id="0xtokenA", bids=(), asks=())
+        sig = SignalPayload(target_token_id="0xtokenA", market_id="mkt-1",
+                            direction=Direction.UP, confidence=Decimal("80"))
+        r1 = e1.on_signal(sig, empty)
+        assert r1.reject_reason == RejectReason.INVALID_PRICE
+        assert r1.requested_size is None, r1.requested_size
+
+        # (2) Drawdown-Lockout: Sizing lief, Lockout greift danach
+        e2 = ShadowExecutionEngine(
+            risk_config=RiskConfig(max_order_size_shares=Decimal("100"),
+                                   max_drawdown_pct=Decimal("10")),
+            size_fn=lambda s, p: Decimal("70"))
+        e2.portfolio.peak_equity = Decimal("10000")
+        e2.portfolio.cash = Decimal("8000")   # 20 % Drawdown -> Lockout
+        r2 = e2.on_signal(sig, _book())
+        assert r2.reject_reason == RejectReason.DRAWDOWN_LOCKOUT
+        assert r2.requested_size == Decimal("70"), r2.requested_size
+
+        # (3) Risk-Reject: angefordert, gekappt, und *danach* abgelehnt —
+        # so bleibt der Risk-Reject-Pfad mit gesetztem requested_size sichtbar.
+        # Die ablehnende Wirkung kommt aus dem Event-Exposure (kleiner als
+        # das, was der Clamp durchlässt).
+        e3 = ShadowExecutionEngine(
+            risk_config=RiskConfig(max_order_size_shares=Decimal("1000"),
+                                   per_order_cap_shares=Decimal("100"),
+                                   max_position_size_usdc=Decimal("500"),
+                                   max_event_exposure_usdc=Decimal("20")),
+            size_fn=lambda s, p: Decimal("500"))
+        r3 = e3.on_signal(sig, _book())
+        assert not r3.approved, (r3.approved, r3.reject_reason)
+        assert r3.reject_reason == RejectReason.MAX_EVENT_EXPOSURE, r3.reject_reason
+        assert r3.requested_size == Decimal("500"), r3.requested_size
+
+        # (4) Approved
+        e4 = ShadowExecutionEngine(
+            risk_config=RiskConfig(max_order_size_shares=Decimal("100")),
+            size_fn=lambda s, p: Decimal("50"))
+        r4 = e4.on_signal(sig, _book())
+        assert r4.approved and r4.requested_size == Decimal("50")
+
+        # Alle vier in EINER DB — die Tabelle wird am persistierten Zustand
+        # geprüft, nicht am In-Memory-Record.
+        store = SQLiteShadowStorage.for_user(Path(tmp), "u1")
+        for e in (e1, e2, e3, e4):
+            TelemetrySink(store, e.telemetry).drain()
+        rows = sqlite3.connect(str(_db)).execute(
+            "SELECT approved, reject_reason, requested_size FROM telemetry ORDER BY seq"
+        ).fetchall()
+        store.close()
+
+    table = [(r[1], r[2]) for r in rows]
+    assert table[0] == ("INVALID_PRICE", None), table[0]
+    assert table[1] == ("DRAWDOWN_LOCKOUT", "70"), table[1]
+    assert table[2][0] == "MAX_EVENT_EXPOSURE", table[2]
+    assert table[2][1] == "500", table[2]
+    assert table[3] == ("NONE", "50"), table[3]
+    print("OK test_requested_size_null_table")
+
+
 if __name__ == "__main__":
     for fn in list(globals().values()):
         if callable(fn) and fn.__name__.startswith("test_"):

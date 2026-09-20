@@ -207,6 +207,32 @@ Telemetrie kein optionales Subsystem, es gibt keine Konfiguration ohne Logger.
 Damit ist der Logger ein *garantierter* Ort, und „Identität gehört zum
 Aufzeichnungsinstrument" ist hier keine Layer-Frage, sondern Charter-Folge.
 
+### Nachtrag (2026-09-20): `requested_size` — Erwartungstabelle als Zeuge
+
+Die `NULL`-Doktrin lebte bis hier nur in der DDL. Ihr Zeuge muss die
+**Datenbank** prüfen, nicht das In-Memory-Record — und die vollständige
+Erwartungstabelle pinnen, nicht nur die zwei `None`-Pfade:
+
+| Pfad | `requested_size` | Begründung |
+|---|---|---|
+| ungültiger Preis | `NULL` | Sizing lief nie (keine Order-Seite) |
+| leere Buchseite | `NULL` | derselbe `INVALID_PRICE`-Pfad |
+| **Drawdown-Lockout** | **gesetzt** | Lockout sitzt in `RiskController.check()` — **nach** dem Sizing |
+| Risk-Reject | gesetzt | Strategie hat angefragt, Betrag bleibt sichtbar |
+| Approved | gesetzt | — |
+
+**Der Lockout ist der interessante Fall.** Die Reihenfolge im Code
+(`on_signal`: Sizing in Zeile 652, `risk.check()` danach) entschied die
+Semantik implizit. Der Test macht sie zur behaupteten: Eine künftige
+Pipeline-Umordnung, die den Lockout vor das Sizing zieht, wird rot statt
+still. Das ist der Unterschied zwischen „konsistent zufällig" und
+„konsistent vertraglich".
+
+**Verifiziert:** `test_requested_size_null_table` prüft alle vier Pfade am
+persistierten Zustand (eine DB, vier Engines). Mutationsnachweis: Lockout-Pfad
+schreibt `NULL` → `AssertionError: None` in Zeile 525. Auch die rohe
+Pipeline-Umordnung (Lockout vor Sizing) wird rot.
+
 ### Warum `telemetry.requested_size` der Kern der Messung ist
 
 Kein Nice-to-have. Die Engine konnte bisher nicht einmal die Frage beantworten,
@@ -484,6 +510,27 @@ am Risiko-Layer vorbei.
       (`diagnostic_only=true`), kein Produktiv-Pfad.
 
 ---
+
+## Der Selbstfang der Invariante (2026-09-20)
+
+Der stärkste Einzelbeleg des F1-Pakets, und er kam vor dem ersten Testlauf:
+
+`max_order_size_shares = 1000` gegen `max_position_size_usdc = 500` heißt:
+Die Engine hätte bei jedem Preis über 0,50 ihre **eigene Default-Order**
+abgelehnt — `notional = 1000 × p > 500` für `p > 0,5`, Check 122, erster
+Trade, garantiert. Der tote Check 116 hätte es nie gefangen (`1000 > 1000`
+ist false); es wäre zur Laufzeit als rätselhafter `MAX_POSITION_SIZE`-Reject
+aufgetreten, und niemand hätte die Defaults verdächtigt, weil „Default" sich
+wie „harmlos" liest.
+
+Die Invariante hat einen latenten Widerspruch von „mysteriöser Reject
+irgendwann" nach „lauter Startfehler sofort" verlegt — und zwar beim
+allerersten `RiskConfig()`-Aufruf, bevor irgendein Test lief. Das ist genau
+die Begründung, mit der Anker (c) ins Ticket kam; sie hat sich an den eigenen
+Defaults bewiesen.
+
+Behoben durch `DEFAULT_MAX_ORDER_SIZE_SHARES = 100.0` (konsistent zum
+Positionslimit und als Order-Level-Cap realistisch).
 
 ## Review-Standard (aus diesem Zyklus übernommen)
 
