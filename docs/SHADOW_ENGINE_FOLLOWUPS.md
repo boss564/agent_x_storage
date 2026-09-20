@@ -1124,6 +1124,32 @@ explizite Restmenge (`Call`-Callee-Rumpf), alles Übrige ist Produktion.
 als **Kriterium**. Als Kriterium erben sie das Nachwachsen; als Testdaten
 belegen sie eine Regel, die ohne sie auskommt.
 
+### Befund: Messung und Beschreibung sind zwei Prüfschritte
+
+Drei Commits in Folge korrigierten dieselbe Zahl — und **jedes Mal entstand der
+Fehler beim Aufschreiben der Korrektur, nicht beim Messen:**
+
+| Commit | Form des Fehlers |
+|---|---|
+| `f68ba36f` | **Zählmodus**: distinkte Paare statt Textstellen (Null statt 7) |
+| `c9b1f7f2` | **Paarung**: zwei Zählmodi in einer Klammer (51 \| 23) |
+| `1ab09e2b` | behebt die Paarung (51 \| 44, Differenz 7) |
+
+Die drei verbindet nicht die Form — es sind drei verschiedene —, sondern die
+**Stelle**: Jeder entstand im Satz *über* der Messung. Die Messungen selbst
+waren jedes Mal richtig: reproduzierbar bis auf den Einzelknoten.
+
+> **Die Prüfung der Messung und die Prüfung ihrer Beschreibung sind zwei
+> Schritte.** Für den ersten hat der Zyklus inzwischen ein Instrument
+> (den Anker, den Checker, die Mutanten). Für den zweiten hat er nur
+> Aufmerksamkeit — und der zweite hat in dieser Kette dreimal so oft versagt
+> wie der erste.
+
+`1ab09e2b` ist kein `amend` von `c9b1f7f2`: Betreffzeilen sind nicht
+nachträglich korrigierbar, ohne die Historie zu verbiegen. Der Nachtrag im
+Dokument ist die konsistente Form — die Historie hält ihre Irrtümer als
+Stationen fest.
+
 **Die Konsummenge war schon vorher geschlossen — nur hat der Regex sie nicht
 gezeigt.** Der Produktivcode enthält **7** Enum-Nennungen in Strings (Regex 51
 gegen AST 44, Differenz 7 — Textstellen, nicht distinkte Werte); keine davon
