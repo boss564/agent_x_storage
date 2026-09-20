@@ -100,10 +100,15 @@ ins Gehege.
 ### Akzeptanzkriterien (Regressionsanker, heute unmöglich)
 
 - [ ] (a) Zwei Orders auf dasselbe Token — erste füllt, zweite kippt die
-      Position über das Limit → Reject.
+      Position über das Limit → Reject. **Der manuelle Beleg vom 2026-09-20
+      (vorbelegte Position 90 USDC + Order 61 USDC bei Limit 100 → Reject)
+      gehört hier als automatisierter Test hinein**, damit der heute manuelle
+      Nachweis dauerhaft wird.
 - [ ] (b) `requested > per_order_cap` → Ausführung am Cap, Telemetrie zeigt
       **beide** Größen.
 - [ ] (c) Config mit `per_order_cap > max_position_size` → Start scheitert.
+- [ ] (d) Jede Ablehnungsursache hat einen **unterscheidbaren** RejectReason
+      (Addendum unten).
 - [ ] Mutationsnachweis: Wird die Sizing-Quelle auf „immer Limit" zurückgedreht
       oder der Positions-Check entfernt, stirbt der jeweilige Test.
 
@@ -142,6 +147,74 @@ Monaten liest jemand 116/118 wieder als funktionierenden Schutz.
       beweist „kein Verhaltensänderung".
 - [ ] Kommentar an der verbleibenden Positions-Prüfung, dass sie die
       *einzige* Position-Level-Schranke ist (Abgrenzung zu Event-Exposure).
+
+### Addendum (2026-09-20): RejectReason-Mehrdeutigkeit als Diagnostik-Lücke
+
+Die Ursache der ursprünglichen Fehldiagnose ist selbst ein Design-Befund:
+Alle vier `MAX_POSITION_SIZE`-Rejects tragen **denselben** `RejectReason`.
+Ein `MAX_POSITION_SIZE` in der Telemetrie sagt damit nicht, *welcher* Check
+gefeuert hat — Ordergröße, Order-Notional oder kumulierte Position.
+
+In einer Engine, deren Charter `diagnostic_only` ist, ist das eine echte
+Lücke: Aus den Daten lässt sich nicht rekonstruieren, warum eine Order
+abgelehnt wurde. Und sie ist nicht bloß kosmetisch — sie hat den falschen
+Befund dieses Tickets erst möglich gemacht (im Review sahen vier Checks wie
+einer aus).
+
+**Beim F1-Umbau zu beheben, nicht nur zu dokumentieren:**
+
+Option 1 — RejectReasons pro Semantik trennen:
+
+| Semantik | Neuer Wert |
+|---|---|
+| Ordergröße (Zeile ~116) | `MAX_ORDER_SIZE` |
+| Order-Notional (Zeile ~118) | `MAX_ORDER_NOTIONAL` |
+| Kumulierte Position (Zeile ~122) | `MAX_POSITION_SIZE` (bleibt) |
+
+Option 2 — `check_id`/`check_name`-Feld im Telemetrie-Record, das den
+feuernden Check benennt. Robuster bei künftigen Checks, aber Schema-Änderung.
+
+Empfehlung: **Option 1**, weil sie ohne Schema-Änderung auskommt und der
+RejectReason bereits im Persistenzschema steht. Option 2 wird attraktiv,
+sobald mehr als ~6 Checks existieren.
+
+Akzeptanzkriterium: Ein Test, der für jede Ablehnungsursache den
+*unterscheidbaren* RejectReason prüft. Die Mehrdeutigkeit, die den falschen
+Befund ermöglichte, ist dann strukturell beseitigt.
+
+---
+
+## F1c — Sizing-Schnittstelle auf Engine-Seite definieren
+
+**Schwere:** hoch (Voraussetzung dafür, dass F1 ohne das Strategy-Package
+lieferbar ist)
+**Ort:** `order_execution_engine/` (neuer Seam), `ShadowExecutionEngine.on_signal()`
+
+F1 darf **nicht** auf ein Strategie-Package warten, das außerhalb dieses
+Repos liegt. Die Schnittstelle gehört jetzt definiert, auf Engine-Seite:
+
+```python
+SizeFn = Callable[[SignalPayload, PortfolioState], Decimal]
+
+def sizing(signal, portfolio_state) -> desired_size
+```
+
+- **Injizierbar:** `ShadowExecutionEngine(..., size_fn=...)`.
+- **Default-Adapter:** fixe Bankroll-Fraktion, damit die Engine ohne
+  Strategie-Package lauffähig bleibt.
+- **Das Strategy-Package implementiert später** die echte Conviction-Logik
+  (NewsBot-Confidence) gegen dieselbe Schnittstelle — ohne Engine-Änderung.
+
+Damit liefert F1 den kompletten Verhaltens-Commit: Seam, Clamp,
+Telemetrie-Felder `requested_size`/`executed_size`, getrennte RejectReasons
+(Addendum), Config-Invariante. F1b bleibt ausschließlich `blocked by F1`.
+
+### Akzeptanzkriterien
+
+- [ ] `size_fn` injizierbar, Default-Adapter funktioniert ohne Strategie.
+- [ ] Mutationsnachweis: Default-Adapter, der `max_order_size_shares`
+      zurückgibt, lässt den Regressionsanker (a) **nicht** feuern — beweist,
+      dass Sizing und Risikoschranke entkoppelt sind.
 
 ---
 
