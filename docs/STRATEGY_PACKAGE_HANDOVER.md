@@ -231,6 +231,32 @@ gegen einen **Rückfall auf Textmessung**, nicht Zeuge für die Sehschärfe des
 AST-Ankers. Ohne dieses Etikett zählt der Nachweis vier Falsch-Grün-Richtungen
 und belegt drei.
 
+**Der Glücksfall, präzise:** Von den sieben String-Nennungen betrifft **keine**
+ein `OrderStatus`-Label. Der Befund hätte sich mit einer einzigen Zeile kippen
+lassen — ein Docstring, der `CANCELLED` oder `EXPIRED` erwähnt. Dass keiner es
+tut, ist der Grund, warum die Waisen überlebt haben; nicht die Güte des
+Instruments.
+
+### Was die Ein-Datei-Lesart verliert (Zeuge für die Reihenfolge)
+
+**Zehn Produzentenstellen in zwei Dateien**, die der Anker heute nicht sieht:
+
+| Wert | Form | Ort | Folge bei F2b-zuerst |
+|---|---|---|---|
+| `OrderStatus.PENDING` | `keyword` | `models.py:227` | **falsch-rote Waise** |
+| `RejectReason.NONE` | `keyword` / `Assign` | `models.py:230`, `persistence.py:270` | heute durch Ausnahme gedeckt |
+| `OrderSide.BUY` / `SELL` | `IfExp` / `keyword` | `models.py:196`, `:198`, `:570` | falsch-rot, sobald `OrderSide` aufgenommen wird |
+| `ExecutionMode.DRY_RUN` | `keyword` / `arguments` | `models.py:228`, `:698` | ausgenommenes Konfigurations-Enum |
+
+Drei Werte werden sofort falsch-rot, sobald F2b die Enums aufnimmt, **ohne
+vorher die Zeugenquelle umzustellen**: `OrderStatus.PENDING`, `OrderSide.BUY`,
+`OrderSide.SELL`.
+
+**Die Reihenfolge-Entscheidung selbst ist damit zweitrangig** — F2b-zuerst beißt
+mit drei Falsch-Rot, F2-zuerst verschiebt den Biss, ohne ihn zu vermeiden.
+Entscheidend ist die **Binnenordnung von F2b**: Zeugenquelle **vor**
+Enum-Aufnahme. Mit dieser Zahl ist das kein Argument mehr, sondern ein Beleg.
+
 **Der Regressionswert ist real:** Der Regex wird nicht verschwinden — die
 F2b-Demo will genau den Vergleich zeigen (ein Kommentar löscht eine Waise aus
 der Liste), und ein Leser, der den Befund nachstellt, greift zum naheliegenden

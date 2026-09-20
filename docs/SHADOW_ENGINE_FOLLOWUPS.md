@@ -1124,13 +1124,26 @@ explizite Restmenge (`Call`-Callee-Rumpf), alles Übrige ist Produktion.
 als **Kriterium**. Als Kriterium erben sie das Nachwachsen; als Testdaten
 belegen sie eine Regel, die ohne sie auskommt.
 
-**Die Konsummenge war schon vorher geschlossen — der Regex war nur verlustfrei
-genug, um es zu verbergen.** Der Produktivcode enthält **keine** Enum-Nennung in
-einem String: Regex- und AST-Treffer decken sich dort exakt. Die Differenz
-zwischen den Instrumenten ist heute **null** — der alte Fund hätte also auch
-unter dem neuen Anker überlebt. Damit zählt die Fixture-Matrix **vier
-Falsch-Grün-Richtungen**, nicht drei; der Regex war ein Glücksfall, kein
-fehlendes Kriterium.
+**Die Konsummenge war schon vorher geschlossen — nur hat der Regex sie nicht
+gezeigt.** Der Produktivcode enthält **7** Enum-Nennungen in Strings (Regex 51
+gegen AST 23 auf distinkten Werten); keine davon betrifft ein `OrderStatus`-
+Label:
+
+```
+models.py:23     RejectReason.NONE      (Feldbeschreibung)
+models.py:191    OrderSide.BUY · SELL   (Docstring)
+models.py:241    ExecutionMode.DISABLED (Fehlermeldung)
+persistence.py:259  RejectReason.NONE
+shadow_execution_engine.py:399   RejectReason.NONE
+shadow_execution_engine.py:440   RejectReason.NONE
+```
+
+**Genau die Konstellation, mit der sich der Befund kippen ließ:** Es braucht kein
+Instrument, das keine Strings zählt — es braucht nur **einen** Docstring, der
+`CANCELLED` oder `EXPIRED` erwähnt. Dass keiner es tut, ist der Glücksfall:
+**„die beiden Waisen standen in keinem der sieben Sätze"**, nicht „das
+Instrument war verlustfrei". Damit zählt die Fixture-Matrix **vier
+Falsch-Grün-Richtungen**, nicht drei.
 
 **Eine Zeile bleibt instrumentabhängig.** Die Docstring-Fixture („Wert nur im
 Docstring → rot") ist unter AST **tautologisch grün**: Der Syntaxbaum sieht
