@@ -169,6 +169,44 @@ nicht rekonstruierbar und bei gefüllten Orders eine Scheingenauigkeit.
       (`requested_size TEXT,  -- NULL = vor Messbeginn (v1), nicht: fehlend`),
       damit er an der Stelle steht, an der jemand die Spalte liest.
 
+### Schema-Migration v2: drei Felder, zwei Backfill-Semantiken
+
+Die Migration umfasst **drei** Felder, nicht zwei — und die Backfill-Regeln
+sind bewusst asymmetrisch. Was historisch wahr war, wird wahr
+fortgeschrieben; was nie gemessen wurde, bleibt sichtbar ungemessen.
+
+| Feld | Tabelle | Backfill | Begründung |
+|---|---|---|---|
+| `requested_size` | `telemetry` | `NULL` | nie persistiert, nicht rekonstruierbar |
+| `decision_seq` | `telemetry` | `NULL` | existierte nicht; Semantik „vor der Messung" |
+| `requested_size` | `fills` | `:= executed_size` | historisch **wahr**, keine Kappung |
+
+**Zur dritten Zeile:** In der Vergangenheit wurde nur eine Größe erfasst, und
+sie war definitionsgemäß die ausgeführte (die Engine orderte die Konstante,
+alles über dem Limit wurde abgelehnt statt gekappt). `executed_size` ist also
+der korrekte historische Wert für `requested_size` — keine Näherung.
+
+**`NULL` explizit dokumentieren.** In den Migrationskommentar und ins Schema,
+nicht nur ins Ticket: `NULL = vor Messbeginn, nicht: fehlend`. Ein
+undokumentiertes `NULL` lädt den nächsten dazu ein, es per Join aus `fills`
+zu „reparieren" — und genau die Scheingenauigkeit, die diese Entscheidung
+vermeidet, wäre wieder da.
+
+**Zähler-Lebensdauer = Entscheidungs-Historie.** `decision_seq` ist nur
+solange replaysicher, wie der Zähler die Historie kennt. Beim Start muss
+`TelemetryLogger` aus `max(decision_seq)` der Datenbank initialisiert werden —
+sonst beginnt jeder Prozessneustart wieder bei 1 und die Korrelation
+über Sessions hinweg kollidiert still. Eine Zeile in der Migration, aber der
+Unterschied zwischen „replayfähig pro Run" und „replayfähig, Punkt".
+
+**Zur Platzierung des Zählers am Logger (Charter-Begründung).** Das Argument
+„der Logger ist der einzige Ort, den beide Seiten sehen" ist zu schwach — die
+Engine sieht beide Seiten ebenfalls, sie konstruiert Snapshot *und* Record.
+Der tragfähige Grund ist die Charter: In einer `diagnostic_only`-Engine ist
+Telemetrie kein optionales Subsystem, es gibt keine Konfiguration ohne Logger.
+Damit ist der Logger ein *garantierter* Ort, und „Identität gehört zum
+Aufzeichnungsinstrument" ist hier keine Layer-Frage, sondern Charter-Folge.
+
 ### Warum `telemetry.requested_size` der Kern der Messung ist
 
 Kein Nice-to-have. Die Engine konnte bisher nicht einmal die Frage beantworten,
