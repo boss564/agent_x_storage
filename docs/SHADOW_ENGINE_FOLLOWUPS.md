@@ -158,9 +158,32 @@ Eine aus `fills` abgeleitete Größe wäre bei abgelehnten Orders (kein Fill)
 nicht rekonstruierbar und bei gefüllten Orders eine Scheingenauigkeit.
 `NULL` heißt hier ehrlich „vor der Messung".
 
-- [ ] `SCHEMA_VERSION` erhöhen (aktuell `1`), Migration idempotent.
+- [ ] `SCHEMA_VERSION` erhöhen (`1` → `2`), Migration idempotent.
 - [ ] Test, der eine v1-DB öffnet und die Migration prüft (inkl. Backfill).
 - [ ] `fills.requested_size = executed_size` in Altdaten nachgewiesen.
+- [ ] **`NULL`-Semantik im Schema dokumentieren, nicht nur im Migrationscode:**
+      `NULL = vor Messbeginn`, nicht `fehlend`. Ein undokumentiertes `NULL`
+      lädt den nächsten dazu ein, es per Join aus `fills` zu „reparieren" —
+      und die Scheingenauigkeit, die der Backfill bewusst vermieden hat, wäre
+      wieder da. Der Spaltenkommentar gehört in die DDL
+      (`requested_size TEXT,  -- NULL = vor Messbeginn (v1), nicht: fehlend`),
+      damit er an der Stelle steht, an der jemand die Spalte liest.
+
+### Warum `telemetry.requested_size` der Kern der Messung ist
+
+Kein Nice-to-have. Die Engine konnte bisher nicht einmal die Frage beantworten,
+**wie groß die Order war, die sie abgelehnt hat**: Die angeforderte Größe wurde
+nirgends persistiert, sie existierte nur flüchtig im `PaperOrder`-Objekt.
+
+`fills` sieht nur die Überlebenden. Ausgerechnet die Rejects — die für die
+Strategiebewertung interessantesten Ereignisse — waren datenlos. In einer
+Engine mit Charter `diagnostic_only` ist das der teuerste blinde Fleck: Der
+Trockenmodus soll Strategieverhalten messen, und die Absicht hinter einer
+Ablehnung ist die reinste Form dieses Signals.
+
+Zusammen mit dem Addendum (unterscheidbare RejectReasons) beantwortet die
+Telemetrie nach F1 erstmals beide Fragen: *warum* wurde abgelehnt und *wie groß*
+war die abgelehnte Absicht.
 
 ---
 
@@ -268,6 +291,13 @@ Telemetrie-Felder `requested_size`/`executed_size`, getrennte RejectReasons
       untergeschmuggelt. Das ist der billigste und schärfste Nachweis, den
       ein Reviewer bekommen kann: „Tests unverändert grün" heißt „Verhalten
       unverändert".
+- [ ] **Belegte Durchlaufung, nicht nur Unverändertheit.** Der leere Test-Diff
+      beweist, dass sich nichts *geändert* hat — er beweist nicht, dass der
+      Seam überhaupt *durchlaufen* wird. Kreuzen die bestehenden 43 Tests den
+      neuen Adapter-Pfad nicht, ist der Seam ab Geburt toter Code — dieselbe
+      Krankheit wie `MAX_POSITION_SIZE`, nur im Refactoring.
+      **Review-Befehl: Coverage auf den neuen Zeilen.** Leerer Test-Diff
+      *plus* belegte Durchlaufung, das zusammen ist der Nachweis.
 - [ ] `size_fn` injizierbar, Default-Adapter funktioniert ohne Strategie.
 - [ ] Mutationsnachweis: Ersetzt man die neue Sizing-Logik durch die
       Legacy-Konstante, wird mindestens ein Anker-Test rot (siehe F1, Kriterium e).
@@ -351,3 +381,90 @@ setzen ein Enum, der `None`-Fall war im Produktivpfad **unerreichbar**.
 Erst Wache + Boundary-Test töten den Mutanten (an Konstruktion und Boundary).
 
 Das ist der Unterschied zwischen „Tests sind grün" und „Tests bewachen etwas".
+
+### Der Standard in Aktion (Commit-Historie)
+
+Dieser Zyklus enthält zwei dokumentierte Kehrtwenden. Sie sind bewusst nicht
+weggeglättet — für eine Engine, die später fremdes Geld bewegen soll, ist
+„wir dokumentieren unsere Irrtümer nicht weg" keine Sentimentalität, sondern
+Kultur:
+
+| Commit | Was widerrufen wurde | Wie es auffiel |
+|---|---|---|
+| `43a2f9a8` | F1-Befund „der `MAX_POSITION_SIZE`-Check ist unerreichbar" | Verifikation am Code: Zeile 122 **funktioniert**; es sind zwei tote Order-Level-Checks, nicht der Check |
+| `5b6280fd` | Zusage „keine Schema-Änderung" | Prüfung der DDL: die `telemetry`-Tabelle hat gar kein Größen-Feld |
+
+Beide Korrekturen stammen nicht aus einem Review durch Dritte, sondern aus
+der Aufforderung, eine Behauptung zu belegen, bevor Code darauf gebaut wird.
+Lehrstück für den nächsten Fall: **Ein Befund, der im Ticket plausibel klingt,
+ist noch nicht verifiziert.**
+
+### Dritter Fall derselben Krankheit: Scheinschutz
+
+Dasselbe Muster trat in diesem Zyklus **dreimal** auf, in drei verschiedenen
+Schichten — es ist ein wiederkehrender Modus, kein Einzelfall:
+
+| Fall | Schicht | Wie der tote Pfad aussah |
+|---|---|---|
+| Zeile ~116 (`order.size > max_order_size_shares`) | Produktionscode | sah wie eine Risikobremse aus, war eine Tautologie |
+| F1c-Seam, wenn von keinem Test gekreuzt | Refactoring | sieht wie eine Schnittstelle aus, ist eine leere Zuweisung |
+| `reject_reason=None`-Test (erste Fassung) | Testsuite | sah wie ein Regressionstest aus, färbte nie |
+
+**Name: Scheinschutz.** Benannte Muster sind im Review aufrufbar — „das ist
+wieder Scheinschutz" ist schneller gesagt als die ganze Analyse.
+
+Gemeinsame Form: **Etwas existiert, sieht nach Schutz aus und kann nie
+feuern.**
+
+#### Die Gegenmaßnahme in einem Satz
+
+> **Jede Schutzbehauptung braucht einen Zeugen.** Ein konkretes Ereignis, das
+> sie auslöst. Kann kein Zeuge konstruiert werden, ist es kein Schutz, sondern
+> Dekoration — und Dekoration im Risk-Pfad ist schlimmer als Abwesenheit, weil
+> sie Vertrauen besetzt, das der Code nicht einlöst.
+
+Ein Prinzip, drei Schichten:
+
+| Angewandt auf | Zeuge |
+|---|---|
+| Risk-Check | Anker-Test: zweiter Fill kippt die Position über das Limit → Reject |
+| Test | Sensitivitäts-Kriterium (e): der Test **muss rot werden**, wenn der Mutant eingebaut wird |
+| Refactoring / Seam | Coverage auf den neuen Zeilen: der Seam wird tatsächlich durchlaufen |
+
+Die Frage ist nie „ist es vorhanden?", sondern **„kann es feuern, und beweist
+ein Test das?"**. Deshalb zwei komplementäre Nachweise in F1c (Unverändertheit
+*plus* Durchlaufung): Einer allein deckt nur die halbe Krankheit ab.
+
+### Herkunft dieses Standards
+
+Der Zyklus begann mit einer falschen Alarmmeldung („der Bug hätte beim ersten
+Fill zugeschlagen") und endete mit einem Review-Standard, der aus der Praxis
+geboren statt dekretiert wurde. Für eine Engine, die später fremdes Geld
+bewegen soll, ist das der wertvollere Ertrag: nicht drei gehärtete Checks,
+sondern ein Präzedenzfall dafür, wie mit Unsicherheit umgegangen wird —
+**verifizieren, korrigieren, stehen lassen.**
+
+### Historie verdichten: Widerrufe bleiben, Zwischenstände dürfen weg
+
+Aus zwei konkreten Squash-Entscheidungen dieses Zyklus:
+
+> **Widerrufe sind Stationen. Vervollständigungen sind Zwischenstände.**
+
+- **Widerruf → behalten.** Eine Station, die einen falsifizierten Befund oder
+  eine korrigierte Zusage zeigt, beweist, dass der Prozess funktioniert. Sie
+  zu squashen produziert eine Geschichte, in der die Behauptung nie falsch
+  war — und entwertet das Lehrstück.
+  Beispiele: `43a2f9a8` (F1-Befund falsifiziert), `5b6280fd` (Schema-Zusage
+  korrigiert).
+- **Vervollständigung → darf verdichtet werden.** Ein Commit, der einen
+  bestehenden Text ergänzt und dessen Inhalt der Endzustand selbst trägt,
+  verliert beim Squash nichts.
+  Beispiel: `08a2b8cb`/`375cdb0d` (Standard plus seine dritte Instanz).
+
+**Prüffrage vor jedem Squash:** Trägt der Endzustand die Information selbst,
+oder lebt sie nur in der Commit-Message? Nur im ersten Fall ist der Squash
+verlustfrei. Wird gesquasht, obwohl die Message der einzige Träger ist, muss
+die kombinierte Message den widerrufenen Inhalt explizit benennen.
+
+
+
