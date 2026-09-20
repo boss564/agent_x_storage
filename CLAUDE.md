@@ -8,7 +8,7 @@ Two integrated systems sharing core infrastructure (SymbolicsAgent, Consensus En
 
 1. **Agent X Core** — DeFi risk management: 6 classes (A–F), 60+ agents, consensus-driven state evaluation with CHI (Composite Health Index), backtesting against 8 historical crisis scenarios.
 
-2. **Agent X B2G** — Public-sector procurement: 243 agents (27 main waves × 9 + Wave 3.5 VOB/B + 25 compliance agents = 277 total) covering the complete lifecycle from GAEB tender receipt through VOB/B multi-installment payment, defect/dispute arbitration, BHO-compliant treasury reconciliation, GoBD archiving, multi-chain notarization, operations, user/project management with BundID SSO, a complete query & reporting layer, a **real-time macroeconomic engine** (Wave 17) with velocity tracking and programmable fiscal stimulus, a **VOB Shadow Contract & Pilot** (Wave 18) for risk-free blockchain adoption, a **Multi-Stakeholder Onboarding Ecosystem** (Wave 19) for craftsmen, builders, developers, IoT and banking partners, a **CertiK Security Audit & Formal Verification Engine** (Wave 20) with 81 subagents for mathematical proof, BSI C5/ISO 27001/SOC2 compliance, and real-time threat monitoring, through **Clearing & Settlement** (Wave 27) with multilateral netting and BHO zero-sum proofs, **External Threat Defense** (Wave 28) with swarm immunity and active countermeasures, **Omnichannel UX & Verwaltungs-Dashboard** (Wave 31) — the human interface for Kämmerer, Bauleiter, and citizens, and **Survival & Off-Grid Mode** (Wave 33) — sovereign post-quantum enclave with mesh networking, resource-backed economy, and air-gapped MPC bunkers.
+2. **Agent X B2G** — Public-sector procurement: **277 agents total** (243 in 27 main waves × 9 + Wave 3.5 VOB/B + 25 compliance), covering the complete lifecycle from GAEB tender receipt through VOB/B multi-installment payment, defect/dispute arbitration, BHO-compliant treasury reconciliation, GoBD archiving, multi-chain notarization, operations, user/project management with BundID SSO, a complete query & reporting layer, a **real-time macroeconomic engine** (Wave 17) with velocity tracking and programmable fiscal stimulus, a **VOB Shadow Contract & Pilot** (Wave 18) for risk-free blockchain adoption, a **Multi-Stakeholder Onboarding Ecosystem** (Wave 19) for craftsmen, builders, developers, IoT and banking partners, a **CertiK Security Audit & Formal Verification Engine** (Wave 20) with 81 subagents for mathematical proof, BSI C5/ISO 27001/SOC2 compliance, and real-time threat monitoring, through **Clearing & Settlement** (Wave 27) with multilateral netting and BHO zero-sum proofs, **External Threat Defense** (Wave 28) with swarm immunity and active countermeasures, **Omnichannel UX & Verwaltungs-Dashboard** (Wave 31) — the human interface for Kämmerer, Bauleiter, and citizens, and **Survival & Off-Grid Mode** (Wave 33) — sovereign post-quantum enclave with mesh networking, resource-backed economy, and air-gapped MPC bunkers. Waves 34–40 are documented outside this 277-count (see Wellen-Übersicht).
 
 ## Agent X Core — Projektstruktur
 
@@ -145,7 +145,8 @@ agent_x_storage/
 
 ## Agent X B2G — Public Sector Procurement
 
-### Architecture: 27 Waves × 9 Agents = 243 Agents (+ Wave 3.5 VOB/B + 25 Compliance = 277 total)
+### Architecture: 27 Waves × 9 Agents = 243 Agents (+ Wave 3.5 VOB/B + 25 Compliance = **277 agents total**)
+Waves 34–40 are outside this 277-count (see Wellen-Übersicht).
 
 ```
 Wave 1 (Tendering):        Monitor → Parser → Eligibility → CHI-Risk → PoPW-Index →
@@ -201,8 +202,11 @@ Wave 17 (MacroEconomy):     MacroEconomyOrchestrator → VelocityOfMoneyTracker 
 Wave 18 (Shadow Contract):  ShadowContractOrchestrator → LifecycleStateEngine →
                             ShadowContractDeployer → PrivateClientBridge →
                             MilestoneConditionChecker → TaxSimulationAgent →
-                            RetentionVaultManager → AuditorDashboardComposer →
-                            PilotMetricsCollector → GovernmentOnboardingKit
+                            RetentionVaultManager → AtomicSettlementEngine →
+                            AuditorDashboardComposer → PilotMetricsCollector →
+                            GovernmentOnboardingKit
+                            # ×9-Kern = 9 Rollen inkl. Root; + AtomicSettlement + Onboarding
+                            # als integrierte Subagenten (siehe Detail / subagents/ 10 files)
 Wave 19 (Ecosystem):        EcosystemOnboardingOrchestrator → CraftsmanOnboarding →
                             DeveloperOnboarding → BuilderOnboarding →
                             IoTPartnerOnboarding → BankingPartnerOnboarding →
@@ -262,15 +266,18 @@ Wave 32 (Philately):        StampMintAndIssuanceEngine → MessagePostageValidat
                             PhilatelicAlbumManager → SecondaryMarketTrader →
                             MuseumExhibitionCurator → StampStakingVault →
                             PhilatelyOrchestrator
-Wave 33 (Survival):         PQC-DilithiumSigner → MPC-BunkerNodes → ZK-STARKCompressor →
-                            LoRaWAN-MeshAgent → Peer-DiscoveryDHT → StateSyncRollup →
-                            Resource-OracleIoT → ZK-eIDRationing → MultilateralClearing →
-                            SurvivalOrchestrator
+Wave 33 (Survival):         SurvivalOrchestrator → PQC-DilithiumSigner → MPC-BunkerNodes →
+                            ZK-STARKCompressor → LoRaWAN-MeshAgent → Peer-DiscoveryDHT →
+                            StateSyncRollup → Resource-OracleIoT → ZK-eIDRationing
+                            # ×9 = Root + 8 Pipeline-Rollen; MultilateralClearing als
+                            # Subagent unter SurvivalOrchestrator (nicht 10. Pfeil)
 ```
 
 ### Wellen-Übersicht
 
 Welle 3.5 (VOB/B Disput) ist eine Unterwelle von Welle 3 (Execution) und wird nicht als eigenständige Hauptwelle gezählt. Die Gesamtzahl der Hauptwellen beträgt 27 (Wellen 1–10, 15–33). Die Wellen-Nummern 11–14, 26 und 30 existieren nicht.
+
+**×9-Zählkonvention:** Die 243 = 27 × 9 zählen **kanonische Rollen pro Hauptwelle**. Architektur-Pfeilketten, die den Root-Orchestrator *zusätzlich* ans Ende hängen (historisch Wave 18/33), verdoppeln ihn nicht in der 243-Formel — Root zählt als eine der 9 (Wave-19-Stil). Extra-Subagenten (z. B. Wave-18 `AtomicSettlementEngine`) sind in der Detail-Tabelle dokumentiert, bleiben aber außerhalb der starren ×9-Zellen der Übersicht.
 
 | Welle | Name | Agenten | Modul | Fokus |
 |-------|------|---------|-------|-------|
@@ -288,7 +295,7 @@ Welle 3.5 (VOB/B Disput) ist eine Unterwelle von Welle 3 (Execution) und wird ni
 | 15 | Public Portal & Transparency | 9 | `public_portal/agents.py` | QR-Codes, Blockchain-Verifikation, Kommunalkarte, DSGVO-Shield, Open Data |
 | 16 | Monerium SEPA-Bridge | 9 | `bridge/agents.py` | EURe Mint/Burn, IBAN/BZSt-Validierung, ERC-4337 Paymaster, Δ=0,00€ Bridge-Reconciliation |
 | 17 | MacroEconomy Engine | 9 | `macro/macro_economy_orchestrator.py` | Velocity, Inflation, Multiplikator, Stimulus, Steuer, Kapitaleffizienz, Kartell, Zentralbank |
-| 18 | Shadow Contract & Pilot | 9 | `shadow/shadow_contract_orchestrator.py` | VOB Shadow Escrow, IoT/ZK-Milestones, ELSTER-Steuer, Retention, RPA-Dashboard |
+| 18 | Shadow Contract & Pilot | 9 | `shadow/shadow_contract_orchestrator.py` | VOB Shadow Escrow, IoT/ZK-Milestones, ELSTER-Steuer, Retention, Atomic Settlement, RPA-Dashboard (10 Subagent-Dateien; ×9 inkl. Root) |
 | 19 | Ecosystem Onboarding | 9 | `onboarding/ecosystem_onboarding_orchestrator.py` | Handwerker, Bauherren, Developer, IoT, Banken — 5 Rollen |
 | 20 | CertiK Security Audit | 9 | `security/certik_audit_orchestrator.py` | Statische Analyse, Access Control, Oracle/DeFi, L1/L2, Formale Verifikation, Fuzzing, BSI C5/ISO 27001/SOC2/GDPR, Real-Time Threat, CertiK Zertifizierung (81 Subagenten) |
 | 21 | Skynet Dynamic Monitor | 9 | `security/skynet_orchestrator.py` | 6-Säulen-Echtzeit-Score: Code, Fundamentales, Betrieb, Markt, Community, Governance — 54 Subagenten |
@@ -303,7 +310,7 @@ Welle 3.5 (VOB/B Disput) ist eine Unterwelle von Welle 3 (Execution) und wird ni
 | 32 | Crypto-Philately & Digital Stamp | 9 | `philately/philately_orchestrator.py` | Briefmarken (ERC-1155), Poststempel, Seltenheitsbewertung, Sammelalben, Sekundärmarkt, Staking — 81 Subagenten |
 | 33 | Survival & Off-Grid Post-Quantum | 9 | `survival/survival_orchestrator.py` | PQC (Dilithium-5/Kyber-1024/SPHINCS+), MPC-Bunker (t=3,n=5), ZK-STARKs, LoRaWAN/HAM/Sat-Mesh, Ressourcen-Clearing, ZK-eID-Rationierung, 180d Autarkie — 9 Subagenten |
 
-Welle 34 (Finale Veredelung) ist ein Pitch-Orchestrator mit 3 Agenten + Streamlit-Dashboard und wird — analog zum Compliance-Modul — außerhalb der ×9-Formel dokumentiert.
+**Wellen 34–40 (außerhalb 277 / außerhalb ×9-Hauptformel):** Wie Compliance und Pitch-Module — dokumentiert und getestet, aber **nicht** in der Ableitung 27 × 9 + 3.5 + 25 = 277. Welle 34 = Pitch/Go-Live; 35–37 = SimChain/MultiChain/Demo; 38–40 = Diagnostic / Ethical Boundary / Resilience (teils 9+81-Struktur, eigene Test-Suites).
 
 | Welle | Name | Agenten | Modul | Fokus |
 |-------|------|---------|-------|-------|
@@ -1162,7 +1169,7 @@ Transactions → Velocity → Inflation → SupplyChain → Stimulus → TaxSpli
 - try/except wrapping on every agent method
 - E2E Test: `python3 scripts/test_wave17_macro.py` — 8/8 passed
 
-### Wave 18 Detail: VOB Shadow Contract & Real-World Pilot (9 Agents)
+### Wave 18 Detail: VOB Shadow Contract & Real-World Pilot (9 ×9-Rollen + Settlement-Subagent)
 
 Rechtssicherer Parallelbetrieb: Smart-Contract-basierte Bauabwicklung als Schattenbuchhaltung zur traditionellen VOB/B-Abwicklung. Ermöglicht Behörden die Beobachtung und Validierung ohne Prozessänderung.
 
@@ -1173,13 +1180,14 @@ Init → Deploy → Fund → 5×Milestones → Tax → Retention → Complete �
 
 | Agent | Funktion |
 |-------|----------|
-| ShadowContractOrchestrator | Root: 14-Phasen-Lifecycle, alle Subagenten integriert |
+| ShadowContractOrchestrator | Root: 14-Phasen-Lifecycle, alle Subagenten integriert (zählt in ×9) |
 | LifecycleStateEngine | CREATED→FUNDED→ACTIVE→DISPUTED→SETTLED→COMPLETED |
 | ShadowContractDeployer | 9-stufig: Compile→Deploy→Gnosisscan→GoBD |
 | PrivateClientBridge | 6-stufig: SEPA→vIBAN→Reconcile→Monerium→Verify |
 | MilestoneConditionChecker | 9-stufig: IoT→ZK→Quantity→Quality→Schedule→Release |
 | TaxSimulationAgent | 9-stufig: §13b→BZSt→Split→ELSTER→PDF/A-3 |
 | RetentionVaultManager | VOB/B §17: 5% Einbehalt, 4-Jahres-Frist, Aval-Bürgschaft |
+| AtomicSettlementEngine | Atomare Settlement-Invariante, Ledger Δ=0,00€ |
 | AuditorDashboardComposer | Read-Only RPA-Dashboard + Completion Certificate |
 | PilotMetricsCollector | 21.600× Speedup, 99.85% Reliability, 88.4 SUS |
 | GovernmentOnboardingKit | EVB-IT-Vertrag, DSGVO-DSFA, Sandbox-Demo-Zugang |
@@ -1509,7 +1517,7 @@ German for communication and documentation. Code comments in English.
 
 ## Version
 
-Agent X Core: 0.4.0 (stable, 90/100 backtest). Agent X B2G: 0.25.1 (243 agents in 27 main waves plus Wave 3.5 and 25 compliance agents — 277 total, plus Wave 34–37, Wave 38 Causal Audit & Signal Guard (281/281) + Post-MEV Diagnostic Extension (27/27, PM1–PM3, keine neue Hauptwelle), Wave 39 Ethical Boundary / Vierfach-Sperre (82/82, `certificate_id` im Envelope), Wave 40 Execution Resilience & Risk Shield (105/105), plus Settlement (D01–D04 divers, C09 ingest, ComplianceExporter, ~1.500 lines), Crew (5-role pipeline + DID registry + 9 specialized agents), Gas (autonomous fuel management), Valhalla (ZK honor protocol), Surface Agents (C01–C09: NATS queue-group workers, adaptive batching, constraint metering, predictive health routing, 223k events/s burst), Subsurface Prover Factory (SGX-TDX/SEV-SNP/CUDA/CPU with curve unification), D01 Mock Responder (8 replicas, batch ZK, binary bisect quarantine), Ephemeral Paratroopers (F01–F03, 3 WASM modules compiled, 500ms TTL), Air Layer E2E: 18/18, Chaos Resilience: F07–F09 abgefangen (Chaos Fleet: killer, throttler, poison injector), Telemetry Ingest (MQTT/HTTP bridge, 7 endpoints), Chaos Matrix (10 attack scenarios), 8 Solidity contracts (inkl. ValhallaVerifier.sol, ProtoGalaxyVerifier.sol, Foundry/Solc 0.8.35) + ESP32 LoRaWAN Firmware (1.651 lines C++/Arduino), E2E: Waves 1–33 all green, Wave 34: 21/21, Wave 35: 199/199, Wave 36: 113/113, Wave 37: Pitch-fertig, Wave 38: 281/281, Post-MEV: 27/27, Wave 39: 82/82, Wave 40: 105/105, Chaos Resilience: 4/4 experiments, Docker: 109+ containers, NATS: Core+JetStream (4222/8222), Anvil: Block 0→1 confirmed, CertiK Security Wave 20: 164/164, Skynet Monitor Wave 21: 79/80, Ops Security Wave 22: 48/48, Token Launch Wave 23: funktional, Trading Wave 24: FN=0/FP=0, Smart Wallet Wave 25: integriert, Clearing & Settlement Wave 27: 122/122, External Threat Defense Wave 28: 105/105, Token Runtime Operations Wave 29: 101/101, UX & Dashboard Wave 31: 92/92, Survival & Off-Grid Wave 33: 63/63, BSI C5/ISO 27001/SOC2/GoBD/eIDAS/GDPR/EVB-IT compliant, GAEB DA XML 3.3, XRechnung 3.0, VHB-221/222, GoBD/BHO-ready, 68.000+ lines, plus 5-Pillar Scale-Up — 1M-Tsunami (0 Loss, 54µs P99, 9.554 echte L1-Anker), Testnet-Bridge (EIP-1559), Overwatch-Dashboard (Prometheus/Grafana), Compliance-Playbook (K1–K8), K8s/Helm-Chart (KEDA+SGX), plus Wirtschafts-Schwarm + Rescue + CI-Resilienz + Humanitäre Logistik + Smart-Grid Meta-Stabilität (H1 falsifiziert, Plastizitäts-Hebel Stubs) — docs/SMART_GRID_ERGEBNIS.md).
+Agent X Core: 0.4.0 (stable, 90/100 backtest). Agent X B2G: 0.25.1 (**277 agents total** = 243 in 27 main waves × 9 + Wave 3.5 + 25 compliance; Waves 34–40 outside this count), plus Wave 34–37, Wave 38 Causal Audit & Signal Guard (281/281) + Post-MEV Diagnostic Extension (27/27, PM1–PM3, keine neue Hauptwelle), Wave 39 Ethical Boundary / Vierfach-Sperre (82/82, `certificate_id` im Envelope), Wave 40 Execution Resilience & Risk Shield (105/105), plus Settlement (D01–D04 divers, C09 ingest, ComplianceExporter, ~1.500 lines), Crew (5-role pipeline + DID registry + 9 specialized agents), Gas (autonomous fuel management), Valhalla (ZK honor protocol), Surface Agents (C01–C09: NATS queue-group workers, adaptive batching, constraint metering, predictive health routing, 223k events/s burst), Subsurface Prover Factory (SGX-TDX/SEV-SNP/CUDA/CPU with curve unification), D01 Mock Responder (8 replicas, batch ZK, binary bisect quarantine), Ephemeral Paratroopers (F01–F03, 3 WASM modules compiled, 500ms TTL), Air Layer E2E: 18/18, Chaos Resilience: F07–F09 abgefangen (Chaos Fleet: killer, throttler, poison injector), Telemetry Ingest (MQTT/HTTP bridge, 7 endpoints), Chaos Matrix (10 attack scenarios), 8 Solidity contracts (inkl. ValhallaVerifier.sol, ProtoGalaxyVerifier.sol, Foundry/Solc 0.8.35) + ESP32 LoRaWAN Firmware (1.651 lines C++/Arduino), E2E: Waves 1–33 all green, Wave 34: 21/21, Wave 35: 199/199, Wave 36: 113/113, Wave 37: Pitch-fertig, Wave 38: 281/281, Post-MEV: 27/27, Wave 39: 82/82, Wave 40: 105/105, Chaos Resilience: 4/4 experiments, Docker: 109+ containers, NATS: Core+JetStream (4222/8222), Anvil: Block 0→1 confirmed, CertiK Security Wave 20: 164/164, Skynet Monitor Wave 21: 79/80, Ops Security Wave 22: 48/48, Token Launch Wave 23: funktional, Trading Wave 24: FN=0/FP=0, Smart Wallet Wave 25: integriert, Clearing & Settlement Wave 27: 122/122, External Threat Defense Wave 28: 105/105, Token Runtime Operations Wave 29: 101/101, UX & Dashboard Wave 31: 92/92, Survival & Off-Grid Wave 33: 63/63, BSI C5/ISO 27001/SOC2/GoBD/eIDAS/GDPR/EVB-IT compliant, GAEB DA XML 3.3, XRechnung 3.0, VHB-221/222, GoBD/BHO-ready, 68.000+ lines, plus 5-Pillar Scale-Up — 1M-Tsunami (0 Loss, 54µs P99, 9.554 echte L1-Anker), Testnet-Bridge (EIP-1559), Overwatch-Dashboard (Prometheus/Grafana), Compliance-Playbook (K1–K8), K8s/Helm-Chart (KEDA+SGX), plus Wirtschafts-Schwarm + Rescue + CI-Resilienz + Humanitäre Logistik + Smart-Grid Meta-Stabilität (H1 falsifiziert, Plastizitäts-Hebel Stubs) — docs/SMART_GRID_ERGEBNIS.md).
 
 ```
 0.25.1 (2026-08-24) — Post-MEV Diagnostic Extension (additive, keine neue Hauptwelle):
