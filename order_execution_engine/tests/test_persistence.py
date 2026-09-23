@@ -503,8 +503,57 @@ def test_replay_matches_live_snapshot_decimal_identical() -> None:
         assert replay.unfilled_rows == 0
         assert replay.fills_folded >= 1
         assert replay.snapshot == live
+        assert replay.resting_orders == ()
         store.close()
     print("OK test_replay_matches_live_snapshot_decimal_identical")
+
+
+def test_replay_resting_orders_survive_then_clear_on_expired() -> None:
+    """GTC ruht durch Replay (Rest korrekt); nach EXPIRED-Telemetrie Liste leer.
+
+    Kein Schema-Neu: Status aus letztem Telemetrie-Record, remaining =
+    requested_size − Σ fills. PARTIALLY_FILLED+Rest zaehlt als ruhend (GTC).
+    """
+    from order_execution_engine.models import OrderStatus
+    from order_execution_engine.shadow_replay import ShadowReplay
+
+    with tempfile.TemporaryDirectory() as tmp:
+        store = SQLiteShadowStorage.for_user(Path(tmp), "u1")
+        oid = uuid.uuid4()
+        sid = uuid.uuid4()
+        # Partial fill 200 von 400 → Rest 200 ruht
+        store.write_telemetry(TelemetryRecord(
+            signal_id=sid, order_id=oid, latency_ms=0.0, approved=True,
+            status=OrderStatus.PARTIALLY_FILLED, reject_reason=RejectReason.NONE,
+            requested_size=Decimal("400"), decision_seq=1,
+        ))
+        store.write_fill(
+            FillResult(
+                order_id=oid, execution_price=Decimal("0.61"),
+                executed_size=Decimal("200"), side=OrderSide.BUY,
+                token_id="0xtokenA", market_id="mkt-1",
+            ),
+            fill_idx=0, decision_seq=1,
+        )
+
+        mid = ShadowReplay(store, Decimal("10000.00")).reconstruct(as_of_seq=1)
+        assert len(mid.resting_orders) == 1
+        rest = mid.resting_orders[0]
+        assert rest.order_id == oid
+        assert rest.remaining == Decimal("200")
+        assert rest.token_id == "0xtokenA"
+        assert rest.market_id == "mkt-1"
+        assert rest.resting_at_seq == 1
+
+        store.write_telemetry(TelemetryRecord(
+            signal_id=sid, order_id=oid, latency_ms=0.0, approved=True,
+            status=OrderStatus.EXPIRED, reject_reason=RejectReason.NONE,
+            requested_size=Decimal("400"), decision_seq=2,
+        ))
+        after = ShadowReplay(store, Decimal("10000.00")).reconstruct()
+        assert after.resting_orders == ()
+        store.close()
+    print("OK test_replay_resting_orders_survive_then_clear_on_expired")
 
 
 def test_replay_marks_gap_and_continues() -> None:

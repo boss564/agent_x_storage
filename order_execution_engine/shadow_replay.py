@@ -3,22 +3,41 @@
 Faltet Fills mit Fold-Spalten (side/token_id/market_id). Legacy-NULLs werden
 als unfaltbar gezaehlt — keine Richtungsvermutung. decision_seq-Luecken in der
 Telemetrie werden markiert, nicht abgebrochen.
+
+Ruhende Orders: letzter Telemetrie-Status pro order_id + remaining =
+requested_size − Σ executed_size. Keine Schema-Erweiterung — Ruhe-Daten
+sind foldbar aus dem bestehenden Ledger. resting_at_seq = decision_seq des
+letzten RESTING/PARTIALLY_FILLED-Records (Ledger-Uhr, kein Timestamp).
 """
 
 from __future__ import annotations
 
+import uuid
 from dataclasses import dataclass
 from decimal import Decimal
 from typing import Any, Mapping, Optional
 
 from order_execution_engine.models import (
     OrderSide,
+    OrderStatus,
     PortfolioSnapshot,
     Position,
     VirtualPortfolio,
 )
 from order_execution_engine.persistence import SQLiteShadowStorage
 from order_execution_engine.shadow_execution_engine import TelemetryRecord
+
+
+@dataclass(frozen=True)
+class RestingReplay:
+    """Rekonstruiertes ruhendes Order-Fragment (kein Matcher-Register)."""
+
+    order_id: uuid.UUID
+    remaining: Decimal
+    resting_at_seq: int
+    token_id: Optional[str] = None
+    market_id: Optional[str] = None
+    requested_size: Optional[Decimal] = None
 
 
 @dataclass(frozen=True)
@@ -29,10 +48,19 @@ class ReplayResult:
     gaps: tuple[int, ...]  # fehlende decision_seq-Werte (markiert)
     fills_folded: int
     unfilled_rows: int  # Legacy-NULLs / unfaltbare Zeilen
+    resting_orders: tuple[RestingReplay, ...] = ()
 
 
 class ShadowReplay:
-    """Faltet das Persistenz-Ledger zu einem PortfolioSnapshot."""
+    """Faltet das Persistenz-Ledger zu Portfolio + ruhenden Orders."""
+
+    # Terminal: Order liegt nicht mehr im virtuellen Buch.
+    _DONE = frozenset({
+        OrderStatus.FILLED,
+        OrderStatus.EXPIRED,
+        OrderStatus.CANCELLED,
+        OrderStatus.REJECTED_BY_RISK,
+    })
 
     def __init__(self, storage: SQLiteShadowStorage, start_cash: Decimal) -> None:
         self._storage = storage
@@ -54,7 +82,8 @@ class ShadowReplay:
         )
         folded = 0
         unfilled = 0
-        for row in self._storage.read_fills_all():
+        fills = self._storage.read_fills_all()
+        for row in fills:
             seq = row.get("decision_seq")
             if as_of_seq is not None:
                 if seq is None:
@@ -71,12 +100,76 @@ class ShadowReplay:
         seq_out = as_of_seq if as_of_seq is not None else (
             max((t.decision_seq for t in telemetry), default=0)
         )
+        resting = self._resting_orders(telemetry, fills, as_of_seq=as_of_seq)
         return ReplayResult(
             snapshot=portfolio.snapshot(marks, as_of_seq=seq_out),
             gaps=gaps,
             fills_folded=folded,
             unfilled_rows=unfilled,
+            resting_orders=resting,
         )
+
+    def _resting_orders(
+        self,
+        telemetry: list[TelemetryRecord],
+        fills: list[dict[str, Any]],
+        *,
+        as_of_seq: Optional[int],
+    ) -> tuple[RestingReplay, ...]:
+        """Letzter Status pro order_id + remaining aus Fills; keine Schema-Aenderung."""
+        last_by_order: dict[uuid.UUID, TelemetryRecord] = {}
+        for rec in telemetry:
+            if rec.order_id is None:
+                continue
+            prev = last_by_order.get(rec.order_id)
+            if prev is None or rec.decision_seq >= prev.decision_seq:
+                last_by_order[rec.order_id] = rec
+
+        executed: dict[uuid.UUID, Decimal] = {}
+        meta: dict[uuid.UUID, tuple[Optional[str], Optional[str]]] = {}
+        for row in fills:
+            seq = row.get("decision_seq")
+            if as_of_seq is not None:
+                if seq is None or int(seq) > as_of_seq:
+                    continue
+            try:
+                oid = uuid.UUID(str(row["order_id"]))
+            except (ValueError, TypeError, KeyError):
+                continue
+            size = Decimal(row["executed_size"])
+            executed[oid] = executed.get(oid, Decimal("0")) + size
+            if oid not in meta and self._is_foldable(row):
+                meta[oid] = (str(row["token_id"]), str(row["market_id"]))
+
+        out: list[RestingReplay] = []
+        for oid, rec in last_by_order.items():
+            if rec.status is None or rec.status in self._DONE:
+                continue
+            filled = executed.get(oid, Decimal("0"))
+            requested = rec.requested_size
+            if requested is None:
+                continue
+            remaining = requested - filled
+            if remaining <= 0:
+                continue
+            # RESTING (idle) oder PARTIALLY_FILLED mit Rest (GTC im Register)
+            if rec.status is OrderStatus.RESTING:
+                pass
+            elif rec.status is OrderStatus.PARTIALLY_FILLED:
+                pass
+            else:
+                continue
+            tok, mkt = meta.get(oid, (None, None))
+            out.append(RestingReplay(
+                order_id=oid,
+                remaining=remaining,
+                resting_at_seq=rec.decision_seq,
+                token_id=tok,
+                market_id=mkt,
+                requested_size=requested,
+            ))
+        out.sort(key=lambda r: (r.resting_at_seq, str(r.order_id)))
+        return tuple(out)
 
     @staticmethod
     def _gaps(telemetry: list[TelemetryRecord]) -> tuple[int, ...]:

@@ -1475,5 +1475,7 @@ Ledger war nicht fold-komplett. **Edit 0 vor Replay:** Schema v3 + Fold-Felder
 | Liefergegenstand | Inhalt |
 |---|---|
 | `read_telemetry` / `read_fills_all` | Lese-Pendants; `ORDER BY decision_seq, seq` |
-| `shadow_replay.py` | Read-only Fold; Lücken markieren; `unfilled_rows` |
-| Zeugen | Live==Replay Decimal; Gap markiert; Legacy-NULL gezaehlt |
+| `shadow_replay.py` | Read-only Fold; Lücken markieren; `unfilled_rows`;
+`resting_orders` aus letztem Status + remaining (kein Register-Persist) |
+| Zeugen | Live==Replay Decimal; Gap markiert; Legacy-NULL gezaehlt;
+GTC-Rest überlebt Replay, verschwindet nach EXPIRED-Record |
