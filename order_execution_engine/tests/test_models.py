@@ -12,6 +12,7 @@ from order_execution_engine.models import (
     MockEIP712Signature,
     OrderSide,
     OrderStatus,
+    OrderType,
     PaperOrder,
     Position,
     RejectReason,
@@ -61,6 +62,7 @@ def test_order_validation() -> None:
     o = _make_order()
     assert o.notional == Decimal("93.000000")
     assert o.status == OrderStatus.PENDING
+    assert o.order_type is OrderType.FAK
     try:
         _make_order(expiration=_utcnow() - timedelta(minutes=1))
         raise AssertionError("abgelaufene Order hätte abgelehnt werden müssen")
@@ -72,6 +74,13 @@ def test_order_validation() -> None:
     except PermissionError:
         pass
     print("OK test_order_validation")
+
+
+def test_paper_order_default_order_type_is_fak() -> None:
+    """Zeuge: Default-Produzent setzt OrderType.FAK (Schritt 1, nur-FAK)."""
+    o = _make_order()
+    assert o.order_type is OrderType.FAK
+    print("OK test_paper_order_default_order_type_is_fak")
 
 
 # Hinweis (F1b): Hier stand bis F1b `assert not o.is_expired()` im

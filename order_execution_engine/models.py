@@ -114,6 +114,22 @@ class OrderSide(str, Enum):
     SELL = "SELL"
 
 
+class OrderType(str, Enum):
+    """Order-Ausführungstyp (CLOB-Semantik, Dry-Run).
+
+    Produzent: Default auf ``PaperOrder.order_type`` — kein externer Aufrufer
+    setzt den Wert heute. Zeuge: ``PaperMatchEngine.match`` liest den Wert;
+    nur ``FAK`` ist aktiv.
+
+    FOK/GTC/GTD erst aufnehmen, wenn Produzent UND Zeuge existieren
+    (Regelwerk, Härte-Test — kein Inventar ohne Aufgabe). GTC kommt
+    notwendig zusammen mit ``OrderStatus.RESTING`` + Resting-Mechanik
+    (auch Wiedereintritt fuer ``EXPIRED``); FOK braucht All-or-Nothing.
+    """
+
+    FAK = "FAK"  # Fill-and-Kill: Teilausfuehrung erlaubt, Rest verworfen
+
+
 class Direction(str, Enum):
     """Signal-Richtung des NewsBots."""
 
@@ -224,6 +240,7 @@ class PaperOrder(BaseModel):
     price: PolymarketPrice = Field(description="Limitpreis 0 < p < 1.")
     size: PositiveDecimal = Field(description="Ordergröße in Shares.")
     expiration: datetime
+    order_type: OrderType = Field(default=OrderType.FAK)
     status: OrderStatus = Field(default=OrderStatus.PENDING)
     mode: ExecutionMode = Field(default=ExecutionMode.DRY_RUN)
     created_at: datetime = Field(default_factory=_utcnow)

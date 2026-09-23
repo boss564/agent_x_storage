@@ -10,6 +10,7 @@ from order_execution_engine.models import (
     FillResult,
     OrderSide,
     OrderStatus,
+    OrderType,
     RejectReason,
     RiskConfig,
     SafetyGuard,
@@ -102,6 +103,26 @@ def test_match_wrong_token() -> None:
     except ValueError:
         pass
     print("OK test_match_wrong_token")
+
+
+def test_match_guard_rejects_non_fak() -> None:
+    """Zeuge: Guard feuert laut bei non-FAK — ohne FOK ins Enum aufzunehmen.
+
+    ``OrderType.FOK`` existiert bewusst nicht (kein Inventar ohne Aufgabe).
+    Der Probe-Enum beweist den Leser im Matcher; wer FOK spaeter aufnimmt,
+    braucht Produzent + All-or-Nothing-Verhalten zuerst.
+    """
+    from enum import Enum
+
+    Probe = Enum("OrderTypeProbe", {"FOK": "FOK"}, type=str)
+    o = _order()
+    o = PaperOrder.model_construct(**{**o.model_dump(), "order_type": Probe.FOK})
+    try:
+        PaperMatchEngine().match(o, _book())
+        raise AssertionError("NotImplementedError erwartet fuer non-FAK")
+    except NotImplementedError as exc:
+        assert "FOK" in str(exc)
+    print("OK test_match_guard_rejects_non_fak")
 
 
 def test_match_empty_book_side_no_crash() -> None:

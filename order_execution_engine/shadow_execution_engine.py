@@ -32,6 +32,7 @@ from order_execution_engine.models import (
     MockEIP712Signature,
     OrderSide,
     OrderStatus,
+    OrderType,
     PaperOrder,
     PortfolioSnapshot,
     RejectReason,
@@ -292,6 +293,12 @@ class PaperMatchEngine:
         Returns:
             MatchResult mit Fills, Status und Slippage-Statistik.
         """
+        if order.order_type is not OrderType.FAK:
+            raise NotImplementedError(
+                f"OrderType {order.order_type.value}: kein Produzent/Zeuge im "
+                f"Dry-Run (aktiv ist nur FAK; siehe OrderType-Docstring). "
+                f"Wert zuerst implementieren, dann aufnehmen."
+            )
         if snapshot.token_id != order.token_id:
             raise ValueError("Snapshot token_id passt nicht zur Order.")
 
