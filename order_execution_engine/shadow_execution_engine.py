@@ -31,6 +31,7 @@ from pydantic import BaseModel, ConfigDict
 from order_execution_engine.models import (
     Direction,
     ExecutionMode,
+    ExecutionReport,
     FillResult,
     MockEIP712Signature,
     OrderSide,
@@ -685,6 +686,49 @@ class ShadowExecutionEngine:
         self.size_fn: SizeFn = size_fn or self._default_size_fn
         self._order_book: dict[uuid.UUID, PaperOrder] = {}
 
+    def _report(
+        self,
+        signal: SignalPayload,
+        record: TelemetryRecord,
+        match: Optional[MatchResult] = None,
+    ) -> ExecutionReport:
+        """Komposition: Telemetrie-Record + optionales MatchResult.
+
+        Kein neuer Zustand — alles abgeleitet. Persistenz laeuft weiter
+        ueber ``TelemetryRecord``; der Report ist Hub-Seite.
+        """
+        fills = match.fills if match is not None else ()
+        # Pre-Order-Rejects setzen status=None am Record; Hub braucht Enum.
+        status = (
+            record.status
+            if record.status is not None
+            else OrderStatus.REJECTED_BY_RISK
+        )
+        return ExecutionReport(
+            signal_id=record.signal_id,
+            order_id=record.order_id,
+            market_id=signal.market_id,
+            approved=record.approved,
+            status=status,
+            reject_reason=record.reject_reason,
+            requested_size=record.requested_size,
+            executed_size=sum(
+                (f.executed_size for f in fills), Decimal("0"),
+            ),
+            avg_execution_price=(
+                match.avg_execution_price if match is not None else None
+            ),
+            total_slippage_bps=(
+                match.total_slippage_bps if match is not None else Decimal("0")
+            ),
+            remaining_size=(
+                match.remaining_size if match is not None else Decimal("0")
+            ),
+            decision_seq=record.decision_seq,
+            latency_ms=record.latency_ms,
+            fills=fills,
+        )
+
     def _default_size_fn(self, signal: SignalPayload,
                          snapshot: PortfolioSnapshot) -> Decimal:
         """Default-Sizing: fixe Größe aus dem Risiko-Limit.
@@ -696,15 +740,19 @@ class ShadowExecutionEngine:
         """
         return self.risk.config.max_order_size_shares
 
-    def on_signal(self, signal: SignalPayload, snapshot: MarketSnapshot) -> TelemetryRecord:
+    def on_signal(self, signal: SignalPayload, snapshot: MarketSnapshot) -> ExecutionReport:
         """Verarbeitet ein eingehendes Signal komplett (Signal -> Fill).
+
+        Intern wird weiter ein ``TelemetryRecord`` geloggt (Persistenz-
+        Boundary). Rueckgabe ist das Hub-DTO ``ExecutionReport``
+        (Komposition, kein Ersatz).
 
         Args:
             signal: SignalPayload aus dem NewsBot.
             snapshot: Aktueller Marktschnappschuss aus PolySentinel.
 
         Returns:
-            TelemetryRecord mit Latenz und Entscheidung.
+            ExecutionReport mit Latenz, Entscheidung und optionalen Fills.
         """
         t0 = time.perf_counter()
         self.guard.assert_safe()
@@ -722,7 +770,7 @@ class ShadowExecutionEngine:
                 decision_seq=self.telemetry.next_decision_seq(),
             )
             self.telemetry.log(record)
-            return record
+            return self._report(signal, record)
 
         # Preis: Limit auf bestem verfügbaren Level setzen
         ref_price = snapshot.best_ask() if side == OrderSide.BUY else snapshot.best_bid()
@@ -734,7 +782,7 @@ class ShadowExecutionEngine:
                 decision_seq=self.telemetry.next_decision_seq(),
             )
             self.telemetry.log(record)
-            return record
+            return self._report(signal, record)
 
         # Sizing über den injizierbaren Seam. Der Portfolio-Snapshot ist
         # read-only; die Sizing-Funktion sieht den Zustand, kann ihn aber
@@ -783,7 +831,7 @@ class ShadowExecutionEngine:
                 requested_size=requested_size, decision_seq=decision_seq,
             )
             self.telemetry.log(record)
-            return record
+            return self._report(signal, record)
 
         match = self.matcher.match(
             order, snapshot,
@@ -806,7 +854,7 @@ class ShadowExecutionEngine:
             requested_size=requested_size, decision_seq=decision_seq,
         )
         self.telemetry.log(record)
-        return record
+        return self._report(signal, record, match)
 
     def on_book_update(self, snapshot: MarketSnapshot) -> list[TelemetryRecord]:
         """Ruhende Nachwertung -> Portfolio -> Telemetrie (decision_seq hoch).

@@ -40,7 +40,7 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from enum import Enum
 from types import MappingProxyType
-from typing import Annotated, Literal, Mapping, Optional
+from typing import Annotated, ClassVar, Literal, Mapping, Optional
 
 from pydantic import (
     BaseModel,
@@ -318,6 +318,63 @@ class FillResult(BaseModel):
     fee: Decimal = Field(default=Decimal("0"), ge=Decimal("0"))
     filled_at: datetime = Field(default_factory=_utcnow)
     latency_ms: Optional[float] = Field(default=None, ge=0.0)
+
+
+class ExecutionReport(BaseModel):
+    """Hub-DTO: Ergebnis der virtuellen Ausfuehrung eines Signals.
+
+    Komposition aus MatchResult + TelemetryRecord; Neueinstiegsstelle
+    fuer den Agent-X-Hub. Persistenz laeuft weiter ueber TelemetryRecord.
+
+    Terminalitaet: ``is_final`` am Paar ``(status, remaining_size)`` —
+    PARTIALLY_FILLED ist mit GTC nicht mehr per Status allein terminal
+    (Rest ruht). CANCELLED/EXPIRED sind in TERMINAL_STATUSES vorab
+    aufgenommen (Waisen, zukunftsfest).
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    TERMINAL_STATUSES: ClassVar[frozenset[OrderStatus]] = frozenset({
+        OrderStatus.FILLED,
+        OrderStatus.REJECTED_BY_RISK,
+        OrderStatus.CANCELLED,  # Waisen vorab mit aufnehmen:
+        OrderStatus.EXPIRED,    # Terminal-Menge ist zukunftsfest.
+    })
+
+    signal_id: uuid.UUID
+    order_id: Optional[uuid.UUID]
+    market_id: Optional[str] = None
+    approved: bool
+    status: OrderStatus
+    reject_reason: RejectReason = RejectReason.NONE
+    requested_size: Optional[Decimal] = None
+    executed_size: Decimal = Decimal("0")
+    avg_execution_price: Optional[Decimal] = None
+    total_slippage_bps: Decimal = Decimal("0")
+    remaining_size: Decimal = Decimal("0")
+    decision_seq: int = 0
+    latency_ms: float = 0.0
+    fills: tuple[FillResult, ...] = ()
+    created_at: datetime = Field(default_factory=_utcnow)
+
+    @property
+    def is_final(self) -> bool:
+        """Endgueltiger Abschluss. PARTIALLY_FILLED nur final, wenn kein
+        Rest ruht (FAK); bei GTC mit remaining > 0 laeuft der Zyklus."""
+        if self.status in self.TERMINAL_STATUSES:
+            return True
+        return (
+            self.status is OrderStatus.PARTIALLY_FILLED
+            and self.remaining_size <= 0
+        )
+
+    @model_validator(mode="after")
+    def _consistency(self) -> "ExecutionReport":
+        if not self.approved and self.reject_reason is RejectReason.NONE:
+            raise ValueError("Abgelehnt ohne reject_reason.")
+        if self.status is OrderStatus.RESTING and self.remaining_size <= 0:
+            raise ValueError("RESTING erfordert remaining_size > 0.")
+        return self
 
 
 # ---------------------------------------------------------------------------

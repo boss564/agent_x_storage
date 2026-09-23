@@ -9,6 +9,7 @@ from decimal import Decimal
 from order_execution_engine.models import (
     Direction,
     ExecutionMode,
+    ExecutionReport,
     FillResult,
     MockEIP712Signature,
     OrderSide,
@@ -119,6 +120,107 @@ def test_fill_result_json_roundtrip() -> None:
     assert restored.execution_price == Decimal("0.419")
     assert restored.slippage == Decimal("-1.18")
     print("OK test_fill_result_json_roundtrip")
+
+
+def test_report_json_roundtrip() -> None:
+    """F2 B2: Schema-Zeuge fuer ExecutionReport — alle Felder besetzt."""
+    oid = uuid.uuid4()
+    sid = uuid.uuid4()
+    fill = FillResult(
+        order_id=oid,
+        execution_price=Decimal("0.61"),
+        executed_size=Decimal("40"),
+        slippage=Decimal("0.5"),
+        fee=Decimal("0"),
+    )
+    report = ExecutionReport(
+        signal_id=sid,
+        order_id=oid,
+        market_id="mkt-1",
+        approved=True,
+        status=OrderStatus.PARTIALLY_FILLED,
+        reject_reason=RejectReason.NONE,
+        requested_size=Decimal("100"),
+        executed_size=Decimal("40"),
+        avg_execution_price=Decimal("0.61"),
+        total_slippage_bps=Decimal("5"),
+        remaining_size=Decimal("60"),
+        decision_seq=7,
+        latency_ms=1.25,
+        fills=(fill,),
+    )
+    restored = ExecutionReport.model_validate_json(report.model_dump_json())
+    assert restored == report
+    assert isinstance(restored.executed_size, Decimal)
+    assert restored.fills[0].execution_price == Decimal("0.61")
+    assert restored.is_final is False  # GTC-Semantik: Rest ruht
+    print("OK test_report_json_roundtrip")
+
+
+def test_report_is_final_partial_fill_fak() -> None:
+    """FAK-Teilfuellung: Rest verworfen (remaining=0) -> final."""
+    report = ExecutionReport(
+        signal_id=uuid.uuid4(),
+        order_id=uuid.uuid4(),
+        approved=True,
+        status=OrderStatus.PARTIALLY_FILLED,
+        executed_size=Decimal("40"),
+        remaining_size=Decimal("0"),
+    )
+    assert report.status is OrderStatus.PARTIALLY_FILLED
+    assert report.is_final is True
+    print("OK test_report_is_final_partial_fill_fak")
+
+
+def test_report_is_final_partial_fill_gtc() -> None:
+    """GTC-Teilfuellung: Rest ruht (remaining>0) -> NICHT final."""
+    report = ExecutionReport(
+        signal_id=uuid.uuid4(),
+        order_id=uuid.uuid4(),
+        approved=True,
+        status=OrderStatus.PARTIALLY_FILLED,
+        executed_size=Decimal("40"),
+        remaining_size=Decimal("60"),
+    )
+    assert report.is_final is False
+    resting = ExecutionReport(
+        signal_id=uuid.uuid4(),
+        order_id=uuid.uuid4(),
+        approved=True,
+        status=OrderStatus.RESTING,
+        remaining_size=Decimal("100"),
+    )
+    assert resting.is_final is False
+    print("OK test_report_is_final_partial_fill_gtc")
+
+
+def test_report_consistency_guards() -> None:
+    """(status, remaining)-Wachen: RESTING ohne Rest; Reject ohne Reason."""
+    from pydantic import ValidationError
+
+    try:
+        ExecutionReport(
+            signal_id=uuid.uuid4(),
+            order_id=uuid.uuid4(),
+            approved=True,
+            status=OrderStatus.RESTING,
+            remaining_size=Decimal("0"),
+        )
+        raise AssertionError("RESTING ohne Rest haette scheitern muessen")
+    except ValidationError:
+        pass
+    try:
+        ExecutionReport(
+            signal_id=uuid.uuid4(),
+            order_id=None,
+            approved=False,
+            status=OrderStatus.REJECTED_BY_RISK,
+            reject_reason=RejectReason.NONE,
+        )
+        raise AssertionError("Abgelehnt ohne Reason haette scheitern muessen")
+    except ValidationError:
+        pass
+    print("OK test_report_consistency_guards")
 
 
 def test_portfolio_apply_fill() -> None:
