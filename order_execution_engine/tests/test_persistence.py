@@ -340,6 +340,38 @@ def test_resting_status_db_roundtrip() -> None:
     print("OK test_resting_status_db_roundtrip")
 
 
+def test_expired_status_db_roundtrip() -> None:
+    """EXPIRED ueber Persistenz — Schema ohne CHECK, Status als TEXT (wie RESTING)."""
+    import sqlite3
+
+    from order_execution_engine.models import OrderStatus
+
+    with tempfile.TemporaryDirectory() as tmp:
+        store = SQLiteShadowStorage.for_user(Path(tmp), "u1")
+        rec = TelemetryRecord(
+            signal_id=uuid.uuid4(),
+            order_id=uuid.uuid4(),
+            latency_ms=0.0,
+            approved=True,
+            status=OrderStatus.EXPIRED,
+            reject_reason=RejectReason.NONE,
+            requested_size=Decimal("200"),
+            decision_seq=9,
+        )
+        store.write_telemetry(rec)
+        conn = sqlite3.connect(str(Path(tmp) / "u1" / "shadow" / "shadow.db"))
+        row = conn.execute(
+            "SELECT status, reject_reason FROM telemetry WHERE signal_id = ?",
+            (str(rec.signal_id),),
+        ).fetchone()
+        conn.close()
+        store.close()
+        assert row is not None
+        assert row[0] == "EXPIRED"
+        assert row[1] == "NONE"
+    print("OK test_expired_status_db_roundtrip")
+
+
 def test_storage_normalizes_none_at_boundary_defensively() -> None:
     """Defensive Schicht — NICHT der produktive Vertrag.
 

@@ -276,6 +276,18 @@ class RestingEvaluation:
     result: MatchResult
 
 
+@dataclass(frozen=True)
+class RestingExpiry:
+    """Register-Exit ohne Fill: ruhende Order hat TTL erreicht."""
+
+    order_id: uuid.UUID
+    signal_id: Optional[uuid.UUID]
+    market_id: Optional[str]
+    requested_size: Optional[Decimal]
+    decision_seq: int
+    remaining_size: Decimal  # ungefuellter Rest (Audit, kein Cash-Effekt)
+
+
 class PaperMatchEngine:
     """Fill- und Slippage-Simulation via Buch-Walk gegen Orderbuch-Tiefe.
 
@@ -502,6 +514,28 @@ class PaperMatchEngine:
             ))
             if remaining <= 0:
                 del self._resting[oid]
+        return out
+
+    def reap_expired(self, now: datetime) -> list[RestingExpiry]:
+        """Entfernt abgelaufene ruhende Orders aus dem Register.
+
+        Reiner Matcher-Teil: Transition/Telemetrie gehoert der Engine.
+        Vergleichsemantik wie PaperOrder-Konstruktor: ``expiration <= now``
+        ist abgelaufen (tz-aware datetime, nicht epoch-int).
+        """
+        out: list[RestingExpiry] = []
+        for oid, resting in list(self._resting.items()):
+            if resting.order.expiration > now:
+                continue
+            out.append(RestingExpiry(
+                order_id=oid,
+                signal_id=resting.signal_id,
+                market_id=resting.market_id,
+                requested_size=resting.requested_size,
+                decision_seq=resting.decision_seq,
+                remaining_size=resting.remaining_size,
+            ))
+            del self._resting[oid]
         return out
 
 
@@ -888,6 +922,38 @@ class ShadowExecutionEngine:
                 reject_reason=RejectReason.NONE,
                 status=order.status,
                 requested_size=ev.requested_size,
+                decision_seq=self.telemetry.next_decision_seq(),
+            )
+            self.telemetry.log(rec)
+            records.append(rec)
+        return records
+
+    def reap_expired(self, now: Optional[datetime] = None) -> list[TelemetryRecord]:
+        """RESTING -> EXPIRED. Takt-Produzent = Hub/Cron/Test (Uhr injizierbar).
+
+        Register-Exit ohne Fill: kein Cash-Effekt, kein Reject. Kein
+        Auto-Resubmit — Folge-GTC ist ein neuer ``match``-Aufruf des Hubs.
+        Mit Default-``expiration`` ist jede ruhende GTC faktisch GTD, sobald
+        dieser Pfad getickt wird.
+        """
+        now = now or datetime.now(timezone.utc)
+        records: list[TelemetryRecord] = []
+        for exp in self.matcher.reap_expired(now):
+            order = self._order_book.get(exp.order_id)
+            if order is None:
+                continue
+            order = order.model_copy(update={"status": OrderStatus.EXPIRED})
+            self._order_book[exp.order_id] = order
+            if exp.signal_id is None:
+                continue  # ohne Signal-Kontext keine Telemetrie (Test-Seam)
+            rec = TelemetryRecord(
+                signal_id=exp.signal_id,
+                order_id=exp.order_id,
+                latency_ms=0.0,
+                approved=True,  # risiko-genehmigt; Verfall ist Lebenszyklus
+                reject_reason=RejectReason.NONE,
+                status=OrderStatus.EXPIRED,
+                requested_size=exp.requested_size,
                 decision_seq=self.telemetry.next_decision_seq(),
             )
             self.telemetry.log(rec)

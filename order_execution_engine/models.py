@@ -111,7 +111,8 @@ class OrderStatus(str, Enum):
     REJECTED_BY_RISK = "REJECTED_BY_RISK"
     RESTING = "RESTING"  # Produzent: PaperMatchEngine._match_gtc (Rest-Registrierung)
     CANCELLED = "CANCELLED"
-    EXPIRED = "EXPIRED"
+    EXPIRED = "EXPIRED"  # Produzent: Engine.reap_expired via PaperOrder.expiration
+    # (Register-Exit ohne Fill; kein Cash-Effekt, kein Reject)
 
 
 class OrderSide(str, Enum):
@@ -131,12 +132,13 @@ class OrderType(str, Enum):
     FOK/GTD erst aufnehmen, wenn Produzent UND Zeuge existieren
     (Regelwerk, Härte-Test — kein Inventar ohne Aufgabe). GTC kommt
     zusammen mit ``OrderStatus.RESTING`` + Resting-Mechanik; FOK braucht
-    All-or-Nothing. EXPIRED-Wiedereintritt (Ablauf ruhender Orders) =
-    Folge-Ticket — kein Cancel/Ablauf in diesem Commit.
+    All-or-Nothing. Mit Default-``expiration`` ist GTC faktisch GTD,
+    sobald der Hub ``reap_expired`` tickt (Register-Exit ohne Fill).
     """
 
     FAK = "FAK"  # Fill-and-Kill: Teilausfuehrung erlaubt, Rest verworfen
     GTC = "GTC"  # Fill kreuzendes, Rest ruht im Matcher-Register bis on_book_update
+                 # / reap_expired (TTL → EXPIRED)
 
 
 class Direction(str, Enum):

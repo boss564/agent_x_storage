@@ -1401,6 +1401,7 @@ Derselbe Befund wie `94084e99`: Zahl im Satz, nicht in der Messung.
 | F2a | `FillResult` — schon frozen BaseModel; nur Roundtrip-Zeuge (`719416f6`) |
 | F2b = **B1** | `TelemetryRecord` → frozen BaseModel; ADR-13 = Feldvalidierung (Fall a) |
 | Resting-Paar | `OrderType.GTC` + `OrderStatus.RESTING` + Matcher-Register + Engine-`on_book_update` (decision_seq hoch) — kein Cancel/GTD |
+| `EXPIRED`-Wiedereintritt | **erledigt** — `reap_expired` (Order-TTL); mit Default-`expiration` faktisch GTD sobald Hub tickt; `CANCELLED` bleibt Waise |
 | B2 `ExecutionReport` | **erledigt** — Hub-DTO, `is_final` am Paar `(status, remaining_size)`, `on_signal` → Report (Telemetrie intern) |
 | B3 `MatchResult` | entfällt — engine-intern, keine Grenze |
 | `VirtualPortfolio` als BaseModel | **ADR 14** — bewusste Ausnahme; Seam = Snapshot-DTOs; Details `docs/adr/ADR-014-virtualportfolio-basemodel.md` |

@@ -1,6 +1,7 @@
 """Self-Tests für shadow_execution_engine (RiskController, PaperMatchEngine, Engine)."""
 
 import tempfile
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
 
@@ -185,6 +186,81 @@ def test_gtc_idle_is_resting_not_pending() -> None:
     # Terminal-Ausschluss: RESTING ist nicht FILLED/PARTIALLY
     assert r.status not in (OrderStatus.FILLED, OrderStatus.PARTIALLY_FILLED)
     print("OK test_gtc_idle_is_resting_not_pending")
+
+
+def test_reap_noop_before_expiration() -> None:
+    """Vor TTL: reap_expired ist No-Op — Register bleibt, kein Telemetrie-Satz."""
+    eng = ShadowExecutionEngine(
+        risk_config=RiskConfig(max_order_size_shares=Decimal("400")),
+    )
+    exp = datetime.now(timezone.utc) + timedelta(minutes=5)
+    thin = _snapshot(
+        asks=(OrderBookLevel(Decimal("0.61"), Decimal("200")),),
+        bids=(OrderBookLevel(Decimal("0.59"), Decimal("150")),),
+    )
+    o = _order(size=Decimal("400"), price=Decimal("0.61"))
+    o = o.model_copy(update={"order_type": OrderType.GTC, "expiration": exp})
+    r = eng.matcher.match(
+        o, thin, signal_id=o.signal_id, market_id="mkt-1",
+        requested_size=Decimal("400"), decision_seq=1,
+    )
+    eng._order_book[o.order_id] = o.model_copy(update={"status": r.status})
+    assert eng.matcher.resting_count == 1
+    assert eng.reap_expired(now=exp - timedelta(seconds=1)) == []
+    assert eng.matcher.resting_count == 1
+    assert eng._order_book[o.order_id].status is not OrderStatus.EXPIRED
+    print("OK test_reap_noop_before_expiration")
+
+
+def test_reap_expired_transitions_resting_to_expired() -> None:
+    """Beide Uhr-Seiten: kein Reap vor TTL; danach RESTING→EXPIRED, Register leer.
+
+    on_signal framet heute FAK — Resting wird hier ueber Matcher+Orderbuch
+    aufgebaut (gleicher Register-/Book-Pfad wie Produktions-GTC). remaining_size
+    auf RestingExpiry = ungefuellter Rest; Cash unveraendert (kein Fill).
+    """
+    eng = ShadowExecutionEngine(
+        risk_config=RiskConfig(max_order_size_shares=Decimal("400")),
+    )
+    exp = datetime.now(timezone.utc) + timedelta(minutes=5)
+    thin = _snapshot(
+        asks=(OrderBookLevel(Decimal("0.61"), Decimal("200")),),
+        bids=(OrderBookLevel(Decimal("0.59"), Decimal("150")),),
+    )
+    o = _order(size=Decimal("400"), price=Decimal("0.61"))
+    o = o.model_copy(update={"order_type": OrderType.GTC, "expiration": exp})
+    r = eng.matcher.match(
+        o, thin, signal_id=o.signal_id, market_id="mkt-1",
+        requested_size=Decimal("400"), decision_seq=1,
+    )
+    assert r.status is OrderStatus.PARTIALLY_FILLED
+    assert r.remaining_size == Decimal("200")
+    eng._order_book[o.order_id] = o.model_copy(update={"status": r.status})
+    cash_before = eng.portfolio.cash
+
+    t_before = exp - timedelta(seconds=1)
+    assert eng.reap_expired(now=t_before) == []
+    assert eng.matcher.resting_count == 1
+
+    # RestingExpiry.remaining_size am Matcher-Seam (ungefuellter Rest, Audit)
+    twin = PaperMatchEngine()
+    o2 = _order(size=Decimal("400"), price=Decimal("0.61"))
+    o2 = o2.model_copy(update={"order_type": OrderType.GTC, "expiration": exp})
+    twin.match(o2, thin, signal_id=o2.signal_id, market_id="mkt-1",
+               requested_size=Decimal("400"), decision_seq=1)
+    exps = twin.reap_expired(now=exp + timedelta(seconds=1))
+    assert len(exps) == 1
+    assert exps[0].remaining_size == Decimal("200")
+
+    records = eng.reap_expired(now=exp + timedelta(seconds=1))
+    assert eng.matcher.resting_count == 0
+    assert len(records) == 1
+    assert records[0].status is OrderStatus.EXPIRED
+    assert records[0].approved is True
+    assert records[0].reject_reason is RejectReason.NONE
+    assert eng._order_book[o.order_id].status is OrderStatus.EXPIRED
+    assert eng.portfolio.cash == cash_before
+    print("OK test_reap_expired_transitions_resting_to_expired")
 
 
 def test_match_empty_book_side_no_crash() -> None:
