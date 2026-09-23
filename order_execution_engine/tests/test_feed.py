@@ -209,6 +209,22 @@ def test_feed_delta_without_initial_book() -> None:
     print("OK test_feed_delta_without_initial_book")
 
 
+def test_ws_subscribe_uses_market_channel_and_assets_ids() -> None:
+    """Guard: Subscribe-Frame muss Doku treffen (sonst abonniert der Feed nichts).
+
+    run() ist pragma: no cover — dieser Zeuge deckt URL + Payload ohne Live-WS.
+    """
+    from order_execution_engine.market_data_feed import PolymarketWsFeed
+
+    assert PolymarketWsFeed.WS_URL.endswith("/ws/market"), PolymarketWsFeed.WS_URL
+    payload = PolymarketWsFeed.subscription_payload(["tokA", "tokB"])
+    assert payload["type"] == "market"
+    assert payload["assets_ids"] == ["tokA", "tokB"]
+    assert "token_ids" not in payload
+    assert payload.get("custom_feature_enabled") is True
+    print("OK test_ws_subscribe_uses_market_channel_and_assets_ids")
+
+
 if __name__ == "__main__":
     for fn in list(globals().values()):
         if callable(fn) and fn.__name__.startswith("test_"):

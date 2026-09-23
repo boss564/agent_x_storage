@@ -1124,7 +1124,9 @@ explizite Restmenge (`Call`-Callee-Rumpf), alles Übrige ist Produktion.
 als **Kriterium**. Als Kriterium erben sie das Nachwachsen; als Testdaten
 belegen sie eine Regel, die ohne sie auskommt.
 
-### Befund: Messung und Beschreibung sind zwei PrüfschritteDrei Commits in Folge korrigierten dieselbe Zahl — und **jedes Mal entstand der
+### Befund: Messung und Beschreibung sind zwei Prüfschritte
+
+Drei Commits in Folge korrigierten dieselbe Zahl — und **jedes Mal entstand der
 Fehler beim Aufschreiben der Korrektur, nicht beim Messen:**
 
 | Commit | Form des Fehlers |

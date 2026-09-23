@@ -211,7 +211,7 @@ class PolymarketWsFeed:
         await feed.run(["0xtokenA", "0xtokenB"])
     """
 
-    WS_URL = "wss://ws-subscriptions-clob.polymarket.com/ws/"
+    WS_URL = "wss://ws-subscriptions-clob.polymarket.com/ws/market"
 
     def __init__(self, handler: PolySentinelBookHandler) -> None:
         """Initialisiert den Feed mit einem Buch-Handler.
@@ -224,15 +224,25 @@ class PolymarketWsFeed:
         # (book = Vollbuch, price_change = Deltas mit size=0 = Entfernung).
         self._books: dict[str, dict[str, dict[Decimal, Decimal]]] = {}
 
-    async def run(self, token_ids: list[str], assets_ids: Optional[list[str]] = None) -> None:  # pragma: no cover
+    @staticmethod
+    def subscription_payload(token_ids: list[str]) -> dict:
+        """Baut das Market-Channel-Subscribe-Frame (Doku: assets_ids = Token-IDs).
+
+        Polymarket erwartet CLOB-Token-IDs unter ``assets_ids``, nicht unter
+        ``token_ids``. Ein leeres ``assets_ids`` abonniert nichts.
+        """
+        return {
+            "type": "market",
+            "assets_ids": list(token_ids),
+            "custom_feature_enabled": True,
+        }
+
+    async def run(self, token_ids: list[str]) -> None:  # pragma: no cover
         """Startet den Read-only-Stream (blockierend, via asyncio).
 
         Args:
-            token_ids: CLOB Token-IDs für book-Kanal.
-            assets_ids: Optionale Market-IDs für ticker-Kanal.
+            token_ids: CLOB Token-IDs — werden als ``assets_ids`` abonniert.
         """
-        import asyncio
-
         try:
             import websockets  # type: ignore[import-not-found]
         except ImportError as e:  # pragma: no cover
@@ -241,12 +251,7 @@ class PolymarketWsFeed:
             ) from e
 
         async with websockets.connect(self.WS_URL) as ws:
-            sub = {
-                "type": "market",
-                "assets_ids": assets_ids or [],
-                "token_ids": token_ids,
-            }
-            await ws.send(json.dumps(sub))  # Nur Subscription — erlaubt, kein Order-Pfad.
+            await ws.send(json.dumps(self.subscription_payload(token_ids)))
             async for raw in ws:
                 self._dispatch(json.loads(raw))
 
