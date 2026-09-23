@@ -1124,9 +1124,7 @@ explizite Restmenge (`Call`-Callee-Rumpf), alles Übrige ist Produktion.
 als **Kriterium**. Als Kriterium erben sie das Nachwachsen; als Testdaten
 belegen sie eine Regel, die ohne sie auskommt.
 
-### Befund: Messung und Beschreibung sind zwei Prüfschritte
-
-Drei Commits in Folge korrigierten dieselbe Zahl — und **jedes Mal entstand der
+### Befund: Messung und Beschreibung sind zwei PrüfschritteDrei Commits in Folge korrigierten dieselbe Zahl — und **jedes Mal entstand der
 Fehler beim Aufschreiben der Korrektur, nicht beim Messen:**
 
 | Commit | Form des Fehlers |
@@ -1144,6 +1142,31 @@ waren jedes Mal richtig: reproduzierbar bis auf den Einzelknoten.
 > (den Anker, den Checker, die Mutanten). Für den zweiten hat er nur
 > Aufmerksamkeit — und der zweite hat in dieser Kette dreimal so oft versagt
 > wie der erste.
+
+### Nebenbefund: Vierte Scheinschutz-Schicht im Charter-Guard
+
+`enforce_charter` prüft `if CHARTER.dry_run or CHARTER.diagnostic_only or not
+CHARTER.order_send or not CHARTER.live_execution`. Die Bedingung ist **wahr**,
+solange irgendein Flag im Dry-Run steht — also heute immer. Nach dieser Logik
+würde der Guard **erst dann aufhören zu feuern, wenn alle vier Flags
+gleichzeitig scharf sind** (live_execution=True, order_send=True,
+dry_run=False, diagnostic_only=False). Ein Guard, der genau dann öffnet, wenn
+er am meisten gebraucht wird, ist kein Guard, sondern ein Schalter.
+
+Das ist die **vierte Geschmacksrichtung** des Scheinschutzes — nach
+Produktionscode, Refactoring, Testsuite und unerreichbarem Prädikat (vgl.
+`is_expired()`): **eine Prädikat-Bedingung, die bei der gefährlichsten
+Konfiguration kippt.**
+
+**Der Body trägt die Bremse, nicht der Guard.** `send_order` hat zwei
+Statements: den Docstring und `raise DryRunViolation(...)`. Ein Guard ist
+strukturell redundant zu einem konstant werfenden Body — die eigentliche
+Sicherheit liegt in der Physik des Moduls: **es gibt keinen Netzwerk-Import**.
+Damit ist die Behauptung „unumgehbare Bremse" nicht falsch — sie hat nur einen
+stärkeren Anker als den, der als Beweis herangezogen wird.
+
+`send_order` bleibt mit dem Etikett `UNREACHABLE, belt-and-braces`. **Der
+Docstring darf nicht behaupten, er sei die Bremse** — er ist der zweite Nagel.
 
 `1ab09e2b` ist kein `amend` von `c9b1f7f2`: Betreffzeilen sind nicht
 nachträglich korrigierbar, ohne die Historie zu verbiegen. Der Nachtrag im
