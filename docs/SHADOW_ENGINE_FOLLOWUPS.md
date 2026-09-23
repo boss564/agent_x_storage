@@ -1168,6 +1168,28 @@ stärkeren Anker als den, der als Beweis herangezogen wird.
 `send_order` bleibt mit dem Etikett `UNREACHABLE, belt-and-braces`. **Der
 Docstring darf nicht behaupten, er sei die Bremse** — er ist der zweite Nagel.
 
+### Nachtrag: Der Repair-Commit hat den Docs-Edit mitgenommen
+
+`701b6268` heißt `chore: sync SWARM_INVENTORY` — enthält aber **zwei** Dateien:
+`docs/SWARM_INVENTORY.md` (der Sync, 8 Zeilen) und `docs/SHADOW_ENGINE_FOLLOWUPS.md`
+(dieser Nebenbefund, 29 Zeilen). Der Pre-Commit-Hook lief in einem Lauf, in dem
+der Docs-Edit noch gestaged war, und nahm ihn mit.
+
+**Das war genau die Vermischung, die der Repair-Commit vermeiden sollte** — Sync
+und Docs getrennt zu halten, damit die Fremdreparatur nicht in einem
+Dokumentations-Commit verschwindet.
+
+`git log -S` führt den Absatz unter dem `chore:`-Betreff. Die Trennung ist in
+der History nicht mehr nachträglich herstellbar, ohne sie zu verbiegen — und
+dieser Zyklus hält Irrtümer als Stationen fest. Der Befund steht hier.
+
+**Was der Vorfall belegt:** Der Hook prüft den *Index*, blockiert aber wegen
+*Repo-weitem* Zustand. Beide Mechanismen griffen im selben Lauf — der Hook
+verhinderte einen sauberen Commit, und der Retry nahm fremden Staging-Inhalt
+mit. Das ist Hook-Design-Geruch: **Prüfgegenstand und Blockiergrund liegen auf
+verschiedenen Ebenen.** Für den Hook selbst ein Follow-up, kein Grund, ihn zu
+umgehen.
+
 `1ab09e2b` ist kein `amend` von `c9b1f7f2`: Betreffzeilen sind nicht
 nachträglich korrigierbar, ohne die Historie zu verbiegen. Der Nachtrag im
 Dokument ist die konsistente Form — die Historie hält ihre Irrtümer als
