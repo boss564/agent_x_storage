@@ -25,6 +25,8 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Optional, Protocol, runtime_checkable
 
+from pydantic import BaseModel
+
 from order_execution_engine.models import FillResult, RejectReason, VirtualPortfolio
 from order_execution_engine.shadow_execution_engine import TelemetryRecord
 
@@ -82,6 +84,21 @@ def _dec_to_text(value: Decimal) -> str:
 def _text_to_dec(value: str) -> Decimal:
     """Deserialisiert TEXT zurück zu Decimal."""
     return Decimal(value)
+
+
+def _json_dec_as_text(value: object) -> Optional[str]:
+    """Cast an der Spaltengrenze: JSON-Mode-Decimal (str) → kanonisches TEXT.
+
+    ``model_dump(mode="json")`` serialisiert Decimal ggf. als ``"1E-16"``.
+    Die Spalten sind TEXT (nicht REAL) — Faustregel: JSON-Mode als Transport,
+    an der Grenze ``Decimal(str) → format(..., "f")``, Spaltentypen unverändert.
+    ``float()`` waere Schema-Bruch und Praezisionsverlust.
+    """
+    if value is None:
+        return None
+    if isinstance(value, Decimal):
+        return _dec_to_text(value)
+    return _dec_to_text(Decimal(str(value)))
 
 
 @runtime_checkable
@@ -248,16 +265,18 @@ class SQLiteShadowStorage:
     def write_telemetry(self, record: TelemetryRecord) -> None:
         """Persistiert einen Telemetrie-Eintrag (append-only).
 
-        Defensive Normalisierung: `TelemetryRecord` verhindert None bereits
-        an der Konstruktion (siehe `__post_init__`), aber ein typ-ignorierender
-        Aufrufer kann die Wache umgehen. Charter `diagnostic_only=true` heisst:
-        Telemetrie darf den Engine-Loop nie crashen. Die Boundary ist der
-        letzte Punkt, an dem das garantiert werden kann.
+        Transport: ``model_dump(mode="json")`` wenn BaseModel — UUID/Enum als
+        str. Spaltenliste explizit (keine implizite Feldreihenfolge).
+        Decimal-Spalten bleiben TEXT: Cast via ``_json_dec_as_text`` (nicht float).
 
-        Die Normalisierung ist bewusst NICHT still — sie loggt eine Warnung,
-        sonst maskiert sie genau die Bugs, die sie ueberleben laesst.
-        Zielwert ist `RejectReason.NONE` (Semantik: "kein Reject erfasst"),
-        nicht NULL: die Spalte ist NOT NULL per Vertrag.
+        Defensive Normalisierung: ``TelemetryRecord`` verhindert None bereits
+        an der Konstruktion (Pydantic-Feld / ADR 13), aber ein typ-ignorierender
+        Aufrufer (SimpleNamespace) kann die Wache umgehen. Charter
+        ``diagnostic_only=true``: Telemetrie darf den Engine-Loop nie crashen.
+        Die Boundary ist der letzte Punkt, an dem das garantiert werden kann.
+
+        Die Normalisierung ist bewusst NICHT still — sie loggt eine Warnung.
+        Zielwert ist ``RejectReason.NONE``, nicht NULL.
         """
         reason = record.reject_reason
         if not isinstance(reason, RejectReason):
@@ -268,28 +287,51 @@ class SQLiteShadowStorage:
                 reason,
             )
             reason = RejectReason.NONE
+
+        if isinstance(record, BaseModel):
+            row = record.model_dump(mode="json")
+        else:
+            # Defensiver Stub-Pfad (Charter): kein Schema, Attribute lesen.
+            row = {
+                "signal_id": str(record.signal_id),
+                "order_id": str(record.order_id) if record.order_id else None,
+                "latency_ms": record.latency_ms,
+                "approved": record.approved,
+                "status": record.status.value if getattr(record, "status", None) else None,
+                "requested_size": (
+                    _dec_to_text(record.requested_size)
+                    if getattr(record, "requested_size", None) is not None
+                    else None
+                ),
+                "decision_seq": getattr(record, "decision_seq", 0) or None,
+            }
+
         with self._lock:
             self._conn.execute(
                 "INSERT INTO telemetry (signal_id, order_id, latency_ms, approved,"
                 " reject_reason, status, requested_size, decision_seq)"
                 " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 (
-                    str(record.signal_id),
-                    str(record.order_id) if record.order_id else None,
-                    record.latency_ms,
-                    1 if record.approved else 0,
+                    row["signal_id"],
+                    row["order_id"],
+                    row["latency_ms"],
+                    1 if row["approved"] else 0,
                     reason.value,
-                    record.status.value if record.status else None,
-                    _dec_to_text(record.requested_size)
-                    if record.requested_size is not None else None,
-                    record.decision_seq if record.decision_seq else None,
+                    row["status"],
+                    _json_dec_as_text(row["requested_size"])
+                    if row.get("requested_size") is not None
+                    else None,
+                    row["decision_seq"] if row.get("decision_seq") else None,
                 ),
             )
             self._conn.commit()
 
     def write_fill(self, fill: FillResult, fill_idx: int = 0,
                    requested_size: Optional[Decimal] = None) -> None:
-        """Persistiert einen Fill (Decimal als TEXT).
+        """Persistiert einen Fill (Decimal als TEXT, Spaltenliste explizit).
+
+        Transport: ``model_dump(mode="json")``. Cast an der Spaltengrenze via
+        ``_json_dec_as_text`` — Schema bleibt TEXT, kein float/REAL.
 
         Args:
             fill: Das FillResult.
@@ -299,6 +341,7 @@ class SQLiteShadowStorage:
                 das ist für neue Fills korrekt (der Default-Adapter kappt
                 nicht) und macht den Aufruf rückwärtskompatibel.
         """
+        row = fill.model_dump(mode="json")
         req = requested_size if requested_size is not None else fill.executed_size
         with self._lock:
             self._conn.execute(
@@ -306,15 +349,15 @@ class SQLiteShadowStorage:
                 " slippage, fee, filled_at, latency_ms, requested_size)"
                 " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
-                    str(fill.order_id),
+                    row["order_id"],
                     fill_idx,
-                    _dec_to_text(fill.execution_price),
-                    _dec_to_text(fill.executed_size),
-                    _dec_to_text(fill.slippage),
-                    _dec_to_text(fill.fee),
-                    fill.filled_at.isoformat(),
-                    fill.latency_ms,
-                    _dec_to_text(req),
+                    _json_dec_as_text(row["execution_price"]),
+                    _json_dec_as_text(row["executed_size"]),
+                    _json_dec_as_text(row["slippage"]),
+                    _json_dec_as_text(row["fee"]),
+                    row["filled_at"],
+                    row["latency_ms"],
+                    _json_dec_as_text(req),
                 ),
             )
             self._conn.commit()

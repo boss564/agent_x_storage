@@ -1403,5 +1403,5 @@ Derselbe Befund wie `94084e99`: Zahl im Satz, nicht in der Messung.
 | B2 `ExecutionReport` | **nach Resting-Paar** — sonst Design auf Phantom-Fills |
 | B3 `MatchResult` | entfällt — engine-intern, keine Grenze |
 | `VirtualPortfolio` als BaseModel | bewusste Ausnahme (ADR 12): Zustandsmodell mit Schema; Seam = `PositionSnapshot`/`PortfolioSnapshot` |
-| Persistenz `write_fill` | vorerst manuell; Schema durch Roundtrip gesichert; `model_dump`-Umstellung eigener Commit mit B1 |
+| Persistenz `write_fill`/`write_telemetry` | `model_dump(mode="json")` + explizite Spalten; Decimal bleibt TEXT via `_json_dec_as_text` (nicht float/REAL — Schema-Vorgabe) |
 

@@ -228,6 +228,86 @@ def test_telemetry_record_json_roundtrip() -> None:
     print("OK test_telemetry_record_json_roundtrip")
 
 
+def test_write_telemetry_db_roundtrip() -> None:
+    """Persistenz-Sync: Spaltengrenze, nicht nur Transport-Dict.
+
+    Liest aus der DB zurück. Decimal bleibt TEXT (kein float/REAL);
+    ``Decimal(str(stored))`` ist der dokumentierte TEXT-Pfad.
+    """
+    import sqlite3
+
+    with tempfile.TemporaryDirectory() as tmp:
+        store = SQLiteShadowStorage.for_user(Path(tmp), "u1")
+        rec = TelemetryRecord(
+            signal_id=uuid.uuid4(),
+            order_id=uuid.uuid4(),
+            latency_ms=1.83,
+            approved=False,
+            status=None,
+            reject_reason=RejectReason.MAX_POSITION_SIZE,
+            requested_size=Decimal("31"),
+            decision_seq=3,
+        )
+        store.write_telemetry(rec)
+        conn = sqlite3.connect(str(Path(tmp) / "u1" / "shadow" / "shadow.db"))
+        conn.row_factory = sqlite3.Row
+        stored = conn.execute(
+            "SELECT signal_id, order_id, status, reject_reason, requested_size, "
+            "decision_seq, approved FROM telemetry WHERE signal_id = ?",
+            (str(rec.signal_id),),
+        ).fetchone()
+        conn.close()
+        store.close()
+
+        expected = rec.model_dump(mode="json")
+        assert stored is not None
+        assert stored["signal_id"] == expected["signal_id"]
+        assert stored["order_id"] == expected["order_id"]
+        assert stored["status"] == expected["status"]
+        assert stored["reject_reason"] == expected["reject_reason"]
+        assert Decimal(str(stored["requested_size"])) == rec.requested_size
+        assert stored["requested_size"] == "31"  # TEXT-Kanon, nicht REAL/float
+        assert stored["decision_seq"] == 3
+        assert stored["approved"] == 0
+    print("OK test_write_telemetry_db_roundtrip")
+
+
+def test_write_fill_db_roundtrip() -> None:
+    """Persistenz-Sync analog fuer FillResult — Spaltengrenze + TEXT-Decimal."""
+    import sqlite3
+
+    with tempfile.TemporaryDirectory() as tmp:
+        store = SQLiteShadowStorage.for_user(Path(tmp), "u1")
+        fill = FillResult(
+            order_id=uuid.uuid4(),
+            execution_price=Decimal("0.419"),
+            executed_size=Decimal("31"),
+            slippage=Decimal("-1.18"),
+            fee=Decimal("0"),
+            latency_ms=0.29,
+        )
+        store.write_fill(fill, fill_idx=0, requested_size=Decimal("50"))
+        conn = sqlite3.connect(str(Path(tmp) / "u1" / "shadow" / "shadow.db"))
+        conn.row_factory = sqlite3.Row
+        stored = conn.execute(
+            "SELECT order_id, execution_price, executed_size, slippage, fee, "
+            "requested_size, latency_ms FROM fills WHERE order_id = ?",
+            (str(fill.order_id),),
+        ).fetchone()
+        conn.close()
+        store.close()
+
+        assert stored is not None
+        assert stored["order_id"] == str(fill.order_id)
+        assert Decimal(stored["execution_price"]) == Decimal("0.419")
+        assert stored["execution_price"] == "0.419"  # kanonisches TEXT, nicht 1E-…
+        assert Decimal(stored["executed_size"]) == Decimal("31")
+        assert Decimal(stored["slippage"]) == Decimal("-1.18")
+        assert Decimal(stored["requested_size"]) == Decimal("50")
+        assert stored["latency_ms"] == 0.29
+    print("OK test_write_fill_db_roundtrip")
+
+
 def test_storage_normalizes_none_at_boundary_defensively() -> None:
     """Defensive Schicht — NICHT der produktive Vertrag.
 
