@@ -1407,3 +1407,62 @@ Derselbe Befund wie `94084e99`: Zahl im Satz, nicht in der Messung.
 | `VirtualPortfolio` als BaseModel | **ADR 14** — bewusste Ausnahme; Seam = Snapshot-DTOs; Details `docs/adr/ADR-014-virtualportfolio-basemodel.md` |
 | Persistenz `write_fill`/`write_telemetry` | `model_dump(mode="json")` + explizite Spalten; Decimal bleibt TEXT via `_json_dec_as_text` (nicht float/REAL — Schema-Vorgabe) |
 
+---
+
+## Nach F2 — offene Wartebedingungen & operative Verträge (2026-09-23)
+
+### `CANCELLED`: bewusste Waise (kein Ticket ohne Verbraucher)
+
+Im Enum belassen als zukunftsfeste Terminal-Menge (`ExecutionReport.TERMINAL_STATUSES`).
+**Kein Code**, bevor einer von zwei konkreten Verbrauchern auftaucht:
+
+| Auslöser | Semantik |
+|---|---|
+| (a) **Hub-Abort** | Signal widerrufen, bevor Fill/Rest (Pre-Match oder ruhend) |
+| (b) **Operator-Cancel** | Manuelle Notbremse auf ruhende Order |
+
+**Regel:** `CANCELLED` wird erst mit einem Zeugen-Aufruf implementiert
+(Produzent + Zeuge im selben Commit — dritter Commit seiner Art:
+erst Produzent, dann Wert). Bis dahin bleibt die Waise im Enum; kein
+Inventar-Eintrag als offenes Feature.
+
+### Hub-Tick-Vertrag (`reap_expired`)
+
+Seit `16f7eac3` ist GTC-mit-Default-`expiration` **faktisch GTD** — aber nur,
+wenn `reap_expired` tatsächlich gerufen wird. Takt-Produzent ist dokumentiert
+als Hub/Cron/Test; **noch kein Produktions-Aufrufer**.
+
+> **Tick-Vertrag offen** — ohne Aufrufer verhalten sich ruhende Orders wie
+> reine GTC (kein Verfall). Engine-seitiger Produzent existiert; der Hub muss
+> den Takt verdrahten, sonst liegen in einem Jahr ruhende Orders, die nie
+> verfallen, und niemand weiß warum.
+
+### Telemetrie-Volumen
+
+`decision_seq` zählt hoch pro Nachwertung (`on_book_update`) und pro
+Reap-Record — korrekt, aber die Tabelle wächst mit Tick-Frequenz. Kein
+Problem jetzt; Hinweis für den Tag, an dem die DB Summen zieht
+(Retention/Aggregation, nicht Engine-Semantik).
+
+### Nächster Meilenstein: Replay / Shadow-Audit (Read-only)
+
+Kreis schließen: F2-DTOs + Persistence-Sync + Resting/TTL werden vom Replay
+*verbraucht* — Zustand aus Telemetrie-/Fills-DB rekonstruieren (Portfolio,
+offene Positionen, ruhende Orders), Dry-Run beweist sein eigenes Ledger.
+
+| Vorgabe | Inhalt |
+|---|---|
+| Scope | **Read-only** — Replay schreibt nichts, mutiert nichts; validiert |
+| Erster Zeuge | Frische Engine + Fixture-Signalserie → DB → Replay →
+`portfolio.snapshot()` Decimal-identisch (nicht float) |
+| `decision_seq`-Lücke | **lückenmarkieren, nicht abbrechen** — Abbruch bei der
+ersten Lücke versteckt die zweite |
+
+**Ist-Lese-Seite (Stand `16f7eac3`):** Fast nur Schreibpfad. Vorhanden:
+`latest_decision_seq()`, `read_fills(order_id) → list[tuple[str,…]]` (TEXT-
+Decimals). **Fehlt für Replay:** `read_telemetry` (ORDER BY decision_seq/seq),
+Fills→`FillResult`-Rekonstruktion, optional Portfolio-Snapshot-Lesen.
+`VirtualPortfolio.snapshot(mark_prices, as_of_seq) → PortfolioSnapshot`
+(frozen Seam) ist der Vergleichspunkt — nicht `write_portfolio` (ADR-14-Schuld:
+lebt noch am Objekt statt am Snapshot-DTO).
+
