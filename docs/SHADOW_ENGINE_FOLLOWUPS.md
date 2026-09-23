@@ -1307,5 +1307,85 @@ ohne dass es jemand merkt — und sie kann es ab jetzt **beweisen**.
 Nach der Übernahme prüft das Strategy-Package seine eigenen Versprechen, bevor
 es Strategien prüft. Das ist die richtige Reihenfolge.
 
+---
 
+## Replace vs. Complement — Entscheidung (2026-09-23)
 
+**Quelle:** `/Users/olivermueller/Downloads/shadow_execution_engine.py`
+(~1060 Zeilen, stdlib-only, Monolith mit `__main__`-Demo).
+**Ziel:** `order_execution_engine/` (Package, 53/53, Persistenz, Meta-Anker).
+
+### Urteil: Ergänzen, nicht Ersetzen
+
+Zwei `ShadowExecutionEngine`-Klassen in einem System vergiften F2 und Replay.
+Das Package ist in der Infrastruktur verankert (Tests, Checker, `persistence.py`).
+Die Download-Datei wird als **Gap-Quelle** geschlachtet — Unique & nützlich wandert
+in's Package (Package-Namespace, Package-Enums); der Rest wird Demo oder verworfen.
+
+**Zielbild nach Abschluss:** Die Download-Datei schrumpft zu
+`order_execution_engine/examples/shadow_engine_demo.py` (oder wird gelöscht, wenn
+die Suite den Demo-Pfad schon abdeckt). Kein zweites Engine-Modul im Import-Pfad.
+
+### Gap-Matrix (gemessen, AST)
+
+| Bucket | Anzahl | Konsequenz |
+|---|---|---|
+| Unique Download | 20 Klassen/Enums + 2 Top-Level-Funcs | prüfen: übernehmen / Demo / verwerfen |
+| Überlappend | 6 Klassen | Feature-Diff → Package nachrüsten, dann Datei-Version streichen |
+| Nur Package | 27 Namen | Vorsprung — kein Gap |
+
+#### Bucket A — Unique Download (mit Härte-Test)
+
+Eine Klasse überlebt nur, wenn (a) F2/Persistenz/Replay sie braucht, (b) Risiko-
+/Validierungslogik, die das Package nicht hat, oder (c) Checker-Abdeckung.
+
+| Name | Härte-Test | Urteil |
+|---|---|---|
+| `OrderType` (FOK/FAK/GTC/GTD) | (a)+(b) — Package hat **kein** OrderType; GTC ist der Wiedereintritt für `EXPIRED` | **übernehmen** (Enums zuerst) |
+| `MatchSimulator` Resting (`_resting`, `_evaluate_resting`, GTC) | (a)+(b) — Package-`PaperMatchEngine` hat **kein** Resting | **übernehmen** (Feature in `PaperMatchEngine`) |
+| `CLOBOrderPayload` + `OrderFramer` CLOB-Mapping | (a) — Framing für Replay/Hub | **übernehmen** (als Erweiterung von `PaperOrder` / Framer) |
+| `send_order` + `DryRunViolation` + `hard_guard_network` / `enforce_charter` | (b) — Package hat `SafetyGuard`; Download-Guard ist Scheinschutz (Disjunktion) | **nicht übernehmen**; Etikett `UNREACHABLE, belt-and-braces` gilt für den Body-`raise`-Gedanken — Package behält `SafetyGuard` |
+| `DrawdownLockout` (eigene Klasse) | — | **verwerfen** — Package-`RiskController` hat Lockout schon (mit Zeuge) |
+| `InversionPolicy` | — | **verwerfen** — Package hat `SignalPayload.invert` + Engine-Pfad + Tests |
+| `Side` / `ReportStatus` | — | **verwerfen als kanonisch** — Package-Enums (`OrderSide`, `OrderStatus`+`RejectReason`) sind kanonisch; Mapping-Tabelle unten |
+| `EngineConfig` | — | **verwerfen** — Package-`RiskConfig` + Feed-Config |
+| `Signal`, `Fill`, `OrderRequest`, `OrderBookSnapshot`, `BookLevel`, `TelemetryEvent`, `ExecutionReport` | teils Rename | **Mapping**, kein Parallel-Typ — Felder in Package-Modelle nachziehen, wo Feature-Gap |
+| `__main__`-Demo | Demo-only | **retten** als `examples/` oder Suite-Pfad; kein Produktionsimport |
+
+#### Bucket B — Überlappend (Feature-Diff)
+
+| Klasse | Download-only | Package-only | Aktion |
+|---|---|---|---|
+| `ShadowExecutionEngine` | `ingest_signal`, `on_book_update`, `send_order`, Resting-Eval | `on_signal`, `preview`, `performance_summary` | Resting + passive Book-API in Package nachziehen; `send_order` nicht |
+| `TelemetryLogger` | `stage_latencies`, `summary`, `trace` | `decision_seq`, `reject_rate`, `stats` | Stage-Latenz optional nachziehen; `decision_seq` behalten |
+| `VirtualPortfolio` / `Position` | Rename-Felder (`cash_usdc`↔`cash`) | Package-Namen kanonisch | Felder **nicht** verdoppeln; Alias nur in Demo |
+| `RiskDecision` | `allowed`/`reasons` | `approved`/`reason` + `ok`/`reject` | Package-API behalten |
+| `MockEIP712Signature` | `is_valid_onchain`, `typed_data` | `r`/`s`/`v`, `is_mock` | `is_valid_onchain=False`-Garantie in Package-Docstring/Feld nachziehen |
+
+#### Enum-Vorherrschaft (F2-Eingangsvoraussetzung)
+
+| Download | Package (kanonisch) | Mapping |
+|---|---|---|
+| `Side` | `OrderSide` | 1:1 BUY/SELL |
+| `ReportStatus` | `OrderStatus` + `RejectReason` | FILLED/PARTIALLY↔Status; REJECTED_*↔Reason; RESTING = **neu** (mit OrderType.GTC) |
+| `OrderType` | — (fehlt) | **neu ins Package** |
+
+> Package-Enums sind kanonisch. Nach Migration importiert jede Demo/Datei nur noch
+> aus `order_execution_engine.models`. Kein paralleles `Side`/`ReportStatus`.
+
+### Migrations-Reihenfolge
+
+1. **Enums** — `OrderType` + `RESTING` (oder äquivalent) in `models.py`, Meta-Anker
+   beachten (Produzent + Zeuge; Binnenordnung F2b).
+2. **Models** — CLOB-Payload / Framer-Felder an `PaperOrder` (ADR 12: Pydantic).
+3. **Engine-Merge** — Resting-Orders in `PaperMatchEngine` + passive Book-Updates
+   an bestehende Feed-Naht (`market_data_feed.on_book_update`).
+4. **Demo-Reduktion** — Download → `examples/shadow_engine_demo.py` oder Löschung.
+5. **Erst dann F2 / Persistenz / Replay** — Models stehen, Enums eine Quelle.
+
+### Nebenkorrektur: Checker-Zahl
+
+Frisch gemessen gegen HEAD: **`206 Angaben geprueft, 0 Abweichungen`**.
+Die „233" in Commit-Hook-Ausgaben und Stand-Blöcken dieser Sitzung hat keine
+stabile Quelle im Live-Lauf (`python3 scripts/check_claude_md.py` → 206).
+Derselbe Befund wie `94084e99`: Zahl im Satz, nicht in der Messung.
