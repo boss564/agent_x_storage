@@ -1,6 +1,7 @@
 """Self-Tests für order_execution_engine.models (v0.2 Härtung)."""
 
 import sys
+import uuid
 from datetime import timedelta
 from decimal import Decimal
 
@@ -95,6 +96,29 @@ def test_mock_signature() -> None:
     sig = MockEIP712Signature.mock()
     assert sig.is_mock is True
     print("OK test_mock_signature")
+
+
+def test_fill_result_json_roundtrip() -> None:
+    """F2a: Schema-Zeuge für FillResult — Persistenz-Anker vor DB-Schreiben.
+
+    Nicht-triviale Werte (neg. Slippage = Sign-Konvention, latency gesetzt),
+    Decimal bleibt Decimal (kein float-Quetschen), kein Handmapping von
+    write_fill — nur model_dump_json / model_validate_json.
+    """
+    fill = FillResult(
+        order_id=uuid.uuid4(),
+        execution_price=Decimal("0.419"),
+        executed_size=Decimal("31"),
+        slippage=Decimal("-1.18"),
+        fee=Decimal("0"),
+        latency_ms=0.29,
+    )
+    restored = FillResult.model_validate_json(fill.model_dump_json())
+    assert restored == fill
+    assert isinstance(restored.execution_price, Decimal)
+    assert restored.execution_price == Decimal("0.419")
+    assert restored.slippage == Decimal("-1.18")
+    print("OK test_fill_result_json_roundtrip")
 
 
 def test_portfolio_apply_fill() -> None:

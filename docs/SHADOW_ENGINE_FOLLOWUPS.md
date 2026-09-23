@@ -1389,3 +1389,19 @@ Frisch gemessen gegen HEAD: **`206 Angaben geprueft, 0 Abweichungen`**.
 Die „233" in Commit-Hook-Ausgaben und Stand-Blöcken dieser Sitzung hat keine
 stabile Quelle im Live-Lauf (`python3 scripts/check_claude_md.py` → 206).
 Derselbe Befund wie `94084e99`: Zahl im Satz, nicht in der Messung.
+
+---
+
+## F2 — Parität (Grenze vs. Kern), Stand 2026-09-23
+
+**Regel:** Validierung an der Grenze, Verhalten im Kern. Nicht „alles auf Pydantic".
+
+| Entscheidung | Inhalt |
+|---|---|
+| F2a | `FillResult` — schon frozen BaseModel; nur Roundtrip-Zeuge (`b0f19eff`+1) |
+| F2b = **B1** | `TelemetryRecord` Dataclass → frozen BaseModel + ADR-13 als `model_validator` |
+| B2 `ExecutionReport` | **nach Resting-Paar** — sonst Design auf Phantom-Fills |
+| B3 `MatchResult` | entfällt — engine-intern, keine Grenze |
+| `VirtualPortfolio` als BaseModel | bewusste Ausnahme (ADR 12): Zustandsmodell mit Schema; Seam = `PositionSnapshot`/`PortfolioSnapshot` |
+| Persistenz `write_fill` | vorerst manuell; Schema durch Roundtrip gesichert; `model_dump`-Umstellung eigener Commit mit B1 |
+
