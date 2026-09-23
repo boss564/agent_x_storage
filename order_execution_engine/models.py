@@ -309,6 +309,9 @@ class FillResult(BaseModel):
         fee: Simulierte Gebühr in USDC.
         filled_at: Zeitpunkt der simulierten Ausführung.
         latency_ms: Latenz Signal-Eingang bis virtuelle Ausführung.
+        side/token_id/market_id: Fold-Felder fuer Shadow-Replay (Ledger).
+            Optional fuer Legacy-Zeilen; neue Fills setzen sie im Matcher.
+            NULL in der DB = unfaltbar (keine Richtungsvermutung).
     """
 
     model_config = ConfigDict(frozen=True)
@@ -320,6 +323,9 @@ class FillResult(BaseModel):
     fee: Decimal = Field(default=Decimal("0"), ge=Decimal("0"))
     filled_at: datetime = Field(default_factory=_utcnow)
     latency_ms: Optional[float] = Field(default=None, ge=0.0)
+    side: Optional[OrderSide] = None
+    token_id: Optional[str] = None
+    market_id: Optional[str] = None
 
 
 class ExecutionReport(BaseModel):

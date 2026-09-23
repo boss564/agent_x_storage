@@ -20,19 +20,25 @@ import logging
 import re
 import sqlite3
 import threading
+import uuid
 from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path
-from typing import Optional, Protocol, runtime_checkable
+from typing import Any, Optional, Protocol, runtime_checkable
 
 from pydantic import BaseModel
 
-from order_execution_engine.models import FillResult, RejectReason, VirtualPortfolio
+from order_execution_engine.models import (
+    FillResult,
+    OrderStatus,
+    RejectReason,
+    VirtualPortfolio,
+)
 from order_execution_engine.shadow_execution_engine import TelemetryRecord
 
 _LOG = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 _USER_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
 
 
@@ -156,6 +162,10 @@ class SQLiteShadowStorage:
         filled_at TEXT NOT NULL,
         latency_ms REAL,
         requested_size TEXT,
+        side TEXT,
+        token_id TEXT,
+        market_id TEXT,
+        decision_seq INTEGER,
         PRIMARY KEY (order_id, fill_idx)
     );
     CREATE TABLE IF NOT EXISTS portfolio_snapshots (
@@ -189,6 +199,15 @@ class SQLiteShadowStorage:
         "UPDATE fills SET requested_size = executed_size WHERE requested_size IS NULL",
     )
 
+    # Migration v2 -> v3 (Replay-Ledger): Fold-Felder + as_of-Anker auf fills.
+    # NULL = Legacy / unfaltbar — Replay raet nicht.
+    _MIGRATIONS_V3 = (
+        "ALTER TABLE fills ADD COLUMN side TEXT",
+        "ALTER TABLE fills ADD COLUMN token_id TEXT",
+        "ALTER TABLE fills ADD COLUMN market_id TEXT",
+        "ALTER TABLE fills ADD COLUMN decision_seq INTEGER",
+    )
+
     def __init__(self, db_path: Path) -> None:
         """Öffnet (und initialisiert/migriert) die SQLite-Datei.
 
@@ -200,8 +219,10 @@ class SQLiteShadowStorage:
         self._db_path.parent.mkdir(parents=True, exist_ok=True)
         self._lock = threading.Lock()
         self._conn = sqlite3.connect(str(self._db_path), check_same_thread=False)
+        self._conn.row_factory = sqlite3.Row
         self._conn.executescript(self._DDL)
         self._migrate_v2()
+        self._migrate_v3()
         self._conn.execute(
             "INSERT OR REPLACE INTO schema_meta (key, value) VALUES ('schema_version', ?)",
             (str(SCHEMA_VERSION),),
@@ -231,6 +252,20 @@ class SQLiteShadowStorage:
                 col = stmt.rsplit("ADD COLUMN ", 1)[1].split()[0]
                 if col in cols:
                     continue
+            self._conn.execute(stmt)
+
+    def _migrate_v3(self) -> None:
+        """Bringt eine v2-Datei auf v3 (idempotent): Fold-Spalten auf fills."""
+        fill_cols = {
+            row[0]
+            for row in self._conn.execute(
+                "SELECT name FROM pragma_table_info('fills')"
+            ).fetchall()
+        }
+        for stmt in self._MIGRATIONS_V3:
+            col = stmt.rsplit("ADD COLUMN ", 1)[1].split()[0]
+            if col in fill_cols:
+                continue
             self._conn.execute(stmt)
 
     def latest_decision_seq(self) -> int:
@@ -327,27 +362,37 @@ class SQLiteShadowStorage:
             self._conn.commit()
 
     def write_fill(self, fill: FillResult, fill_idx: int = 0,
-                   requested_size: Optional[Decimal] = None) -> None:
+                   requested_size: Optional[Decimal] = None,
+                   decision_seq: Optional[int] = None) -> None:
         """Persistiert einen Fill (Decimal als TEXT, Spaltenliste explizit).
 
         Transport: ``model_dump(mode="json")``. Cast an der Spaltengrenze via
         ``_json_dec_as_text`` — Schema bleibt TEXT, kein float/REAL.
 
+        Fold-Spalten (``side``, ``token_id``, ``market_id``, ``decision_seq``):
+        aus dem Fill bzw. optionalem ``decision_seq``-Argument. Fehlen sie,
+        schreibt NULL — Replay zaehlt die Zeile als unfaltbar.
+
         Args:
             fill: Das FillResult.
             fill_idx: Index bei Partial Fills einer Order (Default 0).
             requested_size: Ungekappte angeforderte Größe. `None` = vor
-                Messbeginn. Ohne Angabe wird der ausgeführte Wert verwendet —
-                das ist für neue Fills korrekt (der Default-Adapter kappt
-                nicht) und macht den Aufruf rückwärtskompatibel.
+                Messbeginn. Ohne Angabe wird der ausgeführte Wert verwendet.
+            decision_seq: as_of-Anker; Default aus Fill falls gesetzt, sonst None.
         """
         row = fill.model_dump(mode="json")
         req = requested_size if requested_size is not None else fill.executed_size
+        side_val = (
+            fill.side.value if fill.side is not None
+            else (row.get("side") if isinstance(row.get("side"), str) else None)
+        )
+        seq = decision_seq
         with self._lock:
             self._conn.execute(
                 "INSERT INTO fills (order_id, fill_idx, execution_price, executed_size,"
-                " slippage, fee, filled_at, latency_ms, requested_size)"
-                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                " slippage, fee, filled_at, latency_ms, requested_size,"
+                " side, token_id, market_id, decision_seq)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     row["order_id"],
                     fill_idx,
@@ -358,6 +403,10 @@ class SQLiteShadowStorage:
                     row["filled_at"],
                     row["latency_ms"],
                     _json_dec_as_text(req),
+                    side_val,
+                    fill.token_id,
+                    fill.market_id,
+                    seq,
                 ),
             )
             self._conn.commit()
@@ -402,7 +451,56 @@ class SQLiteShadowStorage:
                 " WHERE order_id = ? ORDER BY fill_idx",
                 (order_id,),
             ).fetchall()
-        return rows
+        return [(r[0], r[1], r[2], r[3]) for r in rows]
+
+    def read_telemetry(
+        self, *, upto_decision_seq: Optional[int] = None,
+    ) -> list[TelemetryRecord]:
+        """Liest Telemetrie chronologisch (decision_seq, seq als Tie-Break).
+
+        Args:
+            upto_decision_seq: Optionaler as_of-Anker (inkl.); None = alle.
+
+        Returns:
+            Liste von TelemetryRecord (RejectReason.NONE bei NULL).
+        """
+        sql = (
+            "SELECT signal_id, order_id, latency_ms, approved, reject_reason,"
+            " status, requested_size, decision_seq FROM telemetry"
+        )
+        args: tuple[Any, ...] = ()
+        if upto_decision_seq is not None:
+            sql += " WHERE decision_seq IS NOT NULL AND decision_seq <= ?"
+            args = (upto_decision_seq,)
+        sql += " ORDER BY decision_seq, seq"
+        with self._lock:
+            rows = self._conn.execute(sql, args).fetchall()
+        out: list[TelemetryRecord] = []
+        for r in rows:
+            out.append(TelemetryRecord(
+                signal_id=uuid.UUID(r["signal_id"]),
+                order_id=uuid.UUID(r["order_id"]) if r["order_id"] else None,
+                latency_ms=float(r["latency_ms"]),
+                approved=bool(r["approved"]),
+                status=OrderStatus(r["status"]) if r["status"] else None,
+                reject_reason=RejectReason(r["reject_reason"] or "NONE"),
+                requested_size=(
+                    Decimal(r["requested_size"]) if r["requested_size"] else None
+                ),
+                decision_seq=int(r["decision_seq"] or 0),
+            ))
+        return out
+
+    def read_fills_all(self) -> list[dict[str, Any]]:
+        """Rohzeilen aller Fills, Einfuegereihenfolge (rowid).
+
+        Replay falten — die DB denkt nicht. Keys = Spaltennamen + ``rowid``.
+        """
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT rowid AS rowid, * FROM fills ORDER BY rowid"
+            ).fetchall()
+        return [dict(r) for r in rows]
 
     def close(self) -> None:
         """Schließt die Datenbankverbindung."""
@@ -431,6 +529,7 @@ class TelemetrySink:
         self._telemetry = telemetry
         self._fills_provider = fills_provider
         self._drained = 0
+        self._fill_rows_written: set[tuple[str, int]] = set()
 
     def drain(self) -> int:
         """Persistiert alle neuen Telemetrie-Einträge (idempotent).
@@ -444,7 +543,13 @@ class TelemetrySink:
             self._storage.write_telemetry(record)
             if self._fills_provider is not None and record.order_id is not None:
                 for idx, fill in enumerate(self._fills_provider(record.order_id)):
-                    self._storage.write_fill(fill, fill_idx=idx)
+                    key = (str(record.order_id), idx)
+                    if key in self._fill_rows_written:
+                        continue
+                    self._storage.write_fill(
+                        fill, fill_idx=idx, decision_seq=record.decision_seq,
+                    )
+                    self._fill_rows_written.add(key)
             written += 1
         self._drained += written
         return written

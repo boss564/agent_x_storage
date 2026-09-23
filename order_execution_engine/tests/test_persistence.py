@@ -8,6 +8,7 @@ from pathlib import Path
 from order_execution_engine.models import (
     Direction,
     FillResult,
+    OrderSide,
     RejectReason,
     RiskConfig,
     SignalPayload,
@@ -70,7 +71,7 @@ def test_schema_version_and_tables() -> None:
         store = SQLiteShadowStorage.for_user(Path(tmp), "u1")
         conn = sqlite3.connect(str(Path(tmp) / "u1" / "shadow" / "shadow.db"))
         version = conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'").fetchone()[0]
-        assert version == "2"  # F1, VM3: Schema v2 (requested_size, decision_seq)
+        assert version == "3"  # v3: Fold-Spalten side/token_id/market_id/decision_seq
         for table in ("telemetry", "fills", "portfolio_snapshots"):
             conn.execute(f"SELECT 1 FROM {table} LIMIT 0")
         # Die neuen Spalten sind da
@@ -78,6 +79,7 @@ def test_schema_version_and_tables() -> None:
         fcols = {r[1] for r in conn.execute("PRAGMA table_info(fills)")}
         assert {"requested_size", "decision_seq"} <= tcols
         assert "requested_size" in fcols
+        assert {"side", "token_id", "market_id", "decision_seq"} <= fcols
         conn.close()
         store.close()
     print("OK test_schema_version_and_tables")
@@ -98,8 +100,7 @@ def test_telemetry_sink_end_to_end() -> None:
 
         store = SQLiteShadowStorage.for_user(Path(tmp), "u1")
         sink = TelemetrySink(store, engine.telemetry,
-                             fills_provider=lambda oid: engine.matcher_last_fills(oid)
-                             if hasattr(engine, "matcher_last_fills") else [])
+                             fills_provider=engine.fills_for)
         written = sink.drain()
         assert written == 1
         assert sink.drain() == 0  # idempotent
@@ -451,6 +452,124 @@ def test_dispatch_rejects_negative_size() -> None:
     assert [a.price for a in snap.asks] == [Decimal("0.62"), Decimal("0.70")]
     assert snap.asks[0].size == Decimal("150")  # unverändert, kein -5
     print("OK test_dispatch_rejects_negative_size")
+
+
+def test_replay_matches_live_snapshot_decimal_identical() -> None:
+    """Vertrag: Live-snapshot == Replay-snapshot (Decimal, DTO-Gleichheit)."""
+    from order_execution_engine.shadow_replay import ShadowReplay
+
+    with tempfile.TemporaryDirectory() as tmp:
+        eng = ShadowExecutionEngine(
+            risk_config=RiskConfig(max_order_size_shares=Decimal("100")),
+        )
+        book = MarketSnapshot(
+            token_id="0xtokenA",
+            bids=(OrderBookLevel(Decimal("0.59"), Decimal("500")),),
+            asks=(OrderBookLevel(Decimal("0.61"), Decimal("500")),),
+        )
+        up = SignalPayload(
+            target_token_id="0xtokenA", market_id="mkt-1",
+            direction=Direction.UP, confidence=Decimal("80"),
+        )
+        # 1) FAK-Fill
+        r1 = eng.on_signal(up, book)
+        assert r1.approved and r1.status is not None
+        # 2) Risk-Reject (Exposure-Limit)
+        eng.risk.config = eng.risk.config.model_copy(
+            update={"max_event_exposure_usdc": Decimal("1")},
+        )
+        r2 = eng.on_signal(up, book)
+        assert not r2.approved
+        # 3) Neutral-Reject (kein Fill)
+        neutral = SignalPayload(
+            target_token_id="0xtokenA", market_id="mkt-1",
+            direction=Direction.NEUTRAL, confidence=Decimal("80"),
+        )
+        r3 = eng.on_signal(neutral, book)
+        assert not r3.approved
+
+        marks = {"0xtokenA": Decimal("0.61")}
+        as_of = eng.telemetry._decision_seq
+        live = eng.portfolio.snapshot(marks, as_of_seq=as_of)
+
+        store = SQLiteShadowStorage.for_user(Path(tmp), "u1")
+        sink = TelemetrySink(store, eng.telemetry, fills_provider=eng.fills_for)
+        assert sink.drain() >= 3
+
+        replay = ShadowReplay(store, Decimal("10000.00")).reconstruct(
+            mark_prices=marks, as_of_seq=as_of,
+        )
+        assert replay.gaps == ()
+        assert replay.unfilled_rows == 0
+        assert replay.fills_folded >= 1
+        assert replay.snapshot == live
+        store.close()
+    print("OK test_replay_matches_live_snapshot_decimal_identical")
+
+
+def test_replay_marks_gap_and_continues() -> None:
+    """decision_seq-Luecke: markieren, nicht abbrechen."""
+    import sqlite3
+
+    from order_execution_engine.shadow_replay import ShadowReplay
+
+    with tempfile.TemporaryDirectory() as tmp:
+        store = SQLiteShadowStorage.for_user(Path(tmp), "u1")
+        for seq in (1, 2, 3):
+            store.write_telemetry(TelemetryRecord(
+                signal_id=uuid.uuid4(),
+                order_id=None,
+                latency_ms=0.0,
+                approved=False,
+                status=None,
+                reject_reason=RejectReason.INVALID_PRICE,
+                decision_seq=seq,
+            ))
+        db = Path(tmp) / "u1" / "shadow" / "shadow.db"
+        conn = sqlite3.connect(str(db))
+        conn.execute("DELETE FROM telemetry WHERE decision_seq = 2")
+        conn.commit()
+        conn.close()
+
+        replay = ShadowReplay(store, Decimal("10000.00")).reconstruct()
+        assert replay.gaps == (2,)
+        assert replay.snapshot.cash == Decimal("10000.00")
+        store.close()
+    print("OK test_replay_marks_gap_and_continues")
+
+
+def test_replay_counts_unfilled_legacy_rows() -> None:
+    """Edit-0-NULL: unfaltbare Legacy-Zeilen werden gezaehlt, nicht geraten."""
+    from order_execution_engine.shadow_replay import ShadowReplay
+
+    with tempfile.TemporaryDirectory() as tmp:
+        store = SQLiteShadowStorage.for_user(Path(tmp), "u1")
+        # Fold-komplett
+        good = FillResult(
+            order_id=uuid.uuid4(),
+            execution_price=Decimal("0.61"),
+            executed_size=Decimal("10"),
+            side=OrderSide.BUY,
+            token_id="0xtokenA",
+            market_id="mkt-1",
+        )
+        store.write_fill(good, fill_idx=0, decision_seq=1)
+        # Legacy ohne side/token/market
+        legacy = FillResult(
+            order_id=uuid.uuid4(),
+            execution_price=Decimal("0.62"),
+            executed_size=Decimal("5"),
+        )
+        store.write_fill(legacy, fill_idx=0, decision_seq=2)
+
+        replay = ShadowReplay(store, Decimal("10000.00")).reconstruct(
+            mark_prices={"0xtokenA": Decimal("0.61")},
+        )
+        assert replay.unfilled_rows == 1
+        assert replay.fills_folded == 1
+        assert replay.snapshot.positions["0xtokenA"] == Decimal("10")
+        store.close()
+    print("OK test_replay_counts_unfilled_legacy_rows")
 
 
 if __name__ == "__main__":

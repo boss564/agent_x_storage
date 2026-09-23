@@ -357,7 +357,7 @@ class PaperMatchEngine:
         if snapshot.token_id != order.token_id:
             raise ValueError("Snapshot token_id passt nicht zur Order.")
         if order.order_type is OrderType.FAK:
-            return self._match_fak(order, snapshot)
+            return self._match_fak(order, snapshot, market_id=market_id)
         if order.order_type is OrderType.GTC:
             return self._match_gtc(
                 order, snapshot,
@@ -372,6 +372,7 @@ class PaperMatchEngine:
 
     def _cross(
         self, order: PaperOrder, snapshot: MarketSnapshot, size: Decimal,
+        *, market_id: Optional[str] = None,
     ) -> tuple[list[FillResult], Decimal, Decimal]:
         """Kreuzt ``size`` gegen sichtbare Tiefe (Bestand-Walk 1:1).
 
@@ -414,6 +415,9 @@ class PaperMatchEngine:
                 executed_size=executed,
                 slippage=slip,
                 fee=fee,
+                side=order.side,
+                token_id=order.token_id,
+                market_id=market_id,
             ))
             notional_sum += level.price * executed
             volume_sum += executed
@@ -458,9 +462,17 @@ class PaperMatchEngine:
             remaining_size=remaining,
         )
 
-    def _match_fak(self, order: PaperOrder, snapshot: MarketSnapshot) -> MatchResult:
+    def _match_fak(
+        self,
+        order: PaperOrder,
+        snapshot: MarketSnapshot,
+        *,
+        market_id: Optional[str] = None,
+    ) -> MatchResult:
         """FAK: heutiger Pfad — Rest verworfen, idle = PENDING."""
-        fills, remaining, ref = self._cross(order, snapshot, order.size)
+        fills, remaining, ref = self._cross(
+            order, snapshot, order.size, market_id=market_id,
+        )
         return self._build_result(
             fills, remaining, ref, idle_status=OrderStatus.PENDING,
         )
@@ -476,7 +488,9 @@ class PaperMatchEngine:
         decision_seq: int,
     ) -> MatchResult:
         """GTC: kreuzt, Rest ruht im Register; idle = RESTING."""
-        fills, remaining, ref = self._cross(order, snapshot, order.size)
+        fills, remaining, ref = self._cross(
+            order, snapshot, order.size, market_id=market_id,
+        )
         if remaining > 0:
             self._resting[order.order_id] = _RestingOrder(
                 order=order,
@@ -499,6 +513,7 @@ class PaperMatchEngine:
                 continue
             fills, remaining, ref = self._cross(
                 resting.order, snapshot, resting.remaining_size,
+                market_id=resting.market_id,
             )
             resting.remaining_size = remaining
             result = self._build_result(
@@ -719,6 +734,12 @@ class ShadowExecutionEngine:
         self.confidence_threshold = confidence_threshold
         self.size_fn: SizeFn = size_fn or self._default_size_fn
         self._order_book: dict[uuid.UUID, PaperOrder] = {}
+        # Fill-Log fuer TelemetrySink / Replay-Zeugen (order_id -> Fills)
+        self._fills_by_order: dict[uuid.UUID, list[FillResult]] = {}
+
+    def fills_for(self, order_id: uuid.UUID) -> list[FillResult]:
+        """Liefert persistierbare Fills zu einer Order (Test-/Sink-Seam)."""
+        return list(self._fills_by_order.get(order_id, []))
 
     def _report(
         self,
@@ -879,6 +900,7 @@ class ShadowExecutionEngine:
             self.portfolio.apply_fill(order, fill, market_id=signal.market_id)
         if match.fills:
             self.portfolio.update_peak_equity({signal.target_token_id: ref_price})
+            self._fills_by_order[order.order_id] = list(match.fills)
         self._order_book[order.order_id] = order
 
         record = TelemetryRecord(
@@ -910,6 +932,9 @@ class ShadowExecutionEngine:
                     order, fill, market_id=ev.market_id or "unknown",
                 )
             self._order_book[ev.order_id] = order
+            if ev.result.fills:
+                bucket = self._fills_by_order.setdefault(ev.order_id, [])
+                bucket.extend(ev.result.fills)
             if ev.result.fills and mark is not None:
                 self.portfolio.update_peak_equity({order.token_id: mark})
             if ev.signal_id is None:

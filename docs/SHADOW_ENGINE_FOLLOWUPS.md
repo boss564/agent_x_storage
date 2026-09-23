@@ -1466,3 +1466,14 @@ Fills→`FillResult`-Rekonstruktion, optional Portfolio-Snapshot-Lesen.
 (frozen Seam) ist der Vergleichspunkt — nicht `write_portfolio` (ADR-14-Schuld:
 lebt noch am Objekt statt am Snapshot-DTO).
 
+### Replay / Shadow-Audit — erledigt (Ledger-Korrektur zuerst)
+
+Fund vor dem Paste: `FillResult`/fills ohne `side`/`market_id`/`token_id` —
+Ledger war nicht fold-komplett. **Edit 0 vor Replay:** Schema v3 + Fold-Felder
++ `decision_seq` auf fills (`as_of`-Anker). Legacy-NULL = unfaltbar.
+
+| Liefergegenstand | Inhalt |
+|---|---|
+| `read_telemetry` / `read_fills_all` | Lese-Pendants; `ORDER BY decision_seq, seq` |
+| `shadow_replay.py` | Read-only Fold; Lücken markieren; `unfilled_rows` |
+| Zeugen | Live==Replay Decimal; Gap markiert; Legacy-NULL gezaehlt |
