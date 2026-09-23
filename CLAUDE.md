@@ -663,7 +663,9 @@ GoBD → Ledger (BHO Δ=0,00€) → Chain-Hash → XRechnung → PoPW-Coverage 
 
 **ADR 13 — Telemetrie-Vertrag (Shadow Execution Engine):** `TelemetryRecord.reject_reason` ist immer ein `RejectReason`-Enum (`NONE` inklusive), niemals `None`. Dataclasses validieren Annotationen nicht — die Wache sitzt in `__post_init__` (frozen + slots). Die Storage-Boundary normalisiert defensiv zu `NONE` **mit Warnung** (Charter `diagnostic_only=true`: Telemetrie darf den Engine-Loop nie crashen). Stilles Normalisieren wäre verboten. Tests: `test_record_rejects_none_at_construction`, `test_storage_normalizes_none_at_boundary_defensively`.
 
-> **Auffindbarkeits-Regel (ADR 12/13):** Jeder ADR-Eintrag trägt seine Nummer
+**ADR 14 — VirtualPortfolio bleibt BaseModel mit Methoden:** Bewusste Ausnahme von der strengen F2-Lesart. `validate_assignment` aus; Schema-Garantie am Seam (`FillResult`, `TelemetryRecord`, `ExecutionReport`, `PortfolioSnapshot`); kein Churn auf Dataclass. Portfolio nie direkt serialisieren — immer über Snapshot-DTOs. Details: `docs/adr/ADR-014-virtualportfolio-basemodel.md`.
+
+> **Auffindbarkeits-Regel (ADR 12/13/14):** Jeder ADR-Eintrag trägt seine Nummer
 > im Titel, damit `rg "ADR 12"` trifft. Eine Regel, die nicht greppbar ist,
 > kann nicht delegiert werden — wer „siehe ADR 12" liest, muss sie finden.
 

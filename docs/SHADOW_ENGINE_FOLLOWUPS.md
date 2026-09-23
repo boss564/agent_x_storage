@@ -1403,6 +1403,6 @@ Derselbe Befund wie `94084e99`: Zahl im Satz, nicht in der Messung.
 | Resting-Paar | `OrderType.GTC` + `OrderStatus.RESTING` + Matcher-Register + Engine-`on_book_update` (decision_seq hoch) — kein Cancel/GTD |
 | B2 `ExecutionReport` | **erledigt** — Hub-DTO, `is_final` am Paar `(status, remaining_size)`, `on_signal` → Report (Telemetrie intern) |
 | B3 `MatchResult` | entfällt — engine-intern, keine Grenze |
-| `VirtualPortfolio` als BaseModel | bewusste Ausnahme (ADR 12): Zustandsmodell mit Schema; Seam = `PositionSnapshot`/`PortfolioSnapshot` |
+| `VirtualPortfolio` als BaseModel | **ADR 14** — bewusste Ausnahme; Seam = Snapshot-DTOs; Details `docs/adr/ADR-014-virtualportfolio-basemodel.md` |
 | Persistenz `write_fill`/`write_telemetry` | `model_dump(mode="json")` + explizite Spalten; Decimal bleibt TEXT via `_json_dec_as_text` (nicht float/REAL — Schema-Vorgabe) |
 
