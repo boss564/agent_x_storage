@@ -22,6 +22,7 @@ import statistics
 import time
 import uuid
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Callable, Optional
 
@@ -249,12 +250,40 @@ class MatchResult:
     remaining_size: Decimal
 
 
+@dataclass
+class _RestingOrder:
+    """Ruhende GTC-Order im virtuellen Buch (Matcher-intern)."""
+
+    order: PaperOrder
+    remaining_size: Decimal
+    signal_id: Optional[uuid.UUID]
+    market_id: Optional[str]
+    requested_size: Optional[Decimal]
+    decision_seq: int
+    resting_since: datetime
+
+
+@dataclass(frozen=True)
+class RestingEvaluation:
+    """Ergebnis der ruhenden Nachwertung, inkl. Telemetrie-Kontext."""
+
+    order_id: uuid.UUID
+    signal_id: Optional[uuid.UUID]
+    market_id: Optional[str]
+    requested_size: Optional[Decimal]
+    decision_seq: int
+    result: MatchResult
+
+
 class PaperMatchEngine:
     """Fill- und Slippage-Simulation via Buch-Walk gegen Orderbuch-Tiefe.
 
     BUY-Orders laufen gegen die Ask-Seite, SELL-Orders gegen die Bid-Seite.
     Ein Fill tritt nur ein, wenn das Limit greift (BUY: ask <= limit,
-    SELL: bid >= limit). Restgrößen bleiben offen (PARTIALLY_FILLED).
+    SELL: bid >= limit).
+
+    FAK: Rest wird verworfen (zustandslos). GTC: Rest ruht in ``_resting``
+    und wird bei ``on_book_update`` nachgewertet.
     """
 
     def __init__(self, fee_bps: Decimal = Decimal("0"), max_slippage_bps: Optional[Decimal] = None) -> None:
@@ -267,6 +296,12 @@ class PaperMatchEngine:
         """
         self.fee_bps = fee_bps
         self.max_slippage_bps = max_slippage_bps
+        self._resting: dict[uuid.UUID, _RestingOrder] = {}
+
+    @property
+    def resting_count(self) -> int:
+        """Anzahl ruhender GTC-Orders (Test-Seam)."""
+        return len(self._resting)
 
     def preview_slippage(self, order: PaperOrder, snapshot: MarketSnapshot) -> Decimal:
         """Berechnet erwartete Slippage in bps OHNE Order zu erzeugen.
@@ -285,32 +320,56 @@ class PaperMatchEngine:
         slip = abs(ref - order.price) / order.price * Decimal("10000")
         return slip.quantize(Decimal("0.01"))
 
-    def match(self, order: PaperOrder, snapshot: MarketSnapshot) -> MatchResult:
+    def match(
+        self,
+        order: PaperOrder,
+        snapshot: MarketSnapshot,
+        *,
+        signal_id: Optional[uuid.UUID] = None,
+        market_id: Optional[str] = None,
+        requested_size: Optional[Decimal] = None,
+        decision_seq: int = 0,
+    ) -> MatchResult:
         """Führt den Buch-Walk für eine Order aus.
 
         Args:
             order: Die zu füllende PaperOrder.
             snapshot: Marktdaten-Schnappschuss (PolySentinel).
+            signal_id/market_id/requested_size/decision_seq: Kontext für
+                GTC-Resting-Register (Telemetrie bei Nachwertung).
 
         Returns:
             MatchResult mit Fills, Status und Slippage-Statistik.
         """
-        if order.order_type is not OrderType.FAK:
-            raise NotImplementedError(
-                f"OrderType {order.order_type.value}: kein Produzent/Zeuge im "
-                f"Dry-Run (aktiv ist nur FAK; siehe OrderType-Docstring). "
-                f"Wert zuerst implementieren, dann aufnehmen."
-            )
         if snapshot.token_id != order.token_id:
             raise ValueError("Snapshot token_id passt nicht zur Order.")
+        if order.order_type is OrderType.FAK:
+            return self._match_fak(order, snapshot)
+        if order.order_type is OrderType.GTC:
+            return self._match_gtc(
+                order, snapshot,
+                signal_id=signal_id, market_id=market_id,
+                requested_size=requested_size, decision_seq=decision_seq,
+            )
+        raise NotImplementedError(
+            f"OrderType {order.order_type.value}: kein Produzent/Zeuge im "
+            f"Dry-Run (aktiv: FAK, GTC; siehe OrderType-Docstring). "
+            f"Wert zuerst implementieren, dann aufnehmen."
+        )
 
+    def _cross(
+        self, order: PaperOrder, snapshot: MarketSnapshot, size: Decimal,
+    ) -> tuple[list[FillResult], Decimal, Decimal]:
+        """Kreuzt ``size`` gegen sichtbare Tiefe (Bestand-Walk 1:1).
+
+        Returns:
+            (fills, remaining, reference_for_total) — reference für Slippage-bps.
+        """
         levels = snapshot.asks if order.side == OrderSide.BUY else snapshot.bids
-        remaining = order.size
+        remaining = size
         fills: list[FillResult] = []
         notional_sum = Decimal("0")
         volume_sum = Decimal("0")
-        # Referenzpreis = bestes AUSFÜHRBARES Niveau auf der Walk-Seite.
-        # Fällt auf das Order-Limit zurück, falls das Buch (noch) leer ist.
         reference_price = order.price
         for _lvl in levels:
             if _lvl.price > 0 and _lvl.size > 0:
@@ -321,11 +380,6 @@ class PaperMatchEngine:
         for level in levels:
             if remaining <= 0:
                 break
-            # Leere/ungültige Buchstufen überspringen. Der Ticker-Fallback in
-            # market_data_feed.on_ticker() erzeugt für eine fehlende Seite eine
-            # Stufe mit price=0/size=0; ohne diesen Guard würde eine BUY-Order
-            # gegen Ask=0 "durchgehen" und an FillResult(gt=0) als
-            # ValidationError abstürzen statt sauber abzulehnen.
             if level.price <= 0 or level.size <= 0:
                 continue
             if order.side == OrderSide.BUY and level.price > order.price:
@@ -333,20 +387,12 @@ class PaperMatchEngine:
             if order.side == OrderSide.SELL and level.price < order.price:
                 break
             executed = min(remaining, level.size)
-            # Slippage wird gegen den besten AUSFÜHRBAREN Preis gemessen
-            # (best ask bei BUY, best bid bei SELL) — nicht gegen das
-            # Order-Limit. Sonst misst eine tief im Geld platzierte Order
-            # eine Scheinslippage: Limit 0.95 bei best ask 0.62 ergäbe
-            # 3474 bps, obwohl die Order zum Marktpreis gefüllt wurde.
             slip = level.price - reference_price
             if order.side == OrderSide.SELL:
-                slip = -slip  # positiver Wert = Preisnachteil
+                slip = -slip
             slip_bps = (slip / reference_price) * Decimal("10000")
             if self.max_slippage_bps is not None and slip_bps > self.max_slippage_bps:
                 break
-            # Ab dem zweiten Niveau steigt der Preis; folgende Stufen werden
-            # gegen den zuletzt ausgeführten Preis gemessen (inkrementelle
-            # Walk-Slippage), nicht erneut gegen das Top-of-Book.
             reference_price = level.price
             fee = (level.price * executed) * self.fee_bps / Decimal("10000")
             fills.append(FillResult(
@@ -360,22 +406,36 @@ class PaperMatchEngine:
             volume_sum += executed
             remaining -= executed
 
+        return fills, remaining, reference_for_total
+
+    def _build_result(
+        self,
+        fills: list[FillResult],
+        remaining: Decimal,
+        reference_for_total: Decimal,
+        *,
+        idle_status: OrderStatus,
+    ) -> MatchResult:
+        """Status/avg/slippage — idle_status = PENDING (FAK) oder RESTING (GTC)."""
         total_slip_bps = Decimal("0")
-        if volume_sum > 0 and fills:
-            avg_price = notional_sum / volume_sum
-            total_slip_bps = (
-                (avg_price - reference_for_total) / reference_for_total * Decimal("10000")
-            ).copy_abs()
+        avg_price: Optional[Decimal] = None
+        if fills:
+            notional_sum = sum(
+                (f.execution_price * f.executed_size for f in fills), Decimal("0")
+            )
+            volume_sum = sum((f.executed_size for f in fills), Decimal("0"))
+            if volume_sum > 0:
+                avg_price = notional_sum / volume_sum
+                total_slip_bps = (
+                    (avg_price - reference_for_total) / reference_for_total * Decimal("10000")
+                ).copy_abs()
 
         if not fills:
-            status = OrderStatus.PENDING
-            avg_price = None
+            status = idle_status
         elif remaining > 0:
             status = OrderStatus.PARTIALLY_FILLED
-            avg_price = notional_sum / volume_sum
         else:
             status = OrderStatus.FILLED
-            avg_price = notional_sum / volume_sum
 
         return MatchResult(
             status=status,
@@ -384,6 +444,64 @@ class PaperMatchEngine:
             total_slippage_bps=total_slip_bps,
             remaining_size=remaining,
         )
+
+    def _match_fak(self, order: PaperOrder, snapshot: MarketSnapshot) -> MatchResult:
+        """FAK: heutiger Pfad — Rest verworfen, idle = PENDING."""
+        fills, remaining, ref = self._cross(order, snapshot, order.size)
+        return self._build_result(
+            fills, remaining, ref, idle_status=OrderStatus.PENDING,
+        )
+
+    def _match_gtc(
+        self,
+        order: PaperOrder,
+        snapshot: MarketSnapshot,
+        *,
+        signal_id: Optional[uuid.UUID],
+        market_id: Optional[str],
+        requested_size: Optional[Decimal],
+        decision_seq: int,
+    ) -> MatchResult:
+        """GTC: kreuzt, Rest ruht im Register; idle = RESTING."""
+        fills, remaining, ref = self._cross(order, snapshot, order.size)
+        if remaining > 0:
+            self._resting[order.order_id] = _RestingOrder(
+                order=order,
+                remaining_size=remaining,
+                signal_id=signal_id,
+                market_id=market_id,
+                requested_size=requested_size,
+                decision_seq=decision_seq,
+                resting_since=datetime.now(timezone.utc),
+            )
+        return self._build_result(
+            fills, remaining, ref, idle_status=OrderStatus.RESTING,
+        )
+
+    def on_book_update(self, snapshot: MarketSnapshot) -> list[RestingEvaluation]:
+        """Nachwertung ruhender GTC-Orders gegen neuen Snapshot."""
+        out: list[RestingEvaluation] = []
+        for oid, resting in list(self._resting.items()):
+            if resting.order.token_id != snapshot.token_id:
+                continue
+            fills, remaining, ref = self._cross(
+                resting.order, snapshot, resting.remaining_size,
+            )
+            resting.remaining_size = remaining
+            result = self._build_result(
+                fills, remaining, ref, idle_status=OrderStatus.RESTING,
+            )
+            out.append(RestingEvaluation(
+                order_id=oid,
+                signal_id=resting.signal_id,
+                market_id=resting.market_id,
+                requested_size=resting.requested_size,
+                decision_seq=resting.decision_seq,
+                result=result,
+            ))
+            if remaining <= 0:
+                del self._resting[oid]
+        return out
 
 
 # ---------------------------------------------------------------------------
@@ -667,7 +785,13 @@ class ShadowExecutionEngine:
             self.telemetry.log(record)
             return record
 
-        match = self.matcher.match(order, snapshot)
+        match = self.matcher.match(
+            order, snapshot,
+            signal_id=signal.signal_id,
+            market_id=signal.market_id,
+            requested_size=requested_size,
+            decision_seq=decision_seq,
+        )
         order = order.model_copy(update={"status": match.status})
         for fill in match.fills:
             self.portfolio.apply_fill(order, fill, market_id=signal.market_id)
@@ -683,6 +807,44 @@ class ShadowExecutionEngine:
         )
         self.telemetry.log(record)
         return record
+
+    def on_book_update(self, snapshot: MarketSnapshot) -> list[TelemetryRecord]:
+        """Ruhende Nachwertung -> Portfolio -> Telemetrie (decision_seq hoch).
+
+        Jede Nachwertung einer ruhenden GTC-Order schreibt einen neuen
+        ``TelemetryRecord`` (gleiche ``order_id``, neues ``decision_seq``).
+        ``latency_ms=0.0``: Buch-zu-Fill, nicht Signal-zu-Fill (Schema-
+        Folgeticket, falls Unterscheidung noetig).
+        """
+        records: list[TelemetryRecord] = []
+        mark = snapshot.best_ask() or snapshot.best_bid()
+        for ev in self.matcher.on_book_update(snapshot):
+            order = self._order_book.get(ev.order_id)
+            if order is None:
+                continue
+            order = order.model_copy(update={"status": ev.result.status})
+            for fill in ev.result.fills:
+                self.portfolio.apply_fill(
+                    order, fill, market_id=ev.market_id or "unknown",
+                )
+            self._order_book[ev.order_id] = order
+            if ev.result.fills and mark is not None:
+                self.portfolio.update_peak_equity({order.token_id: mark})
+            if ev.signal_id is None:
+                continue  # ohne Signal-Kontext keine Telemetrie (Test-Seam)
+            rec = TelemetryRecord(
+                signal_id=ev.signal_id,
+                order_id=ev.order_id,
+                latency_ms=0.0,
+                approved=True,
+                reject_reason=RejectReason.NONE,
+                status=order.status,
+                requested_size=ev.requested_size,
+                decision_seq=self.telemetry.next_decision_seq(),
+            )
+            self.telemetry.log(rec)
+            records.append(rec)
+        return records
 
     def preview(self, signal: SignalPayload, snapshot: MarketSnapshot) -> Decimal:
         """Slippage-Preview für ein Signal OHNE Orderausführung.

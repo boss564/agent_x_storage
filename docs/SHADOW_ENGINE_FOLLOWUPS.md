@@ -1399,8 +1399,9 @@ Derselbe Befund wie `94084e99`: Zahl im Satz, nicht in der Messung.
 | Entscheidung | Inhalt |
 |---|---|
 | F2a | `FillResult` — schon frozen BaseModel; nur Roundtrip-Zeuge (`719416f6`) |
-| F2b = **B1** | `TelemetryRecord` → frozen BaseModel (`…`); ADR-13 = Feldvalidierung (Fall a: `__post_init__` isinstance gelöscht — Verschärfung) |
-| B2 `ExecutionReport` | **nach Resting-Paar** — sonst Design auf Phantom-Fills |
+| F2b = **B1** | `TelemetryRecord` → frozen BaseModel; ADR-13 = Feldvalidierung (Fall a) |
+| Resting-Paar | `OrderType.GTC` + `OrderStatus.RESTING` + Matcher-Register + Engine-`on_book_update` (decision_seq hoch) — kein Cancel/GTD |
+| B2 `ExecutionReport` | **nach Resting-Paar** — jetzt an der Reihe |
 | B3 `MatchResult` | entfällt — engine-intern, keine Grenze |
 | `VirtualPortfolio` als BaseModel | bewusste Ausnahme (ADR 12): Zustandsmodell mit Schema; Seam = `PositionSnapshot`/`PortfolioSnapshot` |
 | Persistenz `write_fill`/`write_telemetry` | `model_dump(mode="json")` + explizite Spalten; Decimal bleibt TEXT via `_json_dec_as_text` (nicht float/REAL — Schema-Vorgabe) |

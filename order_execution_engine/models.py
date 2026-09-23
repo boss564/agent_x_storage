@@ -97,12 +97,19 @@ class ExecutionMode(str, Enum):
 
 
 class OrderStatus(str, Enum):
-    """Lebenszyklus-Status einer Paper-Order."""
+    """Lebenszyklus-Status einer Paper-Order.
+
+    Terminal: FILLED, PARTIALLY_FILLED, REJECTED_BY_RISK, CANCELLED, EXPIRED.
+    NICHT-terminal: PENDING (dieser Tick nichts gefuellt), RESTING (GTC liegt
+    im virtuellen Buch und wartet auf Buch-Updates). Jede Terminal-Iteration
+    muss RESTING explizit ausschliessen.
+    """
 
     PENDING = "PENDING"
     FILLED = "FILLED"
     PARTIALLY_FILLED = "PARTIALLY_FILLED"
     REJECTED_BY_RISK = "REJECTED_BY_RISK"
+    RESTING = "RESTING"  # Produzent: PaperMatchEngine._match_gtc (Rest-Registrierung)
     CANCELLED = "CANCELLED"
     EXPIRED = "EXPIRED"
 
@@ -117,17 +124,19 @@ class OrderSide(str, Enum):
 class OrderType(str, Enum):
     """Order-Ausführungstyp (CLOB-Semantik, Dry-Run).
 
-    Produzent: Default auf ``PaperOrder.order_type`` — kein externer Aufrufer
-    setzt den Wert heute. Zeuge: ``PaperMatchEngine.match`` liest den Wert;
-    nur ``FAK`` ist aktiv.
+    Produzent: Default auf ``PaperOrder.order_type`` (FAK) bzw. explizites
+    ``order_type=GTC`` am Framing. Zeuge: ``PaperMatchEngine.match`` liest
+    den Wert; aktiv sind ``FAK`` und ``GTC``.
 
-    FOK/GTC/GTD erst aufnehmen, wenn Produzent UND Zeuge existieren
+    FOK/GTD erst aufnehmen, wenn Produzent UND Zeuge existieren
     (Regelwerk, Härte-Test — kein Inventar ohne Aufgabe). GTC kommt
-    notwendig zusammen mit ``OrderStatus.RESTING`` + Resting-Mechanik
-    (auch Wiedereintritt fuer ``EXPIRED``); FOK braucht All-or-Nothing.
+    zusammen mit ``OrderStatus.RESTING`` + Resting-Mechanik; FOK braucht
+    All-or-Nothing. EXPIRED-Wiedereintritt (Ablauf ruhender Orders) =
+    Folge-Ticket — kein Cancel/Ablauf in diesem Commit.
     """
 
     FAK = "FAK"  # Fill-and-Kill: Teilausfuehrung erlaubt, Rest verworfen
+    GTC = "GTC"  # Fill kreuzendes, Rest ruht im Matcher-Register bis on_book_update
 
 
 class Direction(str, Enum):

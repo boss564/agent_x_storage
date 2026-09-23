@@ -106,7 +106,7 @@ def test_match_wrong_token() -> None:
 
 
 def test_match_guard_rejects_non_fak() -> None:
-    """Zeuge: Guard feuert laut bei non-FAK — ohne FOK ins Enum aufzunehmen.
+    """Zeuge: Guard feuert laut bei non-FAK/GTC — ohne FOK ins Enum aufzunehmen.
 
     ``OrderType.FOK`` existiert bewusst nicht (kein Inventar ohne Aufgabe).
     Der Probe-Enum beweist den Leser im Matcher; wer FOK spaeter aufnimmt,
@@ -119,10 +119,72 @@ def test_match_guard_rejects_non_fak() -> None:
     o = PaperOrder.model_construct(**{**o.model_dump(), "order_type": Probe.FOK})
     try:
         PaperMatchEngine().match(o, _book())
-        raise AssertionError("NotImplementedError erwartet fuer non-FAK")
+        raise AssertionError("NotImplementedError erwartet fuer non-FAK/GTC")
     except NotImplementedError as exc:
         assert "FOK" in str(exc)
     print("OK test_match_guard_rejects_non_fak")
+
+
+def test_gtc_partial_fills_and_rests() -> None:
+    """GTC gegen duennes Buch -> PARTIALLY_FILLED + Resting-Register."""
+    m = PaperMatchEngine()
+    # Ask-Tiefe 200; Order 400 -> Rest 200 ruht
+    thin = _snapshot(
+        asks=(OrderBookLevel(Decimal("0.61"), Decimal("200")),),
+        bids=(OrderBookLevel(Decimal("0.59"), Decimal("150")),),
+    )
+    o = _order(size=Decimal("400"), price=Decimal("0.61"))
+    o = o.model_copy(update={"order_type": OrderType.GTC})
+    r = m.match(o, thin, signal_id=o.signal_id, market_id="mkt-1",
+                requested_size=Decimal("400"), decision_seq=1)
+    assert r.status is OrderStatus.PARTIALLY_FILLED
+    assert r.remaining_size == Decimal("200")
+    assert m.resting_count == 1
+    print("OK test_gtc_partial_fills_and_rests")
+
+
+def test_gtc_resting_fills_on_book_update() -> None:
+    """Ruhende GTC-Order: neuer Snapshot kreuzt Rest -> FILLED, Register leer."""
+    m = PaperMatchEngine()
+    thin = _snapshot(
+        asks=(OrderBookLevel(Decimal("0.61"), Decimal("200")),),
+        bids=(OrderBookLevel(Decimal("0.59"), Decimal("150")),),
+    )
+    crossing = _snapshot(
+        asks=(OrderBookLevel(Decimal("0.61"), Decimal("500")),),
+        bids=(OrderBookLevel(Decimal("0.59"), Decimal("150")),),
+    )
+    o = _order(size=Decimal("400"), price=Decimal("0.61"))
+    o = o.model_copy(update={"order_type": OrderType.GTC})
+    r = m.match(o, thin, signal_id=o.signal_id, market_id="mkt-1",
+                requested_size=Decimal("400"), decision_seq=1)
+    assert r.status is OrderStatus.PARTIALLY_FILLED
+    assert m.resting_count == 1
+    evals = m.on_book_update(crossing)
+    assert len(evals) == 1
+    assert evals[0].result.status is OrderStatus.FILLED
+    assert evals[0].result.remaining_size == Decimal("0")
+    assert m.resting_count == 0
+    print("OK test_gtc_resting_fills_on_book_update")
+
+
+def test_gtc_idle_is_resting_not_pending() -> None:
+    """GTC ohne Kreuzung -> RESTING (nicht PENDING); Register gefuellt."""
+    m = PaperMatchEngine()
+    # Limit unter Ask -> kein Fill
+    book = _snapshot(
+        asks=(OrderBookLevel(Decimal("0.61"), Decimal("200")),),
+        bids=(OrderBookLevel(Decimal("0.59"), Decimal("150")),),
+    )
+    o = _order(size=Decimal("100"), price=Decimal("0.60"))
+    o = o.model_copy(update={"order_type": OrderType.GTC})
+    r = m.match(o, book, signal_id=o.signal_id)
+    assert r.status is OrderStatus.RESTING
+    assert not r.fills
+    assert m.resting_count == 1
+    # Terminal-Ausschluss: RESTING ist nicht FILLED/PARTIALLY
+    assert r.status not in (OrderStatus.FILLED, OrderStatus.PARTIALLY_FILLED)
+    print("OK test_gtc_idle_is_resting_not_pending")
 
 
 def test_match_empty_book_side_no_crash() -> None:
