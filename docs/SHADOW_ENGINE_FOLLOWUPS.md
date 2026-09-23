@@ -1398,8 +1398,8 @@ Derselbe Befund wie `94084e99`: Zahl im Satz, nicht in der Messung.
 
 | Entscheidung | Inhalt |
 |---|---|
-| F2a | `FillResult` — schon frozen BaseModel; nur Roundtrip-Zeuge (`b0f19eff`+1) |
-| F2b = **B1** | `TelemetryRecord` Dataclass → frozen BaseModel + ADR-13 als `model_validator` |
+| F2a | `FillResult` — schon frozen BaseModel; nur Roundtrip-Zeuge (`719416f6`) |
+| F2b = **B1** | `TelemetryRecord` → frozen BaseModel (`…`); ADR-13 = Feldvalidierung (Fall a: `__post_init__` isinstance gelöscht — Verschärfung) |
 | B2 `ExecutionReport` | **nach Resting-Paar** — sonst Design auf Phantom-Fills |
 | B3 `MatchResult` | entfällt — engine-intern, keine Grenze |
 | `VirtualPortfolio` als BaseModel | bewusste Ausnahme (ADR 12): Zustandsmodell mit Schema; Seam = `PositionSnapshot`/`PortfolioSnapshot` |

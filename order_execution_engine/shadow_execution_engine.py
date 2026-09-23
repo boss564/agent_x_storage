@@ -25,6 +25,8 @@ from dataclasses import dataclass, field
 from decimal import Decimal
 from typing import Callable, Optional
 
+from pydantic import BaseModel, ConfigDict
+
 from order_execution_engine.models import (
     Direction,
     ExecutionMode,
@@ -389,13 +391,14 @@ class PaperMatchEngine:
 # ---------------------------------------------------------------------------
 
 
-@dataclass(frozen=True, slots=True)
-class TelemetryRecord:
-    """Ein Telemetrie-Ereignis (Signal -> virtuelle Ausführung).
+class TelemetryRecord(BaseModel):
+    """Telemetrie-Satz an der Persistenz-Grenze (telemetry-Tabelle).
 
-    Unveraenderlich (frozen): Ein Record beschreibt ein abgeschlossenes
-    Ereignis und darf nachtraeglich nicht manipuliert werden — sonst waere
-    die Wache in __post_init__ nur latenter Schutz.
+    Frozen: Fakt, kein Zustand. ADR 13 (Enum-Wache): ``reject_reason`` ist
+    immer ein ``RejectReason``-Enum — durchgesetzt durch die Felddeklaration
+    (Pydantic-Validierung bei Konstruktion), nicht mehr per ``__post_init__``.
+    Das ist keine Abschwaechung: Die Wache greift jetzt auf jedem
+    Konstruktionspfad, nicht nur im Dataclass-``__post_init__``.
 
     Attribute:
         signal_id: Signal-UUID.
@@ -405,7 +408,11 @@ class TelemetryRecord:
         reject_reason: Ablehnungsgrund. Vertrag: immer ein RejectReason-Enum,
             niemals None — auf dem genehmigten Pfad `RejectReason.NONE`.
         status: Finaler Orderstatus.
+        requested_size: Ungekappte Strategie-Groesse (None = nie angefragt).
+        decision_seq: Engine-seitige monotone Entscheidungs-Id (Replay).
     """
+
+    model_config = ConfigDict(frozen=True)
 
     signal_id: uuid.UUID
     order_id: Optional[uuid.UUID]
@@ -414,38 +421,7 @@ class TelemetryRecord:
     status: Optional[OrderStatus]
     reject_reason: RejectReason = RejectReason.NONE
     requested_size: Optional[Decimal] = None
-    """Ungekappte, von der Strategie angeforderte Größe (Shares).
-
-    `None` bedeutet: Es kam nie zu einem Sizing-Vorschlag (Pre-Order-Ablehnung
-    bei ungültigem Preis). Bewusst `None` statt `0` — „nicht angefragt" ist
-    etwas anderes als „null angefragt". Genau die Unterscheidung, die bei
-    `requested_size := 0` verloren ginge.
-    """
     decision_seq: int = 0
-    """Engine-seitige, monotone Entscheidungs-Id.
-
-    Korreliert den Record mit dem `PortfolioSnapshot`, gegen den entschieden
-    wurde (`as_of_seq`). Wird von `TelemetryLogger.next_decision_seq()`
-    vergeben — *nicht* von der Datenbank: Die ADO-`seq` entsteht erst beim
-    INSERT, der Snapshot aber vorher. Umgekehrte Korrelationsrichtung.
-    """
-
-    def __post_init__(self) -> None:
-        """Erzwingt den Enum-Typ.
-
-        Dataclasses validieren ihre Annotationen nicht. Ohne diese Wache
-        nimmt der Record jeden Wert an — auch None oder den Rohstring
-        "invalid_price" — und der Fehler faellt erst tief in der
-        Persistenz auf. `isinstance` statt `is None`, weil der Bug nur
-        ein Symptom des eigentlichen Problems war: fehlende Typpruefung.
-        """
-        if not isinstance(self.reject_reason, RejectReason):
-            raise TypeError(
-                "TelemetryRecord.reject_reason muss ein RejectReason-Enum sein, "
-                f"nicht {type(self.reject_reason).__name__!r}. "
-                "Die Engine setzt auf jedem on_signal-Pfad ein Enum "
-                "(RejectReason.NONE inklusive)."
-            )
 
 
 class TelemetryLogger:

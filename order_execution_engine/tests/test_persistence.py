@@ -181,19 +181,20 @@ def test_telemetry_all_production_paths() -> None:
 def test_record_rejects_none_at_construction() -> None:
     """Vertrag: `TelemetryRecord.reject_reason` ist immer ein RejectReason-Enum.
 
-    Dataclasses validieren ihre Annotationen nicht, deshalb erzwingt
-    `__post_init__` den Typ. Ohne diese Wache nimmt der Record None (oder
-    einen Rohstring) klaglos an und der Fehler faellt erst tief in der
-    Persistenz auf — genau der latente Bug, den der Mutationsnachweis
-    sichtbar gemacht hat. Dieser Test toetet den Mutanten an der Quelle.
+    F2b/B1: ADR-13 wird durch die Pydantic-Felddeklaration durchgesetzt
+    (nicht mehr per Dataclass-``__post_init__``). Das ist Verschärfung:
+    greift auf jedem Konstruktionspfad. Dieser Test toetet den Mutanten
+    an der Quelle (None / Rohstring / int).
     """
+    from pydantic import ValidationError
+
     base = dict(signal_id=uuid.uuid4(), order_id=uuid.uuid4(), latency_ms=1.0,
                 approved=False, status=None)
     for bad in (None, "invalid_price", 42):
         try:
             TelemetryRecord(**base, reject_reason=bad)  # type: ignore[arg-type]
             raise AssertionError(f"{bad!r} haette abgelehnt werden muessen")
-        except TypeError:
+        except (TypeError, ValidationError):
             pass
     # Der genehmigte Pfad ist explizit erlaubt und der Default.
     rec = TelemetryRecord(**base)
@@ -203,8 +204,28 @@ def test_record_rejects_none_at_construction() -> None:
         rec.reject_reason = None  # type: ignore[misc]
         raise AssertionError("frozen-Verletzung nicht erkannt")
     except Exception as exc:
-        assert "frozen" in str(exc).lower() or isinstance(exc, (AttributeError, TypeError))
+        assert "frozen" in str(exc).lower() or isinstance(exc, (AttributeError, TypeError, ValidationError))
     print("OK test_record_rejects_none_at_construction")
+
+
+def test_telemetry_record_json_roundtrip() -> None:
+    """F2b/B1: Schema-Zeuge — Ablehnungspfad ueber JSON (Persistenz-TEXT-Felder)."""
+    rec = TelemetryRecord(
+        signal_id=uuid.uuid4(),
+        order_id=uuid.uuid4(),
+        latency_ms=1.83,
+        approved=False,
+        status=None,
+        reject_reason=RejectReason.MAX_POSITION_SIZE,
+        requested_size=Decimal("31"),
+        decision_seq=3,
+    )
+    restored = TelemetryRecord.model_validate_json(rec.model_dump_json())
+    assert restored == rec
+    assert restored.reject_reason is RejectReason.MAX_POSITION_SIZE
+    assert restored.requested_size == Decimal("31")
+    assert restored.status is None
+    print("OK test_telemetry_record_json_roundtrip")
 
 
 def test_storage_normalizes_none_at_boundary_defensively() -> None:
