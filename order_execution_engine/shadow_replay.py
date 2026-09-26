@@ -277,9 +277,17 @@ def diff_audit_state(
     replay_realized_pnl: Decimal,
     live_peak_equity: Decimal,
     replay_peak_equity: Decimal,
+    previous_live_peak: Optional[Decimal] = None,
+    check_peak: bool = True,
 ) -> tuple[AuditFinding, ...]:
-    """Vergleicht Snapshots + PnL/Peak. mark_prices bewusst ausgelassen
-    (beide Seiten erhalten denselben Dict — der Vergleich faende nie etwas).
+    """Vergleicht Snapshots + realized_pnl; Peak als Invariante, nicht Gleichheit.
+
+    mark_prices bewusst ausgelassen (beide Seiten denselben Dict).
+    Peak: Live kann durch Book-Updates (ohne Journal-Event) steigen und
+    spaeter wieder fallen — Gleichheit waere ein False-Positive.
+    Geprueft wird:
+      1) live_peak >= max(replay_peak, replay_equity)  (Untergrenze)
+      2) live_peak sinkt nie zwischen zwei Audits (Monotonie)
     """
     findings: list[AuditFinding] = []
     if live_snapshot.cash != replay_snapshot.cash:
@@ -304,25 +312,39 @@ def diff_audit_state(
         findings.append(AuditFinding(
             "realized_pnl", str(live_realized_pnl), str(replay_realized_pnl),
         ))
-    if live_peak_equity != replay_peak_equity:
-        findings.append(AuditFinding(
-            "peak_equity", str(live_peak_equity), str(replay_peak_equity),
-        ))
+    if check_peak:
+        floor = max(replay_peak_equity, replay_snapshot.equity)
+        if live_peak_equity < floor:
+            findings.append(AuditFinding(
+                "peak_equity.floor",
+                str(live_peak_equity),
+                f"min_required={floor}",
+            ))
+        if (
+            previous_live_peak is not None
+            and live_peak_equity < previous_live_peak
+        ):
+            findings.append(AuditFinding(
+                "peak_equity.monotonic",
+                str(live_peak_equity),
+                f"previous={previous_live_peak}",
+            ))
     return tuple(findings)
 
 
-# Rueckwaerts-Kompat: alter Name liefert Snapshot-Diff ohne PnL/Peak/Marks.
+# Rueckwaerts-Kompat: Snapshot-Diff ohne Peak-/PnL-Semantik.
 def diff_portfolio_snapshots(
     live: PortfolioSnapshot,
     replay: PortfolioSnapshot,
 ) -> tuple[AuditFinding, ...]:
-    """Nur cash/equity/positions — ohne mark_prices (nie informativ)."""
+    """Nur cash/equity/positions — ohne mark_prices und ohne Peak-Checks."""
     return diff_audit_state(
         live, replay,
         live_realized_pnl=Decimal("0"),
         replay_realized_pnl=Decimal("0"),
         live_peak_equity=Decimal("0"),
         replay_peak_equity=Decimal("0"),
+        check_peak=False,
     )
 
 
@@ -345,11 +367,33 @@ class JournalReplay:
         self.realized_pnl = Decimal("0")
         self.peak_equity = self._start_balance
         self._positions: dict[str, _JournalPosition] = {}
+        # Monotonie: letzter beobachteter Live-Peak (None = noch kein Audit)
+        self.last_live_peak: Optional[Decimal] = None
 
-    def apply_events(self, events: Iterable[ExecutedFillEvent]) -> None:
-        """Faltet Events inkrementell auf den bestehenden Zustand."""
+    def apply_events(
+        self,
+        events: Iterable[ExecutedFillEvent],
+    ) -> tuple[AuditFinding, int]:
+        """Faltet Events; Cursor-sicher bei Fold-Fehlern.
+
+        Returns:
+            (findings, n_consumed) — jedes Event zaehlt als verbraucht,
+            auch wenn der Fold fehlschlaegt (sonst wuerden erfolgreiche
+            Events davor beim naechsten Tick doppelt gebucht).
+        """
+        findings: list[AuditFinding] = []
+        consumed = 0
         for event in events:
-            self._fold(event)
+            try:
+                self._fold(event)
+            except ValueError as exc:
+                findings.append(AuditFinding(
+                    path="journal",
+                    live="fold_ok",
+                    replay=str(exc),
+                ))
+            consumed += 1
+        return tuple(findings), consumed
 
     def touch_marks(self, mark_prices: Mapping[str, Decimal]) -> None:
         """Peak-Equity anhand aktueller Marks nachziehen (wie Engine-Feed)."""
@@ -407,7 +451,6 @@ class JournalReplay:
                 ) / total
                 pos.size = total
         else:
-            self.cash += cost - fee
             pos = self._positions.get(event.token_id)
             if pos is None:
                 raise ValueError(f"Journal SELL ohne Position: {event.token_id}")
@@ -415,6 +458,7 @@ class JournalReplay:
                 raise ValueError(
                     f"Journal SELL size {size} ausserhalb (0, {pos.size}]"
                 )
+            self.cash += cost - fee
             realized = (price - pos.avg_entry_price) * size
             self.realized_pnl += realized
             pos.size -= size

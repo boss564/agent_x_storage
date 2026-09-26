@@ -335,6 +335,109 @@ def test_hub_full_audit_every_n_ticks() -> None:
     print("OK test_hub_full_audit_every_n_ticks")
 
 
+def test_audit_ok_after_mark_spike_and_revert() -> None:
+    """Kurs-Spike zwischen Audits darf peak_equity nicht als Divergenz melden."""
+    from order_execution_engine.shadow_execution_engine import (
+        MarketSnapshot,
+        OrderBookLevel,
+    )
+
+    engine = ShadowExecutionEngine(
+        risk_config=RiskConfig(max_order_size_shares=Decimal("100")),
+    )
+    binding = attach_book_feed(engine)
+    binding.handler.on_book_update(
+        "0xtokenA",
+        bids=[(Decimal("0.59"), Decimal("500"))],
+        asks=[(Decimal("0.61"), Decimal("500"))],
+    )
+    assert engine.on_signal(_signal()).approved
+
+    hub = ShadowHub(
+        engine,
+        raise_on_divergence=True,
+        full_audit_every_n_ticks=2,
+    )
+    r1 = hub.tick()
+    assert r1.audit.ok
+
+    # Spike: Mid ~0.80 → Live-Peak steigt ohne Journal-Event
+    binding.handler.on_book_update(
+        "0xtokenA",
+        bids=[(Decimal("0.79"), Decimal("500"))],
+        asks=[(Decimal("0.81"), Decimal("500"))],
+    )
+    # Rueckfall auf alte Marks
+    binding.handler.on_book_update(
+        "0xtokenA",
+        bids=[(Decimal("0.59"), Decimal("500"))],
+        asks=[(Decimal("0.61"), Decimal("500"))],
+    )
+
+    r2 = hub.tick()  # full_audit (tick 2)
+    assert r2.audit.ok
+    assert r2.full_audit is True
+
+    inc = engine.audit_shadow_state(full=False, raise_on_divergence=True)
+    full = engine.audit_shadow_state(full=True, raise_on_divergence=True)
+    assert inc.ok and full.ok
+    print("OK test_audit_ok_after_mark_spike_and_revert")
+
+
+def test_journal_fold_error_advances_cursor() -> None:
+    """Fold-ValueError wird Finding, Cursor rueckt vor (kein Doppel-Fold)."""
+    import uuid
+    from order_execution_engine.models import (
+        ExecutedFillEvent,
+        FillResult,
+        OrderSide,
+    )
+
+    engine = ShadowExecutionEngine(
+        risk_config=RiskConfig(max_order_size_shares=Decimal("50")),
+    )
+    binding = attach_book_feed(engine)
+    binding.handler.on_book_update(
+        "0xtokenA",
+        bids=[(Decimal("0.59"), Decimal("500"))],
+        asks=[(Decimal("0.61"), Decimal("500"))],
+    )
+    assert engine.on_signal(_signal()).approved
+    assert engine.audit_shadow_state().ok
+    n_after_ok = engine._audited_upto
+    cash_after_ok = engine._journal_auditor.cash
+
+    oid = uuid.uuid4()
+    bad = ExecutedFillEvent(
+        order_id=oid,
+        signal_id=uuid.uuid4(),
+        token_id="0xunknown",
+        market_id="mkt-x",
+        side=OrderSide.SELL,
+        limit_price=Decimal("0.50"),
+        order_size=Decimal("1"),
+        fill=FillResult(
+            order_id=oid,
+            execution_price=Decimal("0.50"),
+            executed_size=Decimal("1"),
+        ),
+    )
+    engine._execution_journal.append(bad)
+
+    report = engine.audit_shadow_state()
+    assert not report.ok
+    assert any(f.path == "journal" for f in report.findings)
+    assert engine._audited_upto == n_after_ok + 1
+    # Kein Doppel-Fold der guten Events: Cash unveraendert seit ok-Audit
+    assert engine._journal_auditor.cash == cash_after_ok
+
+    # Zweiter Tick: kein erneutes journal-Finding (bereits verbraucht)
+    report2 = engine.audit_shadow_state()
+    assert not any(f.path == "journal" for f in report2.findings)
+    assert report2.ok
+    print("OK test_journal_fold_error_advances_cursor")
+
+
 if __name__ == "__main__":
     for fn in list(globals().values()):
         if callable(fn) and fn.__name__.startswith("test_"):

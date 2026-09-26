@@ -855,6 +855,9 @@ class ShadowExecutionEngine:
 
         Standard: inkrementell (nur Events ab ``_audited_upto``).
         ``full=True``: Fold von vorn, Kontrolle gegen den Cursor-Pfad.
+
+        Peak-Equity: Invarianten (Floor + Monotonie), keine Gleichheit —
+        Live kann durch Book-Updates ohne Journal-Event peaken.
         """
         from order_execution_engine.shadow_replay import (
             AuditReport,
@@ -866,30 +869,42 @@ class ShadowExecutionEngine:
         self.guard.assert_safe()
         marks = dict(self._mark_prices)
         journal = self._execution_journal
+        fold_findings: tuple = ()
 
         if full:
+            prev_peak = (
+                self._journal_auditor.last_live_peak
+                if self._journal_auditor is not None
+                else None
+            )
             auditor = JournalReplay(start_balance=self.portfolio.start_balance)
-            auditor.apply_events(journal)
+            fold_findings, consumed = auditor.apply_events(journal)
             auditor.touch_marks(marks)
+            auditor.last_live_peak = prev_peak
             self._journal_auditor = auditor
-            self._audited_upto = len(journal)
+            self._audited_upto = consumed
         else:
             auditor = self._ensure_journal_auditor()
             new_events = journal[self._audited_upto:]
-            auditor.apply_events(new_events)
-            self._audited_upto = len(journal)
+            fold_findings, consumed = auditor.apply_events(new_events)
+            self._audited_upto += consumed
             auditor.touch_marks(marks)
 
         live_snapshot = self.portfolio.snapshot(marks, as_of_seq=0)
         replay_snapshot = auditor.snapshot(marks, as_of_seq=0)
-        findings = diff_audit_state(
+        live_peak = self.portfolio.peak_equity
+        findings = fold_findings + diff_audit_state(
             live_snapshot,
             replay_snapshot,
             live_realized_pnl=self.portfolio.realized_pnl,
             replay_realized_pnl=auditor.realized_pnl,
-            live_peak_equity=self.portfolio.peak_equity,
+            live_peak_equity=live_peak,
             replay_peak_equity=auditor.peak_equity,
+            previous_live_peak=auditor.last_live_peak,
         )
+        # Monotonie-Anker fuer den naechsten Tick (auch bei Findings setzen,
+        # sonst wuerde ein einmaliger Peak-Spike den Floor dauerhaft spoofen).
+        auditor.last_live_peak = live_peak
         report = AuditReport(
             ok=not findings,
             findings=findings,
