@@ -19,15 +19,12 @@ from typing import Any, Iterable, Mapping, Optional
 
 from order_execution_engine.models import (
     DEFAULT_VIRTUAL_CASH,
-    ExecutionMode,
     ExecutedFillEvent,
     OrderSide,
     OrderStatus,
-    PaperOrder,
     PortfolioSnapshot,
     Position,
     VirtualPortfolio,
-    default_expiration,
 )
 from order_execution_engine.persistence import SQLiteShadowStorage
 from order_execution_engine.shadow_execution_engine import TelemetryRecord
@@ -263,18 +260,38 @@ class ShadowAuditDivergence(RuntimeError):
         super().__init__(f"Shadow-Audit-Divergenz: {detail}")
 
 
-def diff_portfolio_snapshots(
-    live: PortfolioSnapshot,
-    replay: PortfolioSnapshot,
+@dataclass
+class _JournalPosition:
+    """Minimale Positionszeile fuer den unabhaengigen Journal-Fold."""
+
+    market_id: str
+    size: Decimal
+    avg_entry_price: Decimal
+
+
+def diff_audit_state(
+    live_snapshot: PortfolioSnapshot,
+    replay_snapshot: PortfolioSnapshot,
+    *,
+    live_realized_pnl: Decimal,
+    replay_realized_pnl: Decimal,
+    live_peak_equity: Decimal,
+    replay_peak_equity: Decimal,
 ) -> tuple[AuditFinding, ...]:
-    """Vergleicht zwei PortfolioSnapshots feldweise (ohne as_of_seq-Uhr)."""
+    """Vergleicht Snapshots + PnL/Peak. mark_prices bewusst ausgelassen
+    (beide Seiten erhalten denselben Dict — der Vergleich faende nie etwas).
+    """
     findings: list[AuditFinding] = []
-    if live.cash != replay.cash:
-        findings.append(AuditFinding("cash", str(live.cash), str(replay.cash)))
-    if live.equity != replay.equity:
-        findings.append(AuditFinding("equity", str(live.equity), str(replay.equity)))
-    live_pos = {k: str(v) for k, v in live.positions.items()}
-    replay_pos = {k: str(v) for k, v in replay.positions.items()}
+    if live_snapshot.cash != replay_snapshot.cash:
+        findings.append(AuditFinding(
+            "cash", str(live_snapshot.cash), str(replay_snapshot.cash),
+        ))
+    if live_snapshot.equity != replay_snapshot.equity:
+        findings.append(AuditFinding(
+            "equity", str(live_snapshot.equity), str(replay_snapshot.equity),
+        ))
+    live_pos = {k: str(v) for k, v in live_snapshot.positions.items()}
+    replay_pos = {k: str(v) for k, v in replay_snapshot.positions.items()}
     for key in sorted(set(live_pos) | set(replay_pos)):
         path = f"positions.{key}"
         if key not in live_pos:
@@ -283,56 +300,123 @@ def diff_portfolio_snapshots(
             findings.append(AuditFinding(path, live_pos[key], "<missing>"))
         elif live_pos[key] != replay_pos[key]:
             findings.append(AuditFinding(path, live_pos[key], replay_pos[key]))
-    live_marks = {k: str(v) for k, v in live.mark_prices.items()}
-    replay_marks = {k: str(v) for k, v in replay.mark_prices.items()}
-    for key in sorted(set(live_marks) | set(replay_marks)):
-        path = f"mark_prices.{key}"
-        if key not in live_marks:
-            findings.append(AuditFinding(path, "<missing>", replay_marks[key]))
-        elif key not in replay_marks:
-            findings.append(AuditFinding(path, live_marks[key], "<missing>"))
-        elif live_marks[key] != replay_marks[key]:
-            findings.append(AuditFinding(path, live_marks[key], replay_marks[key]))
+    if live_realized_pnl != replay_realized_pnl:
+        findings.append(AuditFinding(
+            "realized_pnl", str(live_realized_pnl), str(replay_realized_pnl),
+        ))
+    if live_peak_equity != replay_peak_equity:
+        findings.append(AuditFinding(
+            "peak_equity", str(live_peak_equity), str(replay_peak_equity),
+        ))
     return tuple(findings)
 
 
-class JournalReplay:
-    """Unabhängiger Buchhaltungs-Gegenlauf aus dem In-Memory-Fill-Journal.
+# Rueckwaerts-Kompat: alter Name liefert Snapshot-Diff ohne PnL/Peak/Marks.
+def diff_portfolio_snapshots(
+    live: PortfolioSnapshot,
+    replay: PortfolioSnapshot,
+) -> tuple[AuditFinding, ...]:
+    """Nur cash/equity/positions — ohne mark_prices (nie informativ)."""
+    return diff_audit_state(
+        live, replay,
+        live_realized_pnl=Decimal("0"),
+        replay_realized_pnl=Decimal("0"),
+        live_peak_equity=Decimal("0"),
+        replay_peak_equity=Decimal("0"),
+    )
 
-    Parallel zu ``ShadowReplay`` (Ledger). Ruft dieselbe ``apply_fill``-Logik
-    auf wie die Engine — doppelte/verlorene Fills werden sichtbar.
+
+class JournalReplay:
+    """Unabhaengiger Buchhaltungs-Gegenlauf aus dem Fill-Journal.
+
+    Ruft bewusst **nicht** ``VirtualPortfolio.apply_fill`` auf — Cash,
+    Positionsgroesse, Durchschnittspreis und realisierter PnL sind hier
+    ein zweites Mal ausgeschrieben. So findet das Audit Fehler in
+    ``apply_fill`` selbst, nicht nur doppelte/verlorene Events.
     """
 
-    def __init__(
-        self,
-        events: Iterable[ExecutedFillEvent],
-        start_balance: Decimal = DEFAULT_VIRTUAL_CASH,
-    ) -> None:
-        self._events = tuple(events)
+    def __init__(self, start_balance: Decimal = DEFAULT_VIRTUAL_CASH) -> None:
         self._start_balance = start_balance
+        self.reset()
 
-    def reconstruct(self) -> VirtualPortfolio:
-        """Rekonstruiert das Portfolio vollständig aus dem Journal."""
-        portfolio = VirtualPortfolio(
-            cash=self._start_balance,
-            start_balance=self._start_balance,
-            peak_equity=self._start_balance,
-        )
-        for event in self._events:
-            order = self._replay_order(event)
-            portfolio.apply_fill(order, event.fill, market_id=event.market_id)
-        return portfolio
+    def reset(self) -> None:
+        """Setzt den Fold-Zustand auf Startkapital zurueck (Vollaudit)."""
+        self.cash = self._start_balance
+        self.realized_pnl = Decimal("0")
+        self.peak_equity = self._start_balance
+        self._positions: dict[str, _JournalPosition] = {}
 
-    @staticmethod
-    def _replay_order(event: ExecutedFillEvent) -> PaperOrder:
-        """Minimale valide PaperOrder für ``apply_fill`` aus dem Event."""
-        return PaperOrder(
-            order_id=event.order_id,
-            signal_id=event.signal_id,
-            token_id=event.token_id,
-            side=event.side,
-            price=event.limit_price,
-            size=event.order_size,
-            expiration=default_expiration(5),
-            mode=ExecutionMode.DRY_RUN,
+    def apply_events(self, events: Iterable[ExecutedFillEvent]) -> None:
+        """Faltet Events inkrementell auf den bestehenden Zustand."""
+        for event in events:
+            self._fold(event)
+
+    def touch_marks(self, mark_prices: Mapping[str, Decimal]) -> None:
+        """Peak-Equity anhand aktueller Marks nachziehen (wie Engine-Feed)."""
+        eq = self.equity(mark_prices)
+        if eq > self.peak_equity:
+            self.peak_equity = eq
+
+    def equity(self, mark_prices: Mapping[str, Decimal]) -> Decimal:
+        unrealized = Decimal("0")
+        for tid, pos in self._positions.items():
+            mark = mark_prices.get(tid, pos.avg_entry_price)
+            unrealized += pos.size * mark
+        return self.cash + unrealized
+
+    def snapshot(
+        self,
+        mark_prices: Mapping[str, Decimal],
+        as_of_seq: int = 0,
+    ) -> PortfolioSnapshot:
+        marks = dict(mark_prices)
+        return PortfolioSnapshot(
+            cash=self.cash,
+            equity=self.equity(marks),
+            positions={tid: p.size for tid, p in self._positions.items()},
+            as_of_seq=as_of_seq,
+            mark_prices=marks,
         )
+
+    def _fold(self, event: ExecutedFillEvent) -> None:
+        """Kauf/Verkauf analog apply_fill — absichtlich duplizierte Arithmetik."""
+        fill = event.fill
+        price = fill.execution_price
+        size = fill.executed_size
+        fee = fill.fee or Decimal("0")
+        cost = price * size
+
+        if event.side is OrderSide.BUY:
+            total_cost = cost + fee
+            if total_cost > self.cash:
+                raise ValueError(
+                    f"Journal INSUFFICIENT_CASH: braucht {total_cost}, hat {self.cash}"
+                )
+            self.cash -= total_cost
+            pos = self._positions.get(event.token_id)
+            if pos is None:
+                self._positions[event.token_id] = _JournalPosition(
+                    market_id=event.market_id,
+                    size=size,
+                    avg_entry_price=price,
+                )
+            else:
+                total = pos.size + size
+                pos.avg_entry_price = (
+                    (pos.avg_entry_price * pos.size) + (price * size)
+                ) / total
+                pos.size = total
+        else:
+            self.cash += cost - fee
+            pos = self._positions.get(event.token_id)
+            if pos is None:
+                raise ValueError(f"Journal SELL ohne Position: {event.token_id}")
+            if size <= 0 or size > pos.size:
+                raise ValueError(
+                    f"Journal SELL size {size} ausserhalb (0, {pos.size}]"
+                )
+            realized = (price - pos.avg_entry_price) * size
+            self.realized_pnl += realized
+            pos.size -= size
+            if pos.size == 0:
+                del self._positions[event.token_id]

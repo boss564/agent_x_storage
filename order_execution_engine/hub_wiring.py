@@ -10,6 +10,9 @@ Auch dieses Modul besitzt keinen Order-Sende-Pfad; der optionale
 PolymarketWsFeed ist read-only und abonniert nur Marktdaten.
 
 Importiert ausschliesslich den Kanon (kein Overlay-``replay.py``).
+
+``ShadowHub.run``: Bei Audit-Divergenz und ``raise_on_divergence=True``
+bricht der Timer-Loop ab (Fail-fast); der Book-Feed laeuft unabhaengig weiter.
 """
 
 from __future__ import annotations
@@ -83,6 +86,7 @@ class HubTickResult:
     ticked_at: datetime
     expired_orders: tuple[PaperOrder, ...]
     audit: AuditReport
+    full_audit: bool
 
 
 class ShadowHub:
@@ -92,21 +96,41 @@ class ShadowHub:
         self,
         engine: ShadowExecutionEngine,
         raise_on_divergence: bool = True,
+        full_audit_every_n_ticks: Optional[int] = 300,
     ) -> None:
+        """Initialisiert den Hub.
+
+        Args:
+            engine: Ziel-Engine.
+            raise_on_divergence: Fail-fast bei Audit-Fund.
+            full_audit_every_n_ticks: Alle N Ticks Voll-Replay (None = nie).
+                Default 300 (~5 Min bei 1 s Intervall) als Kontrolle gegen
+                Drift im inkrementellen Cursor.
+        """
         self.engine = engine
         self.raise_on_divergence = raise_on_divergence
+        self.full_audit_every_n_ticks = full_audit_every_n_ticks
+        self._tick_count = 0
 
     def tick(self, now: Optional[datetime] = None) -> HubTickResult:
         """Fuehrt Punkt 2 und 3 des Hub-Vertrags atomar aus."""
         ticked_at = now or _utcnow()
         self.engine.reap_expired(ticked_at)
+        self._tick_count += 1
+        do_full = (
+            self.full_audit_every_n_ticks is not None
+            and self.full_audit_every_n_ticks > 0
+            and self._tick_count % self.full_audit_every_n_ticks == 0
+        )
         audit = self.engine.audit_shadow_state(
             raise_on_divergence=self.raise_on_divergence,
+            full=do_full,
         )
         return HubTickResult(
             ticked_at=ticked_at,
             expired_orders=self.engine.last_expired_orders,
             audit=audit,
+            full_audit=do_full,
         )
 
     async def run(
@@ -114,7 +138,11 @@ class ShadowHub:
         interval_seconds: float = 1.0,
         stop_event: Optional[asyncio.Event] = None,
     ) -> None:
-        """Async-Timer fuer den Hub-Takt (Alternative zum System-Cron)."""
+        """Async-Timer fuer den Hub-Takt (Alternative zum System-Cron).
+
+        Fail-fast: Eine ungefaangene ``ShadowAuditDivergence`` beendet die
+        Schleife; der Book-Feed ist davon entkoppelt und laeuft weiter.
+        """
         stop = stop_event or asyncio.Event()
         while not stop.is_set():
             self.tick()

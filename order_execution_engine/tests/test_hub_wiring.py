@@ -255,6 +255,86 @@ def test_journal_fills_when_resting_signal_id_is_none() -> None:
     print("OK test_journal_fills_when_resting_signal_id_is_none")
 
 
+def test_audit_detects_apply_fill_bug() -> None:
+    """Unabhaengiger Fold: Fehler in apply_fill selbst wird sichtbar."""
+    from order_execution_engine.models import VirtualPortfolio
+    from order_execution_engine.shadow_execution_engine import (
+        MarketSnapshot,
+        OrderBookLevel,
+    )
+
+    engine = ShadowExecutionEngine(
+        risk_config=RiskConfig(max_order_size_shares=Decimal("100")),
+    )
+    binding = attach_book_feed(engine)
+    binding.handler.on_book_update(
+        "0xtokenA",
+        bids=[(Decimal("0.59"), Decimal("500"))],
+        asks=[(Decimal("0.61"), Decimal("500"))],
+    )
+
+    original = VirtualPortfolio.apply_fill
+
+    def broken(self, order, fill, market_id):  # noqa: ANN001
+        result = original(self, order, fill, market_id)
+        # Doppelte Kostenbuchung — Journal sieht nur den echten Fill.
+        if order.side is OrderSide.BUY:
+            self.cash -= fill.execution_price * fill.executed_size
+        return result
+
+    VirtualPortfolio.apply_fill = broken  # type: ignore[method-assign]
+    try:
+        assert engine.on_signal(_signal()).approved
+        report = engine.audit_shadow_state()
+        assert not report.ok
+        assert any(f.path == "cash" for f in report.findings)
+    finally:
+        VirtualPortfolio.apply_fill = original  # type: ignore[method-assign]
+    print("OK test_audit_detects_apply_fill_bug")
+
+
+def test_incremental_audit_matches_full_audit() -> None:
+    """Inkrementeller Cursor und Voll-Replay liefern denselben Snapshot."""
+    from order_execution_engine.shadow_execution_engine import (
+        MarketSnapshot,
+        OrderBookLevel,
+    )
+
+    engine = ShadowExecutionEngine(
+        risk_config=RiskConfig(max_order_size_shares=Decimal("50")),
+    )
+    binding = attach_book_feed(engine)
+    book = (
+        [(Decimal("0.59"), Decimal("500"))],
+        [(Decimal("0.61"), Decimal("500"))],
+    )
+    for _ in range(5):
+        binding.handler.on_book_update("0xtokenA", bids=book[0], asks=book[1])
+        assert engine.on_signal(_signal()).approved
+        # Zwischenstands-Audit (Cursor rueckt vor)
+        step = engine.audit_shadow_state()
+        assert step.ok
+
+    inc = engine.audit_shadow_state(full=False)
+    full = engine.audit_shadow_state(full=True)
+    assert inc.ok and full.ok
+    assert inc.replay_snapshot == full.replay_snapshot
+    assert inc.live_snapshot == full.live_snapshot
+    assert engine._audited_upto == len(engine.execution_journal())
+    print("OK test_incremental_audit_matches_full_audit")
+
+
+def test_hub_full_audit_every_n_ticks() -> None:
+    engine = ShadowExecutionEngine()
+    hub = ShadowHub(engine, full_audit_every_n_ticks=2)
+    r1 = hub.tick()
+    assert r1.full_audit is False
+    r2 = hub.tick()
+    assert r2.full_audit is True
+    assert r2.audit.ok
+    print("OK test_hub_full_audit_every_n_ticks")
+
+
 if __name__ == "__main__":
     for fn in list(globals().values()):
         if callable(fn) and fn.__name__.startswith("test_"):

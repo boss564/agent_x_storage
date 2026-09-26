@@ -24,7 +24,7 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from decimal import Decimal
-from typing import Callable, Optional
+from typing import Callable, Optional, Any
 
 from pydantic import BaseModel, ConfigDict
 
@@ -766,6 +766,9 @@ class ShadowExecutionEngine:
         # Nur register_order-IDs: Orderbuch-Reaper darf Match-/FAK-Terminals
         # nicht nachtraeglich auf EXPIRED setzen.
         self._registered_only: set[uuid.UUID] = set()
+        # Inkrementelles Journal-Audit (Cursor + Fold-Zustand)
+        self._journal_auditor: Optional[Any] = None  # JournalReplay, lazy
+        self._audited_upto: int = 0
 
     def fills_for(self, order_id: uuid.UUID) -> list[FillResult]:
         """Liefert persistierbare Fills zu einer Order (Test-/Sink-Seam)."""
@@ -831,25 +834,62 @@ class ShadowExecutionEngine:
             fill=fill,
         ))
 
-    def audit_shadow_state(self, raise_on_divergence: bool = False) -> "AuditReport":
-        """Live-Portfolio gegen unabhängiges Journal-Replay prüfen."""
-        # Lazy: vermeidet Zirkel shadow_execution_engine <-> shadow_replay
+    def _ensure_journal_auditor(self):
+        """Lazy JournalReplay an Startkapital des Live-Portfolios."""
+        from order_execution_engine.shadow_replay import JournalReplay
+
+        if self._journal_auditor is None:
+            self._journal_auditor = JournalReplay(
+                start_balance=self.portfolio.start_balance,
+            )
+            self._audited_upto = 0
+        return self._journal_auditor
+
+    def audit_shadow_state(
+        self,
+        raise_on_divergence: bool = False,
+        *,
+        full: bool = False,
+    ) -> "AuditReport":
+        """Live-Portfolio gegen unabhaengiges Journal-Replay pruefen.
+
+        Standard: inkrementell (nur Events ab ``_audited_upto``).
+        ``full=True``: Fold von vorn, Kontrolle gegen den Cursor-Pfad.
+        """
         from order_execution_engine.shadow_replay import (
             AuditReport,
             JournalReplay,
             ShadowAuditDivergence,
-            diff_portfolio_snapshots,
+            diff_audit_state,
         )
 
         self.guard.assert_safe()
         marks = dict(self._mark_prices)
+        journal = self._execution_journal
+
+        if full:
+            auditor = JournalReplay(start_balance=self.portfolio.start_balance)
+            auditor.apply_events(journal)
+            auditor.touch_marks(marks)
+            self._journal_auditor = auditor
+            self._audited_upto = len(journal)
+        else:
+            auditor = self._ensure_journal_auditor()
+            new_events = journal[self._audited_upto:]
+            auditor.apply_events(new_events)
+            self._audited_upto = len(journal)
+            auditor.touch_marks(marks)
+
         live_snapshot = self.portfolio.snapshot(marks, as_of_seq=0)
-        replay = JournalReplay(
-            self._execution_journal,
-            start_balance=self.portfolio.start_balance,
+        replay_snapshot = auditor.snapshot(marks, as_of_seq=0)
+        findings = diff_audit_state(
+            live_snapshot,
+            replay_snapshot,
+            live_realized_pnl=self.portfolio.realized_pnl,
+            replay_realized_pnl=auditor.realized_pnl,
+            live_peak_equity=self.portfolio.peak_equity,
+            replay_peak_equity=auditor.peak_equity,
         )
-        replay_snapshot = replay.reconstruct().snapshot(marks, as_of_seq=0)
-        findings = diff_portfolio_snapshots(live_snapshot, replay_snapshot)
         report = AuditReport(
             ok=not findings,
             findings=findings,
