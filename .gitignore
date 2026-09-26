@@ -94,3 +94,7 @@ shadow_engine_commits.patch
 kimi_codebase_snapshot.txt
 SCHWARM_STATUS.md
 imports/
+
+# Generated smoke / one-shot monitor artefacts (recreated by tests)
+results/m2_live_monitor_smoke.json
+results/*_smoke.json
