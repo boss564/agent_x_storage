@@ -8,7 +8,9 @@
 #   make verify      Pre-Pitch-Verifikation: Health-Checks + Compliance
 #   make clean       Räumt alle Container, Images und Volumes auf
 
-.PHONY: pitch test stop verify clean
+.PHONY: pitch test stop verify clean telemetry telemetry-serve telemetry-once \
+        telemetry-test telemetry-pull telemetry-pull-watch telemetry-pull-status \
+        telemetry-deploy-hetzner
 
 # ── Pitch: Live-Vorführung ───────────────────────────────────────────
 
@@ -174,6 +176,66 @@ dashboard:
 	streamlit run agents_b2g/simchain/streamlit_app.py --server.port 8501 &
 	streamlit run agents_b2g/multichain/streamlit_app.py --server.port 8502 &
 	wait
+
+# ── Telemetrie-Bridge (X-STORAGE Control Center) ─────────────────────
+# status.json ist die alleinige Schnittstelle. Das Frontend pollt die Datei.
+# Wahrheitsregel: fehlende/nested Repos werden ausgewiesen, nicht erfunden.
+#
+# Fester Projektpfad — NICHT in ~/Downloads (Namensdrift + TCC-Quarantaene).
+# Updates: src/ im Bestand ersetzen, nicht neu entpacken.
+
+XSTORAGE_PROJECT ?= $(HOME)/repos/x-storage-control-center
+
+TELEMETRY_OUT ?= dashboard/status.json
+TELEMETRY_MIRROR ?= $(XSTORAGE_PROJECT)/public/status.json
+
+# Remote-Host (Pull-Modell). Der Host schreibt nur seine status.json;
+# geholt wird sie von hier — keine offenen Ports, keine Credentials auf dem Host.
+PULL_SSH_HOST ?= hetzner
+PULL_REMOTE_PATH ?= /var/lib/agent-x-telemetry/status.json
+PULL_OUT ?= $(XSTORAGE_PROJECT)/public/status-hetzner.json
+PULL_STALE_AFTER ?= 60
+
+telemetry: ## Bridge im 2s-Takt (schreibt status.json + Mirror)
+	@echo "🛰️  Telemetry-Bridge → $(TELEMETRY_OUT) (2s)"
+	python3 dashboard/telemetry_bridge.py --interval 2 \
+		$(if $(TELEMETRY_MIRROR),--mirror $(TELEMETRY_MIRROR),)
+
+telemetry-serve: ## Bridge + HTTP-Endpoint auf 127.0.0.1:8787
+	@echo "🛰️  Telemetry-Bridge + HTTP → http://127.0.0.1:8787/status.json"
+	python3 dashboard/telemetry_bridge.py --serve --interval 2
+
+telemetry-once: ## Einmaliger Snapshot (fuer Tests / Cron)
+	python3 dashboard/telemetry_bridge.py --once --out $(TELEMETRY_OUT)
+
+telemetry-test: ## Test-Suiten der Bridge + des Pull-Agenten (43 Tests)
+	python3 dashboard/test_telemetry_bridge.py
+	python3 dashboard/test_pull_agent.py
+
+telemetry-pull: ## Remote-status.json einmalig holen (Hetzner)
+	python3 dashboard/pull_agent.py --once --ssh-host $(PULL_SSH_HOST) \
+		--remote-path $(PULL_REMOTE_PATH) --out $(PULL_OUT) \
+		--stale-after $(PULL_STALE_AFTER)
+
+telemetry-pull-watch: ## Pull-Agent im 15s-Takt (Vordergrund)
+	@echo "📡 Pull $(PULL_SSH_HOST):$(PULL_REMOTE_PATH) → $(PULL_OUT) (15s)"
+	python3 dashboard/pull_agent.py --interval 15 --ssh-host $(PULL_SSH_HOST) \
+		--remote-path $(PULL_REMOTE_PATH) --out $(PULL_OUT) \
+		--stale-after $(PULL_STALE_AFTER)
+
+telemetry-pull-status: ## Transport-Zustand der Remote-Quelle anzeigen
+	@python3 -c "import json,time;d=json.load(open('$(PULL_OUT)'));t=d['transport'];\
+print('ok=%s  alter=%ss  stale=%s' % (t['ok'], t['age_seconds'], t['stale']));\
+print('fehler=%s' % t['error']);\
+[print('  [%-8s] %s' % (a['severity'], a['message'])) for a in d.get('alerts',[])]"
+
+telemetry-deploy-hetzner: ## Bridge + Registry auf den Remote-Host deployen
+	@echo "🚀 Deploy → $(PULL_SSH_HOST)"
+	ssh $(PULL_SSH_HOST) 'install -d -m 0755 /opt/agent-x /etc/agent-x /var/lib/agent-x-telemetry'
+	scp dashboard/telemetry_bridge.py $(PULL_SSH_HOST):/opt/agent-x/telemetry_bridge.py
+	scp deploy/hetzner/telemetry-registry.hetzner.json $(PULL_SSH_HOST):/etc/agent-x/telemetry-registry.json
+	scp deploy/hetzner/telemetry-bridge.env $(PULL_SSH_HOST):/etc/agent-x/telemetry-bridge.env
+	ssh $(PULL_SSH_HOST) 'systemctl restart agent-x-telemetry.service && sleep 6 && systemctl is-active agent-x-telemetry.service'
 
 # ── WASM Build (TinyGo required) ─────────────────────────────────────
 
