@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>EnvironmentVariables</key>
+	<dict>
+		<key>AGENTX_TELEMETRY_LOG</key>
+		<string>/tmp/ref_run.log</string>
+		<key>AGENTX_TELEMETRY_OUT</key>
+		<string>/Volumes/THX_OS_ULTRA/Users/olivermueller/agent_x_storage/dashboard/status.json</string>
+		<key>AGENTX_TELEMETRY_REGISTRY</key>
+		<string>/Volumes/THX_OS_ULTRA/Users/olivermueller/agent_x_storage/dashboard/telemetry-registry.mac.json</string>
+	</dict>
+	<key>KeepAlive</key>
+	<true/>
+	<key>Label</key>
+	<string>com.agentx.telemetry-bridge</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/Volumes/THX_OS_ULTRA/Users/olivermueller/agent_x_storage/.venv/bin/python3</string>
+		<string>-u</string>
+		<string>/Volumes/THX_OS_ULTRA/Users/olivermueller/agent_x_storage/dashboard/telemetry_bridge.py</string>
+		<string>--interval</string>
+		<string>2</string>
+		<string>--mirror</string>
+		<string>/Users/olivermueller/repos/x-storage-control-center/public/status.json</string>
+	</array>
+	<key>RunAtLoad</key>
+	<true/>
+	<key>StandardErrorPath</key>
+	<string>/tmp/com.agentx.telemetry-bridge.err</string>
+	<key>StandardOutPath</key>
+	<string>/tmp/com.agentx.telemetry-bridge.log</string>
+	<key>WorkingDirectory</key>
+	<string>/Volumes/THX_OS_ULTRA/Users/olivermueller/agent_x_storage</string>
+</dict>
+</plist>

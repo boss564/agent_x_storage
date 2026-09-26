@@ -94,11 +94,11 @@ DEFAULT_REPO_REGISTRY: list[dict[str, Any]] = [
     # Erwarteter Zustand: "nested" — verhindert falsche Git-Abfragen.
     {"name": "order_execution_engine", "path": "order_execution_engine",
      "role": "package", "kind": "package"},
-    # Noch nicht ausgegruendet — bewusst als Roadmap-Sichtbarkeit gefuehrt.
-    # Erwarteter Zustand: "not_found" (graues Badge, kein Fehler).
-    {"name": "data_infrastructure", "path": "data_infrastructure", "role": "satellite"},
-    {"name": "polysentinel", "path": "polysentinel", "role": "satellite"},
-    {"name": "farcaster_app", "path": "farcaster_app", "role": "satellite"},
+    # data_infrastructure / polysentinel / farcaster_app: geplant, noch ohne
+    # git init — bewusst NICHT in der Registry. Telemetrie misst Ist-Zustand,
+    # nicht Roadmap. Dauerhaftes NOT_FOUND stumpft den Alert-Strip ab.
+    # Nach git init: auf dem passenden Host mit echtem Pfad eintragen
+    # (polysentinel live: Hetzner /opt/polysentinel).
     # Das Control-Center-Projekt selbst (eigenes Repo seit 2026-09-21).
     # Absoluter Pfad, weil es ausserhalb von BASE_DIR liegt.
     {"name": "x-storage-control-center", "path": "~/repos/x-storage-control-center",

@@ -1,0 +1,49 @@
+{
+  "_comment": "Remote-Registry fuer hetzner (65.108.246.89). Wird von telemetry_bridge.py per AGENTX_TELEMETRY_REGISTRY gelesen. Pfade sind ABSOLUT — der Remote-Host hat keinen gemeinsamen BASE_DIR mit dem Mac.",
+  "_comment_kind": "kind=bare fuer Repos ohne Arbeitsbaum (git --git-dir, kein status). Ohne dieses Flag meldet die Bridge 'error' fuer ein gesundes Bare.",
+  "_comment_ehrlichkeit": "Bewusst als Eintrag gefuehrt, auch wenn der Prozess nicht laeuft: Ein dokumentierter Prozess, der fehlt, ist ein Befund — kein Rauschen. not_running ist die Information, die zur Entscheidung zwingt.",
+  "_comment_polysentinel": "Live unter /opt/polysentinel (.farcaster/ ist gitignored — Key erscheint nicht in Alerts).",
+  "repos": [
+    {
+      "name": "hetzner-agent_x_storage",
+      "path": "/root/agent_x_storage",
+      "role": "hub"
+    },
+    {
+      "name": "hetzner-newsagent",
+      "path": "/root/apps/newsagent",
+      "role": "satellite"
+    },
+    {
+      "name": "hetzner-newsagent-bare",
+      "path": "/root/newsagent-bare.git",
+      "role": "git-remote",
+      "kind": "bare"
+    },
+    {
+      "name": "hetzner-polysentinel",
+      "path": "/opt/polysentinel",
+      "role": "satellite"
+    }
+  ],
+  "processes": [
+    {
+      "name": "newsagent-poll",
+      "pattern": "newsagent-poll.service",
+      "required": true,
+      "unit": "newsagent-poll.service"
+    },
+    {
+      "name": "m2-live-monitor",
+      "pattern": "m2_live_monitor",
+      "required": false,
+      "unit": "m2-live-monitor.service"
+    },
+    {
+      "name": "newsagent-backup",
+      "pattern": "backup_newsagent",
+      "required": false,
+      "unit": "newsagent-backup.service"
+    }
+  ]
+}
