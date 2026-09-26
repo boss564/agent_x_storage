@@ -238,10 +238,18 @@ def test_journal_fills_when_resting_signal_id_is_none() -> None:
         update={"status": result.status},
     )
 
+    n0 = len(engine.execution_journal())
+    fills_before = len(engine.fills_for(order.order_id))
     records = engine.on_book_update(crossing)
+    crossing_fills = engine.fills_for(order.order_id)[fills_before:]
+    assert len(crossing_fills) > 0
+    assert len(engine.execution_journal()) == n0 + len(crossing_fills)
+    assert all(
+        e.signal_id == order.signal_id
+        for e in engine.execution_journal()[n0:]
+    )
     assert records  # Telemetrie mit order.signal_id
     assert all(r.signal_id == order.signal_id for r in records)
-    assert any(e.signal_id == order.signal_id for e in engine.execution_journal())
     report = engine.audit_shadow_state(raise_on_divergence=True)
     assert report.ok
     print("OK test_journal_fills_when_resting_signal_id_is_none")

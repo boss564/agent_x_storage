@@ -1064,6 +1064,9 @@ class ShadowExecutionEngine:
         einer ruhenden GTC-Order schreibt einen neuen ``TelemetryRecord``
         (gleiche ``order_id``, neues ``decision_seq``). ``latency_ms=0.0``:
         Buch-zu-Fill, nicht Signal-zu-Fill.
+
+        Telemetrie wird immer geschrieben: Fehlt ``signal_id`` im Matcher-
+        Register, greift der Fallback ``order.signal_id`` (wie beim Journal).
         """
         self.guard.assert_safe()
         self._store_snapshot(snapshot)
@@ -1130,10 +1133,9 @@ class ShadowExecutionEngine:
             self._order_book[exp.order_id] = order
             handled.add(exp.order_id)
             expired_orders.append(order)
-            if exp.signal_id is None:
-                continue  # ohne Signal-Kontext keine Telemetrie (Test-Seam)
+            sid = exp.signal_id or order.signal_id
             rec = TelemetryRecord(
-                signal_id=exp.signal_id,
+                signal_id=sid,
                 order_id=exp.order_id,
                 latency_ms=0.0,
                 approved=True,  # risiko-genehmigt; Verfall ist Lebenszyklus
