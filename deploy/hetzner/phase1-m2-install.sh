@@ -31,6 +31,24 @@ news_python() {
   fi
 }
 
+# Idempotent: deploy-safe-snapshot / git clean wipe .venv (gitignored); the
+# systemd unit hardcodes .venv/bin/python → 203/EXEC if missing (seen 2026-09-10).
+ensure_venv() {
+  local py="${AGENT_X_ROOT}/.venv/bin/python"
+  local req="${AGENT_X_ROOT}/requirements.txt"
+  if [[ -x "$py" ]]; then
+    ok "venv present: $py"
+    return 0
+  fi
+  [[ -f "$req" ]] || die "requirements.txt missing — cannot recreate .venv ($req)"
+  warn "venv missing — creating ${AGENT_X_ROOT}/.venv and pip install -r requirements.txt"
+  python3 -m venv "${AGENT_X_ROOT}/.venv"
+  "${AGENT_X_ROOT}/.venv/bin/pip" install -U pip
+  "${AGENT_X_ROOT}/.venv/bin/pip" install -r "$req"
+  [[ -x "$py" ]] || die "venv create failed: $py not executable"
+  ok "venv ready: $py"
+}
+
 enable_watchdog_m2_liveness() {
   local env_file="${AGENT_X_ROOT}/config/news_watchdog.env"
   mkdir -p "${AGENT_X_ROOT}/config"
@@ -86,6 +104,8 @@ echo "Root: $AGENT_X_ROOT"
 
 mkdir -p data logs results
 ok "data/ logs/ results/"
+
+ensure_venv
 
 chmod +x scripts/watchdog_news_ingestion.py \
   scripts/backtest_h1_news_m2_shadow.py \
