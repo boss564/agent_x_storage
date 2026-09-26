@@ -98,3 +98,10 @@ imports/
 # Generated smoke / one-shot monitor artefacts (recreated by tests)
 results/m2_live_monitor_smoke.json
 results/*_smoke.json
+
+# Telemetrie: host-spezifische Env (Vorlage: deploy/hetzner/telemetry-bridge.env.example)
+deploy/hetzner/telemetry-bridge.env
+# Nested newsagent-Checkout / Review-Artefakte / Bridge-Output
+newsagent/
+dashboard/_review_newsagent_cutover/
+artifacts/

@@ -1,0 +1,58 @@
+[Unit]
+Description=Agent-X Telemetry Bridge (status.json producer)
+Documentation=file://@AGENT_X_ROOT@/docs/V13_DEPLOY_RUNBOOK.md
+After=network.target
+
+[Service]
+# Type=simple mit Dauerbetrieb statt Timer: Die Bridge taktet selbst (Loop mit
+# AGENTX_TELEMETRY_INTERVAL). Ein Timer wuerde bei jedem Lauf einen neuen
+# Prozess starten — und der 5s-Takt ist feiner als systemd-Timer sinnvoll
+# abbilden koennen (OnUnitActiveSec-Granularitaet + Start-Overhead).
+Type=simple
+
+# WorkingDirectory = der zu UEBERWACHENDE Baum, nicht der Ort der Bridge.
+# Die Bridge liegt unter /opt/agent-x (Deploy-Ziel, ueberlebt Repo-Updates);
+# die relativen Repo-Pfade der Registry werden gegen AGENTX_TELEMETRY_BASE
+# aufgeloest. Die Registry nutzt absolute Pfade, deshalb ist das hier nur der
+# Fallback fuer den Fall, dass BASE_DIR gebraucht wird.
+WorkingDirectory=@AGENT_X_ROOT@
+EnvironmentFile=/etc/agent-x/telemetry-bridge.env
+
+# WICHTIG: Der Host-Checkout /root/agent_x_storage hat KEIN dashboard/ —
+# dort liegt ein aelterer Stand. Die Bridge wird separat nach /opt/agent-x
+# deployt. Ein Pfad auf @AGENT_X_ROOT@/dashboard/... existiert hier nicht und
+# laesst den Dienst mit status=2 sterben (gemessen 2026-09-21).
+#
+# KEINE ${VAR}-Expansion in ExecStart — systemd ersetzt Variablen dort nicht.
+# Ein "${AGENTX_TELEMETRY_INTERVAL}" hier wuerde WOERTLICH uebergeben und
+# argparse mit "invalid float value" sterben lassen. Deshalb: /bin/sh -c
+# uebernimmt die Expansion.
+ExecStart=/bin/sh -c 'exec /usr/bin/python3 ${BRIDGE_SCRIPT:-/opt/agent-x/telemetry_bridge.py} \
+    --interval "${AGENTX_TELEMETRY_INTERVAL:-5}" \
+    --out "${AGENTX_TELEMETRY_OUT:-/var/lib/agent-x-telemetry/status.json}"'
+
+# Der KeepAlive-Ersatz auf Linux. Ein abgestuerzter Bridge-Prozess darf nicht
+# still ausfallen — sonst wechselt das Dashboard auf dem Mac in den DEMO-Modus
+# und niemand merkt, dass die Remote-Telemetrie weg ist.
+Restart=always
+RestartSec=5
+
+# Laufzeitverzeichnis: tmpfs ist OK fuer den Socket, nicht fuer status.json.
+RuntimeDirectory=agent-x-telemetry
+RuntimeDirectoryMode=0755
+
+# Haertung. Die Bridge liest Git-Repos und Logs und schreibt eine JSON —
+# sie braucht keinerlei Schreibzugriff auf den Quellbaum.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/var/lib/agent-x-telemetry
+
+# Logs nach journald (journalctl -u agent-x-telemetry -f).
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=agent-x-telemetry
+
+[Install]
+WantedBy=multi-user.target

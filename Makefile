@@ -234,7 +234,7 @@ telemetry-deploy-hetzner: ## Bridge + Registry auf den Remote-Host deployen
 	ssh $(PULL_SSH_HOST) 'install -d -m 0755 /opt/agent-x /etc/agent-x /var/lib/agent-x-telemetry'
 	scp dashboard/telemetry_bridge.py $(PULL_SSH_HOST):/opt/agent-x/telemetry_bridge.py
 	scp deploy/hetzner/telemetry-registry.hetzner.json $(PULL_SSH_HOST):/etc/agent-x/telemetry-registry.json
-	scp deploy/hetzner/telemetry-bridge.env $(PULL_SSH_HOST):/etc/agent-x/telemetry-bridge.env
+	scp deploy/hetzner/telemetry-bridge.env.example $(PULL_SSH_HOST):/etc/agent-x/telemetry-bridge.env
 	ssh $(PULL_SSH_HOST) 'systemctl restart agent-x-telemetry.service && sleep 6 && systemctl is-active agent-x-telemetry.service'
 
 # ── WASM Build (TinyGo required) ─────────────────────────────────────

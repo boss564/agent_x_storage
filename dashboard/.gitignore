@@ -1,0 +1,4 @@
+# Generierte Telemetrie — nicht committen.
+# Erzeugt von dashboard/telemetry_bridge.py (status.json ist die Schnittstelle
+# zum X-STORAGE Control Center, nicht Quelle).
+status.json
