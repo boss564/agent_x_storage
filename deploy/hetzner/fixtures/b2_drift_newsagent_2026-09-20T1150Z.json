@@ -1,0 +1,39 @@
+{
+  "blocker": "B1-followup / B3-gate",
+  "captured_at_utc": "2026-09-20T11:50:00Z",
+  "hostname": "ubuntu-8gb-hel1-1",
+  "verdict": "LEDGER_ANCHOR_NOT_ON_HOST_OR_BARE",
+  "explanation": [
+    "Host checkout /root/apps/newsagent HEAD = f0b1b41 (2026-09-18) — clean of tracked mods, 6 untracked files",
+    "After git fetch: behind origin/master by 44; bare origin HEAD = c2ff340",
+    "d2990d3 is NOT a valid object on host after fetch and NOT in newsagent-bare.git",
+    "Local Mac nested newsagent: HEAD d2990d3, status ahead 1 of origin/master — commit never pushed to bare",
+    "Therefore Ledger anchor d2990d3 describes a local-only tip, not a deployed host state"
+  ],
+  "hosts": {
+    "deploy_checkout": {
+      "path": "/root/apps/newsagent",
+      "head_short": "f0b1b41",
+      "vs_origin": "behind 44 after fetch"
+    },
+    "bare": {
+      "path": "/root/newsagent-bare.git",
+      "head_short": "c2ff340"
+    },
+    "ledger_anchor_d2990d3": {
+      "on_host": false,
+      "on_bare": false,
+      "on_local_nested": true,
+      "local_vs_origin": "ahead 1"
+    }
+  },
+  "b3_gate": "BLOCKED until (a) push d2990d3 to bare + deploy, or (b) replace Ledger anchor with deployed hash (f0b1b41 or c2ff340 after intentional deploy) with rationale",
+  "untracked_on_host": [
+    "docs/kanonizitaet/ORAKEL_EXPORT_M2_2026-09-19.md",
+    "scripts/falkor_migration/graph_gleichheit.py",
+    "scripts/falkor_migration/hash_definition.py",
+    "scripts/falkor_migration/oracle_export.py",
+    "scripts/falkor_migration/verify_oracle_hash.py",
+    "scripts/falkor_migration/volume_neuaufbau.sh"
+  ]
+}

@@ -1,0 +1,11 @@
+2026-09-20T11:50:41Z
+CLAUDE.md — 1626 Zeilen
+Wellen-Tabelle: 28 Zeilen (1, 2, 3, 3.5, 4, 5, 6, 7, 8, 9, 10, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 27, 28, 29, 31, 32, 33)
+  -> 27 Hauptwellen x 9 = 243 Agenten
+  -> mit Unterwellen: 252
+
+203 Angaben geprueft, 1 Abweichungen
+
+             docs/SWARM_INVENTORY.md Laufzeit-Block veraltet
+            Doku: 232.3h alt   tatsaechlich: >24h   (make raas-swarm-inventory-sync)
+exit=1

@@ -1,0 +1,241 @@
+{
+  "fixture_id": "host_units",
+  "captured_at_utc": "2026-09-20T10:36:24Z",
+  "hostname": "ubuntu-8gb-hel1-1",
+  "blocker": "B1",
+  "ssot_ref": "SCHWARM_STATUS.md §7 B1",
+  "command": "systemctl is-enabled/is-active + systemctl show named properties",
+  "units": [
+    {
+      "unit": "newsagent-waechter.timer",
+      "is_enabled": "not-found",
+      "is_active": "inactive",
+      "load_state": "not-found",
+      "unit_file_state": "",
+      "active_state": "inactive",
+      "sub_state": "dead",
+      "result": "success",
+      "fragment_path": "",
+      "active_enter_timestamp": ""
+    },
+    {
+      "unit": "newsagent-waechter.service",
+      "is_enabled": "not-found",
+      "is_active": "inactive",
+      "load_state": "not-found",
+      "unit_file_state": "",
+      "active_state": "inactive",
+      "sub_state": "dead",
+      "result": "success",
+      "fragment_path": "",
+      "active_enter_timestamp": ""
+    },
+    {
+      "unit": "newsagent-takt.timer",
+      "is_enabled": "enabled",
+      "is_active": "active",
+      "load_state": "loaded",
+      "unit_file_state": "enabled",
+      "active_state": "active",
+      "sub_state": "waiting",
+      "result": "success",
+      "fragment_path": "/etc/systemd/system/newsagent-takt.timer",
+      "active_enter_timestamp": "Sun 2026-09-13 14:13:17 UTC"
+    },
+    {
+      "unit": "newsagent-takt.service",
+      "is_enabled": "static",
+      "is_active": "inactive",
+      "load_state": "loaded",
+      "unit_file_state": "static",
+      "active_state": "inactive",
+      "sub_state": "dead",
+      "result": "success",
+      "fragment_path": "/etc/systemd/system/newsagent-takt.service",
+      "active_enter_timestamp": ""
+    },
+    {
+      "unit": "newsagent-backup.timer",
+      "is_enabled": "enabled",
+      "is_active": "active",
+      "load_state": "loaded",
+      "unit_file_state": "enabled",
+      "active_state": "active",
+      "sub_state": "waiting",
+      "result": "success",
+      "fragment_path": "/etc/systemd/system/newsagent-backup.timer",
+      "active_enter_timestamp": "Sat 2026-09-05 15:30:10 UTC"
+    },
+    {
+      "unit": "newsagent-backup.service",
+      "is_enabled": "disabled",
+      "is_active": "failed",
+      "load_state": "loaded",
+      "unit_file_state": "disabled",
+      "active_state": "failed",
+      "sub_state": "failed",
+      "result": "exit-code",
+      "fragment_path": "/etc/systemd/system/newsagent-backup.service",
+      "active_enter_timestamp": ""
+    },
+    {
+      "unit": "newsagent-digest.timer",
+      "is_enabled": "enabled",
+      "is_active": "active",
+      "load_state": "loaded",
+      "unit_file_state": "enabled",
+      "active_state": "active",
+      "sub_state": "waiting",
+      "result": "success",
+      "fragment_path": "/etc/systemd/system/newsagent-digest.timer",
+      "active_enter_timestamp": "Sat 2026-09-05 19:13:25 UTC"
+    },
+    {
+      "unit": "newsagent-restore-drill.timer",
+      "is_enabled": "enabled",
+      "is_active": "active",
+      "load_state": "loaded",
+      "unit_file_state": "enabled",
+      "active_state": "active",
+      "sub_state": "waiting",
+      "result": "success",
+      "fragment_path": "/etc/systemd/system/newsagent-restore-drill.timer",
+      "active_enter_timestamp": "Sat 2026-09-05 17:25:32 UTC"
+    },
+    {
+      "unit": "newsagent-restore-drill.service",
+      "is_enabled": "disabled",
+      "is_active": "inactive",
+      "load_state": "loaded",
+      "unit_file_state": "disabled",
+      "active_state": "inactive",
+      "sub_state": "dead",
+      "result": "success",
+      "fragment_path": "/etc/systemd/system/newsagent-restore-drill.service",
+      "active_enter_timestamp": ""
+    },
+    {
+      "unit": "newsagent-security.timer",
+      "is_enabled": "enabled",
+      "is_active": "active",
+      "load_state": "loaded",
+      "unit_file_state": "enabled",
+      "active_state": "active",
+      "sub_state": "waiting",
+      "result": "success",
+      "fragment_path": "/etc/systemd/system/newsagent-security.timer",
+      "active_enter_timestamp": "Sun 2026-09-06 05:53:07 UTC"
+    },
+    {
+      "unit": "newsagent-dev.timer",
+      "is_enabled": "enabled",
+      "is_active": "active",
+      "load_state": "loaded",
+      "unit_file_state": "enabled",
+      "active_state": "active",
+      "sub_state": "waiting",
+      "result": "success",
+      "fragment_path": "/etc/systemd/system/newsagent-dev.timer",
+      "active_enter_timestamp": "Sun 2026-09-06 05:53:07 UTC"
+    },
+    {
+      "unit": "rclone-mount-gdrive.service",
+      "is_enabled": "not-found",
+      "is_active": "inactive",
+      "load_state": "not-found",
+      "unit_file_state": "",
+      "active_state": "inactive",
+      "sub_state": "dead",
+      "result": "success",
+      "fragment_path": "",
+      "active_enter_timestamp": ""
+    },
+    {
+      "unit": "rclone-gdrive.service",
+      "is_enabled": "enabled",
+      "is_active": "active",
+      "load_state": "loaded",
+      "unit_file_state": "enabled",
+      "active_state": "active",
+      "sub_state": "running",
+      "result": "success",
+      "fragment_path": "/etc/systemd/system/rclone-gdrive.service",
+      "active_enter_timestamp": "Thu 2026-09-10 06:49:55 UTC"
+    },
+    {
+      "unit": "m2-live-monitor.timer",
+      "is_enabled": "enabled",
+      "is_active": "active",
+      "load_state": "loaded",
+      "unit_file_state": "enabled",
+      "active_state": "active",
+      "sub_state": "waiting",
+      "result": "success",
+      "fragment_path": "/etc/systemd/system/m2-live-monitor.timer",
+      "active_enter_timestamp": "Thu 2026-09-10 19:37:51 UTC"
+    },
+    {
+      "unit": "m2-live-monitor.service",
+      "is_enabled": "disabled",
+      "is_active": "failed",
+      "load_state": "loaded",
+      "unit_file_state": "disabled",
+      "active_state": "failed",
+      "sub_state": "failed",
+      "result": "exit-code",
+      "fragment_path": "/etc/systemd/system/m2-live-monitor.service",
+      "active_enter_timestamp": ""
+    }
+  ],
+  "git": [
+    {
+      "path": "/root/agent_x_storage",
+      "head": "5a5985c58c103538f0c235b5ba97639d32aec4c1",
+      "short": "5a5985c5",
+      "subject": "chore: safe snapshot of local state for hetzner deploy",
+      "remote": "origin\thttps://github.com/boss564/agent_x_storage.git (fetch)\norigin\thttps://github.com/boss564/agent_x_storage.git (push)"
+    },
+    {
+      "path": "/root/apps/newsagent",
+      "head": "f0b1b4104638a47547f42c6a62f74056c6083f1e",
+      "short": "f0b1b41",
+      "subject": "T7a: Praesenz lokal messen statt per Selbst-SSH + Paar-Probe F0/F0b",
+      "remote": "origin\t/root/newsagent-bare.git (fetch)\norigin\t/root/newsagent-bare.git (push)"
+    },
+    {
+      "path": "/root/alpha-pipeline",
+      "head": "d612db3cae15a4a8db4c50309b40d051c8d4e328",
+      "short": "d612db3",
+      "subject": "docs: Verankere Projektanweisung und .gitignore per Regel 10",
+      "remote": ""
+    }
+  ],
+  "failed_unit_journal_tail": {
+    "newsagent-backup.service": [
+      "2026-09-20T03:35:23+00:00 ubuntu-8gb-hel1-1 bash[2230968]:         mentions  = 3147",
+      "2026-09-20T03:35:23+00:00 ubuntu-8gb-hel1-1 bash[2230968]:         triples   = 2240",
+      "2026-09-20T03:35:23+00:00 ubuntu-8gb-hel1-1 bash[2230561]: [-] Urteil liegt in: /var/backups/newsagent/graph-20260920T033517Z.validate.txt",
+      "2026-09-20T03:35:23+00:00 ubuntu-8gb-hel1-1 systemd[1]: newsagent-backup.service: Main process exited, code=exited, status=10/n/a",
+      "2026-09-20T03:35:23+00:00 ubuntu-8gb-hel1-1 systemd[1]: newsagent-backup.service: Failed with result 'exit-code'.",
+      "2026-09-20T03:35:23+00:00 ubuntu-8gb-hel1-1 systemd[1]: Failed to start newsagent-backup.service - Daily newsagent data backup (03:35 UTC).",
+      "2026-09-20T03:35:23+00:00 ubuntu-8gb-hel1-1 systemd[1]: newsagent-backup.service: Consumed 1.392s CPU time over 5.632s wall clock time, 28.2M memory peak.",
+      "2026-09-20T03:35:23+00:00 ubuntu-8gb-hel1-1 systemd[1]: newsagent-backup.service: Triggering OnFailure= dependencies."
+    ],
+    "m2-live-monitor.service": [
+      "2026-09-20T09:00:01+00:00 ubuntu-8gb-hel1-1 systemd[1]: m2-live-monitor.service: Failed with result 'exit-code'.",
+      "2026-09-20T09:00:01+00:00 ubuntu-8gb-hel1-1 systemd[1]: Failed to start m2-live-monitor.service - Agent-X M2 live lag monitor (single shot).",
+      "2026-09-20T10:00:17+00:00 ubuntu-8gb-hel1-1 systemd[1]: Starting m2-live-monitor.service - Agent-X M2 live lag monitor (single shot)...",
+      "2026-09-20T10:00:17+00:00 ubuntu-8gb-hel1-1 (python)[2259961]: m2-live-monitor.service: Unable to locate executable '/root/agent_x_storage/.venv/bin/python': No such file or directory",
+      "2026-09-20T10:00:17+00:00 ubuntu-8gb-hel1-1 (python)[2259961]: m2-live-monitor.service: Failed at step EXEC spawning /root/agent_x_storage/.venv/bin/python: No such file or directory",
+      "2026-09-20T10:00:17+00:00 ubuntu-8gb-hel1-1 systemd[1]: m2-live-monitor.service: Main process exited, code=exited, status=203/EXEC",
+      "2026-09-20T10:00:17+00:00 ubuntu-8gb-hel1-1 systemd[1]: m2-live-monitor.service: Failed with result 'exit-code'.",
+      "2026-09-20T10:00:17+00:00 ubuntu-8gb-hel1-1 systemd[1]: Failed to start m2-live-monitor.service - Agent-X M2 live lag monitor (single shot)."
+    ]
+  },
+  "notes": [
+    "newsagent-waechter.* not installed (not-found)",
+    "newsagent checkout on host: /root/apps/newsagent (not nested under agent_x_storage)",
+    "rclone host unit: rclone-gdrive.service (repo name rclone-mount-gdrive.service differs)",
+    "B1 is inventory, not green health — failed units recorded as facts"
+  ]
+}

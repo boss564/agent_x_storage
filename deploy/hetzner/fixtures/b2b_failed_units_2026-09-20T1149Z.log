@@ -1,0 +1,145 @@
+2026-09-20T11:50:15Z
+=== B2b newsagent-backup.service ===
+× newsagent-backup.service - Daily newsagent data backup (03:35 UTC)
+     Loaded: loaded (/etc/systemd/system/newsagent-backup.service; disabled; preset: enabled)
+    Drop-In: /etc/systemd/system/newsagent-backup.service.d
+             └─override.conf
+     Active: failed (Result: exit-code) since Sun 2026-09-20 03:35:23 UTC; 8h ago
+ Invocation: 2002fbffb0a7414ea12b487f079884a1
+TriggeredBy: ● newsagent-backup.timer
+    Process: 2230561 ExecStart=/bin/bash /root/apps/newsagent/deploy/backup_newsagent.sh (code=exited, status=10)
+   Main PID: 2230561 (code=exited, status=10)
+   Mem peak: 28.2M
+        CPU: 1.392s
+
+Sep 20 03:35:23 ubuntu-8gb-hel1-1 bash[2230968]:         nodes     = 3457
+Sep 20 03:35:23 ubuntu-8gb-hel1-1 bash[2230968]:         edges     = 5387
+Sep 20 03:35:23 ubuntu-8gb-hel1-1 bash[2230968]:         mentions  = 3147
+Sep 20 03:35:23 ubuntu-8gb-hel1-1 bash[2230968]:         triples   = 2240
+Sep 20 03:35:23 ubuntu-8gb-hel1-1 bash[2230561]: [-] Urteil liegt in: /var/backups/newsagent/graph-20260920T033517Z.validate.txt
+Sep 20 03:35:23 ubuntu-8gb-hel1-1 systemd[1]: newsagent-backup.service: Main process exited, code=exited, status=10/n/a
+Sep 20 03:35:23 ubuntu-8gb-hel1-1 systemd[1]: newsagent-backup.service: Failed with result 'exit-code'.
+Sep 20 03:35:23 ubuntu-8gb-hel1-1 systemd[1]: Failed to start newsagent-backup.service - Daily newsagent data backup (03:35 UTC).
+Sep 20 03:35:23 ubuntu-8gb-hel1-1 systemd[1]: newsagent-backup.service: Consumed 1.392s CPU time over 5.632s wall clock time, 28.2M memory peak.
+Sep 20 03:35:23 ubuntu-8gb-hel1-1 systemd[1]: newsagent-backup.service: Triggering OnFailure= dependencies.
+EXIT_status_cmd=0
+--- journal ---
+2026-09-20T03:35:22+00:00 ubuntu-8gb-hel1-1 bash[2230871]:   OK   drafts.db (SQLite, nicht reproduzierbar)
+2026-09-20T03:35:22+00:00 ubuntu-8gb-hel1-1 bash[2230871]:        14 Datei(en) via /var/backups/newsagent/drafts-*.sqlite
+2026-09-20T03:35:22+00:00 ubuntu-8gb-hel1-1 bash[2230871]:        frisch: juengste Datei 0h alt (Schwelle 26h)
+2026-09-20T03:35:22+00:00 ubuntu-8gb-hel1-1 bash[2230871]:   OK   budget.json (Guard-State)
+2026-09-20T03:35:22+00:00 ubuntu-8gb-hel1-1 bash[2230871]:        14 Datei(en) via /var/backups/newsagent/budget-*.json
+2026-09-20T03:35:22+00:00 ubuntu-8gb-hel1-1 bash[2230871]:        frisch: juengste Datei 0h alt (Schwelle 26h)
+2026-09-20T03:35:22+00:00 ubuntu-8gb-hel1-1 bash[2230871]:   OK   Graph-Export (taeglicher Restore-Kurier)
+2026-09-20T03:35:22+00:00 ubuntu-8gb-hel1-1 bash[2230871]:        14 Datei(en) via /var/backups/newsagent/graph-*.jsonl
+2026-09-20T03:35:22+00:00 ubuntu-8gb-hel1-1 bash[2230871]:        frisch: juengste Datei 0h alt (Schwelle 26h)
+2026-09-20T03:35:22+00:00 ubuntu-8gb-hel1-1 bash[2230871]:   OK   Eingefrorene Beweisdaten (FalkorDB-Migration)
+2026-09-20T03:35:22+00:00 ubuntu-8gb-hel1-1 bash[2230871]:        6 Datei(en) via /var/backups/newsagent/frozen/*.jsonl
+2026-09-20T03:35:22+00:00 ubuntu-8gb-hel1-1 bash[2230871]:   OK   Frozen-Metadaten (SHA-Anker)
+2026-09-20T03:35:22+00:00 ubuntu-8gb-hel1-1 bash[2230871]:        5 Datei(en) via /var/backups/newsagent/frozen/*.meta.json
+2026-09-20T03:35:22+00:00 ubuntu-8gb-hel1-1 bash[2230871]:   OK   FalkorDB-Messumgebung (Grobanker: mind. eine Datei)
+2026-09-20T03:35:22+00:00 ubuntu-8gb-hel1-1 bash[2230871]:        85 Datei(en) via /var/backups/newsagent/falkor_measure/*
+2026-09-20T03:35:22+00:00 ubuntu-8gb-hel1-1 bash[2230871]:   OK   Git-Gate: Bare-Repo-Config (Gate-Schluessel)
+2026-09-20T03:35:22+00:00 ubuntu-8gb-hel1-1 bash[2230871]:        12 Datei(en) via /var/backups/newsagent/gitgate/config-*
+2026-09-20T03:35:22+00:00 ubuntu-8gb-hel1-1 bash[2230871]:        frisch: juengste Datei 0h alt (Schwelle 26h)
+2026-09-20T03:35:22+00:00 ubuntu-8gb-hel1-1 bash[2230871]:   OK   Git-Gate: installierter pre-receive-Hook
+2026-09-20T03:35:22+00:00 ubuntu-8gb-hel1-1 bash[2230871]:        12 Datei(en) via /var/backups/newsagent/gitgate/pre-receive-*
+2026-09-20T03:35:22+00:00 ubuntu-8gb-hel1-1 bash[2230871]:        frisch: juengste Datei 0h alt (Schwelle 26h)
+2026-09-20T03:35:22+00:00 ubuntu-8gb-hel1-1 bash[2230871]:   OK   Eichung (Referenzmass des Validators)
+2026-09-20T03:35:22+00:00 ubuntu-8gb-hel1-1 bash[2230871]:        1 Datei(en) via /var/backups/newsagent/eich.json
+2026-09-20T03:35:22+00:00 ubuntu-8gb-hel1-1 bash[2230871]:        frisch: juengste Datei 0h alt (Schwelle 26h)
+2026-09-20T03:35:22+00:00 ubuntu-8gb-hel1-1 bash[2230871]:   OK   FalkorDB-Messumgebung (Belege, Sonden, Vertrag, Pin)
+2026-09-20T03:35:22+00:00 ubuntu-8gb-hel1-1 bash[2230871]:        90 Datei(en) rekursiv in /var/backups/newsagent/falkor_measure
+2026-09-20T03:35:22+00:00 ubuntu-8gb-hel1-1 bash[2230871]: Gegenprobe: Verzeichnisse unter /data ohne Backup-Entsprechung
+2026-09-20T03:35:22+00:00 ubuntu-8gb-hel1-1 bash[2230871]: Coverage: OK — alle registrierten Pfade gesichert.
+2026-09-20T03:35:23+00:00 ubuntu-8gb-hel1-1 bash[2230951]: Frozen-Dump-Verifikation gegen Git-Anker
+2026-09-20T03:35:23+00:00 ubuntu-8gb-hel1-1 bash[2230951]:   Manifest: /root/apps/newsagent/scripts/falkor_migration/SHA256_MANIFEST
+2026-09-20T03:35:23+00:00 ubuntu-8gb-hel1-1 bash[2230951]:   OK   /data/frozen/neo4j-20260911T193338Z.jsonl
+2026-09-20T03:35:23+00:00 ubuntu-8gb-hel1-1 bash[2230951]:   OK   /var/backups/newsagent/frozen/neo4j-20260911T193338Z.jsonl
+2026-09-20T03:35:23+00:00 ubuntu-8gb-hel1-1 bash[2230951]:   OK   /var/backups/newsagent/frozen/neo4j-20260911T180554Z.jsonl
+2026-09-20T03:35:23+00:00 ubuntu-8gb-hel1-1 bash[2230951]:   OK   /var/backups/newsagent/frozen/graph-pre-falkor-20260911T152918Z.jsonl
+2026-09-20T03:35:23+00:00 ubuntu-8gb-hel1-1 bash[2230951]: Verifikation: OK — eingefrorene Beweisdaten intakt.
+2026-09-20T03:35:23+00:00 ubuntu-8gb-hel1-1 bash[2230561]: backup fertig -> /var/backups/newsagent (Retention 14)
+2026-09-20T03:35:23+00:00 ubuntu-8gb-hel1-1 bash[2230561]: [-] VALIDATOR LEHNTE AB (Exit 10):
+2026-09-20T03:35:23+00:00 ubuntu-8gb-hel1-1 bash[2230968]:       [REJECTED_UNATTESTED] /var/backups/newsagent/graph-20260920T033517Z.jsonl
+2026-09-20T03:35:23+00:00 ubuntu-8gb-hel1-1 bash[2230968]:         Zeile 1 traegt kein Attest (backend/source_uri/graph_name fehlen). Ein Artefakt ohne Herkunft ist eine Zahl, keine Evidenz.
+2026-09-20T03:35:23+00:00 ubuntu-8gb-hel1-1 bash[2230968]:         format    = v1.1.0
+2026-09-20T03:35:23+00:00 ubuntu-8gb-hel1-1 bash[2230968]:         nodes     = 3457
+2026-09-20T03:35:23+00:00 ubuntu-8gb-hel1-1 bash[2230968]:         edges     = 5387
+2026-09-20T03:35:23+00:00 ubuntu-8gb-hel1-1 bash[2230968]:         mentions  = 3147
+2026-09-20T03:35:23+00:00 ubuntu-8gb-hel1-1 bash[2230968]:         triples   = 2240
+2026-09-20T03:35:23+00:00 ubuntu-8gb-hel1-1 bash[2230561]: [-] Urteil liegt in: /var/backups/newsagent/graph-20260920T033517Z.validate.txt
+2026-09-20T03:35:23+00:00 ubuntu-8gb-hel1-1 systemd[1]: newsagent-backup.service: Main process exited, code=exited, status=10/n/a
+2026-09-20T03:35:23+00:00 ubuntu-8gb-hel1-1 systemd[1]: newsagent-backup.service: Failed with result 'exit-code'.
+2026-09-20T03:35:23+00:00 ubuntu-8gb-hel1-1 systemd[1]: Failed to start newsagent-backup.service - Daily newsagent data backup (03:35 UTC).
+2026-09-20T03:35:23+00:00 ubuntu-8gb-hel1-1 systemd[1]: newsagent-backup.service: Consumed 1.392s CPU time over 5.632s wall clock time, 28.2M memory peak.
+2026-09-20T03:35:23+00:00 ubuntu-8gb-hel1-1 systemd[1]: newsagent-backup.service: Triggering OnFailure= dependencies.
+=== B2b m2-live-monitor.service ===
+× m2-live-monitor.service - Agent-X M2 live lag monitor (single shot)
+     Loaded: loaded (/etc/systemd/system/m2-live-monitor.service; disabled; preset: enabled)
+     Active: failed (Result: exit-code) since Sun 2026-09-20 11:00:17 UTC; 49min ago
+ Invocation: e288028a4f1b412ba66ace4f4fffb1c5
+TriggeredBy: ● m2-live-monitor.timer
+    Process: 2263177 ExecStart=/root/agent_x_storage/.venv/bin/python /root/agent_x_storage/scripts/m2_live_monitor.py --once --log-file /root/agent_x_storage/logs/m2_live_monitor.log (code=exited, status=203/EXEC)
+   Main PID: 2263177 (code=exited, status=203/EXEC)
+   Mem peak: 1.7M
+        CPU: 6ms
+
+Sep 20 11:00:17 ubuntu-8gb-hel1-1 systemd[1]: Starting m2-live-monitor.service - Agent-X M2 live lag monitor (single shot)...
+Sep 20 11:00:17 ubuntu-8gb-hel1-1 (python)[2263177]: m2-live-monitor.service: Unable to locate executable '/root/agent_x_storage/.venv/bin/python': No such file or directory
+Sep 20 11:00:17 ubuntu-8gb-hel1-1 (python)[2263177]: m2-live-monitor.service: Failed at step EXEC spawning /root/agent_x_storage/.venv/bin/python: No such file or directory
+Sep 20 11:00:17 ubuntu-8gb-hel1-1 systemd[1]: m2-live-monitor.service: Main process exited, code=exited, status=203/EXEC
+Sep 20 11:00:17 ubuntu-8gb-hel1-1 systemd[1]: m2-live-monitor.service: Failed with result 'exit-code'.
+Sep 20 11:00:17 ubuntu-8gb-hel1-1 systemd[1]: Failed to start m2-live-monitor.service - Agent-X M2 live lag monitor (single shot).
+EXIT_status_cmd=0
+--- journal ---
+2026-09-20T03:00:03+00:00 ubuntu-8gb-hel1-1 systemd[1]: m2-live-monitor.service: Failed with result 'exit-code'.
+2026-09-20T03:00:03+00:00 ubuntu-8gb-hel1-1 systemd[1]: Failed to start m2-live-monitor.service - Agent-X M2 live lag monitor (single shot).
+2026-09-20T04:00:17+00:00 ubuntu-8gb-hel1-1 systemd[1]: Starting m2-live-monitor.service - Agent-X M2 live lag monitor (single shot)...
+2026-09-20T04:00:17+00:00 ubuntu-8gb-hel1-1 (python)[2232021]: m2-live-monitor.service: Unable to locate executable '/root/agent_x_storage/.venv/bin/python': No such file or directory
+2026-09-20T04:00:17+00:00 ubuntu-8gb-hel1-1 (python)[2232021]: m2-live-monitor.service: Failed at step EXEC spawning /root/agent_x_storage/.venv/bin/python: No such file or directory
+2026-09-20T04:00:17+00:00 ubuntu-8gb-hel1-1 systemd[1]: m2-live-monitor.service: Main process exited, code=exited, status=203/EXEC
+2026-09-20T04:00:17+00:00 ubuntu-8gb-hel1-1 systemd[1]: m2-live-monitor.service: Failed with result 'exit-code'.
+2026-09-20T04:00:17+00:00 ubuntu-8gb-hel1-1 systemd[1]: Failed to start m2-live-monitor.service - Agent-X M2 live lag monitor (single shot).
+2026-09-20T05:00:07+00:00 ubuntu-8gb-hel1-1 systemd[1]: Starting m2-live-monitor.service - Agent-X M2 live lag monitor (single shot)...
+2026-09-20T05:00:07+00:00 ubuntu-8gb-hel1-1 (python)[2235278]: m2-live-monitor.service: Unable to locate executable '/root/agent_x_storage/.venv/bin/python': No such file or directory
+2026-09-20T05:00:07+00:00 ubuntu-8gb-hel1-1 (python)[2235278]: m2-live-monitor.service: Failed at step EXEC spawning /root/agent_x_storage/.venv/bin/python: No such file or directory
+2026-09-20T05:00:07+00:00 ubuntu-8gb-hel1-1 systemd[1]: m2-live-monitor.service: Main process exited, code=exited, status=203/EXEC
+2026-09-20T05:00:07+00:00 ubuntu-8gb-hel1-1 systemd[1]: m2-live-monitor.service: Failed with result 'exit-code'.
+2026-09-20T05:00:07+00:00 ubuntu-8gb-hel1-1 systemd[1]: Failed to start m2-live-monitor.service - Agent-X M2 live lag monitor (single shot).
+2026-09-20T06:00:17+00:00 ubuntu-8gb-hel1-1 systemd[1]: Starting m2-live-monitor.service - Agent-X M2 live lag monitor (single shot)...
+2026-09-20T06:00:17+00:00 ubuntu-8gb-hel1-1 (python)[2238352]: m2-live-monitor.service: Unable to locate executable '/root/agent_x_storage/.venv/bin/python': No such file or directory
+2026-09-20T06:00:17+00:00 ubuntu-8gb-hel1-1 (python)[2238352]: m2-live-monitor.service: Failed at step EXEC spawning /root/agent_x_storage/.venv/bin/python: No such file or directory
+2026-09-20T06:00:17+00:00 ubuntu-8gb-hel1-1 systemd[1]: m2-live-monitor.service: Main process exited, code=exited, status=203/EXEC
+2026-09-20T06:00:17+00:00 ubuntu-8gb-hel1-1 systemd[1]: m2-live-monitor.service: Failed with result 'exit-code'.
+2026-09-20T06:00:17+00:00 ubuntu-8gb-hel1-1 systemd[1]: Failed to start m2-live-monitor.service - Agent-X M2 live lag monitor (single shot).
+2026-09-20T07:00:17+00:00 ubuntu-8gb-hel1-1 systemd[1]: Starting m2-live-monitor.service - Agent-X M2 live lag monitor (single shot)...
+2026-09-20T07:00:17+00:00 ubuntu-8gb-hel1-1 (python)[2246243]: m2-live-monitor.service: Unable to locate executable '/root/agent_x_storage/.venv/bin/python': No such file or directory
+2026-09-20T07:00:17+00:00 ubuntu-8gb-hel1-1 (python)[2246243]: m2-live-monitor.service: Failed at step EXEC spawning /root/agent_x_storage/.venv/bin/python: No such file or directory
+2026-09-20T07:00:17+00:00 ubuntu-8gb-hel1-1 systemd[1]: m2-live-monitor.service: Main process exited, code=exited, status=203/EXEC
+2026-09-20T07:00:17+00:00 ubuntu-8gb-hel1-1 systemd[1]: m2-live-monitor.service: Failed with result 'exit-code'.
+2026-09-20T07:00:17+00:00 ubuntu-8gb-hel1-1 systemd[1]: Failed to start m2-live-monitor.service - Agent-X M2 live lag monitor (single shot).
+2026-09-20T08:00:01+00:00 ubuntu-8gb-hel1-1 systemd[1]: Starting m2-live-monitor.service - Agent-X M2 live lag monitor (single shot)...
+2026-09-20T08:00:01+00:00 ubuntu-8gb-hel1-1 (python)[2251715]: m2-live-monitor.service: Unable to locate executable '/root/agent_x_storage/.venv/bin/python': No such file or directory
+2026-09-20T08:00:01+00:00 ubuntu-8gb-hel1-1 (python)[2251715]: m2-live-monitor.service: Failed at step EXEC spawning /root/agent_x_storage/.venv/bin/python: No such file or directory
+2026-09-20T08:00:01+00:00 ubuntu-8gb-hel1-1 systemd[1]: m2-live-monitor.service: Main process exited, code=exited, status=203/EXEC
+2026-09-20T08:00:01+00:00 ubuntu-8gb-hel1-1 systemd[1]: m2-live-monitor.service: Failed with result 'exit-code'.
+2026-09-20T08:00:01+00:00 ubuntu-8gb-hel1-1 systemd[1]: Failed to start m2-live-monitor.service - Agent-X M2 live lag monitor (single shot).
+2026-09-20T09:00:01+00:00 ubuntu-8gb-hel1-1 systemd[1]: Starting m2-live-monitor.service - Agent-X M2 live lag monitor (single shot)...
+2026-09-20T09:00:01+00:00 ubuntu-8gb-hel1-1 (python)[2256714]: m2-live-monitor.service: Unable to locate executable '/root/agent_x_storage/.venv/bin/python': No such file or directory
+2026-09-20T09:00:01+00:00 ubuntu-8gb-hel1-1 (python)[2256714]: m2-live-monitor.service: Failed at step EXEC spawning /root/agent_x_storage/.venv/bin/python: No such file or directory
+2026-09-20T09:00:01+00:00 ubuntu-8gb-hel1-1 systemd[1]: m2-live-monitor.service: Main process exited, code=exited, status=203/EXEC
+2026-09-20T09:00:01+00:00 ubuntu-8gb-hel1-1 systemd[1]: m2-live-monitor.service: Failed with result 'exit-code'.
+2026-09-20T09:00:01+00:00 ubuntu-8gb-hel1-1 systemd[1]: Failed to start m2-live-monitor.service - Agent-X M2 live lag monitor (single shot).
+2026-09-20T10:00:17+00:00 ubuntu-8gb-hel1-1 systemd[1]: Starting m2-live-monitor.service - Agent-X M2 live lag monitor (single shot)...
+2026-09-20T10:00:17+00:00 ubuntu-8gb-hel1-1 (python)[2259961]: m2-live-monitor.service: Unable to locate executable '/root/agent_x_storage/.venv/bin/python': No such file or directory
+2026-09-20T10:00:17+00:00 ubuntu-8gb-hel1-1 (python)[2259961]: m2-live-monitor.service: Failed at step EXEC spawning /root/agent_x_storage/.venv/bin/python: No such file or directory
+2026-09-20T10:00:17+00:00 ubuntu-8gb-hel1-1 systemd[1]: m2-live-monitor.service: Main process exited, code=exited, status=203/EXEC
+2026-09-20T10:00:17+00:00 ubuntu-8gb-hel1-1 systemd[1]: m2-live-monitor.service: Failed with result 'exit-code'.
+2026-09-20T10:00:17+00:00 ubuntu-8gb-hel1-1 systemd[1]: Failed to start m2-live-monitor.service - Agent-X M2 live lag monitor (single shot).
+2026-09-20T11:00:17+00:00 ubuntu-8gb-hel1-1 systemd[1]: Starting m2-live-monitor.service - Agent-X M2 live lag monitor (single shot)...
+2026-09-20T11:00:17+00:00 ubuntu-8gb-hel1-1 (python)[2263177]: m2-live-monitor.service: Unable to locate executable '/root/agent_x_storage/.venv/bin/python': No such file or directory
+2026-09-20T11:00:17+00:00 ubuntu-8gb-hel1-1 (python)[2263177]: m2-live-monitor.service: Failed at step EXEC spawning /root/agent_x_storage/.venv/bin/python: No such file or directory
+2026-09-20T11:00:17+00:00 ubuntu-8gb-hel1-1 systemd[1]: m2-live-monitor.service: Main process exited, code=exited, status=203/EXEC
+2026-09-20T11:00:17+00:00 ubuntu-8gb-hel1-1 systemd[1]: m2-live-monitor.service: Failed with result 'exit-code'.
+2026-09-20T11:00:17+00:00 ubuntu-8gb-hel1-1 systemd[1]: Failed to start m2-live-monitor.service - Agent-X M2 live lag monitor (single shot).
