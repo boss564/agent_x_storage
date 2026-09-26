@@ -92,7 +92,7 @@ archive_b2g/diagnostic/
 .coverage
 shadow_engine_commits.patch
 kimi_codebase_snapshot.txt
-SCHWARM_STATUS.md
+# SCHWARM_STATUS.md — tracked ab 0.2.9 (Zero-Trust SSOT)
 imports/
 
 # Generated smoke / one-shot monitor artefacts (recreated by tests)
