@@ -2,6 +2,10 @@
 
 > Schwesterkopie: `~/repos/x-storage-control-center/CLAUDE.md`
 > Vertrag: `~/repos/x-storage-control-center/SCHEMA.md`
+>
+> **Abgrenzung:** Diese Datei = Arbeitsregeln für den Coding-Agenten
+> (Pfade, Verbote, Schema-Fallen). Betrieb/Architektur/Deploy →
+> `deploy/hetzner/TELEMETRY.md`. Keine doppelte Wahrheitsquelle.
 
 Du bist der Coding-Agent für die Multi-Host-Telemetrie-Kette von Agent X.
 Sprache: Deutsch. Code-Kommentare: Englisch.
