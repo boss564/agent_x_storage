@@ -32,6 +32,7 @@ from order_execution_engine.models import (
     Direction,
     ExecutionMode,
     ExecutionReport,
+    ExecutedFillEvent,
     FillResult,
     MockEIP712Signature,
     OrderSide,
@@ -96,6 +97,23 @@ class RiskController:
         self.config = config
         self._lockout_active = False
 
+    def evaluate_drawdown(
+        self,
+        portfolio: VirtualPortfolio,
+        mark_prices: dict[str, Decimal],
+    ) -> bool:
+        """Aktualisiert die Drawdown-Notbremse anhand aktueller Marks.
+
+        Hub-/Feed-Pfad: marktgetrieben ohne Order. ``check`` nutzt dieselbe
+        Logik — keine zweite Schwelle.
+        """
+        if self._lockout_active:
+            return True
+        if portfolio.current_drawdown_pct(mark_prices) >= self.config.max_drawdown_pct:
+            self._lockout_active = True
+            return True
+        return False
+
     def check(
         self,
         order: PaperOrder,
@@ -112,10 +130,7 @@ class RiskController:
         Returns:
             RiskDecision mit Zulassung oder Ablehnungsgrund.
         """
-        if self._lockout_active:
-            return RiskDecision.reject(RejectReason.DRAWDOWN_LOCKOUT)
-        if portfolio.current_drawdown_pct(mark_prices) >= self.config.max_drawdown_pct:
-            self._lockout_active = True
+        if self.evaluate_drawdown(portfolio, mark_prices):
             return RiskDecision.reject(RejectReason.DRAWDOWN_LOCKOUT)
 
         # --- Order-Level-Checks (F1b: entfernt) ---
@@ -225,6 +240,13 @@ class MarketSnapshot:
     def best_ask(self) -> Optional[Decimal]:
         """Gibt den besten Ask zurück (None bei leerer Seite)."""
         return self.asks[0].price if self.asks else None
+
+    def mark_price(self) -> Optional[Decimal]:
+        """Mid aus best Bid/Ask; eine Seite allein genuegt als Fallback."""
+        bid, ask = self.best_bid(), self.best_ask()
+        if bid is not None and ask is not None:
+            return (bid + ask) / Decimal("2")
+        return bid if bid is not None else ask
 
 
 # ---------------------------------------------------------------------------
@@ -736,10 +758,99 @@ class ShadowExecutionEngine:
         self._order_book: dict[uuid.UUID, PaperOrder] = {}
         # Fill-Log fuer TelemetrySink / Replay-Zeugen (order_id -> Fills)
         self._fills_by_order: dict[uuid.UUID, list[FillResult]] = {}
+        # Hub: passives Book-Cache + In-Memory-Journal fuer Selbst-Audit
+        self._market_snapshots: dict[str, MarketSnapshot] = {}
+        self._mark_prices: dict[str, Decimal] = {}
+        self._execution_journal: list[ExecutedFillEvent] = []
+        self._last_expired_orders: tuple[PaperOrder, ...] = ()
 
     def fills_for(self, order_id: uuid.UUID) -> list[FillResult]:
         """Liefert persistierbare Fills zu einer Order (Test-/Sink-Seam)."""
         return list(self._fills_by_order.get(order_id, []))
+
+    # ------------------------------------------------------------------
+    # Hub-Vertrag: Feed-Cache, Register, Journal-Audit
+    # ------------------------------------------------------------------
+
+    def register_order(self, order: PaperOrder) -> None:
+        """Registriert eine Order im Orderbuch (Reaper/Hub ohne Match-Pfad)."""
+        self.guard.assert_safe()
+        self._order_book[order.order_id] = order
+
+    def get_snapshot(self, token_id: str) -> Optional[MarketSnapshot]:
+        """Gibt den zuletzt injizierten Snapshot für ein Token zurück."""
+        return self._market_snapshots.get(token_id)
+
+    def current_marks(self) -> dict[str, Decimal]:
+        """Gibt die aktuell bekannten Mark-Preise zurück."""
+        return dict(self._mark_prices)
+
+    def execution_journal(self) -> tuple[ExecutedFillEvent, ...]:
+        """Unveränderliche Kopie des In-Memory-Fill-Journals."""
+        return tuple(self._execution_journal)
+
+    @property
+    def last_expired_orders(self) -> tuple[PaperOrder, ...]:
+        """PaperOrders, die der letzte ``reap_expired``-Aufruf verfallen hat."""
+        return self._last_expired_orders
+
+    def _store_snapshot(self, snapshot: MarketSnapshot) -> None:
+        """Speichert Snapshot + Mark; Drawdown-Bremse marktgetrieben."""
+        self._market_snapshots[snapshot.token_id] = snapshot
+        mark = snapshot.mark_price()
+        if mark is not None:
+            self._mark_prices[snapshot.token_id] = mark
+        self.portfolio.update_peak_equity(self._mark_prices)
+        self.risk.evaluate_drawdown(self.portfolio, self._mark_prices)
+
+    def _journal_fill(
+        self,
+        order: PaperOrder,
+        *,
+        signal_id: uuid.UUID,
+        market_id: str,
+        fill: FillResult,
+    ) -> None:
+        """Append-only Journal-Hook (Hub-Audit; parallel zu ``_fills_by_order``)."""
+        self._execution_journal.append(ExecutedFillEvent(
+            order_id=order.order_id,
+            signal_id=signal_id,
+            token_id=order.token_id,
+            market_id=market_id,
+            side=order.side,
+            limit_price=order.price,
+            order_size=order.size,
+            fill=fill,
+        ))
+
+    def audit_shadow_state(self, raise_on_divergence: bool = False) -> "AuditReport":
+        """Live-Portfolio gegen unabhängiges Journal-Replay prüfen."""
+        # Lazy: vermeidet Zirkel shadow_execution_engine <-> shadow_replay
+        from order_execution_engine.shadow_replay import (
+            AuditReport,
+            JournalReplay,
+            ShadowAuditDivergence,
+            diff_portfolio_snapshots,
+        )
+
+        self.guard.assert_safe()
+        marks = dict(self._mark_prices)
+        live_snapshot = self.portfolio.snapshot(marks, as_of_seq=0)
+        replay = JournalReplay(
+            self._execution_journal,
+            start_balance=self.portfolio.start_balance,
+        )
+        replay_snapshot = replay.reconstruct().snapshot(marks, as_of_seq=0)
+        findings = diff_portfolio_snapshots(live_snapshot, replay_snapshot)
+        report = AuditReport(
+            ok=not findings,
+            findings=findings,
+            live_snapshot=live_snapshot,
+            replay_snapshot=replay_snapshot,
+        )
+        if findings and raise_on_divergence:
+            raise ShadowAuditDivergence(findings)
+        return report
 
     def _report(
         self,
@@ -795,7 +906,11 @@ class ShadowExecutionEngine:
         """
         return self.risk.config.max_order_size_shares
 
-    def on_signal(self, signal: SignalPayload, snapshot: MarketSnapshot) -> ExecutionReport:
+    def on_signal(
+        self,
+        signal: SignalPayload,
+        snapshot: Optional[MarketSnapshot] = None,
+    ) -> ExecutionReport:
         """Verarbeitet ein eingehendes Signal komplett (Signal -> Fill).
 
         Intern wird weiter ein ``TelemetryRecord`` geloggt (Persistenz-
@@ -804,7 +919,8 @@ class ShadowExecutionEngine:
 
         Args:
             signal: SignalPayload aus dem NewsBot.
-            snapshot: Aktueller Marktschnappschuss aus PolySentinel.
+            snapshot: Marktschnappschuss; fehlt er, wird der letzte
+                Hub-/Feed-Snapshot fuer ``signal.target_token_id`` genutzt.
 
         Returns:
             ExecutionReport mit Latenz, Entscheidung und optionalen Fills.
@@ -827,8 +943,21 @@ class ShadowExecutionEngine:
             self.telemetry.log(record)
             return self._report(signal, record)
 
+        if snapshot is not None:
+            self._store_snapshot(snapshot)
+        active = snapshot or self._market_snapshots.get(signal.target_token_id)
+        if active is None or active.token_id != signal.target_token_id:
+            record = TelemetryRecord(
+                signal_id=signal.signal_id, order_id=None,
+                latency_ms=self._elapsed_ms(t0), approved=False,
+                reject_reason=RejectReason.INVALID_PRICE, status=None,
+                decision_seq=self.telemetry.next_decision_seq(),
+            )
+            self.telemetry.log(record)
+            return self._report(signal, record)
+
         # Preis: Limit auf bestem verfügbaren Level setzen
-        ref_price = snapshot.best_ask() if side == OrderSide.BUY else snapshot.best_bid()
+        ref_price = active.best_ask() if side == OrderSide.BUY else active.best_bid()
         if ref_price is None:
             record = TelemetryRecord(
                 signal_id=signal.signal_id, order_id=None,
@@ -845,8 +974,10 @@ class ShadowExecutionEngine:
         # Die Entscheidungs-Id vergibt die Engine — Snapshot und
         # Telemetrie-Record teilen sie (Replay-Korrelation).
         decision_seq = self.telemetry.next_decision_seq()
+        marks = dict(self._mark_prices)
+        marks[signal.target_token_id] = ref_price
         portfolio_snapshot = self.portfolio.snapshot(
-            mark_prices={signal.target_token_id: ref_price},
+            mark_prices=marks,
             as_of_seq=decision_seq,
         )
         # --- Sizing-Seam (F1c) + engine-seitiger Clamp (F1, VM2) ---
@@ -875,7 +1006,7 @@ class ShadowExecutionEngine:
             mode=self.guard.mode,
         )
 
-        decision = self.risk.check(order, self.portfolio, {signal.target_token_id: ref_price})
+        decision = self.risk.check(order, self.portfolio, marks)
         if not decision.approved:
             order = order.model_copy(update={"status": OrderStatus.REJECTED_BY_RISK, "reject_reason": decision.reason})
             self._order_book[order.order_id] = order
@@ -889,7 +1020,7 @@ class ShadowExecutionEngine:
             return self._report(signal, record)
 
         match = self.matcher.match(
-            order, snapshot,
+            order, active,
             signal_id=signal.signal_id,
             market_id=signal.market_id,
             requested_size=requested_size,
@@ -898,8 +1029,14 @@ class ShadowExecutionEngine:
         order = order.model_copy(update={"status": match.status})
         for fill in match.fills:
             self.portfolio.apply_fill(order, fill, market_id=signal.market_id)
+            self._journal_fill(
+                order,
+                signal_id=signal.signal_id,
+                market_id=signal.market_id,
+                fill=fill,
+            )
         if match.fills:
-            self.portfolio.update_peak_equity({signal.target_token_id: ref_price})
+            self.portfolio.update_peak_equity(marks)
             self._fills_by_order[order.order_id] = list(match.fills)
         self._order_book[order.order_id] = order
 
@@ -915,11 +1052,13 @@ class ShadowExecutionEngine:
     def on_book_update(self, snapshot: MarketSnapshot) -> list[TelemetryRecord]:
         """Ruhende Nachwertung -> Portfolio -> Telemetrie (decision_seq hoch).
 
-        Jede Nachwertung einer ruhenden GTC-Order schreibt einen neuen
-        ``TelemetryRecord`` (gleiche ``order_id``, neues ``decision_seq``).
-        ``latency_ms=0.0``: Buch-zu-Fill, nicht Signal-zu-Fill (Schema-
-        Folgeticket, falls Unterscheidung noetig).
+        Speichert zuerst den Hub-/Feed-Snapshot (Mark-Cache). Jede Nachwertung
+        einer ruhenden GTC-Order schreibt einen neuen ``TelemetryRecord``
+        (gleiche ``order_id``, neues ``decision_seq``). ``latency_ms=0.0``:
+        Buch-zu-Fill, nicht Signal-zu-Fill.
         """
+        self.guard.assert_safe()
+        self._store_snapshot(snapshot)
         records: list[TelemetryRecord] = []
         mark = snapshot.best_ask() or snapshot.best_bid()
         for ev in self.matcher.on_book_update(snapshot):
@@ -927,10 +1066,16 @@ class ShadowExecutionEngine:
             if order is None:
                 continue
             order = order.model_copy(update={"status": ev.result.status})
+            market_id = ev.market_id or "unknown"
             for fill in ev.result.fills:
-                self.portfolio.apply_fill(
-                    order, fill, market_id=ev.market_id or "unknown",
-                )
+                self.portfolio.apply_fill(order, fill, market_id=market_id)
+                if ev.signal_id is not None:
+                    self._journal_fill(
+                        order,
+                        signal_id=ev.signal_id,
+                        market_id=market_id,
+                        fill=fill,
+                    )
             self._order_book[ev.order_id] = order
             if ev.result.fills:
                 bucket = self._fills_by_order.setdefault(ev.order_id, [])
@@ -954,21 +1099,30 @@ class ShadowExecutionEngine:
         return records
 
     def reap_expired(self, now: Optional[datetime] = None) -> list[TelemetryRecord]:
-        """RESTING -> EXPIRED. Takt-Produzent = Hub/Cron/Test (Uhr injizierbar).
+        """RESTING/offen -> EXPIRED. Takt-Produzent = Hub/Cron/Test.
 
         Register-Exit ohne Fill: kein Cash-Effekt, kein Reject. Kein
         Auto-Resubmit — Folge-GTC ist ein neuer ``match``-Aufruf des Hubs.
         Mit Default-``expiration`` ist jede ruhende GTC faktisch GTD, sobald
         dieser Pfad getickt wird.
+
+        Zusaetzlich: ``register_order``-Orders im Orderbuch (PENDING o.ae.),
+        die nie im Matcher lagen, verfallen hier ebenfalls — Telemetrie
+        bleibt ``RejectReason.NONE`` (EXISTING Semantik).
         """
         now = now or datetime.now(timezone.utc)
         records: list[TelemetryRecord] = []
+        expired_orders: list[PaperOrder] = []
+        handled: set[uuid.UUID] = set()
+
         for exp in self.matcher.reap_expired(now):
             order = self._order_book.get(exp.order_id)
             if order is None:
                 continue
             order = order.model_copy(update={"status": OrderStatus.EXPIRED})
             self._order_book[exp.order_id] = order
+            handled.add(exp.order_id)
+            expired_orders.append(order)
             if exp.signal_id is None:
                 continue  # ohne Signal-Kontext keine Telemetrie (Test-Seam)
             rec = TelemetryRecord(
@@ -983,6 +1137,37 @@ class ShadowExecutionEngine:
             )
             self.telemetry.log(rec)
             records.append(rec)
+
+        # Orderbuch-only (z. B. register_order ohne Match): offene TTL-Hits
+        _OPEN = frozenset({
+            OrderStatus.PENDING,
+            OrderStatus.PARTIALLY_FILLED,
+            OrderStatus.RESTING,
+        })
+        for oid, order in list(self._order_book.items()):
+            if oid in handled:
+                continue
+            if order.status not in _OPEN:
+                continue
+            if order.expiration > now:
+                continue
+            updated = order.model_copy(update={"status": OrderStatus.EXPIRED})
+            self._order_book[oid] = updated
+            expired_orders.append(updated)
+            rec = TelemetryRecord(
+                signal_id=order.signal_id,
+                order_id=order.order_id,
+                latency_ms=0.0,
+                approved=True,
+                reject_reason=RejectReason.NONE,
+                status=OrderStatus.EXPIRED,
+                requested_size=order.size,
+                decision_seq=self.telemetry.next_decision_seq(),
+            )
+            self.telemetry.log(rec)
+            records.append(rec)
+
+        self._last_expired_orders = tuple(expired_orders)
         return records
 
     def preview(self, signal: SignalPayload, snapshot: MarketSnapshot) -> Decimal:

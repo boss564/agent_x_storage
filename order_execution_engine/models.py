@@ -328,6 +328,26 @@ class FillResult(BaseModel):
     market_id: Optional[str] = None
 
 
+class ExecutedFillEvent(BaseModel):
+    """Append-only Journal-Ereignis fuer Hub-Selbst-Audit (Journal-Replay).
+
+    Traegt die Felder, die ``VirtualPortfolio.apply_fill`` zur exakten
+    Rekonstruktion braucht. Parallel zum Ledger-Fold in ``shadow_replay.py``
+    (Persistenz); dieses Event ist der In-Memory-Gegenlauf.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    order_id: uuid.UUID
+    signal_id: uuid.UUID
+    token_id: str = Field(min_length=1, max_length=128)
+    market_id: str = Field(min_length=1, max_length=128)
+    side: OrderSide
+    limit_price: PolymarketPrice
+    order_size: PositiveDecimal
+    fill: FillResult
+
+
 class ExecutionReport(BaseModel):
     """Hub-DTO: Ergebnis der virtuellen Ausfuehrung eines Signals.
 
