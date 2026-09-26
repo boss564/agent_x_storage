@@ -90,7 +90,15 @@ class HubTickResult:
 
 
 class ShadowHub:
-    """Kombiniert Reaper und Selbst-Audit in einem deterministischen Takt."""
+    """Kombiniert Reaper und Selbst-Audit in einem deterministischen Takt.
+
+    Bei ``raise_on_divergence=True`` (Default) bricht ein Audit-Fund den Takt
+    mit ``ShadowAuditDivergence`` ab. Bei ``False`` erscheinen Findings wie
+    ``peak_equity.monotonic`` und ``journal`` oft nur beim ersten Auftreten
+    (Cursor/Monotonie-Anker ruecken trotzdem vor) — der Aufrufer muss
+    ``report.findings`` protokollieren und darf sich nicht allein auf
+    ``report.ok`` verlassen.
+    """
 
     def __init__(
         self,

@@ -860,6 +860,7 @@ class ShadowExecutionEngine:
         Live kann durch Book-Updates ohne Journal-Event peaken.
         """
         from order_execution_engine.shadow_replay import (
+            AuditFinding,
             AuditReport,
             JournalReplay,
             ShadowAuditDivergence,
@@ -869,7 +870,7 @@ class ShadowExecutionEngine:
         self.guard.assert_safe()
         marks = dict(self._mark_prices)
         journal = self._execution_journal
-        fold_findings: tuple = ()
+        fold_findings: tuple[AuditFinding, ...] = ()
 
         if full:
             prev_peak = (

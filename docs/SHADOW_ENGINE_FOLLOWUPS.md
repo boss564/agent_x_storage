@@ -1481,3 +1481,26 @@ Ledger war nicht fold-komplett. **Edit 0 vor Replay:** Schema v3 + Fold-Felder
 `resting_orders` aus letztem Status + remaining (kein Register-Persist) |
 | Zeugen | Live==Replay Decimal; Gap markiert; Legacy-NULL gezaehlt;
 GTC-Rest überlebt Replay, verschwindet nach EXPIRED-Record |
+
+---
+
+## Hub-Wiring (2026-09-26) — erledigt + offenes PeakEvent
+
+Freigabe-Kette und Review-Nachweis: `docs/SHADOW_HUB_WIRING_REVIEW.md`.
+
+### PeakEvent — Peak-Obergrenze im Journal-Audit (offen)
+
+**Schwere:** mittel (relevant bei scharfem Drawdown-Lockout)  
+**Ort:** `shadow_replay.JournalReplay` / `ShadowExecutionEngine._store_snapshot`
+
+**Ist:** Peak-Audit Stufe 1 (`5654634c`): `live_peak >= max(replay_peak, replay_equity)`
+und Monotonie des Live-Peaks. Keine Prüfung, ob der Peak *zu hoch* ist
+(Book-Update ohne korrespondierende Journal-Spur).
+
+**Soll (Stufe 2):** Bei jeder Peak-Anhebung ein append-only `PeakEvent`
+(Marks + Journal-Cursor). Replay berechnet Equity am eigenen Fold-Stand
+genau an dieser Stelle und prüft die Obergrenze.
+
+**Nicht tun:** Peak-Gleichheit Live↔Replay wieder einführen (Spike/Revert =
+False Positive; siehe Review-Protokoll).
+

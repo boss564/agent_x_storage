@@ -373,7 +373,7 @@ class JournalReplay:
     def apply_events(
         self,
         events: Iterable[ExecutedFillEvent],
-    ) -> tuple[AuditFinding, int]:
+    ) -> tuple[tuple[AuditFinding, ...], int]:
         """Faltet Events; Cursor-sicher bei Fold-Fehlern.
 
         Returns:
