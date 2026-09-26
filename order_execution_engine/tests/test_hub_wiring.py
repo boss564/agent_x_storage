@@ -158,6 +158,95 @@ def test_shadow_hub_tick_reaps_and_audits_in_one_step() -> None:
     print("OK test_shadow_hub_tick_reaps_and_audits_in_one_step")
 
 
+def test_reap_does_not_expire_terminal_fak_partial() -> None:
+    """FAK-Teilfill ist terminal — Orderbuch-Reaper darf nicht EXPIRED setzen."""
+    from order_execution_engine.shadow_execution_engine import (
+        MarketSnapshot,
+        OrderBookLevel,
+    )
+
+    engine = ShadowExecutionEngine(
+        risk_config=RiskConfig(max_order_size_shares=Decimal("400")),
+    )
+    thin = MarketSnapshot(
+        token_id="0xtokenA",
+        asks=(OrderBookLevel(Decimal("0.61"), Decimal("30")),),
+        bids=(OrderBookLevel(Decimal("0.59"), Decimal("150")),),
+    )
+    report = engine.on_signal(_signal(), thin)
+    assert report.status is OrderStatus.PARTIALLY_FILLED
+    assert report.order_id is not None
+    oid = report.order_id
+    exp = engine._order_book[oid].expiration
+    before_len = len(engine.telemetry._records)
+
+    records = engine.reap_expired(now=exp + timedelta(seconds=1))
+    assert records == []
+    assert engine.last_expired_orders == ()
+    assert engine._order_book[oid].status is OrderStatus.PARTIALLY_FILLED
+    assert len(engine.telemetry._records) == before_len
+    assert not any(
+        r.status is OrderStatus.EXPIRED for r in engine.telemetry._records
+    )
+    print("OK test_reap_does_not_expire_terminal_fak_partial")
+
+
+def test_journal_fills_when_resting_signal_id_is_none() -> None:
+    """Matcher-Seam signal_id=None: Journal faellt auf order.signal_id zurueck."""
+    from order_execution_engine.models import OrderType
+    from order_execution_engine.shadow_execution_engine import (
+        MarketSnapshot,
+        OrderBookLevel,
+        PaperOrder as EngOrder,
+    )
+
+    engine = ShadowExecutionEngine(
+        risk_config=RiskConfig(max_order_size_shares=Decimal("400")),
+    )
+    thin = MarketSnapshot(
+        token_id="0xtokenA",
+        asks=(OrderBookLevel(Decimal("0.61"), Decimal("200")),),
+        bids=(OrderBookLevel(Decimal("0.59"), Decimal("150")),),
+    )
+    crossing = MarketSnapshot(
+        token_id="0xtokenA",
+        asks=(OrderBookLevel(Decimal("0.61"), Decimal("500")),),
+        bids=(OrderBookLevel(Decimal("0.59"), Decimal("150")),),
+    )
+    sig = _signal()
+    order = EngOrder(
+        signal_id=sig.signal_id,
+        token_id="0xtokenA",
+        side=OrderSide.BUY,
+        price=Decimal("0.61"),
+        size=Decimal("400"),
+        expiration=default_expiration(5),
+        order_type=OrderType.GTC,
+    )
+    # signal_id=None im Matcher-Register (Test-Seam)
+    result = engine.matcher.match(
+        order, thin, signal_id=None, market_id="mkt-1",
+        requested_size=Decimal("400"), decision_seq=1,
+    )
+    assert result.status is OrderStatus.PARTIALLY_FILLED
+    for fill in result.fills:
+        engine.portfolio.apply_fill(order, fill, market_id="mkt-1")
+        engine._journal_fill(
+            order, signal_id=order.signal_id, market_id="mkt-1", fill=fill,
+        )
+    engine._order_book[order.order_id] = order.model_copy(
+        update={"status": result.status},
+    )
+
+    records = engine.on_book_update(crossing)
+    assert records  # Telemetrie mit order.signal_id
+    assert all(r.signal_id == order.signal_id for r in records)
+    assert any(e.signal_id == order.signal_id for e in engine.execution_journal())
+    report = engine.audit_shadow_state(raise_on_divergence=True)
+    assert report.ok
+    print("OK test_journal_fills_when_resting_signal_id_is_none")
+
+
 if __name__ == "__main__":
     for fn in list(globals().values()):
         if callable(fn) and fn.__name__.startswith("test_"):

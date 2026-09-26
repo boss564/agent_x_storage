@@ -763,6 +763,9 @@ class ShadowExecutionEngine:
         self._mark_prices: dict[str, Decimal] = {}
         self._execution_journal: list[ExecutedFillEvent] = []
         self._last_expired_orders: tuple[PaperOrder, ...] = ()
+        # Nur register_order-IDs: Orderbuch-Reaper darf Match-/FAK-Terminals
+        # nicht nachtraeglich auf EXPIRED setzen.
+        self._registered_only: set[uuid.UUID] = set()
 
     def fills_for(self, order_id: uuid.UUID) -> list[FillResult]:
         """Liefert persistierbare Fills zu einer Order (Test-/Sink-Seam)."""
@@ -773,9 +776,14 @@ class ShadowExecutionEngine:
     # ------------------------------------------------------------------
 
     def register_order(self, order: PaperOrder) -> None:
-        """Registriert eine Order im Orderbuch (Reaper/Hub ohne Match-Pfad)."""
+        """Registriert eine Order im Orderbuch (Reaper/Hub ohne Match-Pfad).
+
+        Umgeht den ``RiskController`` absichtlich — nur fuer Hub-/Operator-
+        Lebenszyklus (TTL-Reaper), nicht fuer Signal-Matching.
+        """
         self.guard.assert_safe()
         self._order_book[order.order_id] = order
+        self._registered_only.add(order.order_id)
 
     def get_snapshot(self, token_id: str) -> Optional[MarketSnapshot]:
         """Gibt den zuletzt injizierten Snapshot für ein Token zurück."""
@@ -1067,25 +1075,25 @@ class ShadowExecutionEngine:
                 continue
             order = order.model_copy(update={"status": ev.result.status})
             market_id = ev.market_id or "unknown"
+            # Journal immer: Matcher-Seam kann signal_id=None haben; Order
+            # traegt die kanonische UUID (sonst Live/Journal-Divergenz).
+            sid = ev.signal_id or order.signal_id
             for fill in ev.result.fills:
                 self.portfolio.apply_fill(order, fill, market_id=market_id)
-                if ev.signal_id is not None:
-                    self._journal_fill(
-                        order,
-                        signal_id=ev.signal_id,
-                        market_id=market_id,
-                        fill=fill,
-                    )
+                self._journal_fill(
+                    order,
+                    signal_id=sid,
+                    market_id=market_id,
+                    fill=fill,
+                )
             self._order_book[ev.order_id] = order
             if ev.result.fills:
                 bucket = self._fills_by_order.setdefault(ev.order_id, [])
                 bucket.extend(ev.result.fills)
             if ev.result.fills and mark is not None:
                 self.portfolio.update_peak_equity({order.token_id: mark})
-            if ev.signal_id is None:
-                continue  # ohne Signal-Kontext keine Telemetrie (Test-Seam)
             rec = TelemetryRecord(
-                signal_id=ev.signal_id,
+                signal_id=sid,
                 order_id=ev.order_id,
                 latency_ms=0.0,
                 approved=True,
@@ -1106,9 +1114,8 @@ class ShadowExecutionEngine:
         Mit Default-``expiration`` ist jede ruhende GTC faktisch GTD, sobald
         dieser Pfad getickt wird.
 
-        Zusaetzlich: ``register_order``-Orders im Orderbuch (PENDING o.ae.),
-        die nie im Matcher lagen, verfallen hier ebenfalls — Telemetrie
-        bleibt ``RejectReason.NONE`` (EXISTING Semantik).
+        Zweite Schleife: nur ``register_order``-IDs. Match-/FAK-Terminals
+        (z. B. PARTIALLY_FILLED ohne Resting) bleiben unberuehrt.
         """
         now = now or datetime.now(timezone.utc)
         records: list[TelemetryRecord] = []
@@ -1138,21 +1145,25 @@ class ShadowExecutionEngine:
             self.telemetry.log(rec)
             records.append(rec)
 
-        # Orderbuch-only (z. B. register_order ohne Match): offene TTL-Hits
+        # Nur register_order-Pfad (Hub), nie Match-/FAK-Abschluesse
         _OPEN = frozenset({
             OrderStatus.PENDING,
             OrderStatus.PARTIALLY_FILLED,
             OrderStatus.RESTING,
         })
-        for oid, order in list(self._order_book.items()):
+        for oid in list(self._registered_only):
             if oid in handled:
+                self._registered_only.discard(oid)
                 continue
-            if order.status not in _OPEN:
+            order = self._order_book.get(oid)
+            if order is None or order.status not in _OPEN:
+                self._registered_only.discard(oid)
                 continue
             if order.expiration > now:
                 continue
             updated = order.model_copy(update={"status": OrderStatus.EXPIRED})
             self._order_book[oid] = updated
+            self._registered_only.discard(oid)
             expired_orders.append(updated)
             rec = TelemetryRecord(
                 signal_id=order.signal_id,
