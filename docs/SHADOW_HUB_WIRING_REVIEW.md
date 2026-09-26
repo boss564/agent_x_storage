@@ -2,7 +2,7 @@
 
 **Modul:** `order_execution_engine/`  
 **Charter:** `diagnostic_only=true` · `live_execution=false` · `order_send=false`  
-**Suite bei Freigabe:** 88/88 (+ Mikro-Commit Typing/Docstring)
+**Suite bei Freigabe:** 88/88
 
 ---
 
@@ -15,7 +15,7 @@
 | 3 | `21d39e8e` | `signal_id`-Fallback im Matcher-Reaper; Journal-Test straffer | `hub_signal_id_fix_*.zip` |
 | 4 | `51b14e69` | Unabhängiger Fold + inkrementelles Audit | `hub_incremental_audit_*.zip` |
 | 5 | `5654634c` | Peak-Invarianten + cursor-sicherer Fold | `hub_peak_cursor_fix_*.zip` |
-| 6 | *(Mikro)* | Typing `apply_events` / Docstring Findings-Logging | nachziehen vor Übergabe |
+| 6 | `4a8883db` | Typing/Docstring Findings-Logging + dieses Protokoll | `hub_micro_docs_*.zip` |
 
 Zips sind **Delta-Pakete** (Pfade erhalten) — Auspacken im Repo-Root; Suite braucht den restlichen Kanon (`market_data_feed`, `persistence`, …).
 
@@ -27,6 +27,8 @@ Zips sind **Delta-Pakete** (Pfade erhalten) — Auspacken im Repo-Root; Suite br
 |---------|--------|------------|
 | 🔴 | Orderbuch-Reaper setzte terminale FAK-Orders auf EXPIRED | `54d18754` (`_registered_only`) |
 | 🟡 | Journal-Lücke bei `matcher.signal_id=None` | `54d18754` + `21d39e8e` |
+| 🟡 | Audit war nicht unabhängig (`JournalReplay` → `apply_fill`) | `51b14e69` (eigener Fold; Monkeypatch-Zeuge) |
+| 🟡 | Jeder Tick spielte das volle Journal neu ab (O(n)/s) | `51b14e69` (Cursor `_audited_upto` + optional Vollaudit) |
 | 🔴 | `peak_equity`-Gleichheit: False Positive nach Kurs-Spike | `5654634c` (Floor + Monotonie) |
 | 🟡 | Fold-`ValueError` mitten im Batch korrumpierte Cursor | `5654634c` (consume + Finding; SELL-Check vor Cash) |
 
@@ -44,6 +46,8 @@ Mutationstests: neue Tests gegen Vorgänger-Stand rot; Spike-Fall nach `5654634c
 **Skizze:** `PeakEvent(marks, journal_pos)` bei jeder Peak-Anhebung; Replay rechnet Equity am Fold-Stand nach; vergleicht Obergrenze.
 
 Relevant sobald Drawdown-Lockout scharf ausgewertet wird. Siehe auch `docs/SHADOW_ENGINE_FOLLOWUPS.md` (PeakEvent-Eintrag).
+
+**Nicht tun:** Peak-Gleichheit Live↔Replay wieder einführen (Spike/Revert = False Positive).
 
 ---
 
