@@ -810,6 +810,83 @@ def test_evaluate_drawdown_readonly_peak() -> None:
     print("OK test_evaluate_drawdown_readonly_peak")
 
 
+def test_peak_ceiling_unwitnessed() -> None:
+    """Live-Peak ohne PeakEvent muss ceiling.unwitnessed ausloesen."""
+    from order_execution_engine.models import PeakEvent
+    from order_execution_engine.shadow_replay import check_peak_ceiling
+    # Unit: Decke = start_balance ohne Events
+    f = check_peak_ceiling(
+        [], [], start_balance=Decimal("10000"),
+        live_peak=Decimal("12000"),
+    )
+    assert len(f) == 1 and f[0].path == "peak_equity.ceiling.unwitnessed"
+    assert f[0].live == "12000" and f[0].replay == "10000"
+    # Mit Event (journal-konsistent): Decke = max(start, letztes Event)
+    covered = PeakEvent(
+        seq=0, marks={}, journal_pos=0, peak_equity=Decimal("10000"),
+    )
+    assert not check_peak_ceiling(
+        [covered], [], start_balance=Decimal("10000"),
+        live_peak=Decimal("10000"),
+    )
+    f2 = check_peak_ceiling(
+        [covered], [], start_balance=Decimal("10000"),
+        live_peak=Decimal("10000.01"),
+    )
+    assert f2[0].path == "peak_equity.ceiling.unwitnessed"
+    # Engine-Integration: direkter Peak-Schreib ohne _record_peak
+    eng = ShadowExecutionEngine()
+    eng.portfolio.peak_equity = Decimal("12000")
+    report = eng.audit_shadow_state()
+    assert not report.ok
+    assert any(f.path == "peak_equity.ceiling.unwitnessed" for f in report.findings)
+    report_full = eng.audit_shadow_state(full=True)
+    assert not report_full.ok
+    assert any(
+        f.path == "peak_equity.ceiling.unwitnessed" for f in report_full.findings
+    )
+    # Monotonie-Anker darf den forged Peak nicht festschreiben
+    assert eng._journal_auditor.last_live_peak != Decimal("12000")
+    eng.portfolio.peak_equity = Decimal("10000.00")
+    clean = eng.audit_shadow_state()
+    assert clean.ok, clean.findings
+    assert not any(f.path == "peak_equity.monotonic" for f in clean.findings)
+    print("OK test_peak_ceiling_unwitnessed")
+
+
+def test_book_update_fill_peak_uses_mark_cache() -> None:
+    """on_book_update-Fill: PeakEvent.marks = Mid-Cache, nicht best_ask allein."""
+    eng = ShadowExecutionEngine(
+        risk_config=RiskConfig(max_order_size_shares=Decimal("500")),
+    )
+    # Limit unter Ask → RESTING, kein Partial, kein PeakEvent
+    thin = _snapshot(
+        asks=(OrderBookLevel(Decimal("0.61"), Decimal("200")),),
+        bids=(OrderBookLevel(Decimal("0.59"), Decimal("150")),),
+    )
+    o = _order(size=Decimal("200"), price=Decimal("0.50"))
+    o = o.model_copy(update={"order_type": OrderType.GTC})
+    eng._store_snapshot(thin)
+    r = eng.matcher.match(
+        o, thin, signal_id=o.signal_id, market_id="mkt-1",
+        requested_size=Decimal("200"), decision_seq=1,
+    )
+    assert r.status is OrderStatus.RESTING and not r.fills
+    eng._order_book[o.order_id] = o.model_copy(update={"status": r.status})
+    assert not eng.peak_events()
+    # Ask 0.50 fuellt Limit; Bid 0.90 → Mid 0.70. Alt-Bug speicherte Ask 0.50.
+    crossing = _snapshot(
+        asks=(OrderBookLevel(Decimal("0.50"), Decimal("500")),),
+        bids=(OrderBookLevel(Decimal("0.90"), Decimal("500")),),
+    )
+    eng.on_book_update(crossing)
+    events = eng.peak_events()
+    assert events, "Fill mit Mid > Entry muss PeakEvent schreiben"
+    last = events[-1]
+    assert last.marks["0xtokenA"] == Decimal("0.70"), last.marks
+    print("OK test_book_update_fill_peak_uses_mark_cache")
+
+
 if __name__ == "__main__":
     for fn in list(globals().values()):
         if callable(fn) and fn.__name__.startswith("test_"):

@@ -885,7 +885,8 @@ class ShadowExecutionEngine:
 
         Peak Stufe 1: Floor + Monotonie (keine Gleichheit).
         Peak Stufe 2: ``check_peak_ceiling`` — Live-Peak darf nicht hoeher
-        sein als Journal-Replay-Equity am PeakEvent (Event-Marks).
+        sein als Journal-Replay-Equity am PeakEvent (Event-Marks); zusaetzlich
+        ``peak_equity.ceiling.unwitnessed`` wenn Live-Peak ohne PeakEvent.
         """
         from order_execution_engine.shadow_replay import (
             AuditFinding,
@@ -932,14 +933,19 @@ class ShadowExecutionEngine:
             replay_peak_equity=auditor.peak_equity,
             previous_live_peak=auditor.last_live_peak,
         )
-        findings = findings + check_peak_ceiling(
+        peak_findings = check_peak_ceiling(
             self._peak_events,
             journal,
             start_balance=self.portfolio.start_balance,
             tolerance=peak_tolerance,
+            live_peak=live_peak,
         )
-        # Monotonie-Anker fuer den naechsten Tick
-        auditor.last_live_peak = live_peak
+        findings = findings + peak_findings
+        # Monotonie-Anker: Peak ohne PeakEvent nicht festschreiben
+        if not any(
+            f.path == "peak_equity.ceiling.unwitnessed" for f in peak_findings
+        ):
+            auditor.last_live_peak = live_peak
         report = AuditReport(
             ok=not findings,
             findings=findings,
@@ -1161,7 +1167,6 @@ class ShadowExecutionEngine:
         self.guard.assert_safe()
         self._store_snapshot(snapshot)
         records: list[TelemetryRecord] = []
-        mark = snapshot.best_ask() or snapshot.best_bid()
         for ev in self.matcher.on_book_update(snapshot):
             order = self._order_book.get(ev.order_id)
             if order is None:
@@ -1183,8 +1188,8 @@ class ShadowExecutionEngine:
             if ev.result.fills:
                 bucket = self._fills_by_order.setdefault(ev.order_id, [])
                 bucket.extend(ev.result.fills)
-            if ev.result.fills and mark is not None:
-                self._record_peak({order.token_id: mark})
+                # Mid-Mark-Cache (wie _store_snapshot), nicht best_ask/bid allein
+                self._record_peak(self._mark_prices)
             rec = TelemetryRecord(
                 signal_id=sid,
                 order_id=ev.order_id,

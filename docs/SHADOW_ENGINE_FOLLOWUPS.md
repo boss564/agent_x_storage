@@ -1540,12 +1540,15 @@ Package `__version__ = "0.3.0"`.
 | `test_peak_ceiling_tolerance` | Toleranz 0 vs. enge Cap |
 | `test_peak_ceiling_engine_audit_integration` | `audit_shadow_state` + `raise_on_divergence` |
 | `test_evaluate_drawdown_readonly_peak` | Risk-Check hebt Peak nie selbst an |
+| `test_peak_ceiling_unwitnessed` | Live-Peak ohne PeakEvent → `ceiling.unwitnessed`; Monotonie-Anker nicht vergiftet |
+| `test_book_update_fill_peak_uses_mark_cache` | `on_book_update`-Fill nutzt Mid-Mark-Cache |
 
 **Nicht tun:** Peak-Gleichheit Live↔Replay; Peak-Cap als `RejectReason`;
 Overlay-`replay.py` neben kanonischem `shadow_replay.py`.
 
-**Nebenwirkung (kanonisch seit `0f9d240b`):** Externe Aufrufer von
-`evaluate_drawdown` allein heben den Peak nicht mehr — Engine-Flüsse müssen
-`_record_peak` unmittelbar vor dem Check aufrufen (tut `_store_snapshot` /
-Fill-Pfad bereits).
-
+**Nebenwirkung (kanonisch seit `0f9d240b`, Anker-Fix unwitnessed):** Externe
+Aufrufer von `evaluate_drawdown` allein heben den Peak nicht mehr.
+`_store_snapshot` ruft `_record_peak` vor `evaluate_drawdown` auf. Der
+Fill-Pfad in `on_book_update` peakt nach dem Fill mit dem Mid-Mark-Cache
+(`self._mark_prices`); ein anschliessender Drawdown-Check folgt dort nicht
+automatisch — naechster Hub-Tick / `_store_snapshot` zieht nach.

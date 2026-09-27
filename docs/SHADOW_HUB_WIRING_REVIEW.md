@@ -58,6 +58,9 @@ Stufe 2: Live-Peak darf nicht zu hoch sein (Drawdown-Lockout sonst zu früh).
   **rein lesend** — hebt `peak_equity` nicht mehr an. Isolierte Wiederverwendung
   des RiskControllers ohne Engine-Pfad schreibt keine PeakEvents und zieht den
   Peak nicht nach.
+- **Unwitnessed:** Live-Peak ohne deckendes PeakEvent →
+  `AuditFinding("peak_equity.ceiling.unwitnessed")`; Monotonie-Anker übernimmt
+  den forged Peak nicht.
 - **Nicht tun:** Peak-Gleichheit Live↔Replay; Peak-Cap als Risk-Reject.
 
 Details und Zeugen-Tabelle: `docs/SHADOW_ENGINE_FOLLOWUPS.md` (PeakEvent-Abschnitt).

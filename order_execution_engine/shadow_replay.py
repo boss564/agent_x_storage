@@ -338,6 +338,7 @@ def check_peak_ceiling(
     journal: tuple[ExecutedFillEvent, ...] | list[ExecutedFillEvent],
     start_balance: Decimal = DEFAULT_VIRTUAL_CASH,
     tolerance: Decimal = Decimal("0"),
+    live_peak: Decimal | None = None,
 ) -> tuple[AuditFinding, ...]:
     """PeakEvent Stufe 2: Live-Peak darf nicht hoeher sein als das Journal.
 
@@ -346,12 +347,19 @@ def check_peak_ceiling(
     Marks gerechnet. Referenz ist bewusst das Journal (eigener Fold +
     Event-Marks), nicht der Live-Mark-Cache.
 
+    Zusaetzlich (wenn ``live_peak`` gesetzt): der Live-Peak muss durch den
+    PeakEvent-Strom gedeckt sein — sonst ``peak_equity.ceiling.unwitnessed``.
+    Gedeckt heisst ``live_peak <= max(start_balance, letztes PeakEvent.peak_equity)
+    + tolerance``. Ohne Events ist die Decke ``start_balance``.
+
     Returns:
-        Findings mit Pfad ``peak_equity.ceiling[<seq>]`` (leer = ok).
+        Findings mit Pfad ``peak_equity.ceiling[<seq>]`` bzw.
+        ``peak_equity.ceiling.unwitnessed`` (leer = ok).
     """
+    events = tuple(peak_events)
     journal_tuple = tuple(journal)
     findings: list[AuditFinding] = []
-    for event in peak_events:
+    for event in events:
         path = f"peak_equity.ceiling[{event.seq}]"
         if event.journal_pos > len(journal_tuple):
             findings.append(AuditFinding(
@@ -373,6 +381,16 @@ def check_peak_ceiling(
                 path,
                 format(event.peak_equity, "f"),
                 format(replay_equity, "f"),
+            ))
+    if live_peak is not None:
+        witnessed = start_balance
+        if events:
+            witnessed = max(witnessed, events[-1].peak_equity)
+        if live_peak > witnessed + tolerance:
+            findings.append(AuditFinding(
+                "peak_equity.ceiling.unwitnessed",
+                format(live_peak, "f"),
+                format(witnessed, "f"),
             ))
     return tuple(findings)
 
