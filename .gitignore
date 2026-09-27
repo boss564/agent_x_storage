@@ -99,6 +99,9 @@ imports/
 results/m2_live_monitor_smoke.json
 results/*_smoke.json
 
+# Hub binary export/review ZIPs (timestamped, regenerated each run)
+order_execution_engine/hub_*.zip
+
 # Telemetrie: host-spezifische Env (Vorlage: deploy/hetzner/telemetry-bridge.env.example)
 deploy/hetzner/telemetry-bridge.env
 # Nested newsagent-Checkout / Review-Artefakte / Bridge-Output

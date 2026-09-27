@@ -1,0 +1,21 @@
+
+SELFTEST - Rot-Beweise gegen eine Wegwerf-Umgebung
+Die echte .env wird dabei nicht gelesen und nicht angefasst.
+  [1/10] gueltige Env       -> ROT, aber GRUEN erwartet
+  [2/10] Platzhalter-Token  -> ROT (erwartet)
+  [3/10] THETA_LOW fehlt    -> ROT (erwartet)
+  [4/10] THETA_LOW>HIGH     -> ROT (erwartet)
+  [5/10] ohne Telegram      -> WARNUNG (erwartet)
+  [6/10] Slug nur kommentiert -> ROT (erwartet)
+  [7/10] aufgeloester Markt -> ROT (erwartet)
+  [8/10] handelbarer Markt  -> GRUEN (erwartet)
+  [9/10] unbekannter Schluessel -> ROT (erwartet)
+  [10/10] fremde Schluessel    -> GRUEN (erwartet)
+
+Beweis: die echte .env ist unberuehrt
+  Pruefsumme vor dem Selftest waere hier nicht vergleichbar -
+  deshalb die harte Zusage: dieser Lauf hat $REPO_ROOT/.env nicht gelesen.
+  Temporar-Verzeichnis war: /tmp/tmp.mXgos3tVpm (jetzt geloescht)
+
+Selftest-Ergebnis
+1 Fall/Faelle NICHT wie erwartet - das Skript prueft falsch.

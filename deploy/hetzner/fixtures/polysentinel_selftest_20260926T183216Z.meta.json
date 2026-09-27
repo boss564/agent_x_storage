@@ -1,0 +1,30 @@
+{
+  "fixture": "polysentinel_selftest",
+  "measured_at_utc": "2026-09-26T18:32:16Z",
+  "host": "hetzner:/opt/polysentinel",
+  "head": "66be8defbb657f5100eb027d2db36d69670ee45d",
+  "head_short": "66be8def",
+  "previous_anchor": "d56796611af69e37afa8a7438bcbff0a3b1b2198",
+  "previous_anchor_short": "d567966",
+  "previous_is_ancestor": true,
+  "command": "./scripts/preflight.sh --selftest",
+  "exit_code": 2,
+  "selftest": "9/10",
+  "fail_case": "[1/10] gueltige Env -> ROT, aber GRUEN erwartet",
+  "journal_ops_since": "2026-09-20 \u2014 keine [OPS]-Zeile",
+  "service": {
+    "active_since_utc": "2026-09-26T15:39:27Z",
+    "exec_start_pre": false,
+    "restart_prevent_exit_status": "2 6"
+  },
+  "related_tracks": [
+    "B6",
+    "B7",
+    "PolySentinel_Hetzner"
+  ],
+  "files": {
+    "selftest": "polysentinel_selftest_20260926T183216Z.txt",
+    "preflight": "polysentinel_preflight_20260926T183216Z.log",
+    "meta": "polysentinel_selftest_20260926T183216Z.meta.json"
+  }
+}

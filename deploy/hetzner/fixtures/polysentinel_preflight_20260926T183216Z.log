@@ -1,0 +1,29 @@
+
+1. Virtuelle Umgebung und Abhaengigkeiten
+  ok: Interpreter: Python 3.14.4
+  ok: Runtime-Abhaengigkeiten vollstaendig
+  ABBRUCH: pytest fehlt in der venv - die Suite waere falsch-rot.
+    ./venv/bin/pip install -r requirements-dev.txt
+
+2. Konfiguration (.env)
+  ok: .env vorhanden
+  ok: MARKET_SLUG gesetzt
+  ok: THETA_LOW gesetzt
+  ok: THETA_HIGH gesetzt
+  ok: Telegram konfiguriert (Zustellung aktiv)
+
+3. Validierung ohne Netz
+  ok: Settings-Validierung durchlaeuft
+  ok: Korrelations-Schwellen gueltig (1.0/2.5)
+  ok: News-Provider baubar (beine=2 keywords=0)
+
+4. Schluessel-Namensraum (.env gegen Code)
+  ok: alle PolySentinel-Schluessel sind dem Code bekannt
+
+6. Testsuite (ohne Netz)
+  WARNUNG: Suite uebersprungen (pytest fehlt) - siehe Schritt 1.
+
+Ergebnis
+NICHT STARTKLAR: 1 Abbruch(e), 1 Warnung(en)
+
+Bitte die ABBRUCH-Zeilen oben abarbeiten. Nichts davon ist optional.
