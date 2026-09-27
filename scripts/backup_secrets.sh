@@ -13,7 +13,7 @@ REPO="${REPO:-/Volumes/THX_OS_ULTRA/Users/olivermueller/agent_x_storage}"
 MANIFEST="${SECRETS_MANIFEST:-${HOME}/.secrets_manifest}"
 OUT_DIR="${SECRETS_BACKUP_DIR:-${REPO}/secrets-backup}"
 KEYCHAIN_SERVICE="${SECRETS_KEYCHAIN_SERVICE:-agent_x_secrets_backup_passphrase}"
-GPG="${GPG:-$(command -v gpg)}"
+GPG="${GPG:-$(command -v gpg || true)}"
 
 die() { echo "ERROR: $*" >&2; exit 1; }
 warn() { echo "WARN: $*" >&2; }
@@ -40,7 +40,7 @@ while IFS= read -r line || [ -n "${line}" ]; do
   esac
   # refuse absolute / traversal — paths are relative to $HOME
   case "${line}" in
-    /*|*/../*|../*|*/..)
+    /*|..|../*|*/..|*/../*)
       die "Path must be relative to \$HOME, no traversal: ${line}"
       ;;
   esac
