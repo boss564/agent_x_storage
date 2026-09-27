@@ -3,4 +3,4 @@
 Charter: diagnostic_only=true, live_execution=false, order_send=false.
 """
 
-__version__ = "0.1.0"
+__version__ = "0.3.0"

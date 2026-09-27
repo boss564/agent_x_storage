@@ -1490,13 +1490,13 @@ Freigabe-Kette und Review-Nachweis: `docs/SHADOW_HUB_WIRING_REVIEW.md`.
 
 ### PeakEvent — Peak-Obergrenze im Journal-Audit (Stufe 2)
 
-**Status:** Spezifikation freigegeben (2026-09-27).  
-**Code-Merge:** merged — `models.PeakEvent`, Engine `_record_peak` / `peak_events`,
-`shadow_replay.check_peak_ceiling`, `evaluate_drawdown` rein lesend, 6 Zeugen in
-`tests/test_engine.py`.
+**Status:** erledigt (2026-09-27) — Spez `846d81bb`, Code `0f9d240b`;
+`models.PeakEvent`, Engine `_record_peak` / `peak_events`,
+`shadow_replay.check_peak_ceiling`, 6 Zeugen in `tests/test_engine.py`,
+Package `__version__ = "0.3.0"`.
 
 **Schwere:** mittel (Drawdown-Lockout: zu hoher Peak → Lockout zu früh)  
-**Ort (Soll):** `models.PeakEvent` · `ShadowExecutionEngine` (Single-Writer) ·
+**Ort:** `models.PeakEvent` · `ShadowExecutionEngine` (Single-Writer) ·
 `shadow_replay.check_peak_ceiling` (nicht Overlay-`replay.py`)
 
 #### Verbindliche Spez (Audit-Zeuge, kein RejectReason)
@@ -1512,10 +1512,13 @@ Freigabe-Kette und Review-Nachweis: `docs/SHADOW_HUB_WIRING_REVIEW.md`.
    enge USDC-Caps erlaubt; keine %-Schwelle.
 4. **Single-Writer:** Nur die Engine darf `peak_equity` anheben und dabei ein
    append-only `PeakEvent` schreiben (`seq`, `marks`, `journal_pos`,
-   `peak_equity`, `raised_at`). `RiskController.evaluate_drawdown` ist rein
-   lesend — kein implizites Peak-Update im Pre-Trade-Check.
+   `peak_equity`, `raised_at`). **Semantik-Änderung:** `RiskController.evaluate_drawdown`
+   ist seit Stufe 2 **rein lesend** — kein implizites Peak-Update im Pre-Trade-
+   Check; isolierte RiskController-Wiederverwendung zieht den Peak nicht nach.
 5. **Audit-Hook:** `audit_shadow_state(..., peak_tolerance=…)` hängt
    Ceiling-Findings an den bestehenden Snapshot-/Invarianten-Diff.
+   Ein `peak_equity.ceiling`-Finding am Hub-Tick ist der Zeuge (kein Audit-Bug) —
+   PeakEvent-Strom und Journal-Cursor im betroffenen Zeitraum prüfen.
 
 #### Soll-Felder `PeakEvent` (frozen, append-only)
 
@@ -1541,7 +1544,8 @@ Freigabe-Kette und Review-Nachweis: `docs/SHADOW_HUB_WIRING_REVIEW.md`.
 **Nicht tun:** Peak-Gleichheit Live↔Replay; Peak-Cap als `RejectReason`;
 Overlay-`replay.py` neben kanonischem `shadow_replay.py`.
 
-**Nebenwirkung dokumentieren:** Externe Aufrufer von `evaluate_drawdown`
-allein heben den Peak nicht mehr — Engine-Flüsse müssen `_record_peak_*`
-unmittelbar vor dem Check aufrufen.
+**Nebenwirkung (kanonisch seit `0f9d240b`):** Externe Aufrufer von
+`evaluate_drawdown` allein heben den Peak nicht mehr — Engine-Flüsse müssen
+`_record_peak` unmittelbar vor dem Check aufrufen (tut `_store_snapshot` /
+Fill-Pfad bereits).
 

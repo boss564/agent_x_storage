@@ -40,9 +40,9 @@ Mutationstests: neue Tests gegen Vorgänger-Stand rot; Spike-Fall nach `5654634c
 
 ## PeakEvent Stufe 2 — Peak-Obergrenze (Audit-Zeuge)
 
-**Status:** Spezifikation freigegeben (2026-09-27).  
-**Code-Merge:** merged (chirurgisch gegen Kanon; `shadow_replay.check_peak_ceiling`,
-nicht Overlay-`replay.py`).
+**Status:** erledigt — Spez `846d81bb`, Code `0f9d240b` (chirurgisch gegen Kanon;
+`shadow_replay.check_peak_ceiling`, nicht Overlay-`replay.py`). Package
+`__version__ = "0.3.0"`.
 
 Stufe 1 (`5654634c`): Floor + Monotonie — Live-Peak darf nicht zu niedrig sein.  
 Stufe 2: Live-Peak darf nicht zu hoch sein (Drawdown-Lockout sonst zu früh).
@@ -53,8 +53,11 @@ Stufe 2: Live-Peak darf nicht zu hoch sein (Drawdown-Lockout sonst zu früh).
 - **Referenz:** unabhängiger Journal-Fold bis `PeakEvent.journal_pos`, Equity mit
   **Event-Marks** (nicht Live-Cache).
 - **Toleranz:** Default `Decimal("0")` (identisch); enge USDC-Caps ok; keine %.
-- **Single-Writer:** Engine zeichnet Peak-Anhebung + `PeakEvent`; `evaluate_drawdown`
-  ist rein lesend.
+- **Single-Writer:** Engine zeichnet Peak-Anhebung + `PeakEvent` via `_record_peak`.
+- **Semantik-Änderung:** `RiskController.evaluate_drawdown` ist seit Stufe 2
+  **rein lesend** — hebt `peak_equity` nicht mehr an. Isolierte Wiederverwendung
+  des RiskControllers ohne Engine-Pfad schreibt keine PeakEvents und zieht den
+  Peak nicht nach.
 - **Nicht tun:** Peak-Gleichheit Live↔Replay; Peak-Cap als Risk-Reject.
 
 Details und Zeugen-Tabelle: `docs/SHADOW_ENGINE_FOLLOWUPS.md` (PeakEvent-Abschnitt).
@@ -66,3 +69,6 @@ Details und Zeugen-Tabelle: `docs/SHADOW_ENGINE_FOLLOWUPS.md` (PeakEvent-Abschni
 - `ShadowHub.raise_on_divergence=True` (Default): Fail-fast — Feed läuft entkoppelt weiter.
 - `False`: Findings (`peak_equity.monotonic`, `journal`) oft nur einmal — **`report.findings` loggen**, nicht nur `ok`.
 - `full_audit_every_n_ticks=300` (~5 Min bei 1 s): Kontrolle gegen inkrementellen Drift.
+- `peak_equity.ceiling[<seq>]` beim Tick (`ShadowHub.tick` → `audit_shadow_state`):
+  kein Audit-Bug, sondern der Zeuge — PeakEvent-Strom und Journal-Cursor im
+  betroffenen Zeitraum prüfen.
