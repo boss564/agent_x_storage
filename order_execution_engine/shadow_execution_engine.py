@@ -39,6 +39,7 @@ from order_execution_engine.models import (
     OrderStatus,
     OrderType,
     PaperOrder,
+    PeakEvent,
     PortfolioSnapshot,
     RejectReason,
     RiskConfig,
@@ -104,12 +105,16 @@ class RiskController:
     ) -> bool:
         """Aktualisiert die Drawdown-Notbremse anhand aktueller Marks.
 
-        Hub-/Feed-Pfad: marktgetrieben ohne Order. ``check`` nutzt dieselbe
-        Logik — keine zweite Schwelle.
+        Rein lesend: Hebt ``peak_equity`` NICHT an. Peak-Anhebungen erfolgen
+        ausschließlich engine-seitig (Single-Writer + PeakEvent), damit jede
+        echte Anhebung prüfbar ist. Nutzt bewusst nicht
+        ``current_drawdown_pct`` (das den Peak nachziehen würde).
         """
         if self._lockout_active:
             return True
-        if portfolio.current_drawdown_pct(mark_prices) >= self.config.max_drawdown_pct:
+        eq = portfolio.equity(mark_prices)
+        peak = portfolio.peak_equity
+        if peak > 0 and eq < peak and ((peak - eq) / peak) * Decimal("100") >= self.config.max_drawdown_pct:
             self._lockout_active = True
             return True
         return False
@@ -762,6 +767,7 @@ class ShadowExecutionEngine:
         self._market_snapshots: dict[str, MarketSnapshot] = {}
         self._mark_prices: dict[str, Decimal] = {}
         self._execution_journal: list[ExecutedFillEvent] = []
+        self._peak_events: list[PeakEvent] = []
         self._last_expired_orders: tuple[PaperOrder, ...] = ()
         # Nur register_order-IDs: Orderbuch-Reaper darf Match-/FAK-Terminals
         # nicht nachtraeglich auf EXPIRED setzen.
@@ -800,10 +806,30 @@ class ShadowExecutionEngine:
         """Unveränderliche Kopie des In-Memory-Fill-Journals."""
         return tuple(self._execution_journal)
 
+    def peak_events(self) -> tuple[PeakEvent, ...]:
+        """Unveränderliche Kopie des PeakEvent-Stroms (Stufe 2)."""
+        return tuple(self._peak_events)
+
     @property
     def last_expired_orders(self) -> tuple[PaperOrder, ...]:
         """PaperOrders, die der letzte ``reap_expired``-Aufruf verfallen hat."""
         return self._last_expired_orders
+
+    def _record_peak(self, marks: dict[str, Decimal]) -> None:
+        """Hebt peak_equity an und zeugt jede echte Anhebung als PeakEvent.
+
+        Single-Writer: Nur hier darf der Live-Peak steigen, damit Stufe 2
+        (``check_peak_ceiling``) jede Anhebung gegen das Journal prüfen kann.
+        """
+        before = self.portfolio.peak_equity
+        after = self.portfolio.update_peak_equity(marks)
+        if after > before:
+            self._peak_events.append(PeakEvent(
+                seq=len(self._peak_events),
+                marks=dict(marks),
+                journal_pos=len(self._execution_journal),
+                peak_equity=after,
+            ))
 
     def _store_snapshot(self, snapshot: MarketSnapshot) -> None:
         """Speichert Snapshot + Mark; Drawdown-Bremse marktgetrieben."""
@@ -811,7 +837,7 @@ class ShadowExecutionEngine:
         mark = snapshot.mark_price()
         if mark is not None:
             self._mark_prices[snapshot.token_id] = mark
-        self.portfolio.update_peak_equity(self._mark_prices)
+        self._record_peak(self._mark_prices)
         self.risk.evaluate_drawdown(self.portfolio, self._mark_prices)
 
     def _journal_fill(
@@ -850,20 +876,23 @@ class ShadowExecutionEngine:
         raise_on_divergence: bool = False,
         *,
         full: bool = False,
+        peak_tolerance: Decimal = Decimal("0"),
     ) -> "AuditReport":
         """Live-Portfolio gegen unabhaengiges Journal-Replay pruefen.
 
         Standard: inkrementell (nur Events ab ``_audited_upto``).
         ``full=True``: Fold von vorn, Kontrolle gegen den Cursor-Pfad.
 
-        Peak-Equity: Invarianten (Floor + Monotonie), keine Gleichheit —
-        Live kann durch Book-Updates ohne Journal-Event peaken.
+        Peak Stufe 1: Floor + Monotonie (keine Gleichheit).
+        Peak Stufe 2: ``check_peak_ceiling`` — Live-Peak darf nicht hoeher
+        sein als Journal-Replay-Equity am PeakEvent (Event-Marks).
         """
         from order_execution_engine.shadow_replay import (
             AuditFinding,
             AuditReport,
             JournalReplay,
             ShadowAuditDivergence,
+            check_peak_ceiling,
             diff_audit_state,
         )
 
@@ -903,8 +932,13 @@ class ShadowExecutionEngine:
             replay_peak_equity=auditor.peak_equity,
             previous_live_peak=auditor.last_live_peak,
         )
-        # Monotonie-Anker fuer den naechsten Tick (auch bei Findings setzen,
-        # sonst wuerde ein einmaliger Peak-Spike den Floor dauerhaft spoofen).
+        findings = findings + check_peak_ceiling(
+            self._peak_events,
+            journal,
+            start_balance=self.portfolio.start_balance,
+            tolerance=peak_tolerance,
+        )
+        # Monotonie-Anker fuer den naechsten Tick
         auditor.last_live_peak = live_peak
         report = AuditReport(
             ok=not findings,
@@ -1100,7 +1134,7 @@ class ShadowExecutionEngine:
                 fill=fill,
             )
         if match.fills:
-            self.portfolio.update_peak_equity(marks)
+            self._record_peak(marks)
             self._fills_by_order[order.order_id] = list(match.fills)
         self._order_book[order.order_id] = order
 
@@ -1150,7 +1184,7 @@ class ShadowExecutionEngine:
                 bucket = self._fills_by_order.setdefault(ev.order_id, [])
                 bucket.extend(ev.result.fills)
             if ev.result.fills and mark is not None:
-                self.portfolio.update_peak_equity({order.token_id: mark})
+                self._record_peak({order.token_id: mark})
             rec = TelemetryRecord(
                 signal_id=sid,
                 order_id=ev.order_id,
@@ -1280,6 +1314,7 @@ class ShadowExecutionEngine:
             "equity": str(self.portfolio.equity(marks)),
             "realized_pnl": str(self.portfolio.realized_pnl),
             "peak_equity": str(self.portfolio.peak_equity),
+            "peak_events": len(self._peak_events),
             "open_positions": len(self.portfolio.positions),
             "lockout_active": self.risk.lockout_active,
             "mode": self.guard.mode.value,

@@ -716,6 +716,100 @@ def test_requested_size_null_table() -> None:
     print("OK test_requested_size_null_table")
 
 
+def test_peak_event_recorded() -> None:
+    eng = ShadowExecutionEngine(risk_config=RiskConfig(max_order_size_shares=Decimal("200")))
+    sig = SignalPayload(target_token_id="0xtokenA", market_id="mkt-1",
+                        direction=Direction.UP, confidence=Decimal("70"))
+    eng.on_signal(sig, _book())  # Fill zu 0.61, danach Peak-Aufzeichnung
+    assert not eng.peak_events()  # Equity unter Start -> kein PeakEvent
+    # Kurs steigt: echte Peak-Anhebung via Book-Update (Mark 0.80)
+    eng.on_book_update(_snapshot(
+        asks=(OrderBookLevel(Decimal("0.80"), Decimal("200")),),
+        bids=(OrderBookLevel(Decimal("0.79"), Decimal("200")),),
+    ))
+    events = eng.peak_events()
+    assert len(events) == 1
+    ev = events[0]
+    assert ev.seq == 0
+    assert ev.journal_pos == len(eng.execution_journal()) > 0
+    assert ev.peak_equity == eng.portfolio.peak_equity
+    assert ev.marks["0xtokenA"] == Decimal("0.795")  # Mid aus dem Event
+    print("OK test_peak_event_recorded")
+
+
+def test_peak_ceiling_clean_audit() -> None:
+    eng = ShadowExecutionEngine(risk_config=RiskConfig(max_order_size_shares=Decimal("200")))
+    sig = SignalPayload(target_token_id="0xtokenA", market_id="mkt-1",
+                        direction=Direction.UP, confidence=Decimal("70"))
+    eng.on_signal(sig, _book())
+    eng.on_book_update(_snapshot(
+        asks=(OrderBookLevel(Decimal("0.80"), Decimal("200")),),
+        bids=(OrderBookLevel(Decimal("0.79"), Decimal("200")),),
+    ))
+    report = eng.audit_shadow_state()
+    assert report.ok, report.findings
+    assert not any(f.path.startswith("peak_equity.ceiling") for f in report.findings)
+    print("OK test_peak_ceiling_clean_audit")
+
+
+def test_peak_ceiling_finding() -> None:
+    from order_execution_engine.models import PeakEvent
+    from order_execution_engine.shadow_replay import check_peak_ceiling
+    # Künstlich zu hoher Peak ohne journalisierte Spur:
+    forged = PeakEvent(seq=0, marks={}, journal_pos=0, peak_equity=Decimal("10001"))
+    findings = check_peak_ceiling([forged], [], start_balance=Decimal("10000"))
+    assert len(findings) == 1
+    assert findings[0].path == "peak_equity.ceiling[0]"
+    assert findings[0].live == "10001" and findings[0].replay == "10000"
+    bad_cursor = PeakEvent(seq=1, marks={}, journal_pos=5, peak_equity=Decimal("10000"))
+    f2 = check_peak_ceiling([bad_cursor], [], start_balance=Decimal("10000"))
+    assert f2[0].path == "peak_equity.ceiling[1].journal_pos"
+    print("OK test_peak_ceiling_finding")
+
+
+def test_peak_ceiling_tolerance() -> None:
+    from order_execution_engine.models import PeakEvent
+    from order_execution_engine.shadow_replay import check_peak_ceiling
+    ev = PeakEvent(seq=0, marks={}, journal_pos=0, peak_equity=Decimal("10000.005"))
+    assert check_peak_ceiling([ev], [], start_balance=Decimal("10000"))
+    assert not check_peak_ceiling([ev], [], start_balance=Decimal("10000"),
+                                  tolerance=Decimal("0.01"))
+    print("OK test_peak_ceiling_tolerance")
+
+
+def test_peak_ceiling_engine_audit_integration() -> None:
+    from order_execution_engine.models import PeakEvent
+    from order_execution_engine.shadow_replay import ShadowAuditDivergence
+    eng = ShadowExecutionEngine(risk_config=RiskConfig(max_order_size_shares=Decimal("200")))
+    sig = SignalPayload(target_token_id="0xtokenA", market_id="mkt-1",
+                        direction=Direction.UP, confidence=Decimal("70"))
+    eng.on_signal(sig, _book())
+    assert eng.audit_shadow_state().ok
+    eng._peak_events.append(PeakEvent(
+        seq=99, marks=dict(eng.current_marks()),
+        journal_pos=len(eng.execution_journal()),
+        peak_equity=Decimal("99999"),
+    ))
+    report = eng.audit_shadow_state()
+    assert not report.ok
+    assert any(f.path == "peak_equity.ceiling[99]" for f in report.findings)
+    try:
+        eng.audit_shadow_state(raise_on_divergence=True)
+        raise AssertionError("Divergenz hätte ShadowAuditDivergence werfen müssen")
+    except ShadowAuditDivergence:
+        pass
+    print("OK test_peak_ceiling_engine_audit_integration")
+
+
+def test_evaluate_drawdown_readonly_peak() -> None:
+    rc = RiskController(RiskConfig())
+    pf = VirtualPortfolio()  # peak = 10000, cash = 10000
+    pf.cash = Decimal("12000")
+    assert not rc.evaluate_drawdown(pf, {})
+    assert pf.peak_equity == Decimal("10000.00")
+    print("OK test_evaluate_drawdown_readonly_peak")
+
+
 if __name__ == "__main__":
     for fn in list(globals().values()):
         if callable(fn) and fn.__name__.startswith("test_"):

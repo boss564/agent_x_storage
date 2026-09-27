@@ -1491,8 +1491,9 @@ Freigabe-Kette und Review-Nachweis: `docs/SHADOW_HUB_WIRING_REVIEW.md`.
 ### PeakEvent — Peak-Obergrenze im Journal-Audit (Stufe 2)
 
 **Status:** Spezifikation freigegeben (2026-09-27).  
-**Code-Merge in diesen Kanon-Tree:** ausstehend — Arbeitsbaum enthält noch kein
-`PeakEvent` / `check_peak_ceiling` / `_record_peak_*` (Stand Verifikation).
+**Code-Merge:** merged — `models.PeakEvent`, Engine `_record_peak` / `peak_events`,
+`shadow_replay.check_peak_ceiling`, `evaluate_drawdown` rein lesend, 6 Zeugen in
+`tests/test_engine.py`.
 
 **Schwere:** mittel (Drawdown-Lockout: zu hoher Peak → Lockout zu früh)  
 **Ort (Soll):** `models.PeakEvent` · `ShadowExecutionEngine` (Single-Writer) ·

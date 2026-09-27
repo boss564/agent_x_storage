@@ -13,6 +13,13 @@ Härtung (v0.2):
     - VirtualPortfolio kann Fills selbständig verarbeiten (apply_fill)
       und führt peak_equity für den Drawdown-Lockout.
 
+Härtung (v0.3):
+    - PeakEvent: append-only-Zeuge jeder echten Peak-Anhebung
+      (marks + Journal-Cursor). Ermöglicht den Stufe-2-Audit
+      peak_equity.ceiling in shadow_replay.py (Live-Peak <= Journal-
+      Replay-Equity zum Anhebungszeitpunkt). Bewusst KEIN RejectReason —
+      die Peak-Obergrenze ist ein Integritäts-Befund, kein Order-Reject.
+
 Hinweis: Das Modul enthält KEINE Netzwerk-Calls. Jeglicher Versuch,
 echte Order-Aussendungen auszulösen, führt zu einem harten Abbruch.
 
@@ -346,6 +353,32 @@ class ExecutedFillEvent(BaseModel):
     limit_price: PolymarketPrice
     order_size: PositiveDecimal
     fill: FillResult
+
+
+class PeakEvent(BaseModel):
+    """Append-only-Zeuge einer echten Peak-Anhebung (PeakEvent Stufe 2).
+
+    Stufe 1: Live-Peak darf nicht zu niedrig sein (Floor + Monotonie).
+    Stufe 2: Live-Peak darf nicht hoeher sein als die Equity, die das
+    unabhaengige Journal-Replay zum Anhebungszeitpunkt mit genau diesen
+    Marks rechnet. AuditFinding peak_equity.ceiling — kein RejectReason.
+
+    Attribute:
+        seq: Laufende Nummer im append-only Event-Strom (0-basiert).
+        marks: Exakte Mark-Preise zum Zeitpunkt der Anhebung (Kopie).
+        journal_pos: Cursor in das Fill-Journal (Anzahl journalisierter
+            Fills zum Zeitpunkt der Anhebung).
+        peak_equity: Der neue Live-Peak nach der Anhebung (USDC).
+        raised_at: Zeitpunkt der Anhebung (UTC).
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    seq: int = Field(ge=0)
+    marks: dict[str, Decimal]
+    journal_pos: int = Field(ge=0)
+    peak_equity: Decimal = Field(gt=Decimal("0"))
+    raised_at: datetime = Field(default_factory=_utcnow)
 
 
 class ExecutionReport(BaseModel):

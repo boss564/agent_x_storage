@@ -41,8 +41,8 @@ Mutationstests: neue Tests gegen Vorgänger-Stand rot; Spike-Fall nach `5654634c
 ## PeakEvent Stufe 2 — Peak-Obergrenze (Audit-Zeuge)
 
 **Status:** Spezifikation freigegeben (2026-09-27).  
-**Code-Merge in diesen Kanon-Tree:** ausstehend (kein `PeakEvent` im Arbeitsbaum
-zum Zeitpunkt der Spez-Übernahme).
+**Code-Merge:** merged (chirurgisch gegen Kanon; `shadow_replay.check_peak_ceiling`,
+nicht Overlay-`replay.py`).
 
 Stufe 1 (`5654634c`): Floor + Monotonie — Live-Peak darf nicht zu niedrig sein.  
 Stufe 2: Live-Peak darf nicht zu hoch sein (Drawdown-Lockout sonst zu früh).

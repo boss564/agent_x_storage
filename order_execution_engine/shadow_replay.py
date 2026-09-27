@@ -22,6 +22,7 @@ from order_execution_engine.models import (
     ExecutedFillEvent,
     OrderSide,
     OrderStatus,
+    PeakEvent,
     PortfolioSnapshot,
     Position,
     VirtualPortfolio,
@@ -328,6 +329,50 @@ def diff_audit_state(
                 "peak_equity.monotonic",
                 str(live_peak_equity),
                 f"previous={previous_live_peak}",
+            ))
+    return tuple(findings)
+
+
+def check_peak_ceiling(
+    peak_events: Iterable[PeakEvent],
+    journal: tuple[ExecutedFillEvent, ...] | list[ExecutedFillEvent],
+    start_balance: Decimal = DEFAULT_VIRTUAL_CASH,
+    tolerance: Decimal = Decimal("0"),
+) -> tuple[AuditFinding, ...]:
+    """PeakEvent Stufe 2: Live-Peak darf nicht hoeher sein als das Journal.
+
+    Fuer jeden PeakEvent-Zeugen wird das Fill-Journal unabhaengig bis zu
+    seinem Cursor gefaltet und die Equity mit den im Event konservierten
+    Marks gerechnet. Referenz ist bewusst das Journal (eigener Fold +
+    Event-Marks), nicht der Live-Mark-Cache.
+
+    Returns:
+        Findings mit Pfad ``peak_equity.ceiling[<seq>]`` (leer = ok).
+    """
+    journal_tuple = tuple(journal)
+    findings: list[AuditFinding] = []
+    for event in peak_events:
+        path = f"peak_equity.ceiling[{event.seq}]"
+        if event.journal_pos > len(journal_tuple):
+            findings.append(AuditFinding(
+                f"{path}.journal_pos",
+                str(event.journal_pos),
+                f"journal_len={len(journal_tuple)}",
+            ))
+            continue
+        replayed = JournalReplay(start_balance=start_balance)
+        fold_findings, _ = replayed.apply_events(
+            journal_tuple[: event.journal_pos],
+        )
+        if fold_findings:
+            findings.extend(fold_findings)
+            continue
+        replay_equity = replayed.equity(dict(event.marks))
+        if event.peak_equity > replay_equity + tolerance:
+            findings.append(AuditFinding(
+                path,
+                format(event.peak_equity, "f"),
+                format(replay_equity, "f"),
             ))
     return tuple(findings)
 
