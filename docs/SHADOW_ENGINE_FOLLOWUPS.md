@@ -1552,3 +1552,28 @@ Aufrufer von `evaluate_drawdown` allein heben den Peak nicht mehr.
 Fill-Pfad in `on_book_update` peakt nach dem Fill mit dem Mid-Mark-Cache
 (`self._mark_prices`); ein anschliessender Drawdown-Check folgt dort nicht
 automatisch — naechster Hub-Tick / `_store_snapshot` zieht nach.
+
+**Härtung `52fded7a` (Review OK, push-ready):** Unwitnessed-Check + Mid-Marks
+im Book-Update-Fill; Mutationstests rot bei Rückdrehen. Suite 96/96.
+
+### Folge-Ticket — PeakEvent Persistenz + inkrementeller Ceiling (Befunde 3+4)
+
+**Status:** offen (nicht in `52fded7a`; eigener Commit).  
+**Zusammen lösen** — sonst: Engine-Neustart mit wiederhergestelltem
+`peak_equity` aber leerem `_peak_events` → fälschlich
+`peak_equity.ceiling.unwitnessed`.
+
+| # | Thema | Soll |
+|---|--------|------|
+| 3 | Audit-Aufwand | Eigenen Cursor für geprüfte PeakEvents; Journal-Stand beim Ceiling-Fold weiterverwenden (kein O(Events×Journal) pro Tick) |
+| 4 | Persistenz | `_peak_events` speichern/laden (heute schreibt `persistence.py` nur `peak_equity`, **kein** Engine-Reload-Pfad) |
+
+**Fester Hinweis:** Derzeit kein Fehlalarm nach Neustart, weil es keinen
+Lade-Pfad gibt, der den Engine-Zustand aus der DB wieder aufbaut. Wer einen
+solchen Pfad einführt, **muss vorher** 3+4 geschlossen haben.
+
+**Nebenbei (niedrig, kein Blocker):** `test_book_update_fill_peak_uses_mark_cache`
+nutzt bewusst gekreuztes Buch (Bid > Ask), um Mid≠Ask zu erzwingen — bricht,
+falls Snapshots solche Bücher später ablehnen. Tests greifen Interna
+(`_journal_auditor`, `_order_book`, `matcher.match`) an — Refactor-empfindlich,
+kein Spec-Verstoß.
