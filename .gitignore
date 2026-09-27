@@ -102,6 +102,9 @@ results/*_smoke.json
 # Hub binary export/review ZIPs (timestamped, regenerated each run)
 order_execution_engine/hub_*.zip
 
+# Encrypted secrets archives (scripts/backup_secrets.sh) — never version
+secrets-backup/
+
 # Telemetrie: host-spezifische Env (Vorlage: deploy/hetzner/telemetry-bridge.env.example)
 deploy/hetzner/telemetry-bridge.env
 # Nested newsagent-Checkout / Review-Artefakte / Bridge-Output

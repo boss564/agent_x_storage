@@ -7,6 +7,8 @@ DEST="${HOME}/backup/agent-x-$(date +%Y%m%d-%H%M)"
 KEEP=7
 mkdir -p "${DEST}"
 cd "${REPO}"
+# 0) Encrypted secrets (Keychain passphrase; see docs/SECRETS_BACKUP.md)
+bash "${REPO}/scripts/backup_secrets.sh"
 # 1) Compose, env, volume inventory
 cp docker-compose.yml docker-compose.mock.yml .env "${DEST}/" 2>/dev/null || true
 docker volume ls --format "table {{.Name}}\t{{.Driver}}" > "${DEST}/volumes.txt"
