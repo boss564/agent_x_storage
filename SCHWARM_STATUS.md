@@ -9,11 +9,11 @@
 
 | Feld | Wert |
 |---|---|
-| SSOT-Version | **0.3.2** |
-| Messstand (Host) | **27.09.2026** (Wächter 03:45 UTC; PolySentinel-Fixtures 26.09. 18:32 UTC; Push+Hub-FF 15:35 UTC) — **keine Wächter-Neumessung** |
+| SSOT-Version | **0.3.3** |
+| Messstand (Host) | **27.09.2026** (Wächter 03:45 UTC; PolySentinel-Fixtures 26.09. 18:32 UTC; Remote-Sync-Abschluss 15:35 UTC @ `8edb44f1`; Hub-HEAD 15:44 UTC @ `c77febc8`) — **keine Wächter-Neumessung** |
 | Buchungsdatum | **27.09.2026** |
 | Nächster geplanter Check | Wächter-Timer → **28.09.2026, 03:45 UTC** |
-| Betriebsstatus | Betrieb läuft. **Alle Audit-Pfade verankert** (Fixtures `b97bb551` · SSOT `32771676` · Remote-Sync ✅ `8edb44f1` origin+Hub). Messstand Wächter/PolySentinel unverändert (Exit 0; ungated/Gate defekt; B4 ⚪; B6/B7 🔴). |
+| Betriebsstatus | Betrieb läuft. **Alle Audit-Pfade verankert.** Remote-Sync-Abschluss @ `8edb44f1` (15:35 UTC); Tip @ `c77febc8` (15:44 UTC). Messstand Wächter/PolySentinel unverändert (Exit 0; ungated/Gate defekt; B4 ⚪; B6/B7 🔴). |
 
 ---
 
@@ -24,7 +24,7 @@
 │  AGENT X  — Steuerungs-/Daten-Hub           │
 │  Hetzner-Deploy · v1.3 Schema · Compose-DB  │
 │  (FalkorDB ≠ Hub → newsagent / B4 ⚪)       │
-│  SSOT 0.3.2                                 │
+│  SSOT 0.3.3                                 │
 └───────┬───────────────────┬─────────────────┘
         │                   │
   ┌─────▼─────┐       ┌─────▼──────────┐       ┌──────────────────┐
@@ -54,7 +54,7 @@
 
 | Modul | Commit-Anker | Status | Bemerkung |
 |---|---|---|---|
-| **Agent X (Hub)** | `8edb44f1` | 🟢 aktiv | Gemessen 27.09. **15:35 UTC** (Push+Hub-FF); Wächter-03:45-Ist war `d96031d5` (hist.). SSOT-Ledger: `32771676` → `8edb44f1` (§7) |
+| **Agent X (Hub)** | `c77febc8` | 🟢 aktiv | Tip gemessen 27.09. **15:44 UTC** (FF-only nach 0.3.2-Commit). Remote-Sync-Abschluss bleibt @ `8edb44f1` (15:35 UTC). Wächter-03:45-Ist `d96031d5` hist. |
 | **PolySentinel** | `66be8def` | 🔴 **läuft ungated — Gate defekt** | Belegt via Fixtures (`b97bb551`); `d567966` → Vorgänger (`merge-base --is-ancestor` YES). Fail-Closed (§5.4) derzeit **nicht gewährleistet**; Ursachenzuordnung zu B6/B7 offen |
 | **NewsAgent / Wächter** | `677c49f` | 🟢 aktiv | Gemessen 27.09. 03:45 UTC @ `/root/apps/newsagent`; HEAD weiter als `eec4c50` |
 
@@ -62,9 +62,10 @@
 - Kette: `d2990d3` (Ticket, hist.) → `3b8ada8` (Ist-Anker 0.2.8) → `eec4c50` (Ist-Anker 0.2.9) → **`677c49f` (Ist-Anker 0.3.0)**.
 - Regel unverändert: Ledger-Anker folgt dem gemessenen Ist-HEAD; Vorgänger bleiben als historische Referenz erhalten.
 
-### 2.2 Anker-Kette Hub
-- Kette: `5a5985c5` (hist.) → `81502319` (0.2.9) → `d96031d5` (0.3.0, Wächter-Messung) → **`8edb44f1` (0.3.2, Push+Hub-FF 27.09. 15:35 UTC)**.
-- Ledger-Datei-Anker: `32771676` (0.3.0) → `8edb44f1` (0.3.1-Commit + Remote-Sync-Abschluss).
+### 2.2 Anker-Kette Hub + Selbstanker-Regel
+- Kette: `5a5985c5` (hist.) → `81502319` (0.2.9) → `d96031d5` (0.3.0, Wächter) → `8edb44f1` (Remote-Sync-Abschluss 15:35 UTC) → **`c77febc8` (Tip / 0.3.2-Commit, gemessen 15:44 UTC)**.
+- Ledger-Datei-Anker: `32771676` → `8edb44f1` → `c77febc8` (alle committed + gepusht).
+- **Selbstanker-Regel:** Der Commit-Anker der *aktuellen* SSOT-Version entsteht definitionsgemäß erst mit ihrem Commit und wird im **Folge-Schnitt** nachgebucht. Bis dahin gilt er als „Tip gemeldet", **nicht** als Ledger-Lücke. (Diese Version 0.3.3 bucht `c77febc8`; ihr eigener Commit wird Tip bis 0.3.4.)
 
 ---
 
@@ -134,6 +135,17 @@
 | Objects | `8edb44f1` / `32771676` / `b97bb551` = commit (alle verifizierbar) |
 
 > Formulierung (ledger-maßgeblich): **Remote-Sync ✅ — origin + Hub @ `8edb44f1` (gemessen 27.09. 15:35 UTC)**
+
+### 3.8 0.3.2-Commit Push + Hub-FF 27.09. 15:44 UTC — Tip `c77febc8`
+
+| Schritt | Ergebnis |
+|---|---|
+| Commit | `c77febc8` — `docs(ssot): book SCHWARM_STATUS 0.3.2 — remote-sync closed @ 8edb44f1` |
+| Push | `8edb44f1..c77febc8` → `origin/deploy-safe-snapshot` |
+| Hub FF | `8edb44f1` → **`c77febc8`** (FF-only) @ `2026-09-27T15:44:11Z` |
+| Inhalt | Remote-Sync ✅-Formulierung, Hub-Kette bis `8edb44f1`, §3.7, Prioritäten ohne Push-Punkt, Konvergenz der fünf Teil-Edits |
+
+> Trennung (Ledger-Regel): **Abschluss** = `8edb44f1` @ 15:35 UTC · **Tip** = `c77febc8` @ 15:44 UTC — nicht vermischen.
 
 ---
 
@@ -214,42 +226,48 @@ severity: INFO | WARN | CRIT
 
 | Prüfpfad | Stand |
 |---|---|
-| Commit-Verifikation Agent X (Hub) | **`8edb44f1`** ✅ gemessen 27.09. 15:35 UTC; Kette `5a5985c5` → `81502319` → `d96031d5` → `8edb44f1` (Wächter-Ist `d96031d5` hist.) |
+| Commit-Verifikation Agent X (Hub) | Tip **`c77febc8`** ✅ gemessen 27.09. 15:44 UTC; Kette `…` → `d96031d5` → `8edb44f1` → `c77febc8`. Remote-Sync-Abschluss bleibt @ `8edb44f1` (15:35 UTC) |
 | Commit-Verifikation PolySentinel | `66be8def` ✅ belegt via Fixtures 26.09. 18:32 UTC; `d567966` hist. — ⬛ aufgelöst |
 | Commit-Verifikation NewsAgent | `677c49f` ✅ gemessen 27.09. 03:45 UTC @ `/root/apps/newsagent`; Kette `d2990d3` → `3b8ada8` → `eec4c50` → `677c49f` |
 | **Fixtures-Hygiene** | ✅ **geschlossen** — Anker **`b97bb551`** |
-| **SSOT-Hygiene** | ✅ **geschlossen** — `32771676` (0.3.0) · ergänzt um **`8edb44f1`** (0.3.1-Commit + Remote-Sync) |
-| **Remote-Sync** | ✅ **geschlossen** — origin + Hub @ `8edb44f1` (gemessen 27.09. 15:35 UTC) |
+| **SSOT-Hygiene** | ✅ **geschlossen** — Kette `32771676` / `8edb44f1` / `c77febc8` — alle committed + gepusht |
+| **Remote-Sync** | ✅ **geschlossen** — Abschluss an **`8edb44f1` (15:35 UTC)** gemessen; Tip `c77febc8` separat (§2.2 / §3.8) |
 | Key-Rotation | nächste Rotation: nach B4-Abschluss festlegen (B4 ⚪ — Termin rückt entsprechend) |
-| Zero-Trust-Audit-Pfad | Messbeleg + Commit-Anker; remote-Abschluss = Push + Hub-FF — **erstmals vollständig** |
+| Zero-Trust-Audit-Pfad | Messbeleg + Commit-Anker; remote-Abschluss = Push + Hub-FF; Selbstanker-Regel §2.2 |
 
 ---
 
-## 8. Änderungsprotokoll 0.3.1 → 0.3.2
+## 8. Änderungsprotokoll 0.3.2 → 0.3.3
+
+| Thema | 0.3.2 | 0.3.3 |
+|---|---|---|
+| Charakter | Remote-Sync-Abschluss gebucht | Tip-Nachbuchung + **Selbstanker-Regel** |
+| Hub-Tip | `8edb44f1` (Abschluss = Tip vermischt) | Tip **`c77febc8`** (15:44 UTC); Abschluss bleibt `8edb44f1` |
+| §3.8 | — | Messprotokoll 0.3.2-Commit Push+FF |
+| §2.2 | — | Selbstanker-Regel formalisiert |
+
+### 8.1 Archiv — 0.3.1 → 0.3.2
 
 | Thema | 0.3.1 | 0.3.2 |
 |---|---|---|
-| Charakter | Nachbuchung Anker lokal | **Remote-Sync-Abschluss** (+ Konvergenz fünf Teil-Edits) |
-| Hub-Anker | `d96031d5` (Wächter-Ist) | **`8edb44f1`** (Push+Hub-FF 15:35 UTC) |
-| Remote-Sync | 🟡 offen | ✅ origin + Hub @ `8edb44f1` |
-| §3.7 | — | Messprotokoll Push + Hub-FF |
-| Audit-Pfade | Fixtures/SSOT ✅, Remote 🟡 | **alle ✅** |
+| Charakter | Nachbuchung Anker lokal | Remote-Sync-Abschluss (+ Konvergenz) |
+| Hub-Anker | `d96031d5` | **`8edb44f1`** (15:35 UTC) |
+| Remote-Sync | 🟡 | ✅ @ `8edb44f1` |
 
-### 8.1 Archiv — 0.3.0 → 0.3.1
+### 8.2 Archiv — 0.3.0 → 0.3.1
 
 | Thema | 0.3.0 | 0.3.1 |
 |---|---|---|
-| Charakter | Mess-Schnitt | Reine Nachbuchung |
 | Fixtures / SSOT | angeordnet | ✅ `b97bb551` / `32771676` |
 | §1.1 | implizit | explizit Maßgeblich-nur-Repo · Falkor≠Hub · Fixtures |
 | Remote-Sync | — | 🟡 neu/offen |
 
-### 8.2 Archiv — 0.2.9 → 0.3.0
+### 8.3 Archiv — 0.2.9 → 0.3.0
 
 | Thema | 0.2.9 | 0.3.0 |
 |---|---|---|
 | Hub / NewsAgent | `81502319` / `eec4c50` | `d96031d5` / `677c49f` |
-| PolySentinel | ⬛ | 🔴 ungated, Gate defekt @ `66be8def` |
+| PolySentinel | ⬛ | 🔴 ungated @ `66be8def` |
 | Wächter 03:45 | Exit 3 / skip 1 | **Exit 0 / skip 0** |
 | B4 / B6 / B7 | offen / — | ⚪ / 🔴 / 🔴 |
 
@@ -257,14 +275,14 @@ severity: INFO | WARN | CRIT
 
 ## 9. Nächste Schritte (Priorität)
 
-1. **Wächter-Lauf 28.09. 03:45 UTC** abwarten: Erwartung offen — Exit 0 und Exit 3 sind beide kontrakt-konform; die Serie entscheidet, ob das Skip-Muster strukturell überwunden ist.
-2. **PolySentinel-Gate wiederherstellen** (Fail-Closed): höchste Satelliten-Priorität — ungated-Betrieb als bekanntes Risiko; Verzahnung mit B6 (venv) / B7 (`[OPS]`).
+1. **Wächter-Lauf 28.09. 03:45 UTC** abwarten: Erwartung offen — Exit 0 und Exit 3 sind beide kontrakt-konform; die Serie entscheidet über das Skip-Muster.
+2. **PolySentinel-Gate wiederherstellen** (Fail-Closed): höchste Satelliten-Priorität — einziger verbleibender 🔴-Pfad (B6/B7).
 3. **B6-Fix (venv)** und **B7-Fix (`[OPS]`)**: vor der nächsten PolySentinel-Neumessung.
 4. **m2 — Beobachtung abschließen**: nächster live-monitor-Beleg → dann ✅.
 5. **Backlog:** Dashboard-FP (Log-Tail), `alpha-pipeline` Scope-Zeile, Track-12 Exit-Inventur, B4-Schema-Design (⚪).
 
-**Erledigt seit 0.3.0 (quittiert):** Fixtures-Commit · SSOT-Commit · Push + Hub-FF (Remote-Sync ✅ @ `8edb44f1`).
+**Erledigt seit 0.3.0 (quittiert):** Fixtures · SSOT · Push+Hub-FF · Remote-Sync ✅ @ `8edb44f1` · Tip-Nachbuchung `c77febc8` · Selbstanker-Regel.
 
 ---
 
-*SSOT 0.3.2 · Messstand 27.09.2026 · Remote-Sync ✅ origin+Hub @ 8edb44f1 (15:35 UTC) · nächster Check Wächter 28.09. 03:45 UTC · verifizierte Messwerte, keine Annahmen.*
+*SSOT 0.3.3 · Tip `c77febc8` (15:44 UTC) · Remote-Sync-Abschluss `8edb44f1` (15:35 UTC) · nächster Check Wächter 28.09. 03:45 UTC · verifizierte Messwerte, keine Annahmen.*
