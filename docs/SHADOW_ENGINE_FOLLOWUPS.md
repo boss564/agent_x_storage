@@ -1484,23 +1484,63 @@ GTC-Rest überlebt Replay, verschwindet nach EXPIRED-Record |
 
 ---
 
-## Hub-Wiring (2026-09-26) — erledigt + offenes PeakEvent
+## Hub-Wiring (2026-09-26) — erledigt + PeakEvent Stufe 2
 
 Freigabe-Kette und Review-Nachweis: `docs/SHADOW_HUB_WIRING_REVIEW.md`.
 
-### PeakEvent — Peak-Obergrenze im Journal-Audit (offen)
+### PeakEvent — Peak-Obergrenze im Journal-Audit (Stufe 2)
 
-**Schwere:** mittel (relevant bei scharfem Drawdown-Lockout)  
-**Ort:** `shadow_replay.JournalReplay` / `ShadowExecutionEngine._store_snapshot`
+**Status:** Spezifikation freigegeben (2026-09-27).  
+**Code-Merge in diesen Kanon-Tree:** ausstehend — Arbeitsbaum enthält noch kein
+`PeakEvent` / `check_peak_ceiling` / `_record_peak_*` (Stand Verifikation).
 
-**Ist:** Peak-Audit Stufe 1 (`5654634c`): `live_peak >= max(replay_peak, replay_equity)`
-und Monotonie des Live-Peaks. Keine Prüfung, ob der Peak *zu hoch* ist
-(Book-Update ohne korrespondierende Journal-Spur).
+**Schwere:** mittel (Drawdown-Lockout: zu hoher Peak → Lockout zu früh)  
+**Ort (Soll):** `models.PeakEvent` · `ShadowExecutionEngine` (Single-Writer) ·
+`shadow_replay.check_peak_ceiling` (nicht Overlay-`replay.py`)
 
-**Soll (Stufe 2):** Bei jeder Peak-Anhebung ein append-only `PeakEvent`
-(Marks + Journal-Cursor). Replay berechnet Equity am eigenen Fold-Stand
-genau an dieser Stelle und prüft die Obergrenze.
+#### Verbindliche Spez (Audit-Zeuge, kein RejectReason)
 
-**Nicht tun:** Peak-Gleichheit Live↔Replay wieder einführen (Spike/Revert =
-False Positive; siehe Review-Protokoll).
+1. **Kanal:** `AuditFinding(path="peak_equity.ceiling[<seq>]")` bzw.
+   `peak_equity.ceiling[<seq>].journal_pos`. Kein neuer `RejectReason` —
+   Enum bleibt Pre-Trade-Ablehnungen vorbehalten (Meta-Anker).
+2. **Referenz:** Journal-Replay-Equity am PeakEvent — eigener Fold bis
+   `journal_pos`, Equity mit den **Event-Marks** (Kopie zum Anhebungszeitpunkt).
+   Nicht Live-Mark-Cache, nicht Gleichheit Live↔Replay-Peak (Spike/Revert =
+   False Positive; Stufe 1 bleibt Floor + Monotonie).
+3. **Toleranz:** Default Decimal-identisch (`peak_tolerance=Decimal("0")`);
+   enge USDC-Caps erlaubt; keine %-Schwelle.
+4. **Single-Writer:** Nur die Engine darf `peak_equity` anheben und dabei ein
+   append-only `PeakEvent` schreiben (`seq`, `marks`, `journal_pos`,
+   `peak_equity`, `raised_at`). `RiskController.evaluate_drawdown` ist rein
+   lesend — kein implizites Peak-Update im Pre-Trade-Check.
+5. **Audit-Hook:** `audit_shadow_state(..., peak_tolerance=…)` hängt
+   Ceiling-Findings an den bestehenden Snapshot-/Invarianten-Diff.
+
+#### Soll-Felder `PeakEvent` (frozen, append-only)
+
+| Feld | Bedeutung |
+|------|-----------|
+| `seq` | Ereignis-Sequenz |
+| `marks` | exakte Marks zum Anhebungszeitpunkt (Kopie) |
+| `journal_pos` | Cursor ins Fill-Journal |
+| `peak_equity` | neuer Live-Peak nach Anhebung |
+| `raised_at` | Zeitstempel |
+
+#### Soll-Zeugen
+
+| Test | Deckt ab |
+|------|-----------|
+| `test_peak_event_recorded` | Event nur bei echter Anhebung; Marks/Cursor/Peak konsistent |
+| `test_peak_ceiling_clean_audit` | Normalbetrieb → kein Ceiling-Befund |
+| `test_peak_ceiling_finding` | Überhöhter Peak / Cursor jenseits Journal → Befund |
+| `test_peak_ceiling_tolerance` | Toleranz 0 vs. enge Cap |
+| `test_peak_ceiling_engine_audit_integration` | `audit_shadow_state` + `raise_on_divergence` |
+| `test_evaluate_drawdown_readonly_peak` | Risk-Check hebt Peak nie selbst an |
+
+**Nicht tun:** Peak-Gleichheit Live↔Replay; Peak-Cap als `RejectReason`;
+Overlay-`replay.py` neben kanonischem `shadow_replay.py`.
+
+**Nebenwirkung dokumentieren:** Externe Aufrufer von `evaluate_drawdown`
+allein heben den Peak nicht mehr — Engine-Flüsse müssen `_record_peak_*`
+unmittelbar vor dem Check aufrufen.
 

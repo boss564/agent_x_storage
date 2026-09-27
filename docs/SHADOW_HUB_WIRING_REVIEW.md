@@ -38,16 +38,26 @@ Mutationstests: neue Tests gegen Vorgänger-Stand rot; Spike-Fall nach `5654634c
 
 ---
 
-## Offenes Ticket: PeakEvent (Obergrenze)
+## PeakEvent Stufe 2 — Peak-Obergrenze (Audit-Zeuge)
 
-**Status:** offen (Stufe 2)  
-**Warum:** Stufe 1 prüft nur Untergrenze + Monotonie. Ob der Live-Peak *zu hoch* ist (Drawdown-Lockout zu früh), braucht journalisierte Peak-Anhebungen.
+**Status:** Spezifikation freigegeben (2026-09-27).  
+**Code-Merge in diesen Kanon-Tree:** ausstehend (kein `PeakEvent` im Arbeitsbaum
+zum Zeitpunkt der Spez-Übernahme).
 
-**Skizze:** `PeakEvent(marks, journal_pos)` bei jeder Peak-Anhebung; Replay rechnet Equity am Fold-Stand nach; vergleicht Obergrenze.
+Stufe 1 (`5654634c`): Floor + Monotonie — Live-Peak darf nicht zu niedrig sein.  
+Stufe 2: Live-Peak darf nicht zu hoch sein (Drawdown-Lockout sonst zu früh).
 
-Relevant sobald Drawdown-Lockout scharf ausgewertet wird. Siehe auch `docs/SHADOW_ENGINE_FOLLOWUPS.md` (PeakEvent-Eintrag).
+### Verbindliche Spez
 
-**Nicht tun:** Peak-Gleichheit Live↔Replay wieder einführen (Spike/Revert = False Positive).
+- **Kanal:** `AuditFinding("peak_equity.ceiling[<seq>]")` — kein neuer `RejectReason`.
+- **Referenz:** unabhängiger Journal-Fold bis `PeakEvent.journal_pos`, Equity mit
+  **Event-Marks** (nicht Live-Cache).
+- **Toleranz:** Default `Decimal("0")` (identisch); enge USDC-Caps ok; keine %.
+- **Single-Writer:** Engine zeichnet Peak-Anhebung + `PeakEvent`; `evaluate_drawdown`
+  ist rein lesend.
+- **Nicht tun:** Peak-Gleichheit Live↔Replay; Peak-Cap als Risk-Reject.
+
+Details und Zeugen-Tabelle: `docs/SHADOW_ENGINE_FOLLOWUPS.md` (PeakEvent-Abschnitt).
 
 ---
 
