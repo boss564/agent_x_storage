@@ -10,11 +10,11 @@
 
 | Feld | Wert |
 |---|---|
-| SSOT-Version | **0.3.4** |
-| Messstand (Host) | **28.09.2026** Wächter 03:45 UTC (Paste) · PolySentinel Lauf-`rev-parse` **30.09.2026T18:11:54Z** · Remote-Sync-Abschluss 27.09. 15:35 UTC @ `8edb44f1` |
+| SSOT-Version | **0.3.5** |
+| Messstand (Host) | **28.09.2026** Wächter 03:45 UTC (Paste) · PolySentinel Lauf-`rev-parse` **30.09.2026T18:11:54Z** · Sync-FF **30.09.2026T18:18:46Z** `3c7ebc1b`→`b8f66d9d` |
 | Buchungsdatum | **30.09.2026** |
 | Nächster geplanter Check | Wächter-Timer → **01.10.2026, 03:45 UTC** (Serienpunkt 6) |
-| Betriebsstatus | Betrieb läuft. **Serienpunkt 5:** zweiter Exit-0 im Timer-Pfad (27.+28.09.). Hub Tip `3c7ebc1b`. PolySentinel Live-HEAD `66be8def` (Lauf-verifiziert). Zero-Trust SSOT ✅. Key-Rotation 🔴 offen. Gate 🔴 (B6/B7). |
+| Betriebsstatus | Betrieb läuft. **Serienpunkt 5** (27.+28.09. Exit 0). **Laufzeit-Anker Hub `3c7ebc1b`** · Docs-Tip `b8f66d9d`. PolySentinel Live-HEAD `66be8def`. Zero-Trust SSOT ✅. Key-Rotation 🔴 offen. Gate 🔴 (B6/B7). |
 
 ---
 
@@ -25,7 +25,7 @@
 │  AGENT X  — Steuerungs-/Daten-Hub           │
 │  Hetzner-Deploy · v1.3 Schema · Compose-DB  │
 │  (FalkorDB ≠ Hub → newsagent / B4 ⚪)       │
-│  SSOT 0.3.4                                 │
+│  SSOT 0.3.5                                 │
 └───────┬───────────────────┬─────────────────┘
         │                   │
   ┌─────▼─────┐       ┌─────▼──────────┐       ┌──────────────────┐
@@ -49,6 +49,7 @@
 | **FalkorDB ≠ Hub** | Graph-Layer → **newsagent** (B4 ⚪). Kein Hub-Schema. |
 | **Fixtures repo-getrackt** | `deploy/hetzner/fixtures/polysentinel_*20260926T183216Z*` — Anker **`b97bb551`** ✅ |
 | **Daten-Weg (Wächter-Paste)** | **Option 2 = Standard:** Host schreibt Summary nach Repo/`logs/` (oder Offsite-Sync); abgeschottete Wakes lesen Datei, erfinden nichts. Option 1 (manuell einfügen) = Fallback. Option 3 (SSH-Keys in geteiltem Ordner) = abgelehnt. |
+| **Docs-Tip ≠ Laufzeit-Anker** | SSOT-Commits erzeugen einen **Docs-Tip**; der **Laufzeit-Anker Hub** bleibt der zuletzt gemessene Deploy-/Wächter-`rev-parse`. Nächster `rev-parse`-Lauf nicht gegen Docs-Tip false-positive/negative werten. |
 
 ---
 
@@ -56,7 +57,7 @@
 
 | Modul | Commit-Anker | Status | Bemerkung |
 |---|---|---|---|
-| **Agent X (Hub)** | `3c7ebc1b` | 🟢 aktiv | Tip gemessen 27.09. **15:58:52Z** (0.3.3-Commit FF). Remote-Sync-Abschluss @ `8edb44f1` (15:35 UTC). Wächter-28.09.-`rev-parse` = `3c7ebc1b` |
+| **Agent X (Hub)** | **`3c7ebc1b`** (Laufzeit) | 🟢 aktiv | **Laufzeit-Anker** = Wächter-28.09.-`rev-parse` + 0.3.3-FF. Docs-Tip `b8f66d9d` (0.3.4-SSOT) ≠ Laufzeit. Remote-Sync-Abschluss @ `8edb44f1`. |
 | **PolySentinel** | `66be8def` | 🔴 **läuft ungated — Gate defekt** | **Lauf-`rev-parse` 30.09.T18:11:54Z** @ `/opt/polysentinel`; Service active seit 26.09. 15:39:27Z PID 384439; Fixtures `b97bb551`. `d567966` = Vorgänger (`merge-base --is-ancestor` YES) — archiviert, kein Ist-HEAD |
 | **NewsAgent / Wächter** | `677c49f` | 🟢 aktiv | **Lauf-Messung 28.09. 03:45 UTC** @ `/root/apps/newsagent` (nicht späterer Tip) |
 
@@ -65,9 +66,10 @@
 - Regel: Ledger-Anker = gemessener Ist-HEAD am Lauf; spätere Tips ohne Paste nicht nachziehen.
 
 ### 2.2 Anker-Kette Hub + Selbstanker-Regel
-- Kette: `5a5985c5` → `81502319` → `d96031d5` → `8edb44f1` (Remote-Sync-Abschluss) → `c77febc8` → **`3c7ebc1b` (Tip / 0.3.3-Commit, FF 15:58:52Z; Wächter-28.09.-`rev-parse`)**.
-- Ledger-Datei-Anker: `32771676` → `8edb44f1` → `c77febc8` → `3c7ebc1b`.
-- **Selbstanker-Regel:** Commit-Anker der *aktuellen* Version entsteht erst mit ihrem Commit → Nachbuchung im Folge-Schnitt als „Tip gemeldet", keine Ledger-Lücke. (0.3.4 bucht `3c7ebc1b`; eigener Commit = Tip bis 0.3.5.)
+- **Laufzeit-Kette:** `5a5985c5` → `81502319` → `d96031d5` → `8edb44f1` → `c77febc8` → **`3c7ebc1b` (Laufzeit-Anker / Wächter-28.09.-`rev-parse`)**.
+- **Docs-/Ledger-Kette:** `32771676` → `8edb44f1` → `c77febc8` → `3c7ebc1b` → **`b8f66d9d` (Docs-Tip / 0.3.4-Commit, FF 18:18:46Z)**.
+- **Selbstanker-Regel:** Commit-Anker der *aktuellen* Version entsteht erst mit ihrem Commit → Nachbuchung im Folge-Schnitt als „Tip gemeldet", keine Ledger-Lücke. (0.3.5 bucht Docs-Tip `b8f66d9d`; eigener Commit = Tip bis 0.3.6.)
+- **Unterscheidung:** Docs-Tip für Sync/SSOT-Hygiene; Laufzeit-Anker für Deploy- und Wächter-`rev-parse`-Vergleiche.
 
 ---
 
@@ -84,7 +86,7 @@
 | Timer | LAST `2026-09-28 03:45:02 UTC` · NEXT `2026-09-29 03:45:00 UTC` |
 | Hook-Drift | `[OK] Hook-Drift: RC=0, kein Drift` (Summary; Diff-Lärm kein Befund) |
 | Offsite | **hash-bestätigt** — 230 Dateien, Beleg-Alter **84302 s** |
-| Hub `rev-parse` | `3c7ebc1b` (`3c7ebc1b6493657c228745e883fda5c0da964e2c`) |
+| Hub `rev-parse` | `3c7ebc1b` (`3c7ebc1b6493657c228745e883fda5c0da964e2c`) — **Laufzeit-Anker** |
 | NewsAgent `rev-parse` | `677c49f` (`677c49f15ec7dad84720971545c0a5eedcdf8917`) @ `/root/apps/newsagent` |
 | `[OPS]` | keine |
 
@@ -116,7 +118,7 @@
 
 > Nächster Schnitt bucht **Serienpunkt 6** direkt in diese Tabelle (01.10. 03:45 UTC o. ä.).
 
-### 3.5–3.8 Archiv (Kurz)
+### 3.5–3.9 Archiv (Kurz)
 
 | ID | Inhalt |
 |---|---|
@@ -124,14 +126,17 @@
 | 3.6 | B3 23.09.: Host/Bare `3b8ada8`, `d2990d3` Ancestor |
 | 3.7 | Remote-Sync ✅ `d96031d5..8edb44f1` @ 15:35 UTC |
 | 3.8 | Tip `c77febc8` FF @ 15:44 UTC |
+| 3.9 | Tip `3c7ebc1b` FF @ 15:58:52Z (0.3.3) |
 
-### 3.9 Tip-Nachbuchung `3c7ebc1b` (27.09. 15:58:52Z)
+### 3.10 Sync-Einspielung 0.3.4 — Audit-Zeile (30.09. 18:18:46Z)
 
 | Schritt | Ergebnis |
 |---|---|
-| Commit | `3c7ebc1b` — `docs(ssot): book SCHWARM_STATUS 0.3.3 — tip c77febc8 + self-anchor rule` |
-| Push / Hub FF | `c77febc8..3c7ebc1b` · FF-only @ `2026-09-27T15:58:52Z` |
-| Verify | 21 Treffer `0.3.3`/`c77febc8` auf Hub |
+| Commit | `b8f66d9d` — `docs(ssot): book SCHWARM_STATUS 0.3.4 — SP5 + PolySentinel lauf-anker 66be8def` |
+| Push / Hub FF | `3c7ebc1b`→`b8f66d9d` · Branch `deploy-safe-snapshot` · FF-only @ **`2026-09-30T18:18:46Z`** |
+| Hub-Verify | SSOT **0.3.4** · PS `66be8def` · Key-Rotation 🔴 · SP5 |
+| Klassifikation | **`b8f66d9d` = Docs-Tip** (SSOT-Commit); **Laufzeit-Anker Hub bleibt `3c7ebc1b`** |
+| Hook-Nebenfix | Wave-21-Zähler CLAUDE.md 79→78 + `docs/SWARM_INVENTORY.md` Laufzeit-Sync (Pre-Commit-Gate) — Hinweis auf Doku/Laufzeit-Drift; bei Gelegenheit klären, warum 79 gebucht war |
 
 ---
 
@@ -159,7 +164,7 @@ Unverändert: Schema `1.3`, Pflichtfelder `schema_version` / `agent_id` / `ts_ut
 
 ### 5.3 NewsAgent/Wächter — Exit 0/1/2/3
 - `0` Vollprüfung · `1` WARN · `2` hart/degraded · `3` Skip/WARN (OnFailure ok, kein CRIT)
-- Mit 0.3.4: **zwei** Timer-Pfad-Exit-0 (27.+28.09.) — Erwartungsbild noch nicht umgestellt; Serie weiter.
+- Mit 0.3.4+: **zwei** Timer-Pfad-Exit-0 (27.+28.09.) — Erwartungsbild noch nicht umgestellt; Serie weiter.
 
 ### 5.4 PolySentinel
 - Ziel: Fail-Closed + Preflight. **Ist:** ungated, Gate defekt → bekanntes Risiko bis B6/B7.
@@ -185,45 +190,48 @@ Unverändert: Schema `1.3`, Pflichtfelder `schema_version` / `agent_id` / `ts_ut
 
 | Prüfpfad | Stand |
 |---|---|
-| Hub Commit | Tip **`3c7ebc1b`** ✅ (FF 15:58:52Z + Wächter-28.09.-`rev-parse`); Abschluss Remote-Sync @ `8edb44f1` |
+| Hub Laufzeit-Anker | **`3c7ebc1b`** ✅ (Wächter-28.09.-`rev-parse` + 0.3.3-FF) — **maßgeblich für rev-parse-Vergleiche** |
+| Hub Docs-Tip | **`b8f66d9d`** ✅ (0.3.4-SSOT-Commit; FF 18:18:46Z) — **nicht** Laufzeit-Anker |
 | PolySentinel Commit | **`66be8def`** ✅ Lauf-`rev-parse` 30.09.T18:11:54Z + Fixtures `b97bb551`; `d567966` hist. |
 | NewsAgent Commit | **`677c49f`** ✅ Lauf-Messung 28.09. 03:45 UTC |
 | Fixtures-Hygiene | ✅ `b97bb551` |
-| SSOT-Hygiene | ✅ Kette bis `3c7ebc1b` committed+gepusht |
+| SSOT-Hygiene | ✅ Docs-Kette bis `b8f66d9d` committed+gepusht+FF |
 | Remote-Sync | ✅ Abschluss @ `8edb44f1` (15:35 UTC) |
-| **Zero-Trust SSOT** | ✅ **geschlossen** — Messbeleg + Commit-Anker + Push/Hub-FF (seit 0.3.2/0.3.3); Tip-Kette bis `3c7ebc1b` |
-| **Key-Rotation** | 🔴 **offen** — kein Rotations-Ereignis. Befund: `.env` PS mtime `2026-09-25T19:06Z`; newsagent `.env` `2026-09-04`; `docs/SECRETS_BACKUP.md` nur „After key rotation". Termin an B4 ⚪. **Abschlusskriterium:** Rotation + Beleg (Datum, Scope, Backup-Nachweis) — kein Abschluss ohne Beleg |
-| **Repo-Sync 0.3.4** | ✅ **erledigt** mit diesem Commit (ersetzt 0.3.3) |
+| Sync 0.3.4 | ✅ **eingespielt** — FF `3c7ebc1b`→`b8f66d9d` @ 18:18:46Z; Hub-Verify SSOT 0.3.4 · PS `66be8def` · Key-Rot 🔴 · SP5 |
+| **Zero-Trust SSOT** | ✅ **geschlossen** — Messbeleg + Commit-Anker + Push/Hub-FF; Docs-Tip `b8f66d9d` |
+| **Key-Rotation** | 🔴 **offen** — kein Rotations-Ereignis. Befund: `.env` PS mtime `2026-09-25T19:06Z`; newsagent `.env` `2026-09-04`; `docs/SECRETS_BACKUP.md` ohne Rotationsnachweis. Termin an B4 ⚪. **Abschlusskriterium:** Rotation + Beleg (Datum, Scope, Backup-Nachweis) — kein Abschluss ohne Beleg |
 
 ---
 
-## 8. Änderungsprotokoll 0.3.3 → 0.3.4
+## 8. Änderungsprotokoll 0.3.4 → 0.3.5
 
-| Thema | 0.3.3 | 0.3.4 |
+| Thema | 0.3.4 | 0.3.5 |
 |---|---|---|
-| Charakter | Tip/Selbstanker | Wächter Serienpunkt 5 + PolySentinel Lauf-Anker + Audit-Klarstellung |
-| Hub-Tip | `c77febc8` gemeldet | **`3c7ebc1b`** gebucht |
-| Wächter | wartet 28.09. | Exit **0**, Serienpunkt **5** |
-| PolySentinel | Fixtures-only | + Lauf-`rev-parse` 30.09.; `d567966` explizit Vorgänger |
-| Zero-Trust SSOT | ✅ | ✅ bestätigt |
-| Key-Rotation | Termin an B4 | 🔴 offen + Abschlusskriterium festgeschrieben |
-| Daten-Weg | — | Option 2 = Standard (§1.1) |
+| Charakter | SP5 + PS Lauf-Anker + Audit-Kriterien | Tip-Nachbuchung + Docs≠Laufzeit + Sync-Audit |
+| Docs-Tip | (entsteht mit Commit) | **`b8f66d9d`** gebucht |
+| Laufzeit-Anker Hub | `3c7ebc1b` | **`3c7ebc1b`** beibehalten (explizit ≠ Docs-Tip) |
+| Sync 0.3.4 | erledigbarer Eintrag | ✅ Audit-Zeile FF @ 18:18:46Z |
+| Hook-Nebenfix | — | Wave-21 79→78 + Inventory-Laufzeit-Sync vermerkt (Drift-Hinweis) |
+| Offene Punkte | inkl. Sync | Sync gestrichen; **sechs** verbleibend, angeführt von Key-Rotation 🔴 |
 
-### 8.1–8.4 Archiv
-0.3.2→0.3.3 (Selbstanker) · 0.3.1→0.3.2 (Remote-Sync) · 0.3.0→0.3.1 (Fixtures/SSOT) · 0.2.9→0.3.0 (erster Timer-Exit-0).
+### 8.1–8.5 Archiv
+0.3.3→0.3.4 (SP5/PS) · 0.3.2→0.3.3 (Selbstanker) · 0.3.1→0.3.2 (Remote-Sync) · 0.3.0→0.3.1 (Fixtures/SSOT) · 0.2.9→0.3.0 (erster Timer-Exit-0).
 
 ---
 
 ## 9. Nächste Schritte (Priorität)
 
-1. **Wächter Serienpunkt 6** (nächster 03:45-Timer) — direkt in §3.4 nachbuchen.
-2. **PolySentinel-Gate** (Fail-Closed) — B6 venv + B7 `[OPS]` — einziger 🔴-Satelliten-Pfad.
-3. **Key-Rotation** — Beleg liefern oder Termin an B4 belassen (nicht als ✅ führen).
-4. **m2** Beobachtung abschließen.
-5. **Backlog:** Dashboard-FP, `alpha-pipeline` Scope, Track-12 Exit-Inventur, Option-2 Summary-Datei implementieren.
+1. **Key-Rotation** 🔴 — Rotation + Beleg (Datum, Scope, Backup-Nachweis); sonst Termin an B4 belassen (nicht als ✅ führen).
+2. **B6** venv/Deploy-Gate — `pytest`, Gate≠Startpfad, Fixture Z.5–6.
+3. **B7** `[OPS]`-Verdrahtung — Exit 2 muss Journal-`[OPS]` erzeugen; `RestartPreventExitStatus`-Risiko.
+4. **Wächter Serienpunkt 6** (nächster 03:45-Timer) — direkt in §3.4 nachbuchen.
+5. **m2** EXEC-Repeater — Beobachtung abschließen.
+6. **Backlog:** Dashboard-FP · `alpha-pipeline` Scope · Track-12 Exit-Inventur · Option-2 Summary-Datei · Wave-21-Zähler-Drift (warum 79 gebucht?).
 
-**Erledigt (quittiert):** Fixtures · SSOT-Anker · Remote-Sync · Selbstanker · Tip `3c7ebc1b` · Wächter SP5 · PolySentinel Lauf-HEAD · Zero-Trust SSOT · Repo-Sync 0.3.4.
+**Erledigt (quittiert):** Fixtures · SSOT-Anker · Remote-Sync · Selbstanker · Tip `3c7ebc1b` (Laufzeit) · Wächter SP5 · PolySentinel Lauf-HEAD · Zero-Trust SSOT · Repo-Sync 0.3.4 (`b8f66d9d` Docs-Tip) · Sync-Einspielung FF 18:18:46Z.
+
+~~Sync~~ — gestrichen (offen → erledigt).
 
 ---
 
-*SSOT 0.3.4 · Hub `3c7ebc1b` · NewsAgent Lauf `677c49f` · PolySentinel Lauf `66be8def` · Zero-Trust SSOT ✅ · Key-Rotation 🔴 · kein Abschluss ohne Beleg.*
+*SSOT 0.3.5 · Laufzeit-Anker Hub `3c7ebc1b` · Docs-Tip `b8f66d9d` · NewsAgent Lauf `677c49f` · PolySentinel Lauf `66be8def` · Zero-Trust SSOT ✅ · Key-Rotation 🔴 · kein Abschluss ohne Beleg.*
