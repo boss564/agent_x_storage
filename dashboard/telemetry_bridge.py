@@ -720,6 +720,101 @@ def collect_log(path: Path = LOG_PATH, lines: int = LOG_TAIL_LINES) -> dict[str,
 # 4. Alerts + Charter
 # ---------------------------------------------------------------------------
 
+def _porcelain_untracked_rel(line: str) -> str | None:
+    """Extrahiert den Relativpfad aus einer ``?? path``-Porcelain-Zeile."""
+    if not line.startswith("??"):
+        return None
+    rel = line[2:].lstrip().rstrip("/")
+    return rel or None
+
+
+def _untracked_entry_has_own_git(repo_root: Path, rel: str) -> bool:
+    """
+    True, wenn ``repo_root/rel`` ein eigenes Git-Anker (``.git``-Dir oder
+    ``gitdir:``-Datei) ist — ohne Symlinks nach aussen zu folgen.
+
+    ``?? X/`` in porcelain sieht fuer eingebettete Repos und normale Ordner
+    gleich aus; nur diese Pruefung trennt REPO_NESTED von REPO_UNTRACKED.
+    """
+    if not rel or rel.startswith("/") or ".." in Path(rel).parts:
+        return False
+    root = Path(repo_root)
+    candidate = root / rel
+    # Symlink am Eintrag selbst: nicht folgen (sonst Z → /tmp/repo-mit-git).
+    try:
+        if candidate.is_symlink():
+            return False
+    except OSError:
+        return False
+    if not candidate.is_dir():
+        return False
+    # Unter Root halten (kein Escape ueber aufgeloeste Zwischenstuecke).
+    try:
+        candidate.resolve(strict=False).relative_to(root.resolve(strict=False))
+    except (ValueError, OSError, RuntimeError):
+        return False
+    marker = candidate / ".git"
+    # Ordner ODER Datei (Worktree/Submodul: ``gitdir: …``).
+    try:
+        return marker.is_dir() or marker.is_file()
+    except OSError:
+        return False
+
+
+def _registered_nested_paths(repos: Iterable[RepoStatus]) -> set[Path]:
+    """Absolute Pfade aller Registry-Eintraege mit state=nested."""
+    out: set[Path] = set()
+    for r in repos:
+        if r.state != "nested":
+            continue
+        try:
+            out.add(Path(r.path).resolve(strict=False))
+        except (OSError, RuntimeError):
+            out.add(Path(r.path))
+    return out
+
+
+def _append_untracked_nested_alerts(
+    alerts: list[dict[str, Any]],
+    repo: RepoStatus,
+    nested_registered: set[Path],
+    *,
+    emit_plain_untracked: bool = False,
+) -> None:
+    """Klassifiziert ``??``-Zeilen: eigenes .git → REPO_NESTED, sonst optional UNTRACKED."""
+    plain = 0
+    root = Path(repo.path)
+    for line in repo.changed_files:
+        rel = _porcelain_untracked_rel(line)
+        if rel is None:
+            continue
+        if _untracked_entry_has_own_git(root, rel):
+            try:
+                abs_nested = (root / rel).resolve(strict=False)
+            except (OSError, RuntimeError):
+                abs_nested = root / rel
+            if abs_nested in nested_registered:
+                continue
+            alerts.append({
+                "severity": "info",
+                "code": "REPO_NESTED",
+                "source": rel,
+                "message": (
+                    f"{rel}: unregistered nested Git "
+                    f"(unter {repo.name})"
+                ),
+            })
+        elif emit_plain_untracked:
+            plain += 1
+    if emit_plain_untracked and plain:
+        alerts.append({
+            "severity": "info",
+            "code": "REPO_UNTRACKED",
+            "source": repo.name,
+            "message": f"{repo.name}: {plain} untracked Datei(en)",
+        })
+
+
 def build_alerts(repos: Iterable[RepoStatus], agents: Iterable[AgentStatus],
                  log: dict[str, Any]) -> list[dict[str, Any]]:
     """
@@ -728,8 +823,10 @@ def build_alerts(repos: Iterable[RepoStatus], agents: Iterable[AgentStatus],
     kein CRITICAL: eine Luecke ist kein Ausfall.
     """
     alerts: list[dict[str, Any]] = []
+    repo_list = list(repos)
+    nested_registered = _registered_nested_paths(repo_list)
 
-    for repo in repos:
+    for repo in repo_list:
         if repo.state == "not_found":
             alerts.append({
                 "severity": "info",
@@ -767,13 +864,14 @@ def build_alerts(repos: Iterable[RepoStatus], agents: Iterable[AgentStatus],
                 "source": repo.name,
                 "message": f"{repo.name}: {repo.changed_count} uncommitted Aenderung(en)",
             })
+            # Auch bei DIRTY: eingebettete Repos unter ?? melden (sonst Blindheit
+            # sobald parallel getrackte Dateien geaendert sind).
+            _append_untracked_nested_alerts(alerts, repo, nested_registered)
         elif repo.health == "WARN":
-            alerts.append({
-                "severity": "info",
-                "code": "REPO_UNTRACKED",
-                "source": repo.name,
-                "message": f"{repo.name}: {repo.changed_count} untracked Datei(en)",
-            })
+            # WARN = nur ??-Eintraege. Eingebettete Repos (X/.git) sind NESTED,
+            # keine UNTRACKED — sonst luegt der Alert-Typ (Befund 2026-10-01).
+            _append_untracked_nested_alerts(alerts, repo, nested_registered,
+                                           emit_plain_untracked=True)
 
     for agent in agents:
         if agent.state == "failed":

@@ -269,6 +269,110 @@ class ProcessDetectionTests(unittest.TestCase):
         self.assertEqual(d["detected_by"], "systemd")
 
 
+class NestedUntrackedAlertTests(unittest.TestCase):
+    """Sabotage: ?? X/ mit/ohne .git — Alert-Typ muss trennen (Befund 2026-10-01)."""
+
+    def setUp(self) -> None:
+        self.tmp = Path(tempfile.mkdtemp(prefix="tbnested-"))
+        self.hub = self.tmp / "hub"
+        self.hub.mkdir()
+        self.assertEqual(_git(["init", "-q"], self.hub), 0)
+        _git(["config", "user.email", "t@t"], self.hub)
+        _git(["config", "user.name", "t"], self.hub)
+        (self.hub / "a.txt").write_text("a")
+        _git(["add", "-A"], self.hub)
+        _git(["commit", "-qm", "init"], self.hub)
+
+    def tearDown(self) -> None:
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _hub_warn(self, changed: list[str]) -> tb.RepoStatus:
+        return tb.RepoStatus(
+            name="hub", path=str(self.hub), role="hub", state="ok",
+            health="WARN", dirty=True,
+            changed_files=changed, changed_count=len(changed),
+        )
+
+    def test_untracked_dir_with_git_init_is_nested(self) -> None:
+        """Fall 1: mkdir X && git init → REPO_NESTED (nicht UNTRACKED)."""
+        x = self.hub / "X"
+        x.mkdir()
+        self.assertEqual(_git(["init", "-q"], x), 0)
+        alerts = tb.build_alerts([self._hub_warn(["?? X/"])], [], {"error": None})
+        codes = [a["code"] for a in alerts]
+        self.assertIn("REPO_NESTED", codes)
+        self.assertNotIn("REPO_UNTRACKED", codes)
+        nested = next(a for a in alerts if a["code"] == "REPO_NESTED")
+        self.assertEqual(nested["severity"], "info")
+        self.assertIn("unregistered", nested["message"])
+        self.assertEqual(nested["source"], "X")
+
+    def test_untracked_dir_without_git_stays_untracked(self) -> None:
+        """Fall 2: mkdir Y && touch Y/a → weiter REPO_UNTRACKED."""
+        y = self.hub / "Y"
+        y.mkdir()
+        (y / "a").write_text("a")
+        alerts = tb.build_alerts([self._hub_warn(["?? Y/"])], [], {"error": None})
+        codes = [a["code"] for a in alerts]
+        self.assertEqual(codes, ["REPO_UNTRACKED"])
+
+    def test_gitdir_file_pointer_is_nested(self) -> None:
+        """Fall 3: X/.git als Datei (gitdir: …) → REPO_NESTED."""
+        real = self.tmp / "real.git"
+        real.mkdir()
+        subprocess.run(["git", "init", "-q", "--bare", str(real)], check=True)
+        x = self.hub / "X"
+        x.mkdir()
+        (x / ".git").write_text(f"gitdir: {real}\n")
+        alerts = tb.build_alerts([self._hub_warn(["?? X/"])], [], {"error": None})
+        self.assertIn("REPO_NESTED", [a["code"] for a in alerts])
+        self.assertNotIn("REPO_UNTRACKED", [a["code"] for a in alerts])
+
+    def test_symlink_out_is_not_followed(self) -> None:
+        """Fall 4: Symlink Z → externes Repo → kein NESTED."""
+        outside = self.tmp / "outside"
+        outside.mkdir()
+        self.assertEqual(_git(["init", "-q"], outside), 0)
+        z = self.hub / "Z"
+        z.symlink_to(outside)
+        alerts = tb.build_alerts([self._hub_warn(["?? Z"])], [], {"error": None})
+        # Symlink nicht folgen: entweder UNTRACKED oder nichts Nested.
+        self.assertNotIn("REPO_NESTED", [a["code"] for a in alerts])
+        self.assertIn("REPO_UNTRACKED", [a["code"] for a in alerts])
+
+    def test_registry_nested_no_double_alert(self) -> None:
+        """Fall 5: X schon als nested in Registry → genau 1 Alert."""
+        x = self.hub / "X"
+        x.mkdir()
+        self.assertEqual(_git(["init", "-q"], x), 0)
+        nested = tb.RepoStatus(
+            name="X", path=str(x), role="package", state="nested",
+            health="NESTED", dirty=None,
+        )
+        hub = self._hub_warn(["?? X/"])
+        alerts = tb.build_alerts([hub, nested], [], {"error": None})
+        nested_alerts = [a for a in alerts if a["code"] == "REPO_NESTED"]
+        self.assertEqual(len(nested_alerts), 1, alerts)
+        self.assertNotIn("REPO_UNTRACKED", [a["code"] for a in alerts])
+        self.assertEqual(nested_alerts[0]["source"], "X")
+
+    def test_dirty_parent_still_reports_nested_untracked(self) -> None:
+        """DIRTY + ?? X/.git → REPO_DIRTY und REPO_NESTED (kein Blindheit)."""
+        x = self.hub / "X"
+        x.mkdir()
+        self.assertEqual(_git(["init", "-q"], x), 0)
+        hub = tb.RepoStatus(
+            name="hub", path=str(self.hub), role="hub", state="ok",
+            health="DIRTY", dirty=True,
+            changed_files=[" M a.txt", "?? X/"], changed_count=2,
+        )
+        alerts = tb.build_alerts([hub], [], {"error": None})
+        codes = [a["code"] for a in alerts]
+        self.assertIn("REPO_DIRTY", codes)
+        self.assertIn("REPO_NESTED", codes)
+        self.assertNotIn("REPO_UNTRACKED", codes)
+
+
 class BareAlertTests(unittest.TestCase):
     """Alerts fuer die neuen Repo-Zustaende."""
 
