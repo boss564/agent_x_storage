@@ -1558,22 +1558,24 @@ im Book-Update-Fill; Mutationstests rot bei Rückdrehen. Suite 96/96.
 
 ### Folge-Ticket — PeakEvent Persistenz + inkrementeller Ceiling (Befunde 3+4)
 
-**Status:** offen (nicht in `52fded7a`; eigener Commit).  
-**Zusammen lösen** — sonst: Engine-Neustart mit wiederhergestelltem
-`peak_equity` aber leerem `_peak_events` → fälschlich
-`peak_equity.ceiling.unwitnessed`.
+**Status:** erledigt — chirurgischer Merge gegen Kanon (`shadow_replay.PeakCeilingChecker`
+via `JournalReplay`, nicht Overlay-`ShadowReplay`/`apply_fill`; Persistenz
+`SCHEMA_VERSION` 3→4 + `peak_events`).
 
 | # | Thema | Soll |
 |---|--------|------|
-| 3 | Audit-Aufwand | Eigenen Cursor für geprüfte PeakEvents; Journal-Stand beim Ceiling-Fold weiterverwenden (kein O(Events×Journal) pro Tick) |
-| 4 | Persistenz | `_peak_events` speichern/laden (heute schreibt `persistence.py` nur `peak_equity`, **kein** Engine-Reload-Pfad) |
+| 3 | Audit-Aufwand | `PeakCeilingChecker`: Journal-Cursor + Equity-Memo; Engine hält Instanz in `audit_shadow_state` |
+| 4 | Persistenz | `write_peak_event` / `read_peak_events`, `TelemetrySink(peak_events_provider=…)`, `engine.restore_peak_events` |
 
-**Fester Hinweis:** Derzeit kein Fehlalarm nach Neustart, weil es keinen
-Lade-Pfad gibt, der den Engine-Zustand aus der DB wieder aufbaut. Wer einen
-solchen Pfad einführt, **muss vorher** 3+4 geschlossen haben.
+**Pflicht eingelöst:** `test_peak_events_reload_clean_audit` — Reload ohne
+`ceiling.unwitnessed`.
+
+**Fester Hinweis (historisch):** Load-Pfad darf erst nach 3+4 existieren — jetzt
+gedeckt. Wer den Hub-Reload verdrahtet, nutzt `restore_peak_events` + Journal/
+Marks/Portfolio-Rekonstruktion.
 
 **Nebenbei (niedrig, kein Blocker):** `test_book_update_fill_peak_uses_mark_cache`
 nutzt bewusst gekreuztes Buch (Bid > Ask), um Mid≠Ask zu erzwingen — bricht,
 falls Snapshots solche Bücher später ablehnen. Tests greifen Interna
-(`_journal_auditor`, `_order_book`, `matcher.match`) an — Refactor-empfindlich,
-kein Spec-Verstoß.
+(`_journal_auditor`, `_order_book`, `matcher.match`, `_ceiling_checker`) an —
+Refactor-empfindlich, kein Spec-Verstoß.

@@ -15,7 +15,7 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass
 from decimal import Decimal
-from typing import Any, Iterable, Mapping, Optional
+from typing import Any, Iterable, Mapping, Optional, Sequence
 
 from order_execution_engine.models import (
     DEFAULT_VIRTUAL_CASH,
@@ -333,6 +333,120 @@ def diff_audit_state(
     return tuple(findings)
 
 
+class PeakCeilingChecker:
+    """Zustandsbehafteter Ceiling-Pruefer mit Journal-Cursor (Befund 3).
+
+    Haelt den ``JournalReplay``-Fold (unabhaengige Buchhaltung, nicht
+    ``VirtualPortfolio.apply_fill``) und memoisiert die Replay-Equity je
+    geprueftem PeakEvent. Kosten pro Audit-Tick: O(neue Journaleintraege +
+    neue PeakEvents) statt O(Events × Journal).
+
+    Vertrag (append-only, Engine-Garantie):
+        - journal waechst ausschliesslich am Ende; Eintraege aendern sich nie.
+        - peak_events waechst ausschliesslich am Ende; journal_pos ist monoton
+          nicht-fallend (journal_pos = len(journal) zum Anhebungszeitpunkt).
+        - start_balance ist ueber die Lebensdauer konstant.
+
+    Memoisiert wird die Replay-Equity (nicht das Bool), darum bleiben
+    Findings tick-uebergreifend reproduzierbar und ``tolerance`` darf pro
+    Aufruf wechseln. Defensivpfad bei journal_pos hinter dem Cursor:
+    Einzelfold per frischem ``JournalReplay``.
+    """
+
+    def __init__(self, start_balance: Decimal = DEFAULT_VIRTUAL_CASH) -> None:
+        self._start_balance = start_balance
+        self._reset_fold()
+
+    def _reset_fold(self) -> None:
+        self._replay = JournalReplay(start_balance=self._start_balance)
+        self._journal_cursor = 0
+        self._equity_memo: dict[int, Decimal] = {}
+
+    @property
+    def journal_cursor(self) -> int:
+        """Anzahl bereits gefalteter Journaleintraege."""
+        return self._journal_cursor
+
+    @property
+    def checked_events(self) -> int:
+        """Anzahl memoisierte (journalgedeckt gepruefte) PeakEvents."""
+        return len(self._equity_memo)
+
+    def reset(self) -> None:
+        """Setzt Fold und Memoisierung zurueck (z. B. nach Engine-Reload)."""
+        self._reset_fold()
+
+    def _advance(
+        self,
+        journal: Sequence[ExecutedFillEvent],
+        target: int,
+    ) -> tuple[AuditFinding, ...]:
+        """Faltet Journal vom Cursor bis target; Findings bei Fold-Fehlern."""
+        if target < self._journal_cursor:
+            return ()
+        chunk = journal[self._journal_cursor:target]
+        fold_findings, consumed = self._replay.apply_events(chunk)
+        self._journal_cursor += consumed
+        return fold_findings
+
+    def check(
+        self,
+        peak_events: Iterable[PeakEvent],
+        journal: Sequence[ExecutedFillEvent],
+        tolerance: Decimal = Decimal("0"),
+        live_peak: Decimal | None = None,
+    ) -> tuple[AuditFinding, ...]:
+        """Prueft PeakEvents inkrementell; optional Unwitnessed-Deckung."""
+        events = tuple(peak_events)
+        journal_len = len(journal)
+        findings: list[AuditFinding] = []
+        for event in events:
+            path = f"peak_equity.ceiling[{event.seq}]"
+            if event.journal_pos > journal_len:
+                findings.append(AuditFinding(
+                    f"{path}.journal_pos",
+                    str(event.journal_pos),
+                    f"journal_len={journal_len}",
+                ))
+                continue
+            replay_equity = self._equity_memo.get(event.seq)
+            if replay_equity is None:
+                if event.journal_pos < self._journal_cursor:
+                    # Defensiv: Cursor kann nicht zurueck — Einzelfold.
+                    solo = JournalReplay(start_balance=self._start_balance)
+                    fold_findings, _ = solo.apply_events(
+                        journal[: event.journal_pos],
+                    )
+                    if fold_findings:
+                        findings.extend(fold_findings)
+                        continue
+                    replay_equity = solo.equity(dict(event.marks))
+                else:
+                    fold_findings = self._advance(journal, event.journal_pos)
+                    if fold_findings:
+                        findings.extend(fold_findings)
+                        continue
+                    replay_equity = self._replay.equity(dict(event.marks))
+                self._equity_memo[event.seq] = replay_equity
+            if event.peak_equity > replay_equity + tolerance:
+                findings.append(AuditFinding(
+                    path,
+                    format(event.peak_equity, "f"),
+                    format(replay_equity, "f"),
+                ))
+        if live_peak is not None:
+            witnessed = self._start_balance
+            if events:
+                witnessed = max(witnessed, events[-1].peak_equity)
+            if live_peak > witnessed + tolerance:
+                findings.append(AuditFinding(
+                    "peak_equity.ceiling.unwitnessed",
+                    format(live_peak, "f"),
+                    format(witnessed, "f"),
+                ))
+        return tuple(findings)
+
+
 def check_peak_ceiling(
     peak_events: Iterable[PeakEvent],
     journal: tuple[ExecutedFillEvent, ...] | list[ExecutedFillEvent],
@@ -352,47 +466,18 @@ def check_peak_ceiling(
     Gedeckt heisst ``live_peak <= max(start_balance, letztes PeakEvent.peak_equity)
     + tolerance``. Ohne Events ist die Decke ``start_balance``.
 
+    Implementierung (Befund 3): ein einziger inkrementeller Fold pro Aufruf
+    ueber ``PeakCeilingChecker`` — O(Events + Journal) statt O(Events × Journal).
+    Aufrufer mit wiederholten Audits (Engine-Tick) sollen eine
+    ``PeakCeilingChecker``-Instanz halten und wiederverwenden.
+
     Returns:
         Findings mit Pfad ``peak_equity.ceiling[<seq>]`` bzw.
         ``peak_equity.ceiling.unwitnessed`` (leer = ok).
     """
-    events = tuple(peak_events)
-    journal_tuple = tuple(journal)
-    findings: list[AuditFinding] = []
-    for event in events:
-        path = f"peak_equity.ceiling[{event.seq}]"
-        if event.journal_pos > len(journal_tuple):
-            findings.append(AuditFinding(
-                f"{path}.journal_pos",
-                str(event.journal_pos),
-                f"journal_len={len(journal_tuple)}",
-            ))
-            continue
-        replayed = JournalReplay(start_balance=start_balance)
-        fold_findings, _ = replayed.apply_events(
-            journal_tuple[: event.journal_pos],
-        )
-        if fold_findings:
-            findings.extend(fold_findings)
-            continue
-        replay_equity = replayed.equity(dict(event.marks))
-        if event.peak_equity > replay_equity + tolerance:
-            findings.append(AuditFinding(
-                path,
-                format(event.peak_equity, "f"),
-                format(replay_equity, "f"),
-            ))
-    if live_peak is not None:
-        witnessed = start_balance
-        if events:
-            witnessed = max(witnessed, events[-1].peak_equity)
-        if live_peak > witnessed + tolerance:
-            findings.append(AuditFinding(
-                "peak_equity.ceiling.unwitnessed",
-                format(live_peak, "f"),
-                format(witnessed, "f"),
-            ))
-    return tuple(findings)
+    return PeakCeilingChecker(start_balance=start_balance).check(
+        peak_events, journal, tolerance=tolerance, live_peak=live_peak,
+    )
 
 
 # Rueckwaerts-Kompat: Snapshot-Diff ohne Peak-/PnL-Semantik.

@@ -24,7 +24,7 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from decimal import Decimal
-from typing import Callable, Optional, Any
+from typing import Callable, Iterable, Optional, Any
 
 from pydantic import BaseModel, ConfigDict
 
@@ -775,6 +775,11 @@ class ShadowExecutionEngine:
         # Inkrementelles Journal-Audit (Cursor + Fold-Zustand)
         self._journal_auditor: Optional[Any] = None  # JournalReplay, lazy
         self._audited_upto: int = 0
+        # Befund 3: Ceiling-Fold + Equity-Memo ueber Audit-Ticks
+        from order_execution_engine.shadow_replay import PeakCeilingChecker
+        self._ceiling_checker = PeakCeilingChecker(
+            start_balance=self.portfolio.start_balance,
+        )
 
     def fills_for(self, order_id: uuid.UUID) -> list[FillResult]:
         """Liefert persistierbare Fills zu einer Order (Test-/Sink-Seam)."""
@@ -809,6 +814,29 @@ class ShadowExecutionEngine:
     def peak_events(self) -> tuple[PeakEvent, ...]:
         """Unveränderliche Kopie des PeakEvent-Stroms (Stufe 2)."""
         return tuple(self._peak_events)
+
+    def restore_peak_events(self, events: Iterable[PeakEvent]) -> int:
+        """Stellt den PeakEvent-Strom nach Reload aus der Persistenz her.
+
+        Nur auf leerem Strom; seq lueckenlos ab 0. Setzt den
+        ``PeakCeilingChecker`` zurueck (Befund 4).
+        """
+        self.guard.assert_safe()
+        loaded = list(events)
+        if self._peak_events:
+            raise ValueError(
+                "restore_peak_events nur auf leerem Strom (Reload-Pfad); "
+                "live Anhebungen bleiben Single-Writer-Sache (_record_peak)."
+            )
+        for expected, event in enumerate(loaded):
+            if event.seq != expected:
+                raise ValueError(
+                    f"PeakEvent-Strom nicht lückenlos: erwartet seq={expected}, "
+                    f"erhalten seq={event.seq}."
+                )
+        self._peak_events.extend(loaded)
+        self._ceiling_checker.reset()
+        return len(loaded)
 
     @property
     def last_expired_orders(self) -> tuple[PaperOrder, ...]:
@@ -893,7 +921,6 @@ class ShadowExecutionEngine:
             AuditReport,
             JournalReplay,
             ShadowAuditDivergence,
-            check_peak_ceiling,
             diff_audit_state,
         )
 
@@ -933,10 +960,9 @@ class ShadowExecutionEngine:
             replay_peak_equity=auditor.peak_equity,
             previous_live_peak=auditor.last_live_peak,
         )
-        peak_findings = check_peak_ceiling(
+        peak_findings = self._ceiling_checker.check(
             self._peak_events,
             journal,
-            start_balance=self.portfolio.start_balance,
             tolerance=peak_tolerance,
             live_peak=live_peak,
         )

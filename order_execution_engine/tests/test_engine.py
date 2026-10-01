@@ -887,6 +887,106 @@ def test_book_update_fill_peak_uses_mark_cache() -> None:
     print("OK test_book_update_fill_peak_uses_mark_cache")
 
 
+def _engine_with_two_peaks() -> ShadowExecutionEngine:
+    """Engine mit 2 Journaleintraegen und mehreren PeakEvents (Befund-3-Fixture)."""
+    eng = ShadowExecutionEngine(risk_config=RiskConfig(max_order_size_shares=Decimal("200")))
+    sig = SignalPayload(target_token_id="0xtokenA", market_id="mkt-1",
+                        direction=Direction.UP, confidence=Decimal("70"))
+    eng.on_signal(sig, _book())
+    eng.on_book_update(_snapshot(
+        asks=(OrderBookLevel(Decimal("0.80"), Decimal("200")),),
+        bids=(OrderBookLevel(Decimal("0.79"), Decimal("200")),),
+    ))
+    eng.on_signal(sig, _snapshot(
+        asks=(OrderBookLevel(Decimal("0.80"), Decimal("200")),),
+        bids=(OrderBookLevel(Decimal("0.79"), Decimal("200")),),
+    ))
+    eng.on_book_update(_snapshot(
+        asks=(OrderBookLevel(Decimal("0.86"), Decimal("200")),),
+        bids=(OrderBookLevel(Decimal("0.85"), Decimal("200")),),
+    ))
+    return eng
+
+
+def test_peak_ceiling_single_fold() -> None:
+    """Befund 3: Ein Ceiling-Aufruf faltet das Journal genau einmal."""
+    from order_execution_engine.shadow_replay import JournalReplay, check_peak_ceiling
+    eng = _engine_with_two_peaks()
+    journal = eng.execution_journal()
+    events = eng.peak_events()
+    assert len(journal) == 2 and len(events) >= 2
+
+    original = JournalReplay._fold
+    calls = 0
+
+    def spy(self, event):
+        nonlocal calls
+        calls += 1
+        return original(self, event)
+
+    JournalReplay._fold = spy  # type: ignore[method-assign]
+    try:
+        findings = check_peak_ceiling(
+            events, journal, start_balance=eng.portfolio.start_balance,
+        )
+    finally:
+        JournalReplay._fold = original  # type: ignore[method-assign]
+    assert not findings, findings
+    # Inkrementeller Einzelfold: len(journal) Buchungen — nicht sum(journal_pos).
+    assert calls == len(journal), calls
+    print("OK test_peak_ceiling_single_fold")
+
+
+def test_ceiling_checker_reused_across_audits() -> None:
+    """Befund 3: Zweiter Audit-Tick verwendet Cursor + Memo wieder."""
+    from order_execution_engine.shadow_replay import PeakCeilingChecker
+    eng = _engine_with_two_peaks()
+    journal_len = len(eng.execution_journal())
+
+    first = eng.audit_shadow_state()
+    assert first.ok, first.findings
+    assert eng._ceiling_checker.journal_cursor == journal_len
+    assert eng._ceiling_checker.checked_events == len(eng.peak_events())
+
+    advances = 0
+    original = PeakCeilingChecker._advance
+
+    def spy(self, journal, target):
+        nonlocal advances
+        advances += 1
+        return original(self, journal, target)
+
+    PeakCeilingChecker._advance = spy  # type: ignore[method-assign]
+    try:
+        second = eng.audit_shadow_state()
+    finally:
+        PeakCeilingChecker._advance = original  # type: ignore[method-assign]
+    assert second.ok, second.findings
+    assert advances == 0
+    print("OK test_ceiling_checker_reused_across_audits")
+
+
+def test_restore_peak_events_validation() -> None:
+    """Befund 4: Restore nur lueckenlos ab 0 auf leerem Strom."""
+    from order_execution_engine.models import PeakEvent
+    eng = ShadowExecutionEngine()
+    ev0 = PeakEvent(seq=0, marks={}, journal_pos=0, peak_equity=Decimal("10001"))
+    ev2 = PeakEvent(seq=2, marks={}, journal_pos=0, peak_equity=Decimal("10002"))
+    try:
+        eng.restore_peak_events([ev2])
+        raise AssertionError("seq-Lücke hätte ValueError werfen müssen")
+    except ValueError:
+        pass
+    assert eng.restore_peak_events([ev0]) == 1
+    try:
+        eng.restore_peak_events([ev0])
+        raise AssertionError("Restore auf belegtem Strom hätte ValueError werfen müssen")
+    except ValueError:
+        pass
+    assert eng.peak_events() == (ev0,)
+    print("OK test_restore_peak_events_validation")
+
+
 if __name__ == "__main__":
     for fn in list(globals().values()):
         if callable(fn) and fn.__name__.startswith("test_"):

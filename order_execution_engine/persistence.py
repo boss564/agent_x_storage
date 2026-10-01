@@ -31,6 +31,7 @@ from pydantic import BaseModel
 from order_execution_engine.models import (
     FillResult,
     OrderStatus,
+    PeakEvent,
     RejectReason,
     VirtualPortfolio,
 )
@@ -38,7 +39,7 @@ from order_execution_engine.shadow_execution_engine import TelemetryRecord
 
 _LOG = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 _USER_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
 
 
@@ -177,6 +178,13 @@ class SQLiteShadowStorage:
         peak_equity TEXT NOT NULL,
         positions_json TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS peak_events (
+        seq INTEGER PRIMARY KEY,
+        raised_at TEXT NOT NULL,
+        journal_pos INTEGER NOT NULL,
+        peak_equity TEXT NOT NULL,
+        marks_json TEXT NOT NULL
+    );
     """
 
     # Migration v1 -> v2 (F1, VM3). Drei Spalten, zwei Backfill-Semantiken.
@@ -223,6 +231,7 @@ class SQLiteShadowStorage:
         self._conn.executescript(self._DDL)
         self._migrate_v2()
         self._migrate_v3()
+        self._migrate_v4()
         self._conn.execute(
             "INSERT OR REPLACE INTO schema_meta (key, value) VALUES ('schema_version', ?)",
             (str(SCHEMA_VERSION),),
@@ -267,6 +276,24 @@ class SQLiteShadowStorage:
             if col in fill_cols:
                 continue
             self._conn.execute(stmt)
+
+    def _migrate_v4(self) -> None:
+        """Bringt eine v3-Datei auf v4: peak_events-Tabelle (Befund 4).
+
+        CREATE TABLE IF NOT EXISTS ist idempotent; DDL oben deckt Neuanlage ab.
+        Hier nur fuer explizite Migration alter Dateien nach Schema-Bump.
+        """
+        self._conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS peak_events (
+                seq INTEGER PRIMARY KEY,
+                raised_at TEXT NOT NULL,
+                journal_pos INTEGER NOT NULL,
+                peak_equity TEXT NOT NULL,
+                marks_json TEXT NOT NULL
+            )
+            """
+        )
 
     def latest_decision_seq(self) -> int:
         """Höchster persistierter `decision_seq` (0, wenn keiner existiert).
@@ -436,6 +463,59 @@ class SQLiteShadowStorage:
             )
             self._conn.commit()
 
+    def write_peak_event(self, event: PeakEvent) -> None:
+        """Persistiert einen PeakEvent-Zeugen (append-only, seq als PK).
+
+        Decimal als TEXT, Marks als JSON mit TEXT-Werten. Identischer
+        Re-Drain wird toleriert; Inhaltwechsel unter gleicher seq → ValueError.
+        """
+        marks_json = json.dumps(
+            {k: _dec_to_text(v) for k, v in sorted(event.marks.items())}
+        )
+        payload = (
+            event.raised_at.isoformat(),
+            event.journal_pos,
+            _dec_to_text(event.peak_equity),
+            marks_json,
+        )
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT raised_at, journal_pos, peak_equity, marks_json"
+                " FROM peak_events WHERE seq = ?",
+                (event.seq,),
+            ).fetchone()
+            if row is not None:
+                if tuple(row) != payload:
+                    raise ValueError(
+                        f"peak_events seq={event.seq} bereits mit anderem Inhalt "
+                        "belegt (append-only-Verletzung)."
+                    )
+                return
+            self._conn.execute(
+                "INSERT INTO peak_events (seq, raised_at, journal_pos,"
+                " peak_equity, marks_json) VALUES (?, ?, ?, ?, ?)",
+                (event.seq, *payload),
+            )
+            self._conn.commit()
+
+    def read_peak_events(self) -> list[PeakEvent]:
+        """Laedt den PeakEvent-Strom (ORDER BY seq) — Reload-Pfad."""
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT seq, raised_at, journal_pos, peak_equity, marks_json"
+                " FROM peak_events ORDER BY seq"
+            ).fetchall()
+        return [
+            PeakEvent(
+                seq=seq,
+                raised_at=datetime.fromisoformat(raised_at),
+                journal_pos=journal_pos,
+                peak_equity=_text_to_dec(peak_equity),
+                marks={k: _text_to_dec(v) for k, v in json.loads(marks_json).items()},
+            )
+            for seq, raised_at, journal_pos, peak_equity, marks_json in rows
+        ]
+
     def read_fills(self, order_id: str) -> list[tuple[str, str, str, str]]:
         """Liest Fill-Beträge zurück (Decimal-TEXT, exakt) — für Zero-Sum-Prüfung.
 
@@ -516,7 +596,8 @@ class TelemetrySink:
     persistiert).
     """
 
-    def __init__(self, storage: ShadowStorage, telemetry, fills_provider=None) -> None:
+    def __init__(self, storage: ShadowStorage, telemetry, fills_provider=None,
+                 peak_events_provider=None) -> None:
         """Initialisiert die Senke.
 
         Args:
@@ -524,18 +605,27 @@ class TelemetrySink:
             telemetry: TelemetryLogger-Instanz der Engine.
             fills_provider: Optional; Callable(order_id) -> Iterable[FillResult],
                 liefert Fills zu einer Order fuer die Persistenz.
+            peak_events_provider: Optional; Callable() -> Iterable[PeakEvent],
+                liefert den append-only PeakEvent-Strom (z. B.
+                engine.peak_events) fuer die Zeugen-Persistenz (Befund 4).
         """
         self._storage = storage
         self._telemetry = telemetry
         self._fills_provider = fills_provider
+        self._peak_events_provider = peak_events_provider
         self._drained = 0
+        self._peaks_drained = 0
         self._fill_rows_written: set[tuple[str, int]] = set()
 
     def drain(self) -> int:
         """Persistiert alle neuen Telemetrie-Einträge (idempotent).
 
+        Zusaetzlich werden — sofern ein peak_events_provider angeschlossen
+        ist — neue PeakEvent-Zeugen append-only persistiert. Rueckgabewert
+        zaehlt nur Telemetrie (Bestandsvertrag).
+
         Returns:
-            Anzahl neu persistierter Einträge.
+            Anzahl neu persistierter Telemetrie-Einträge.
         """
         records = self._telemetry._records  # bewusst intern: Senke- Kopplung
         written = 0
@@ -552,4 +642,9 @@ class TelemetrySink:
                     self._fill_rows_written.add(key)
             written += 1
         self._drained += written
+        if self._peak_events_provider is not None:
+            events = list(self._peak_events_provider())
+            for event in events[self._peaks_drained:]:
+                self._storage.write_peak_event(event)
+            self._peaks_drained = len(events)
         return written

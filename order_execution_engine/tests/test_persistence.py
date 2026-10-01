@@ -71,8 +71,8 @@ def test_schema_version_and_tables() -> None:
         store = SQLiteShadowStorage.for_user(Path(tmp), "u1")
         conn = sqlite3.connect(str(Path(tmp) / "u1" / "shadow" / "shadow.db"))
         version = conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'").fetchone()[0]
-        assert version == "3"  # v3: Fold-Spalten side/token_id/market_id/decision_seq
-        for table in ("telemetry", "fills", "portfolio_snapshots"):
+        assert version == "4"  # v4: peak_events (Befund 4)
+        for table in ("telemetry", "fills", "portfolio_snapshots", "peak_events"):
             conn.execute(f"SELECT 1 FROM {table} LIMIT 0")
         # Die neuen Spalten sind da
         tcols = {r[1] for r in conn.execute("PRAGMA table_info(telemetry)")}
@@ -80,6 +80,8 @@ def test_schema_version_and_tables() -> None:
         assert {"requested_size", "decision_seq"} <= tcols
         assert "requested_size" in fcols
         assert {"side", "token_id", "market_id", "decision_seq"} <= fcols
+        pcols = {r[1] for r in conn.execute("PRAGMA table_info(peak_events)")}
+        assert {"seq", "raised_at", "journal_pos", "peak_equity", "marks_json"} <= pcols
         conn.close()
         store.close()
     print("OK test_schema_version_and_tables")
@@ -619,6 +621,119 @@ def test_replay_counts_unfilled_legacy_rows() -> None:
         assert replay.snapshot.positions["0xtokenA"] == Decimal("10")
         store.close()
     print("OK test_replay_counts_unfilled_legacy_rows")
+
+
+def test_peak_event_roundtrip() -> None:
+    """Befund 4: PeakEvents überleben Write/Load exakt (Decimal als TEXT)."""
+    from order_execution_engine.models import PeakEvent
+    with tempfile.TemporaryDirectory() as tmp:
+        store = SQLiteShadowStorage.for_user(Path(tmp), "u1")
+        ev0 = PeakEvent(seq=0, marks={"0xtokenA": Decimal("0.795")}, journal_pos=1,
+                        peak_equity=Decimal("10037.123456789012345678"))
+        ev1 = PeakEvent(seq=1, marks={"0xtokenA": Decimal("0.855"),
+                                      "0xtokenB": Decimal("0.0000000000000001")},
+                        journal_pos=2, peak_equity=Decimal("10060.5"))
+        store.write_peak_event(ev0)
+        store.write_peak_event(ev1)
+        assert store.read_peak_events() == [ev0, ev1]
+        store.close()
+    print("OK test_peak_event_roundtrip")
+
+
+def test_peak_event_rewrite_and_conflict() -> None:
+    """Befund 4: Identischer Re-Drain ok, Inhaltwechsel unter seq ist Befund."""
+    from order_execution_engine.models import PeakEvent
+    with tempfile.TemporaryDirectory() as tmp:
+        store = SQLiteShadowStorage.for_user(Path(tmp), "u1")
+        ev = PeakEvent(seq=0, marks={"t": Decimal("0.5")}, journal_pos=0,
+                       peak_equity=Decimal("10001"))
+        store.write_peak_event(ev)
+        store.write_peak_event(ev)
+        assert len(store.read_peak_events()) == 1
+        forged = ev.model_copy(update={"peak_equity": Decimal("99999")})
+        try:
+            store.write_peak_event(forged)
+            raise AssertionError("Append-only-Konflikt hätte ValueError werfen müssen")
+        except ValueError:
+            pass
+        assert store.read_peak_events()[0].peak_equity == Decimal("10001")
+        store.close()
+    print("OK test_peak_event_rewrite_and_conflict")
+
+
+def test_telemetry_sink_drains_peak_events() -> None:
+    """Befund 4: Sink persistiert PeakEvent-Zeugen inkrementell."""
+    with tempfile.TemporaryDirectory() as tmp:
+        engine = ShadowExecutionEngine(risk_config=RiskConfig(max_order_size_shares=Decimal("100")))
+        snap = MarketSnapshot(
+            token_id="0xtokenA",
+            bids=(OrderBookLevel(Decimal("0.59"), Decimal("500")),),
+            asks=(OrderBookLevel(Decimal("0.61"), Decimal("500")),),
+        )
+        sig = SignalPayload(target_token_id="0xtokenA", market_id="mkt-1",
+                            direction=Direction.UP, confidence=Decimal("80"))
+        assert engine.on_signal(sig, snap).approved
+        engine.on_book_update(MarketSnapshot(
+            token_id="0xtokenA",
+            bids=(OrderBookLevel(Decimal("0.79"), Decimal("500")),),
+            asks=(OrderBookLevel(Decimal("0.80"), Decimal("500")),),
+        ))
+        assert len(engine.peak_events()) == 1
+
+        store = SQLiteShadowStorage.for_user(Path(tmp), "u1")
+        sink = TelemetrySink(store, engine.telemetry,
+                             fills_provider=engine.fills_for,
+                             peak_events_provider=engine.peak_events)
+        sink.drain()
+        assert [e.seq for e in store.read_peak_events()] == [0]
+        sink.drain()
+        assert len(store.read_peak_events()) == 1
+        engine.on_book_update(MarketSnapshot(
+            token_id="0xtokenA",
+            bids=(OrderBookLevel(Decimal("0.85"), Decimal("500")),),
+            asks=(OrderBookLevel(Decimal("0.86"), Decimal("500")),),
+        ))
+        sink.drain()
+        assert store.read_peak_events() == list(engine.peak_events())
+        assert [e.seq for e in store.read_peak_events()] == [0, 1]
+        store.close()
+    print("OK test_telemetry_sink_drains_peak_events")
+
+
+def test_peak_events_reload_clean_audit() -> None:
+    """Befund 4 Pflicht: Reload aus DB erzeugt keine Ceiling-Befunde."""
+    with tempfile.TemporaryDirectory() as tmp:
+        eng = ShadowExecutionEngine(risk_config=RiskConfig(max_order_size_shares=Decimal("200")))
+        sig = SignalPayload(target_token_id="0xtokenA", market_id="mkt-1",
+                            direction=Direction.UP, confidence=Decimal("70"))
+        eng.on_signal(sig, MarketSnapshot(
+            token_id="0xtokenA",
+            bids=(OrderBookLevel(Decimal("0.59"), Decimal("200")),),
+            asks=(OrderBookLevel(Decimal("0.61"), Decimal("200")),),
+        ))
+        eng.on_book_update(MarketSnapshot(
+            token_id="0xtokenA",
+            bids=(OrderBookLevel(Decimal("0.79"), Decimal("200")),),
+            asks=(OrderBookLevel(Decimal("0.80"), Decimal("200")),),
+        ))
+        assert len(eng.peak_events()) == 1
+
+        store = SQLiteShadowStorage.for_user(Path(tmp), "u1")
+        for ev in eng.peak_events():
+            store.write_peak_event(ev)
+        loaded = store.read_peak_events()
+        store.close()
+        assert loaded == list(eng.peak_events())
+
+        eng2 = ShadowExecutionEngine(risk_config=RiskConfig(max_order_size_shares=Decimal("200")))
+        eng2._execution_journal.extend(eng.execution_journal())
+        eng2._mark_prices.update(eng.current_marks())
+        eng2.portfolio = eng.portfolio.model_copy(deep=True)
+        assert eng2.restore_peak_events(loaded) == 1
+        report = eng2.audit_shadow_state()
+        assert report.ok, report.findings
+        assert not any(f.path.startswith("peak_equity.ceiling") for f in report.findings)
+    print("OK test_peak_events_reload_clean_audit")
 
 
 if __name__ == "__main__":
