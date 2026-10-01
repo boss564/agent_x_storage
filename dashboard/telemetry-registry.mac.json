@@ -13,6 +13,11 @@
       "role": "satellite"
     },
     {
+      "name": "krypto_steuer_analytix",
+      "path": "krypto_steuer_analytix",
+      "role": "satellite"
+    },
+    {
       "name": "order_execution_engine",
       "path": "order_execution_engine",
       "role": "package",
