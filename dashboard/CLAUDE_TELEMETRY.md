@@ -110,7 +110,7 @@ Top-Level: `schema_version`, `generated_at`, `generated_ts` (float Unix-Sek.),
 - HEAD-Feld heißt **`head`** (nicht `commit`).
 - `nested`: `head` = Fremd-Anker ODER `null`; Eltern-Repo in `error`.
 - Bare mit HEAD → `state=bare`; ohne → `bare_empty`. `dirty=null` ohne Working Tree.
-- Kreuz: `health: BARE` ⇒ `state ∈ {bare, bare_empty}`; `state: ok` ⇒ `health ∈ {CLEAN, DIRTY, WARN, ERROR}`.
+- Kreuz: `health: BARE` ⇔ `state: bare`, `health: EMPTY` ⇔ `state: bare_empty` (bijektiv, gemessen); `state: ok` ⇒ `health ∈ {CLEAN, DIRTY, WARN, ERROR}`.
 
 ### Agents — Bridge liefert KEIN `detail` / `supervisor`
 
