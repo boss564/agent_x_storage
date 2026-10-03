@@ -50,3 +50,24 @@ Verifikation
   git merge-base --is-ancestor 7e306cb1 origin/deploy-safe-snapshot
   git show 7e306cb1:order_execution_engine/shadow_replay.py | sha256sum
   python3 -m pytest order_execution_engine/tests/ -q
+
+Hash-Delta 7e306cb1 → 4e46901a (4e46901a70b4b2d2f92ec4a68f1394d2b9a7cb3e)
+----------------------------------------
+Migrationslücke war rein test-seitig: persistence.py unverändert seit 7e306cb1.
+Geänderte Dateien in 4e46901a:
+SCHWARM_STATUS.md
+docs/SHADOW_ENGINE_FOLLOWUPS.md
+docs/SWARM_INVENTORY.md
+order_execution_engine/tests/test_persistence.py
+output/SEE_KANON_BASELINE_7e306cb1.txt
+
+SHA256 @ 4e46901a (nur geänderte SEE-/Baseline-relevante Dateien):
+446b96b0510b5cd768e1f634b84a147422a97338f5d2d3e0404cd89a34b09a13  order_execution_engine/tests/test_persistence.py
+e0f5a9e44e9f9ce94c706c2af65a28ced5f35f0c45209cb932fa1df8180dbbcc  docs/SHADOW_ENGINE_FOLLOWUPS.md
+e6384df3e3122928b90e3d46661cfbecba2905d15e35b04eca1be4a82372fda0  output/SEE_KANON_BASELINE_7e306cb1.txt
+
+Unverändert seit 7e306cb1 (Hashes der Baseline-Tabelle oben gelten weiter):
+  shadow_replay.py, shadow_execution_engine.py, persistence.py, models.py,
+  tests/test_engine.py, __init__.py
+
+Mirror-Messlatte: Tip 4e46901a; historische Anker-Hashes @ 7e306cb1 + dieses Delta.
