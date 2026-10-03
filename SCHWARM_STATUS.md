@@ -10,11 +10,11 @@
 
 | Feld | Wert |
 |---|---|
-| SSOT-Version | **0.3.7** |
-| Messstand (Host) | **02.10.2026** Wächter SP8+SP9 (Journal-Paste) · PolySentinel Lauf `66be8def` · Docs-Tip-Vorgänger **`ebf94d4d`** · Origin-Tip-Kontext `7e306cb1` |
-| Buchungsdatum | **02.10.2026** |
-| Nächster geplanter Check | Wächter-Timer → **03.10.2026, 03:45 UTC** (Serienpunkt 10 → Schnitt 0.3.8) |
-| Betriebsstatus | Betrieb läuft. **Serie = 9 Punkte**, Timer-Pfad Exit **0** ab SP4 (27.09.–02.10., 6×); kein CRIT; keine `[OPS]` in SP5–SP9. **Laufzeit-Anker Hub `3c7ebc1b`** · Docs-Tip-Vorgänger `ebf94d4d` · Origin-Tip `7e306cb1` (Kontext; Hub-Checkout noch `ebf94d4d`). PolySentinel `66be8def`. Zero-Trust SSOT ✅. Key-Rotation 🔴. Gate 🔴 (B6/B7). |
+| SSOT-Version | **0.3.8** |
+| Messstand (Host) | **03.10.2026** Wächter SP8–SP10 (Journal-Paste) · PolySentinel `66be8def` · Docs-Tip-Vorgänger **`2a19a1d8`** · Inventar `83dcbedc` |
+| Buchungsdatum | **03.10.2026** |
+| Nächster geplanter Check | Wächter-Timer → **04.10.2026, 03:45 UTC** (Serienpunkt 11 → Schnitt 0.3.9; erwartet: erste `hub_rev=`-Zeile) |
+| Betriebsstatus | Betrieb läuft. **Serie = 10** reguläre Timer-Punkte Exit **0** (SP1–3 Exit 3; SP4–SP10 Exit 0). Kein CRIT; keine `[OPS]` in SP5–SP10. **Laufzeit-Anker Hub `3c7ebc1b`** (formal) · abgeleiteter Lauf-Stand SP10 **`2a19a1d8` 🟡**. Zero-Trust SSOT ✅. Key-Rotation 🔴. Gate 🔴 (B6/B7). Journal-Lücke Hub-`rev-parse` 🔵. |
 
 ---
 
@@ -25,7 +25,7 @@
 │  AGENT X  — Steuerungs-/Daten-Hub           │
 │  Hetzner-Deploy · v1.3 Schema · Compose-DB  │
 │  (FalkorDB ≠ Hub → newsagent / B4 ⚪)       │
-│  SSOT 0.3.7                                 │
+│  SSOT 0.3.8                                 │
 └───────┬───────────────────┬─────────────────┘
         │                   │
   ┌─────▼─────┐       ┌─────▼──────────┐       ┌──────────────────┐
@@ -48,10 +48,11 @@
 | **Maßgeblich-nur-Repo** | Einzige SSOT: `agent_x_storage/SCHWARM_STATUS.md`. Downloads / claude.ai / Chat = **Staging**, nie Ledger. |
 | **FalkorDB ≠ Hub** | Graph-Layer → **newsagent** (B4 ⚪). Kein Hub-Schema. |
 | **Fixtures repo-getrackt** | `deploy/hetzner/fixtures/polysentinel_*20260926T183216Z*` — Anker **`b97bb551`** ✅ |
-| **Daten-Weg (Wächter-Paste)** | **Option 2 = Standard:** Host schreibt Summary nach Repo/`logs/` (oder Offsite-Sync); abgeschottete Wakes lesen Datei, erfinden nichts. Option 1 (manuell einfügen) = Fallback. Option 3 (SSH-Keys in geteiltem Ordner) = abgelehnt. |
-| **Docs-Tip ≠ Laufzeit-Anker** | SSOT-Commits erzeugen einen **Docs-Tip**; der **Laufzeit-Anker Hub** bleibt der zuletzt gemessene Deploy-/Wächter-`rev-parse`. Nächster `rev-parse`-Lauf nicht gegen Docs-Tip false-positive/negative werten. |
-| **Diff-Lärm-Regel** | „hash:FEHLT" / Hook-Diff-Block = **Rauschen**. Ledger-maßgeblich ist die **Summary-Zeile** (`[OK] Hook-Drift: RC=0, kein Drift`). Diff allein ≠ Befund. |
-| **§-Mapping Repo ↔ Redaktion** | Repo nutzt Unterabschnitte (§1.1, §3.10, §9 …); Redaktions-Kopie Abschnitte 1–8. Inhaltlich deckungsgleich — Sektionsnummern allein kein Drift. |
+| **Daten-Weg (Wächter-Paste)** | **Option 2 = Standard:** Host schreibt Summary nach Repo/`logs/` (oder Offsite-Sync); abgeschottete Wakes lesen Datei, erfinden nichts. |
+| **Docs-Tip ≠ Laufzeit-Anker** | SSOT-Commits = **Docs-Tip**; **Laufzeit-Anker Hub** = zuletzt *gemessener* Deploy-/Wächter-`rev-parse`. Rekonstruktion (FF-Zeit) ≠ Messung → Anker-Nachzug nur mit Journal-`hub_rev=` oder manuellem Paste. |
+| **Diff-Lärm-Regel** | „hash:FEHLT" / Hook-Diff = **Rauschen**. Maßgeblich: Summary `[OK] Hook-Drift: RC=0, kein Drift`. |
+| **Offsite-Trend-Toleranz** | Erwartung ≈ **+4 Dateien/Lauf**. Abweichung **> ±4** vom Trend = Befund. Mittel über Intervalle beobachten. |
+| **§-Mapping Repo ↔ Redaktion** | Repo-Unterabschnitte vs. Redaktion 1–8 — inhaltlich deckungsgleich; Nummern allein kein Drift. |
 
 ---
 
@@ -59,145 +60,112 @@
 
 | Modul | Commit-Anker | Status | Bemerkung |
 |---|---|---|---|
-| **Agent X (Hub)** | **`3c7ebc1b`** (Laufzeit) | 🟢 aktiv | **Laufzeit-Anker** unverändert (Wächter-28.09.-`rev-parse`). Docs-Tip-Vorgänger `ebf94d4d` (0.3.6). Hub-Checkout 02.10. = `ebf94d4d`; Origin-Tip `7e306cb1` — Kontext, kein Anker-Update. |
-| **PolySentinel** | `66be8def` | 🔴 **läuft ungated — Gate defekt** | Lauf-`rev-parse` 30.09.T18:11:54Z; Fixtures `b97bb551`; `d567966` Vorgänger archiviert |
-| **NewsAgent / Wächter** | **`677c49f`** (Referenz) | 🟢 aktiv | **Referenz-Anker** = Lauf-Messung 28.09. Host-Tip-Kontext `46d7d5f` (02.10.; Vorgänger `d4e6455`) **ohne** Anker-Update |
+| **Agent X (Hub)** | **`3c7ebc1b`** (Laufzeit, formal) | 🟢 aktiv | Formaler Anker unverändert. **Abgeleiteter Lauf-Stand SP10: `2a19a1d8` 🟡** (FF @ 02.10. 04:01:46Z lag vor SP10; SP8/SP9 noch auf `ebf94d4d`). Nachzug formell nach `hub_rev=`-Messung. |
+| **PolySentinel** | `66be8def` | 🔴 **läuft ungated — Gate defekt** | unverändert |
+| **NewsAgent / Wächter** | **`677c49f`** (Referenz) | 🟢 aktiv | Referenz 28.09. Host-Tip-Kontext **`3c15251`** (03.10.) — kein Anker-Update (§1.1 analog) |
 
 ### 2.1 Anker-Kette NewsAgent
-- Kette: `d2990d3` → `3b8ada8` → `eec4c50` → **`677c49f` (Referenz / Wächter-Lauf 28.09.)**.
-- Kontext 30.09.: Host-Tip `d4e6455`; Kontext 02.10.: Host-Tip **`46d7d5f`** — beide nur Kontext, kein Nachziehen ohne Lauf-`rev-parse`-Paste.
-- Regel: Ledger-Anker = gemessener Ist-HEAD am Lauf; spätere Tips ohne Paste nicht nachziehen.
+- Referenz: **`677c49f`** (Lauf 28.09.).
+- Kontext: `d4e6455` (30.09.) → `46d7d5f` (02.10.) → **`3c15251`** (03.10.) — nur Kontext.
 
 ### 2.2 Anker-Kette Hub + Selbstanker-Regel
-- **Laufzeit-Kette:** `5a5985c5` → `81502319` → `d96031d5` → `8edb44f1` → `c77febc8` → **`3c7ebc1b` (Laufzeit-Anker)**.
-- **Docs-/Ledger-Kette:** `32771676` → `8edb44f1` → `c77febc8` → `3c7ebc1b` → `b8f66d9d` → `8b98ec85` (0.3.5) → **`ebf94d4d` (Docs-Tip / 0.3.6)** → *(dieser Commit = Tip bis 0.3.8)*.
-- **Code-Commits nach 0.3.6 (Origin-Tip-Kontext, kein Anker):** `35f5ec4d` (fix bridge REPO_NESTED) → `45a5b74f` (gitignore krypto_steuer_analytix) → **`7e306cb1`** (feat see PeakEvent Befunde 3+4). Stand 02.10.: auf Origin, **nicht** auf Hub-Deploy-Tree (Checkout `ebf94d4d`).
-- **Selbstanker-Regel:** Commit-Anker der *aktuellen* Version entsteht erst mit ihrem Commit → Nachbuchung im Folge-Schnitt. (0.3.7 bucht Docs-Tip `ebf94d4d`; eigener Commit = Tip bis 0.3.8 / SP10.)
-- **Unterscheidung:** Docs-Tip für Sync/SSOT-Hygiene; Laufzeit-Anker für Deploy- und Wächter-`rev-parse`-Vergleiche.
+- **Laufzeit (formal):** … → **`3c7ebc1b`**.
+- **Abgeleitet 🟡:** SP8/SP9 Checkout `ebf94d4d` · SP10 Checkout **`2a19a1d8`** (Rekonstruktion über FF-Zeit, nicht Journal-Zeile).
+- **Docs-/Ledger-Kette:** … → `ebf94d4d` (0.3.6) → **`2a19a1d8` (0.3.7 / Docs-Tip)** → *(dieser Commit = Tip bis 0.3.9)*.
+- **Hygiene:** Inventar-Sync **`83dcbedc`** (vor 0.3.7-Ledger).
+- **Selbstanker:** 0.3.8 bucht Docs-Tip `2a19a1d8`; eigener Commit = Tip bis 0.3.9 / SP11.
 
 ---
 
 ## 3. Verifikationsprotokolle
 
-### 3.1 Wächter-Lauf 28.09. 03:45 UTC — Exit 0 (Serienpunkt 5)
+### 3.1–3.3 Archiv-Kern
+SP5 (28.09.): Exit 0, Offsite 230, Hub-Laufzeit-Anker `3c7ebc1b`, NA `677c49f`. Diff-Lärm-Regel §1.1. PolySentinel `66be8def` ungated.
 
-| Feld | Messwert |
-|---|---|
-| Exit | **0** (`ExecMainStatus=0`, `Result=success`) |
-| Zähler | `geprüft 2 · befund 0 · blind 0 · alarm 0 · skip 0` |
-| Timer (damals) | LAST `2026-09-28 03:45:02 UTC` · NEXT `2026-09-29 03:45:00 UTC` |
-| Hook-Drift | `[OK] Hook-Drift: RC=0, kein Drift` (Summary; Diff-Lärm → Regel §1.1) |
-| Offsite | **hash-bestätigt** — **230** Dateien |
-| Hub `rev-parse` | `3c7ebc1b` — **Laufzeit-Anker** |
-| NewsAgent `rev-parse` | `677c49f` — **Referenz-Anker** |
-| `[OPS]` | keine |
+### 3.4 Wächter-Serie 03:45-Timer — **Serienpunkt 10**
 
-### 3.2 Diff-Lärm-Regel (Observability)
-
-- Diff-Block kann „DRIFT ERKANNT" / „hash:FEHLT" zeigen → **Rauschen**.
-- **Ledger-maßgeblich:** Summary-Zeile `[OK] Hook-Drift: RC=0, kein Drift`.
-- Folgeaktion (Hygiene/Dashboard-FP) bleibt Backlog — kein Befund aus Diff allein.
-
-### 3.3 PolySentinel — unverändert
-
-| Feld | Messwert |
-|---|---|
-| HEAD | **`66be8def`** (Fixtures + Lauf 30.09.) |
-| Fixtures-Anker | **`b97bb551`** ✅ |
-| Befund | **läuft ungated — Gate defekt** |
-
-### 3.4 Wächter-Serie 03:45-Timer — **Serienpunkt 9**
-
-| # | Wann | Exit | Zähler | Bewertung |
+| # | Wann | Exit | Offsite | Bewertung |
 |---|---|---|---|---|
-| 1 | 24.09. 03:45 UTC | 3 | `geprüft 1 · skip 1` | WARN, OnFailure ok |
-| 2 | 25.09. 03:45 UTC | 3 | `geprüft 1 · skip 1` | WARN, OnFailure ok |
-| 3 | 26.09. 03:45 UTC | 3 | `geprüft 1 · skip 1` | WARN, OnFailure ok |
-| — | 26.09. 11:11 UTC (manuell) | 0 | `geprüft 2 · skip 0` | Vollprüfung, manueller Pfad |
-| 4 | 27.09. 03:45 UTC | 0 | `geprüft 2 · … · skip 0` | erster Exit 0 im Timer-Pfad |
-| 5 | 28.09. 03:45 UTC | 0 | `geprüft 2 · befund 0 · blind 0 · alarm 0 · skip 0` | zweiter Exit 0; Offsite **230** |
-| 6 | 29.09. 03:45:00 UTC | 0 | `geprüft 2 · befund 0 · blind 0 · alarm 0 · skip 0` | Journal-Paste; Offsite **234**; „Deactivated successfully" = normale Oneshot-Signatur; kein CRIT; keine `[OPS]` |
-| 7 | 30.09. 03:45:02 UTC | 0 | `geprüft 2 · befund 0 · blind 0 · alarm 0 · skip 0` | `ExecMainStatus=0`, Result=success; Offsite **238**; Hook Summary OK; kein CRIT; keine `[OPS]` |
-| **8** | **01.10. 03:45:00 UTC** | **0** | `geprüft 2 · befund 0 · blind 0 · alarm 0 · skip 0` | „Deactivated successfully"; Offsite **242** hash-bestätigt; `[OK] RC=0, kein Drift`; kein CRIT; keine `[OPS]` |
-| **9** | **02.10. 03:45:03 UTC** | **0** | `geprüft 2 · befund 0 · blind 0 · alarm 0 · skip 0` | `ExecMainStatus=0`, Result=success; Offsite **245** hash-bestätigt; `[OK] RC=0, kein Drift`; kein CRIT; keine `[OPS]` |
+| 1–3 | 24.–26.09. | 3 | — | WARN/Skip |
+| — | 26.09. manuell | 0 | — | manueller Pfad |
+| 4 | 27.09. | 0 | — | erster Timer-Exit-0 |
+| 5 | 28.09. | 0 | **230** | SP5 |
+| 6 | 29.09. | 0 | **234** | +4 |
+| 7 | 30.09. | 0 | **238** | +4 |
+| 8 | 01.10. 03:45:00 | **0** | **242** | +4; Beleg 84300 s; Hub-Checkout abgeleitet `ebf94d4d` |
+| 9 | 02.10. 03:45:03 | **0** | **245** | **+3**; Beleg 84301 s; Checkout `ebf94d4d` (FF erst 04:01:46Z) |
+| **10** | **03.10. 03:45:01** | **0** | **250** | **+5**; Beleg 84297 s; Checkout abgeleitet **`2a19a1d8` 🟡**; `ExecMainStatus=0` |
 
-> Nächster Schnitt: **Serienpunkt 10** am **03.10.2026, 03:45 UTC** → eigener Schnitt **0.3.8**.
-> Hinweis: SP8 wurde nicht zeitnah gebucht (Lücke 01.10.) → in 0.3.7 mit SP9 zusammengefasst; Messwerte aus Journal-Paste 02.10.
+> Alle SP5–SP10: `geprüft 2 · befund 0 · blind 0 · alarm 0 · skip 0` · Hook Summary `[OK] RC=0, kein Drift` · kein CRIT · keine `[OPS]`.
+> Nächster Schnitt: **SP11** am **04.10.2026, 03:45 UTC** → **0.3.9** (erste erwartete `hub_rev=`-Zeile).
 
-**Offsite-Trend (Beobachtung, kein Befund):** 230 → 234 → 238 → 242 → 245 (SP5→SP9; +4/+4/+4/**+3**). Erste Abweichung vom +4-Muster bei SP9 — weiter beobachten.
+**Offsite-Trend:** 230→234→238→242→245→250. Δ: +4/+4/+4/**+3**/+**5**. Abweichungen −1/+1 vom +4-Soll **innerhalb ±4-Toleranz — kein Befund**. Mittel über 5 Intervalle (SP5→SP10) = **+4,0/Lauf**. Beleg-Alter stabil ~84 300 s.
 
-**Timer (gemessen 02.10.):** LAST `2026-10-02 03:45:03 UTC` · NEXT `2026-10-03 03:45:00 UTC`.
+**Timer:** LAST `2026-10-03 03:45:01 UTC` · NEXT `2026-10-04 03:45:00 UTC`.
 
-### 3.5–3.10 Archiv (Kurz)
+### 3.11–3.13 Archiv
+3.11 Tip `8b98ec85` · 3.12 SP6/SP7 · 3.13 SP8/SP9 + Tip `ebf94d4d` (0.3.7).
 
-| ID | Inhalt |
-|---|---|
-| 3.5–3.9 | wie 0.3.5 (Verifikation / B3 / Remote-Sync / Tips `c77febc8` / `3c7ebc1b`) |
-| 3.10 | Sync 0.3.4: FF `3c7ebc1b`→`b8f66d9d` @ 18:18:46Z |
-
-### 3.11 Tip-Nachbuchung `8b98ec85` (0.3.5) — Audit geschlossen
+### 3.14 Tip-Nachbuchung `2a19a1d8` + Inventar `83dcbedc` (0.3.7-Sync)
 
 | Schritt | Ergebnis |
 |---|---|
-| Commit | `8b98ec85` — `docs(ssot): book SCHWARM_STATUS 0.3.5 — docs-tip b8f66d9d ≠ laufzeit-anker 3c7ebc1b` |
-| Push / Hub FF | `b8f66d9d`→`8b98ec85` · FF-only @ **`2026-09-30T18:27:47Z`** |
-| Vollhash | `8b98ec85c3c1c4216bd08b53940a79fe1820db82` |
-| FF-Kette Docs | `3c7ebc1b` → `b8f66d9d` → **`8b98ec85`** |
-| Klassifikation | **Docs-Tip**; Laufzeit-Anker Hub bleibt **`3c7ebc1b`** |
+| Inventar | `83dcbedc` — `chore(inventory): sync SWARM_INVENTORY Laufzeit-Block` |
+| Commit | `2a19a1d8` — `docs(ssot): book SCHWARM_STATUS 0.3.7 — SP8/SP9 + docs-tip ebf94d4d` |
+| Push / Hub FF | `ebf94d4d`→`2a19a1d8` · FF-only @ **`2026-10-02T04:01:46Z`** (inkl. Code bis `7e306cb1`) |
+| Vollhash | `2a19a1d8d71ce5ab70ed939b5593cbc6b18403a6` |
+| Klassifikation | **Docs-Tip**; Laufzeit-Anker formal **`3c7ebc1b`** |
 
-### 3.12 SP6/SP7-Nachbuchung (Paste 30.09. ~18:33Z)
-
-| SP | Exit | Offsite | Hook Summary | Anmerkung |
-|---|---|---|---|---|
-| 6 | 0 | 234 | RC=0, kein Drift | Oneshot „Deactivated successfully" = normal |
-| 7 | 0 | 238 | RC=0, kein Drift | `ExecMainStatus=0` |
-| Kontext | — | — | — | Host-Tips Hub `8b98ec85`, NewsAgent `d4e6455` — **kein** Anker-Update |
-
-### 3.13 SP8/SP9 + Tip-Nachbuchung `ebf94d4d` (Paste 02.10.)
+### 3.15 SP8–SP10-Paste + §1.1-Entscheidung (03.10.)
 
 | Feld | Wert |
 |---|---|
-| SP8 | 01.10. 03:45:00 UTC · Exit 0 · Offsite 242 · `[OK] RC=0, kein Drift` |
-| SP9 | 02.10. 03:45:03 UTC · Exit 0 (`ExecMainStatus=0`) · Offsite 245 · `[OK] RC=0, kein Drift` |
-| Docs-Tip gebucht | **`ebf94d4d`** — `docs(ssot): book SCHWARM_STATUS 0.3.6 — SP6/SP7 + Diff-Lärm-Regel` |
-| Hub `rev-parse` (02.10., Checkout) | `ebf94d4d` — Docs-Tip, **kein** Laufzeit-Anker-Update |
-| Origin-Tip | `7e306cb1` (`35f5ec4d` → `45a5b74f` → `7e306cb1`) — Kontext; Hub-FF ausstehend |
-| NewsAgent `rev-parse` (02.10.) | `46d7d5f` — Kontext; Referenz bleibt `677c49f` |
+| SP8–SP10 | Exit 0 · Offsite 242/245/250 · Serie **10** |
+| Hub `rev-parse` im Journal | **fehlt** — Unit loggt nur NewsAgent-Repo + Offsite + Hook |
+| Abgeleitet 🟡 | SP8/9 = `ebf94d4d` · SP10 = `2a19a1d8` |
+| Entscheidung | Formaler Anker bleibt **`3c7ebc1b`**; `2a19a1d8` = abgeleiteter Lauf-Stand 🟡. Nachzug erst nach gemessener `hub_rev=`-Zeile (oder manuellem Paste). |
+| NewsAgent Kontext | `3c15251` · Referenz `677c49f` |
 
 ---
 
 ## 4. Baustellen-Tracker (B-Tracks)
 
-**Legende:** ✅ geschlossen · 🟢 i. O. · 🟡 Beobachtung · 🔴 offen/kritisch · ⬛ keine Messung · ⚪ zurückgestellt
+**Legende:** ✅ geschlossen · 🟢 i. O. · 🟡 Beobachtung · 🔴 offen/kritisch · ⬛ keine Messung · ⚪ zurückgestellt · 🔵 Fix-Auftrag
 
 | ID | Thema | Status | Anker/Detail |
 |---|---|---|---|
 | B1 | — | ✅ | `not-found` erledigt |
-| B3 | Host-Anker | ✅ | Referenz `677c49f` (Wächter-Lauf 28.09.) |
-| **B4** | FalkorDB | ⚪ | newsagent-Scope; Key-Rotationstermin hängt hier (§7) |
-| **B6** | venv/Deploy-Gate | 🔴 | `pytest` fehlt; Gate ≠ Startpfad; ABBRUCH Fixture Z.5–6 |
-| **B7** | `[OPS]`-Verdrahtung | 🔴 | Exit 2 ohne Journal-`[OPS]`; `RestartPreventExitStatus=2 6` → stiller Ausfall-Risiko |
-| Track 12 | `--self-test` + Exit-Inventur | 🔴 | nicht blockierend |
-| m2 | EXEC-Repeater | 🟡 | last success 26.09.; beobachten |
-| B5 | Exit-3-Kontrakt | ✅ | Kontrakt 0/1/2/3 bestätigt |
+| B3 | Host-Anker | ✅ | Referenz `677c49f` |
+| **B4** | FalkorDB | ⚪ | Key-Rotationstermin |
+| **B6** | venv/Deploy-Gate | 🔴 | `pytest` / Gate≠Startpfad |
+| **B7** | `[OPS]`-Verdrahtung | 🔴 | Exit 2 ohne Journal-`[OPS]` |
+| **B8** | Hub-`rev-parse` im Wächter-Journal | 🔵 | Fix: `hub_rev=$(git -C /root/agent_x_storage rev-parse --short=8 HEAD)` neben Repo-Zeile in `waechter_lauf.sh` — nicht ExecStartPost |
+| Track 12 | `--self-test` | 🔴 | nicht blockierend |
+| m2 | EXEC-Repeater | 🟡 | beobachten |
+| B5 | Exit-3-Kontrakt | ✅ | 0/1/2/3 |
 
 ---
 
 ## 5. Schnittstellen-Verträge (v1.3)
 
 ### 5.1–5.2
-Unverändert: Schema `1.3`, Pflichtfelder `schema_version` / `agent_id` / `ts_utc` / `msg_type` / `payload`.
+Unverändert: Schema `1.3`.
 
 ### 5.3 NewsAgent/Wächter — Exit 0/1/2/3
-- `0` Vollprüfung · `1` WARN · `2` hart/degraded · `3` Skip/WARN (OnFailure ok, kein CRIT)
-- Mit 0.3.7: **sechs** aufeinanderfolgende Timer-Pfad-Exit-0 (SP4–SP9, 27.09.–02.10.) — Erwartungsbild noch nicht umgestellt; Serie weiter.
-- Oneshot-Ende: „Deactivated successfully" = normale Signatur bei Exit 0 (kein Ausfall).
+- Mit 0.3.8: **sieben** Timer-Pfad-Exit-0 in Folge (SP4–SP10). Erwartungsbild noch nicht umgestellt.
+- Oneshot „Deactivated successfully" = normal bei Exit 0.
 
 ### 5.4 PolySentinel
-- Ziel: Fail-Closed + Preflight. **Ist:** ungated, Gate defekt → bekanntes Risiko bis B6/B7.
+- Ist: ungated, Gate defekt → B6/B7.
 
 ### 5.5 `[OPS]`-Format
-`[OPS] <severity> <agent_id> <ts_utc> <code> <msg>` · severity INFO|WARN|CRIT
+Unverändert.
+
+### 5.6 Wächter-Journal — Hub-Zeile (Soll, B8 🔵)
+```
+hub_rev=<short8>
+```
+Pfad: `/root/agent_x_storage`. Position: Script-Hauptlauf neben `Repo :`. Optional später: `hub_anchor_ok=yes/no`.
 
 ---
 
@@ -205,12 +173,12 @@ Unverändert: Schema `1.3`, Pflichtfelder `schema_version` / `agent_id` / `ts_ut
 
 | Komponente | Zustand | Detail |
 |---|---|---|
-| Timer | 🟢 | enabled+active; NEXT 03.10. 03:45 UTC (SP10) |
-| SP5–SP9 | 🟢 Exit 0 | kein CRIT; keine `[OPS]`; Offsite 230→234→238→242→245 |
-| Skip-Muster 24.–26.09. | ✅ durchbrochen | 6× Exit 0 im Timer-Pfad |
-| **PolySentinel-Gate** | 🔴 defekt | ungated; B6/B7 |
-| Exit-Kontrakt | 🟢 0/1/2/3 | Exit außerhalb → CRIT-`[OPS]` + Incident |
-| Diff-Lärm | 🟢 Regel | Summary maßgeblich (§1.1) |
+| Timer | 🟢 | LAST 03.10. 03:45:01 · NEXT 04.10. 03:45 (SP11) |
+| SP5–SP10 | 🟢 Exit 0 | Serie 10; Offsite Mittel +4,0/Lauf |
+| **PolySentinel-Gate** | 🔴 defekt | B6/B7 |
+| Exit-Kontrakt | 🟢 | 0/1/2/3 |
+| Diff-Lärm | 🟢 Regel | Summary maßgeblich |
+| Hub-`rev-parse` Log | 🔵 fehlt | B8 Fix-Auftrag |
 
 ---
 
@@ -218,60 +186,46 @@ Unverändert: Schema `1.3`, Pflichtfelder `schema_version` / `agent_id` / `ts_ut
 
 | Prüfpfad | Stand |
 |---|---|
-| Hub Laufzeit-Anker | **`3c7ebc1b`** ✅ — maßgeblich für rev-parse-Vergleiche |
-| Hub Docs-Tip | **`ebf94d4d`** ✅ (0.3.6; Hub-Checkout 02.10.) — **nicht** Laufzeit-Anker; dieser Commit = nächster Docs-Tip |
-| Origin-Tip | `7e306cb1` — Kontext; Hub-FF ausstehend |
-| PolySentinel Commit | **`66be8def`** ✅ |
-| NewsAgent Referenz | **`677c49f`** ✅; Host-Tip `46d7d5f` nur Kontext |
-| Fixtures-Hygiene | ✅ `b97bb551` |
-| SSOT-Hygiene | ✅ Docs-Kette bis `ebf94d4d` |
-| Remote-Sync / Sync 0.3.4 | ✅ |
-| **Zero-Trust SSOT** | ✅ **geschlossen** |
-| **Key-Rotation** | 🔴 **offen** — Abschlusskriterium: Rotation + Beleg (Datum, Scope, Backup-Nachweis) |
+| Hub Laufzeit-Anker (formal) | **`3c7ebc1b`** ✅ |
+| Hub abgeleiteter Lauf-Stand | **`2a19a1d8` 🟡** (SP10; Rekonstruktion ≠ Messung) |
+| Hub Docs-Tip | **`2a19a1d8`** ✅ (0.3.7; FF 04:01:46Z) — dieser Commit = nächster Docs-Tip |
+| Inventar-Hygiene | **`83dcbedc`** ✅ |
+| PolySentinel | **`66be8def`** ✅ |
+| NewsAgent Referenz | **`677c49f`** ✅ · Kontext `3c15251` |
+| **Zero-Trust SSOT** | ✅ |
+| **Key-Rotation** | 🔴 **offen** |
+| Journal Hub-`rev-parse` | 🔵 Lücke — B8 |
 
 ---
 
-## 8. Änderungsprotokoll 0.3.6 → 0.3.7
+## 8. Änderungsprotokoll 0.3.7 → 0.3.8
 
-| Thema | 0.3.6 | 0.3.7 |
+| Thema | 0.3.7 | 0.3.8 |
 |---|---|---|
-| Charakter | SP6/SP7 + Diff-Lärm-Regel | **SP8/SP9** + Tip-Nachbuchung + Origin-Tip-Kontext |
-| Docs-Tip gebucht | `8b98ec85` | **`ebf94d4d`** |
-| Laufzeit-Anker Hub | `3c7ebc1b` | **`3c7ebc1b`** unverändert |
-| Origin-Tip | — | `7e306cb1` (Kontext; Hub-FF ausstehend) |
-| NewsAgent Host-Tip | `d4e6455` | `46d7d5f` (Kontext) |
-| Wächter-Serie | SP7 | **SP9** (9 Punkte; SP4–SP9 Exit 0) |
-| Offsite | 230→234→238 | →242→245 (+4/+3) |
-| Nächster Schnitt | SP8 → 0.3.7 | **SP10 → 0.3.8** (03.10. 03:45 UTC) |
+| Charakter | SP8/SP9 + Origin-Tip | **SP8–SP10 final** + Tip `2a19a1d8` + Anker-🟡 + B8 |
+| Docs-Tip | `ebf94d4d` | **`2a19a1d8`** (+ Inventar `83dcbedc`) |
+| Laufzeit-Anker | `3c7ebc1b` | formal **`3c7ebc1b`** · abgeleitet SP10 **`2a19a1d8` 🟡** |
+| Serie | SP9 | **SP10** (10 Punkte) |
+| Offsite | …→245 | →**250**; ±4-Toleranz, Mittel +4,0 |
+| Hub-FF §9 | ausstehend | ✅ `ebf94d4d`→`2a19a1d8` @ 04:01:46Z |
+| Journal-Lücke | — | B8 🔵 Fix-Auftrag `hub_rev=` |
+| Nächster Schnitt | SP10 | **SP11 → 0.3.9** (04.10.) |
 
-### 8.0 Änderungsprotokoll 0.3.5 → 0.3.6
-
-| Thema | 0.3.5 | 0.3.6 |
-|---|---|---|
-| Charakter | Tip-Nachbuchung Docs≠Laufzeit | **SP6/SP7** + Diff-Lärm-Regel + Offsite-Trend |
-| Docs-Tip gebucht | `b8f66d9d` | **`8b98ec85`** (Audit §3.11 geschlossen) |
-| Laufzeit-Anker Hub | `3c7ebc1b` | **`3c7ebc1b`** unverändert |
-| Wächter-Serie | SP5 | **SP7** (7 Punkte; SP4–SP7 Exit 0) |
-| Diff-Lärm | Fußnote | **Ledger-Regel** §1.1 |
-| Offsite | 230 (SP5) | Trend 230→234→238 (Beobachtung) |
-| Nächster Schnitt | SP6 ausstehend (Paste-Lücke) | **SP8 → 0.3.7** (01.10. 03:45 UTC) |
-
-### 8.1–8.6 Archiv
-0.3.4→0.3.5 (Docs≠Laufzeit) · 0.3.3→0.3.4 (SP5/PS) · 0.3.2→0.3.3 (Selbstanker) · 0.3.1→0.3.2 (Remote-Sync) · 0.3.0→0.3.1 (Fixtures/SSOT) · 0.2.9→0.3.0 (erster Timer-Exit-0).
+### 8.1–8.7 Archiv
+0.3.6→0.3.7 (SP8/9) · 0.3.5→0.3.6 (SP6/7) · … · 0.2.9→0.3.0.
 
 ---
 
 ## 9. Nächste Schritte (Priorität)
 
-1. **Key-Rotation** 🔴 — Rotation + Beleg; sonst Termin an B4 belassen.
-2. **B6** venv/Deploy-Gate.
-3. **B7** `[OPS]`-Verdrahtung.
-4. **Wächter Serienpunkt 10** (03.10. 03:45 UTC) — eigener Schnitt **0.3.8**. Hub-FF `ebf94d4d`→`7e306cb1` + Checkout nachziehen.
-5. **m2** EXEC-Repeater — Beobachtung abschließen.
-6. **Backlog:** Dashboard-FP · `alpha-pipeline` · Track-12 · Option-2 Summary-Datei · Wave-21-Zähler-Drift · Offsite-Trend (+3 bei SP9) weiter beobachten.
+1. **Key-Rotation** 🔴 — Beleg oder Termin B4.
+2. **B8** 🔵 — `hub_rev=` in `waechter_lauf.sh` verdrahten (Weg 2); ab SP11 Anker-Nachzug `3c7ebc1b`→`2a19a1d8` formell möglich.
+3. **B6** / **B7** — Gate + `[OPS]`.
+4. **SP11** (04.10. 03:45 UTC) → Schnitt **0.3.9**.
+5. **m2** / Backlog (Dashboard-FP, Option-2 Summary, Offsite-Trend).
 
-**Erledigt (quittiert):** Fixtures · SSOT-Anker · Remote-Sync · Selbstanker · Laufzeit-Tip `3c7ebc1b` · Docs-Tips `b8f66d9d`/`8b98ec85` · Wächter SP5–SP9 · Docs-Tip `ebf94d4d` · PolySentinel Lauf-HEAD · Zero-Trust SSOT · Diff-Lärm-Regel · Sync-Einspielungen.
+**Erledigt (quittiert):** SP5–SP10 · Docs-Tips bis `2a19a1d8` · Inventar `83dcbedc` · Hub-FF 0.3.7 · Zero-Trust · Diff-Lärm-Regel · Offsite-Toleranz-Bewertung SP9/SP10 · 0.3.7-Lücke nachträglich geschlossen.
 
 ---
 
-*SSOT 0.3.7 · Laufzeit-Anker Hub `3c7ebc1b` · Docs-Tip-Vorgänger `ebf94d4d` · Origin-Tip `7e306cb1` · NewsAgent Referenz `677c49f` · PolySentinel `66be8def` · Serie SP9 · Zero-Trust SSOT ✅ · Key-Rotation 🔴 · kein Abschluss ohne Beleg.*
+*SSOT 0.3.8 · Laufzeit-Anker formal `3c7ebc1b` · abgeleitet SP10 `2a19a1d8` 🟡 · Docs-Tip-Vorgänger `2a19a1d8` · NA Referenz `677c49f` · PS `66be8def` · Serie SP10 · Key-Rotation 🔴 · B8 🔵 · kein Abschluss ohne Beleg.*
