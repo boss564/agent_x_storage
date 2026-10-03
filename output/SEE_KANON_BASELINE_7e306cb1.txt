@@ -1,0 +1,52 @@
+SEE Kanon-Baseline @ 7e306cb1 (PeakEvent Stufe 2 + Befunde 3+4)
+================================================================
+
+WICHTIG: Kanon ≠ Overlay-Delta-full/
+------------------------------------
+Die Delta-Manifeste unter Downloads beschreiben den Overlay-Stand
+(rekonstruiert, SCHEMA 1→2, VirtualPortfolio.apply_fill / replay.py).
+Der gepushte Kanon ist chirurgisch gemergt:
+  - PeakCeilingChecker faltet über JournalReplay (nicht apply_fill)
+  - SCHEMA_VERSION 3→4 (Kanon stand schon bei 3)
+  - kein Overlay-replay.py; Imports nur shadow_replay
+  - Suite 103+ Tests (nicht Overlay-55)
+
+Tips
+----
+PeakEvent-Abschluss (order_execution_engine/ Stand): 7e306cb1
+Aktueller Branch-Tip origin/deploy-safe-snapshot:     2a19a1d8
+  (nach 7e306cb1 nur Docs/Inventory; SEE-Dateien unverändert bis Migrations-Zeuge)
+
+SHA256 der SEE-Dateien @ 7e306cb1
+---------------------------------
+d622c4a4404226dc9d5a99ef2f6988b2ea239c802073e1b112941df3dbe64d00  order_execution_engine/shadow_replay.py
+33054c5d5647ff41d147d4071016182c8e7bc3852906d16970d2d68fe5754baf  order_execution_engine/shadow_execution_engine.py
+33e724dcc5e8fbdc09c2b49ff045668947f071e21c4ddb64fa0144cf4b89eebc  order_execution_engine/persistence.py
+b9d74ece96d472f4e110f9b8c57a11d66af481963e929ea54ccf84a747476a40  order_execution_engine/models.py
+24c53d344bb74eb5f1487990058f329f5211c35fa3566322b04df7f1921a29b4  order_execution_engine/tests/test_engine.py
+3bc9fb3e05535ff58f6c2a125e4d107f40e64ddda812107f700a9146ac6d349c  order_execution_engine/tests/test_persistence.py
+40a1356c1f97116cab0c490e3b3e3ee7017a07aff44b4bac811f0a322c041a24  order_execution_engine/__init__.py
+
+Semantik-Zeugen (Namen, nicht nur Anzahl)
+----------------------------------------
+Befund 3: test_peak_ceiling_single_fold, test_ceiling_checker_reused_across_audits
+Befund 4: test_peak_event_roundtrip, test_peak_event_rewrite_and_conflict,
+          test_telemetry_sink_drains_peak_events, test_peak_events_reload_clean_audit,
+          test_restore_peak_events_validation
+Migration 3→4: test_schema_migrates_v3_to_v4_peak_events
+Unwitnessed/Mid: test_peak_ceiling_unwitnessed, test_book_update_fill_peak_uses_mark_cache
+
+Review-Muster M1–M4 auf dem Kanon (2026-10-03)
+----------------------------------------------
+M1 Vollfold pro Event          → rot: test_peak_ceiling_single_fold
+M2 frischer Checker pro Audit  → rot: test_ceiling_checker_reused_across_audits
+M3 read_peak_events wirkungslos → rot: 4 Befund-4-Persistenz-Tests
+M4 write_peak_event wirkungslos → rot: 4 Befund-4-Persistenz-Tests
+Restore nach Mutationen: Suite-Zeugen grün, Dateien bit-identisch.
+
+Verifikation
+------------
+  git rev-parse origin/deploy-safe-snapshot
+  git merge-base --is-ancestor 7e306cb1 origin/deploy-safe-snapshot
+  git show 7e306cb1:order_execution_engine/shadow_replay.py | sha256sum
+  python3 -m pytest order_execution_engine/tests/ -q

@@ -1560,7 +1560,8 @@ im Book-Update-Fill; Mutationstests rot bei Rückdrehen. Suite 96/96.
 
 **Status:** erledigt — chirurgischer Merge gegen Kanon (`shadow_replay.PeakCeilingChecker`
 via `JournalReplay`, nicht Overlay-`ShadowReplay`/`apply_fill`; Persistenz
-`SCHEMA_VERSION` 3→4 + `peak_events`).
+`SCHEMA_VERSION` 3→4 + `peak_events`). Review-Muster M1–M4 auf dem Kanon
+reproduziert (2026-10-03); Baseline-Hashes: `output/SEE_KANON_BASELINE_7e306cb1.txt`.
 
 | # | Thema | Soll |
 |---|--------|------|
@@ -1568,11 +1569,14 @@ via `JournalReplay`, nicht Overlay-`ShadowReplay`/`apply_fill`; Persistenz
 | 4 | Persistenz | `write_peak_event` / `read_peak_events`, `TelemetrySink(peak_events_provider=…)`, `engine.restore_peak_events` |
 
 **Pflicht eingelöst:** `test_peak_events_reload_clean_audit` — Reload ohne
-`ceiling.unwitnessed`.
+`ceiling.unwitnessed`. Migration 3→4: `test_schema_migrates_v3_to_v4_peak_events`.
 
 **Fester Hinweis (historisch):** Load-Pfad darf erst nach 3+4 existieren — jetzt
 gedeckt. Wer den Hub-Reload verdrahtet, nutzt `restore_peak_events` + Journal/
 Marks/Portfolio-Rekonstruktion.
+
+**Hygiene:** Overlay-Delta-Manifeste ≠ Kanon — nächster Mirror startet mit
+`output/SEE_KANON_BASELINE_7e306cb1.txt`, nicht mit Overlay-`full/`-Hashes.
 
 **Nebenbei (niedrig, kein Blocker):** `test_book_update_fill_peak_uses_mark_cache`
 nutzt bewusst gekreuztes Buch (Bid > Ask), um Mid≠Ask zu erzwingen — bricht,

@@ -87,6 +87,92 @@ def test_schema_version_and_tables() -> None:
     print("OK test_schema_version_and_tables")
 
 
+def test_schema_migrates_v3_to_v4_peak_events() -> None:
+    """Befund 4: bestehende v3-DB wird auf v4 angehoben (peak_events).
+
+    Simuliert eine Kanon-v3-Datei ohne peak_events-Tabelle; nach Öffnen
+    muss SCHEMA_VERSION=4 und die Tabelle existieren. Anschließend
+    append-only Write + identischer Re-Drain.
+    """
+    import sqlite3
+    from order_execution_engine.models import PeakEvent
+    with tempfile.TemporaryDirectory() as tmp:
+        db = Path(tmp) / "u1" / "shadow" / "shadow.db"
+        db.parent.mkdir(parents=True)
+        conn = sqlite3.connect(str(db))
+        conn.executescript(
+            """
+            CREATE TABLE schema_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+            CREATE TABLE telemetry (
+                seq INTEGER PRIMARY KEY AUTOINCREMENT,
+                signal_id TEXT NOT NULL,
+                order_id TEXT,
+                latency_ms REAL NOT NULL,
+                approved INTEGER NOT NULL,
+                reject_reason TEXT,
+                status TEXT,
+                requested_size TEXT,
+                decision_seq INTEGER
+            );
+            CREATE TABLE fills (
+                order_id TEXT NOT NULL,
+                fill_idx INTEGER NOT NULL,
+                execution_price TEXT NOT NULL,
+                executed_size TEXT NOT NULL,
+                slippage TEXT NOT NULL,
+                fee TEXT NOT NULL,
+                filled_at TEXT NOT NULL,
+                latency_ms REAL,
+                requested_size TEXT,
+                side TEXT,
+                token_id TEXT,
+                market_id TEXT,
+                decision_seq INTEGER,
+                PRIMARY KEY (order_id, fill_idx)
+            );
+            CREATE TABLE portfolio_snapshots (
+                seq INTEGER PRIMARY KEY AUTOINCREMENT,
+                taken_at TEXT NOT NULL,
+                cash TEXT NOT NULL,
+                start_balance TEXT NOT NULL,
+                realized_pnl TEXT NOT NULL,
+                peak_equity TEXT NOT NULL,
+                positions_json TEXT NOT NULL
+            );
+            INSERT INTO schema_meta (key, value) VALUES ('schema_version', '3');
+            """
+        )
+        conn.commit()
+        tables = {
+            r[0] for r in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            )
+        }
+        assert "peak_events" not in tables
+        assert conn.execute(
+            "SELECT value FROM schema_meta WHERE key='schema_version'"
+        ).fetchone()[0] == "3"
+        conn.close()
+
+        store = SQLiteShadowStorage(db)
+        conn2 = sqlite3.connect(str(db))
+        assert conn2.execute(
+            "SELECT value FROM schema_meta WHERE key='schema_version'"
+        ).fetchone()[0] == "4"
+        conn2.execute("SELECT 1 FROM peak_events LIMIT 0")
+        conn2.close()
+
+        ev = PeakEvent(
+            seq=0, marks={"t": Decimal("0.5")}, journal_pos=0,
+            peak_equity=Decimal("10001"),
+        )
+        store.write_peak_event(ev)
+        store.write_peak_event(ev)  # Re-Drain
+        assert store.read_peak_events() == [ev]
+        store.close()
+    print("OK test_schema_migrates_v3_to_v4_peak_events")
+
+
 def test_telemetry_sink_end_to_end() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         engine = ShadowExecutionEngine(risk_config=RiskConfig(max_order_size_shares=Decimal("100")))
