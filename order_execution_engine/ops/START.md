@@ -101,9 +101,15 @@ PYTHONPATH=. python3 order_execution_engine/ops/preflight_check.py --after-start
 |---|---|
 | `no_book` | nahe 0 (2 Freeze-Märkte subscribed); sonst WS |
 | `news_too_old` | nicht ~100 % |
-| `unresolved` | darf hoch |
+| `unresolved_asset:empty_list` | erwartbares Rauschen (leere `target_assets`) |
+| `unresolved_asset:mapping_miss` | Stillverlierer — News liefert Asset, Freeze kennt es nicht |
 | `STALE_SNAPSHOT` | ≈ 0 |
+| `TELEMETRY_RECONCILIATION` | GREEN: erfolgreiche Dispatches ≥1 ⇒ `telemetry_rows >= dispatched_success` (sonst RED: stiller Write-Ausfall) |
 | `telemetry_fill_metrics` | bei Fills |
 | Dedup | 0 Doppel-`item_id` |
+
+`TELEMETRY_RECONCILIATION` in `preflight_check.py` (`--min-run-id 7`). Erfolgspfad =
+`dispatched_signals` ab `run_id=7.started_at` **ohne** `bridge_discards`-Zeile
+(Claim vor Resolve zählt unresolved/no_book nicht als Dispatch-Erfolg).
 
 Freeze-Ende 2026-11-01 — Tag-7 Settle-Check. Config nicht anfassen.

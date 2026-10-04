@@ -225,12 +225,18 @@ class NewsBridge:
             self._log_discard(str(item_id), "news_too_old")
             return False
 
+        assets = item.get("target_assets") or []
+        # Trennscharf: leere Liste = erwartbares Rauschen; Mapping-Miss = Stillverlierer.
+        if not assets:
+            self._log_discard(str(item_id), "unresolved_asset:empty_list")
+            return False
+
         if not self._dedup.claim(str(item_id)):
             return False
 
-        target = self._resolver.resolve(item.get("target_assets") or [])
+        target = self._resolver.resolve(assets)
         if target is None:
-            self._log_discard(str(item_id), "unresolved_asset")
+            self._log_discard(str(item_id), "unresolved_asset:mapping_miss")
             return False
 
         snapshot = self._cache.get(target.token_id)

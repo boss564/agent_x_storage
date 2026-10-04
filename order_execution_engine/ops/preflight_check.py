@@ -12,6 +12,7 @@ import sqlite3
 import subprocess
 import sys
 import time
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Optional
 
@@ -34,6 +35,7 @@ DEFAULT_POLICY = OPS / "run_policy.json"
 _DEFAULT_APP = Path.home() / "Library" / "Application Support" / "agentx"
 DEFAULT_DATA_ROOT = _DEFAULT_APP / "shadow_live"
 DEFAULT_NEWS_JSONL = _DEFAULT_APP / "news_scores.jsonl"
+DEFAULT_MIN_RUN_ID = 7
 
 REQUIRED_CONFIG_KEYS = (
     "max_book_age_ms",
@@ -47,6 +49,15 @@ REQUIRED_CONFIG_KEYS = (
 )
 
 
+@dataclass(frozen=True)
+class GateResult:
+    """Ein Checkpoint-Gate (GREEN/RED), analog STALE_SNAPSHOT."""
+
+    name: str
+    status: str  # GREEN | RED
+    detail: Any = None
+
+
 def _ok(msg: str) -> None:
     print(f"OK  {msg}")
 
@@ -58,6 +69,68 @@ def _fail(msg: str, errors: list[str]) -> None:
 
 def _warn(msg: str) -> None:
     print(f"WARN {msg}")
+
+
+def gate_telemetry_reconciliation(
+    conn: sqlite3.Connection,
+    *,
+    min_run_id: int = DEFAULT_MIN_RUN_ID,
+) -> GateResult:
+    """RED, wenn erfolgreiche Dispatches ohne korrespondierende Telemetrie existieren.
+
+    Erfolgreich = Zeile in ``dispatched_signals`` ab ``telemetry_runs.started_at``
+    von ``min_run_id``, und *nicht* in ``bridge_discards`` (Claim vor Resolve
+    würde sonst unresolved/no_book als Phantom-Dispatch zählen).
+
+    Erkennt stille Telemetry-Write-Ausfälle, die bei dispatched=0 von
+    „keine Aktivität“ nicht unterscheidbar wären.
+    """
+    row = conn.execute(
+        "SELECT started_at FROM telemetry_runs WHERE run_id = ?",
+        (min_run_id,),
+    ).fetchone()
+    if row is None:
+        return GateResult(
+            name="TELEMETRY_RECONCILIATION",
+            status="GREEN",
+            detail={"note": f"no telemetry_runs.run_id={min_run_id}"},
+        )
+    started_at = float(row[0])
+    dispatched = int(
+        conn.execute(
+            """
+            SELECT COUNT(*) FROM dispatched_signals d
+            WHERE d.dispatched_at >= ?
+              AND NOT EXISTS (
+                SELECT 1 FROM bridge_discards b WHERE b.item_id = d.item_id
+              )
+            """,
+            (started_at,),
+        ).fetchone()[0]
+    )
+    telemetry_rows = int(
+        conn.execute(
+            "SELECT COUNT(*) FROM telemetry WHERE run_id >= ?",
+            (min_run_id,),
+        ).fetchone()[0]
+    )
+    detail = {
+        "min_run_id": min_run_id,
+        "started_at": started_at,
+        "dispatched_success": dispatched,
+        "telemetry_rows": telemetry_rows,
+    }
+    if dispatched > 0 and telemetry_rows < dispatched:
+        return GateResult(
+            name="TELEMETRY_RECONCILIATION",
+            status="RED",
+            detail=detail,
+        )
+    return GateResult(
+        name="TELEMETRY_RECONCILIATION",
+        status="GREEN",
+        detail=detail,
+    )
 
 
 def check_git(expected_prefix: str, errors: list[str]) -> str:
@@ -208,7 +281,12 @@ def check_run_config(
             _ok("run ws_token_ids == freeze")
 
 
-def gate_snapshot(db_path: Path) -> None:
+def gate_snapshot(
+    db_path: Path,
+    errors: list[str],
+    *,
+    min_run_id: int = DEFAULT_MIN_RUN_ID,
+) -> None:
     if not db_path.exists():
         _warn("keine DB für Gate-Schnappschuss")
         return
@@ -218,10 +296,15 @@ def gate_snapshot(db_path: Path) -> None:
             "SELECT reason, COUNT(*) FROM bridge_discards GROUP BY reason"
         ).fetchall()
         stale = conn.execute(
-            "SELECT COUNT(*) FROM telemetry WHERE reject_reason = 'STALE_SNAPSHOT'"
+            "SELECT COUNT(*) FROM telemetry WHERE run_id >= ? "
+            "AND reject_reason = 'STALE_SNAPSHOT'",
+            (min_run_id,),
         ).fetchone()[0]
         fills = conn.execute(
-            "SELECT COUNT(*) FROM telemetry_fill_metrics"
+            "SELECT COUNT(*) FROM telemetry_fill_metrics f "
+            "JOIN telemetry t ON t.seq = f.telemetry_seq "
+            "WHERE t.run_id >= ?",
+            (min_run_id,),
         ).fetchone()[0]
         disp = conn.execute(
             "SELECT COUNT(*) FROM dispatched_signals"
@@ -230,6 +313,7 @@ def gate_snapshot(db_path: Path) -> None:
             "SELECT item_id, COUNT(*) c FROM dispatched_signals "
             "GROUP BY item_id HAVING c > 1"
         ).fetchall()
+        recon = gate_telemetry_reconciliation(conn, min_run_id=min_run_id)
     except sqlite3.Error as exc:
         _warn(f"gate snapshot skipped: {exc}")
         return
@@ -238,11 +322,19 @@ def gate_snapshot(db_path: Path) -> None:
     print("--- Gate-Schnappschuss ---")
     print(f"  dispatched_signals: {disp}")
     print(f"  discard_reasons: {dict(discards)}")
-    print(f"  STALE_SNAPSHOT telemetry: {stale}")
-    print(f"  telemetry_fill_metrics rows: {fills}")
+    print(f"  STALE_SNAPSHOT telemetry (run_id>={min_run_id}): {stale}")
+    print(f"  telemetry_fill_metrics rows (run_id>={min_run_id}): {fills}")
     print(f"  duplicate item_ids: {len(dup)}")
+    print(f"  {recon.name}: {recon.status} detail={recon.detail}")
     if dup:
         print(f"  FAIL duplicates: {dup[:5]}")
+        _fail(f"duplicate item_ids: {dup[:5]}", errors)
+    if recon.status == "RED":
+        _fail(
+            f"{recon.name}: dispatched_success={recon.detail.get('dispatched_success')} "
+            f"> telemetry_rows={recon.detail.get('telemetry_rows')}",
+            errors,
+        )
 
 
 def check_paths(news_jsonl: Path, data_root: Path, errors: list[str], *, after_start: bool) -> None:
@@ -292,6 +384,10 @@ def main(argv: Optional[list[str]] = None) -> int:
         "--after-start", action="store_true",
         help="Strenger: Run + Tail-Offset müssen existieren",
     )
+    parser.add_argument(
+        "--min-run-id", type=int, default=DEFAULT_MIN_RUN_ID,
+        help="Auswertungs-/Gate-Untergrenze (Messperiode: 7)",
+    )
     args = parser.parse_args(argv)
 
     errors: list[str] = []
@@ -310,8 +406,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     check_run_config(
         db_path, freeze, errors, require_run=args.after_start,
     )
-    gate_snapshot(db_path)
-
+    gate_snapshot(db_path, errors, min_run_id=args.min_run_id)
     if errors:
         print(f"\nRESULT: RED ({len(errors)} errors)")
         for e in errors:

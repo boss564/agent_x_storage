@@ -130,8 +130,12 @@ def test_w_bridge_2_dedup_atomic_and_restart() -> None:
 def test_w_bridge_3_unresolved_and_no_book_no_fetch() -> None:
     """W-BRIDGE-3: unresolved / kalter Cache → Verwerf-Beleg, kein Dispatch."""
     bridge, engine, store, tmp = _wired(with_book=False)
+    # empty_list vor Claim (erwartbares Rauschen)
+    assert bridge.on_news_item(_item("empty:1", assets=[])) is False
+    assert ("empty:1", "unresolved_asset:empty_list") in bridge.discards
+    # mapping_miss nach Claim
     assert bridge.on_news_item(_item(assets=["DOGE"])) is False
-    assert ("binance:abc", "unresolved_asset") in bridge.discards
+    assert ("binance:abc", "unresolved_asset:mapping_miss") in bridge.discards
     # claim verbraucht item_id — neues Item für no_book
     assert bridge.on_news_item(_item("binance:nobook", assets=["BTC"])) is False
     assert ("binance:nobook", "no_book") in bridge.discards
@@ -140,7 +144,7 @@ def test_w_bridge_3_unresolved_and_no_book_no_fetch() -> None:
     n = sqlite3.connect(str(Path(tmp.name) / "u1" / "shadow" / "shadow.db")).execute(
         "SELECT COUNT(*) FROM bridge_discards"
     ).fetchone()[0]
-    assert n == 2
+    assert n == 3
     store.close()
     tmp.cleanup()
     print("OK test_w_bridge_3_unresolved_and_no_book_no_fetch")
