@@ -253,7 +253,7 @@ class PolymarketWsFeed:
         async with websockets.connect(self.WS_URL) as ws:
             await ws.send(json.dumps(self.subscription_payload(token_ids)))
             async for raw in ws:
-                self._dispatch(json.loads(raw))
+                self.ingest_raw(raw)
 
     def _ensure_book(self, token: str) -> dict[str, dict[Decimal, Decimal]]:
         """Holt (oder erzeugt) den Buch-Zustand eines Tokens."""
@@ -286,6 +286,17 @@ class PolymarketWsFeed:
         asks = sorted(book["asks"].items(), key=lambda kv: kv[0])
         self._handler.on_book_update(token, bids=bids, asks=asks)
 
+    def ingest_raw(self, raw: str | bytes) -> None:
+        """Parst eine WS-Payload (dict oder list[dict]) und dispatcht Events."""
+        data = json.loads(raw)
+        if isinstance(data, list):
+            for item in data:
+                if isinstance(item, dict):
+                    self._dispatch(item)
+            return
+        if isinstance(data, dict):
+            self._dispatch(data)
+
     def _dispatch(self, msg: dict) -> None:
         """Verteilt eingehende Marktdaten-Events an den Handler.
 
@@ -308,15 +319,26 @@ class PolymarketWsFeed:
                     if price > 0 and size >= 0:
                         book[side_key][price] = size
             self._emit_snapshot(str(token))
-        elif event_type == "price_change" and token:
-            for change in msg.get("changes", []):
+        elif event_type == "price_change":
+            # Newer CLOB: price_changes[{asset_id,price,size,side}]; legacy: market+changes.
+            changes = msg.get("price_changes") or msg.get("changes") or []
+            for change in changes:
+                if not isinstance(change, dict):
+                    continue
+                tok = (
+                    change.get("asset_id")
+                    or change.get("market")
+                    or token
+                )
+                if not tok:
+                    continue
                 self._apply_change(
-                    str(token),
-                    side=str(change["side"]),
+                    str(tok),
+                    side=str(change.get("side") or change.get("Side") or ""),
                     price=Decimal(str(change["price"])),
                     size=Decimal(str(change["size"])),
                 )
-            self._emit_snapshot(str(token))
+                self._emit_snapshot(str(tok))
         elif event_type == "ticker" and token:
             self._handler.on_ticker(
                 token_id=str(token),

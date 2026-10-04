@@ -1,9 +1,11 @@
 """Self-Tests für market_data_feed (SnapshotCache + PolySentinelBookHandler)."""
 
+import json
 import sys
 import threading
 import time
 from decimal import Decimal
+
 
 sys.path.insert(0, "/mnt/agents/output")
 
@@ -207,6 +209,27 @@ def test_feed_delta_without_initial_book() -> None:
     assert snap.best_ask() == Decimal("0.63")
     assert snap.bids == ()
     print("OK test_feed_delta_without_initial_book")
+
+
+def test_feed_ingest_raw_list_payload() -> None:
+    """Live-WS liefert oft list[dict] — darf nicht an .get() scheitern."""
+    from order_execution_engine.market_data_feed import PolymarketWsFeed
+
+    cache = SnapshotCache()
+    feed = PolymarketWsFeed(PolySentinelBookHandler(cache))
+    payload = json.dumps([
+        {
+            "event_type": "book",
+            "market": "0xtokenA",
+            "bids": [{"price": "0.55", "size": "10"}],
+            "asks": [{"price": "0.56", "size": "10"}],
+        }
+    ])
+    feed.ingest_raw(payload)
+    snap = cache.get("0xtokenA")
+    assert snap is not None
+    assert snap.best_bid() == Decimal("0.55")
+    print("OK test_feed_ingest_raw_list_payload")
 
 
 def test_ws_subscribe_uses_market_channel_and_assets_ids() -> None:
