@@ -32,6 +32,7 @@ from order_execution_engine.fill_simulator import (
     FillMetrics,
     FillSimConfig,
     FillSimulator,
+    RestingModel,
     StalenessPolicy,
 )
 from order_execution_engine.models import (
@@ -368,6 +369,11 @@ class PaperMatchEngine:
         self._resting: dict[uuid.UUID, _RestingOrder] = {}
 
     @property
+    def fill_sim(self) -> FillSimulator:
+        """Öffentlicher Seam zum FillSimulator (Cap/Fee/Staleness/Resting)."""
+        return self._fill_sim
+
+    @property
     def resting_count(self) -> int:
         """Anzahl ruhender GTC-Orders (Test-Seam)."""
         return len(self._resting)
@@ -426,12 +432,12 @@ class PaperMatchEngine:
             f"Wert zuerst implementieren, dann aufnehmen."
         )
 
-    def _cross_with_metrics(
+    def _walk(
         self, order: PaperOrder, snapshot: MarketSnapshot, size: Decimal,
         *, market_id: Optional[str] = None,
     ) -> tuple[list[FillResult], Decimal, Decimal, FillMetrics]:
-        """Walk via FillSimulator + Kanon-Tupel (fills, remaining, ref)."""
-        fills, metrics = self._fill_sim.cross(
+        """FillSimulator.cross + Kanon-Ableitung (remaining, touch-ref)."""
+        fills, metrics = self.fill_sim.cross(
             order, snapshot, size=size, market_id=market_id,
         )
         remaining = size - sum(
@@ -444,23 +450,6 @@ class PaperMatchEngine:
                 reference_for_total = _lvl.price
                 break
         return fills, remaining, reference_for_total, metrics
-
-    def _cross(
-        self, order: PaperOrder, snapshot: MarketSnapshot, size: Decimal,
-        *, market_id: Optional[str] = None,
-    ) -> tuple[list[FillResult], Decimal, Decimal]:
-        """Kreuzt ``size`` gegen sichtbare Tiefe (Bestand-Walk 1:1).
-
-        Commit 2: dünne Delegation an ``FillSimulator.cross``. Signatur und
-        Rückgabe = Kanon ``(fills, remaining, reference_for_total)``.
-        ``FillMetrics`` bleiben intern (über ``_cross_with_metrics`` /
-        ``match``); externe Caller sehen sie nicht. Entfernung des Rumpfs
-        in Commit 3 nach grüner Regression.
-        """
-        fills, remaining, reference_for_total, _metrics = self._cross_with_metrics(
-            order, snapshot, size, market_id=market_id,
-        )
-        return fills, remaining, reference_for_total
 
     def _build_result(
         self,
@@ -509,7 +498,7 @@ class PaperMatchEngine:
         market_id: Optional[str] = None,
     ) -> MatchResult:
         """FAK: heutiger Pfad — Rest verworfen, idle = PENDING."""
-        fills, remaining, ref, metrics = self._cross_with_metrics(
+        fills, remaining, ref, metrics = self._walk(
             order, snapshot, order.size, market_id=market_id,
         )
         return self._build_result(
@@ -529,7 +518,7 @@ class PaperMatchEngine:
         decision_seq: int,
     ) -> MatchResult:
         """GTC: kreuzt, Rest ruht im Register; idle = RESTING."""
-        fills, remaining, ref, metrics = self._cross_with_metrics(
+        fills, remaining, ref, metrics = self._walk(
             order, snapshot, order.size, market_id=market_id,
         )
         if remaining > 0:
@@ -543,7 +532,7 @@ class PaperMatchEngine:
                 resting_since=datetime.now(timezone.utc),
             )
             # Queue-Beobachtung additiv; Kanon-Register bleibt _resting.
-            rest = self._fill_sim.place_resting(
+            rest = self.fill_sim.place_resting(
                 order, snapshot, remaining_size=remaining,
             )
             metrics = metrics.model_copy(update={
@@ -559,25 +548,30 @@ class PaperMatchEngine:
     def on_book_update(self, snapshot: MarketSnapshot) -> list[RestingEvaluation]:
         """Nachwertung ruhender GTC-Orders gegen neuen Snapshot.
 
-        Commit 2: Walk-Umleitung über delegiertes ``_cross`` /
-        ``FillSimulator.cross`` mit ``remaining_size`` aus ``_RestingOrder``.
-        Kanon-Semantik (Re-Cross gegen sichtbare Tiefe) bleibt — nicht der
-        Trade-Through-Observer ``FillSimulator.on_book_update``.
+        Default ``RestingModel.RE_CROSS``: Kanon-Walk über ``remaining_size``
+        aus ``_RestingOrder``. Opt-in ``TRADE_THROUGH``: experimenteller
+        Pfad über ``FillSimulator.on_book_update`` (Shadow-A/B).
         """
         out: list[RestingEvaluation] = []
+        use_tt = (
+            self.fill_sim.config.resting_model is RestingModel.TRADE_THROUGH
+        )
         for oid, resting in list(self._resting.items()):
             if resting.order.token_id != snapshot.token_id:
                 continue
-            fills, remaining, ref, metrics = self._cross_with_metrics(
-                resting.order, snapshot, resting.remaining_size,
-                market_id=resting.market_id,
-            )
-            resting.remaining_size = remaining
-            result = self._build_result(
-                fills, remaining, ref,
-                idle_status=OrderStatus.RESTING,
-                fill_metrics=metrics,
-            )
+            if use_tt:
+                result = self._resting_trade_through(resting, snapshot)
+            else:
+                fills, remaining, ref, metrics = self._walk(
+                    resting.order, snapshot, resting.remaining_size,
+                    market_id=resting.market_id,
+                )
+                resting.remaining_size = remaining
+                result = self._build_result(
+                    fills, remaining, ref,
+                    idle_status=OrderStatus.RESTING,
+                    fill_metrics=metrics,
+                )
             out.append(RestingEvaluation(
                 order_id=oid,
                 signal_id=resting.signal_id,
@@ -586,10 +580,32 @@ class PaperMatchEngine:
                 decision_seq=resting.decision_seq,
                 result=result,
             ))
-            if remaining <= 0:
+            if result.remaining_size <= 0:
                 del self._resting[oid]
-                self._fill_sim._resting_queue.pop(oid, None)
+                self.fill_sim._resting_queue.pop(oid, None)
         return out
+
+    def _resting_trade_through(
+        self, resting: _RestingOrder, snapshot: MarketSnapshot,
+    ) -> MatchResult:
+        """Opt-in TRADE_THROUGH — experimentell, Default bleibt RE_CROSS."""
+        tt = self.fill_sim.on_book_update(
+            resting.order, snapshot,
+            remaining_size=resting.remaining_size,
+            market_id=resting.market_id,
+        )
+        if tt is None:
+            return self._build_result(
+                [], resting.remaining_size, resting.order.price,
+                idle_status=OrderStatus.RESTING,
+            )
+        fills, metrics = tt
+        resting.remaining_size = Decimal("0")
+        return self._build_result(
+            fills, Decimal("0"), resting.order.price,
+            idle_status=OrderStatus.RESTING,
+            fill_metrics=metrics,
+        )
 
     def reap_expired(self, now: datetime) -> list[RestingExpiry]:
         """Entfernt abgelaufene ruhende Orders aus dem Register.
@@ -798,7 +814,6 @@ class ShadowExecutionEngine:
         self.matcher = PaperMatchEngine(
             fee_bps=cfg.fee_bps, fill_sim_config=fill_sim_config,
         )
-        self._fill_sim = self.matcher._fill_sim
         self.portfolio = VirtualPortfolio()
         self.telemetry = telemetry or TelemetryLogger()
         self.invert_weak_signals = invert_weak_signals
@@ -825,6 +840,11 @@ class ShadowExecutionEngine:
             start_balance=self.portfolio.start_balance,
         )
 
+    @property
+    def fill_sim(self) -> FillSimulator:
+        """FillSimulator des Matchers — sichtbare Komponentengrenze."""
+        return self.matcher.fill_sim
+
     def _preflight_staleness(
         self,
         signal: SignalPayload,
@@ -840,12 +860,12 @@ class ShadowExecutionEngine:
         """
         now_ms = now * 1000.0
         signal_ts_ms = signal.timestamp.timestamp() * 1000.0
-        if self._fill_sim.is_stale(
+        if self.fill_sim.is_stale(
             snapshot, now_ms=now_ms, signal_timestamp_ms=signal_ts_ms,
         ):
-            if self._fill_sim.staleness_policy is StalenessPolicy.NEXT_TICK:
-                # Parken via bestehendes GTC-Resting (Commit 2 verdichtet
-                # staleness_applied=NEXT_TICK am place_resting-Seam).
+            if self.fill_sim.staleness_policy is StalenessPolicy.NEXT_TICK:
+                # Parken via bestehendes GTC-Resting;
+                # staleness_applied=NEXT_TICK am place_resting-Seam.
                 return None
             return RejectReason.STALE_SNAPSHOT
         return None
@@ -1205,9 +1225,8 @@ class ShadowExecutionEngine:
             mode=self.guard.mode,
         )
 
-        # Fill-Tiefe Commit 1: Signal-Ref + Staleness-Preflight (vor Match).
-        # match()/_cross bleiben unangetastet — Simulator steht daneben.
-        self._fill_sim.register_signal_ref(order.order_id, signal.suggested_price)
+        # Fill-Tiefe: Signal-Ref + Staleness-Preflight (vor Match).
+        self.fill_sim.register_signal_ref(order.order_id, signal.suggested_price)
         stale_reason = self._preflight_staleness(signal, active, now=time.time())
         if stale_reason is not None:
             record = TelemetryRecord(

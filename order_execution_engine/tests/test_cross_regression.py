@@ -1,4 +1,4 @@
-"""Regression Commit 2 — Golden FillResult-Listen nach FillSimulator-Delegation.
+"""Regression — Golden FillResult-Listen über den produktiven ``match()``-Seam.
 
 W-SLIP-1: bit-identisch zu ``tests/fixtures/cross_golden.json`` (pre-delegation).
 W-QUEUE-2: Crossing-Pfad unabhängig von ``conservative_queue``.
@@ -11,17 +11,22 @@ import uuid
 from decimal import Decimal
 from pathlib import Path
 
-from order_execution_engine.fill_simulator import FillSimConfig
+from order_execution_engine.fill_simulator import FillSimConfig, RestingModel
 from order_execution_engine.models import (
+    Direction,
     OrderSide,
+    OrderStatus,
     OrderType,
     PaperOrder,
+    RiskConfig,
+    SignalPayload,
     default_expiration,
 )
 from order_execution_engine.shadow_execution_engine import (
     MarketSnapshot,
     OrderBookLevel,
     PaperMatchEngine,
+    ShadowExecutionEngine,
 )
 
 GOLDEN_PATH = (
@@ -74,46 +79,35 @@ def _fills_as_dicts(fills) -> list[dict]:
     ]
 
 
-def _build_matcher(
-    *,
-    fee_bps: Decimal = Decimal("0"),
-    max_slippage_bps: Decimal | None = None,
-    conservative_queue: bool = True,
+def _matcher_for_case(
+    case: dict, *, conservative_queue: bool = True,
 ) -> PaperMatchEngine:
-    return PaperMatchEngine(
-        fee_bps=fee_bps,
-        max_slippage_bps=max_slippage_bps,
-        fill_sim_config=FillSimConfig(conservative_queue=conservative_queue),
-    )
-
-
-def _matcher_for_case(case: dict, *, conservative_queue: bool = True) -> PaperMatchEngine:
     fee = Decimal(case["fee_bps"])
     cap = (
         None if case["max_slippage_bps"] is None
         else Decimal(case["max_slippage_bps"])
     )
-    return _build_matcher(
+    return PaperMatchEngine(
         fee_bps=fee,
         max_slippage_bps=cap,
-        conservative_queue=conservative_queue,
+        fill_sim_config=FillSimConfig(conservative_queue=conservative_queue),
     )
 
 
 def test_w_slip_1_golden_fills() -> None:
-    """W-SLIP-1: FillResult-Listen bit-identisch zu Golden Fixtures."""
+    """W-SLIP-1: FillResult-Listen bit-identisch über ``match()``."""
     assert GOLDEN, "cross_golden.json leer — dump_cross_fixtures.py erneut?"
     for case in GOLDEN:
         eng = _matcher_for_case(case)
         order = _load_order(case["order"])
-        snapshot = _load_snapshot(case["snapshot"])
-        fills, remaining, ref = eng._cross(
-            order, snapshot, Decimal(case["size"]),
+        # Fixture-size == order.size (Dump-Vertrag); Match nutzt order.size.
+        assert str(order.size) == case["size"], case["name"]
+        result = eng.match(
+            order, _load_snapshot(case["snapshot"]),
             market_id=case["market_id"],
         )
-        assert _fills_as_dicts(fills) == case["expected_fills"], case["name"]
-        assert str(remaining) == case["expected_remaining"], case["name"]
-        assert str(ref) == case["expected_reference"], case["name"]
+        assert _fills_as_dicts(result.fills) == case["expected_fills"], case["name"]
+        assert str(result.remaining_size) == case["expected_remaining"], case["name"]
     print("OK test_w_slip_1_golden_fills")
 
 
@@ -122,24 +116,22 @@ def test_w_queue_2_cross_unaffected_by_queue() -> None:
     for conservative in (True, False):
         for case in GOLDEN:
             eng = _matcher_for_case(case, conservative_queue=conservative)
-            fills, _, _ = eng._cross(
+            result = eng.match(
                 _load_order(case["order"]),
                 _load_snapshot(case["snapshot"]),
-                Decimal(case["size"]),
                 market_id=case["market_id"],
             )
-            assert _fills_as_dicts(fills) == case["expected_fills"], (
+            assert _fills_as_dicts(result.fills) == case["expected_fills"], (
                 f"{case['name']} conservative_queue={conservative}"
             )
     print("OK test_w_queue_2_cross_unaffected_by_queue")
 
 
 def test_match_exposes_fill_metrics() -> None:
-    """Stichprobe: match() trägt reale FillMetrics (Telemetrie-Seam)."""
+    """Stichprobe: match() trägt reale FillMetrics."""
     eng = PaperMatchEngine(fee_bps=Decimal("10"))
     order = _load_order(GOLDEN[0]["order"])
     snapshot = _load_snapshot(GOLDEN[0]["snapshot"])
-    # size aus Fixture (200) — Order-Objekt trägt size=200 bereits
     result = eng.match(order, snapshot, market_id="mkt-1")
     assert result.fill_metrics is not None
     assert result.fill_metrics.filled_size == Decimal("200")
@@ -150,9 +142,6 @@ def test_match_exposes_fill_metrics() -> None:
 
 def test_engine_telemetry_carries_fill_metrics() -> None:
     """Engine-Telemetrie auf approved-Pfad enthält fill_metrics."""
-    from order_execution_engine.models import Direction, RiskConfig, SignalPayload
-    from order_execution_engine.shadow_execution_engine import ShadowExecutionEngine
-
     eng = ShadowExecutionEngine(
         risk_config=RiskConfig(max_order_size_shares=Decimal("100")),
     )
@@ -171,3 +160,53 @@ def test_engine_telemetry_carries_fill_metrics() -> None:
     assert rec.fill_metrics is not None
     assert rec.fill_metrics.filled_size > 0
     print("OK test_engine_telemetry_carries_fill_metrics")
+
+
+def test_resting_model_trade_through_opt_in() -> None:
+    """TRADE_THROUGH: Fill nur bei striktem Durchbruch; Default bleibt RE_CROSS."""
+    # RE_CROSS (Default): neue Tiefe am Limit füllt Rest — Kanon.
+    m_recross = PaperMatchEngine()
+    thin = MarketSnapshot(
+        token_id="0xtokenA",
+        asks=(OrderBookLevel(Decimal("0.61"), Decimal("200")),),
+        bids=(OrderBookLevel(Decimal("0.59"), Decimal("150")),),
+    )
+    more_depth = MarketSnapshot(
+        token_id="0xtokenA",
+        asks=(OrderBookLevel(Decimal("0.61"), Decimal("500")),),
+        bids=(OrderBookLevel(Decimal("0.59"), Decimal("150")),),
+    )
+    o = PaperOrder(
+        signal_id=uuid.uuid4(), token_id="0xtokenA", side=OrderSide.BUY,
+        price=Decimal("0.61"), size=Decimal("400"),
+        expiration=default_expiration(5), order_type=OrderType.GTC,
+    )
+    assert m_recross.match(o, thin, market_id="mkt-1").remaining_size == Decimal("200")
+    evals = m_recross.on_book_update(more_depth)
+    assert evals[0].result.status is OrderStatus.FILLED
+
+    # TRADE_THROUGH: gleiche Tiefe am Limit — kein Fill; erst best_ask < Limit.
+    m_tt = PaperMatchEngine(
+        fill_sim_config=FillSimConfig(resting_model=RestingModel.TRADE_THROUGH),
+    )
+    o2 = o.model_copy(update={"order_id": uuid.uuid4()})
+    assert m_tt.match(o2, thin, market_id="mkt-1").remaining_size == Decimal("200")
+    idle = m_tt.on_book_update(more_depth)
+    assert idle[0].result.fills == ()
+    assert idle[0].result.remaining_size == Decimal("200")
+    through = MarketSnapshot(
+        token_id="0xtokenA",
+        asks=(OrderBookLevel(Decimal("0.60"), Decimal("10")),),
+        bids=(OrderBookLevel(Decimal("0.59"), Decimal("150")),),
+    )
+    filled = m_tt.on_book_update(through)
+    assert filled[0].result.status is OrderStatus.FILLED
+    assert filled[0].result.fills[0].execution_price == Decimal("0.61")
+    print("OK test_resting_model_trade_through_opt_in")
+
+
+def test_fill_sim_property_on_engine() -> None:
+    """Engine.fill_sim ist der Matcher-Seam (keine stille Privatkopplung)."""
+    eng = ShadowExecutionEngine()
+    assert eng.fill_sim is eng.matcher.fill_sim
+    print("OK test_fill_sim_property_on_engine")

@@ -9,8 +9,8 @@ Staleness-Producer (Anker D): ``ShadowExecutionEngine._preflight_staleness``
 trägt das Literal ``RejectReason.STALE_SNAPSHOT``. Dieses Modul liefert nur
 ``is_stale() -> bool``.
 
-Commit 1: Modul + Zeugen; ``PaperMatchEngine.match`` / ``_cross`` unberührt.
-Commit 2: Delegation; Commit 3: ``_cross`` entfernen.
+Commit 1: Modul + Zeugen; Commit 2: Delegation; Commit 3: ``_cross`` entfernt.
+Resting: Default ``RE_CROSS`` (Kanon); ``TRADE_THROUGH`` nur per Config (Opt-in).
 """
 
 from __future__ import annotations
@@ -35,6 +35,18 @@ class StalenessPolicy(str, Enum):
     NEXT_TICK = "next_tick"  # nur per Config: parken via GTC-Resting
 
 
+class RestingModel(str, Enum):
+    """Nachwertung ruhender GTC-Orders.
+
+    ``RE_CROSS`` (Default): Kanon — sichtbare Tiefe erneut walken.
+    ``TRADE_THROUGH``: experimentell — Fill nur bei striktem Trade-Through;
+    Queue-Schwund ohne Durchbruch füllt nicht. Opt-in für Shadow-A/B.
+    """
+
+    RE_CROSS = "re_cross"
+    TRADE_THROUGH = "trade_through"
+
+
 class FillSimConfig(BaseModel):
     """Konfiguration der Fill-Simulation (frozen)."""
 
@@ -43,7 +55,8 @@ class FillSimConfig(BaseModel):
     max_book_age_ms: int = 2000
     staleness_policy: StalenessPolicy = StalenessPolicy.REJECT_STALE
     conservative_queue: bool = True
-    # Commit 2: 1:1 von PaperMatchEngine übernehmen
+    resting_model: RestingModel = RestingModel.RE_CROSS
+    # Cap/Fee 1:1 vom PaperMatchEngine (keine zweite Wahrheit)
     max_slippage_bps: Optional[Decimal] = None
     fee_bps: Decimal = Decimal("0")
 
@@ -109,12 +122,16 @@ def _level_size(
 
 
 class FillSimulator:
-    """Buch-Walk + Queue/Staleness-Hilfen (Commit 1, neben dem Matcher)."""
+    """Buch-Walk + Queue/Staleness-Hilfen (kanonischer Fill-Pfad)."""
 
     def __init__(self, config: FillSimConfig) -> None:
         self._cfg = config
         self._resting_queue: dict[uuid.UUID, _RestingQueue] = {}
         self._signal_refs: dict[uuid.UUID, Decimal] = {}
+
+    @property
+    def config(self) -> FillSimConfig:
+        return self._cfg
 
     def is_stale(
         self,
@@ -151,10 +168,10 @@ class FillSimulator:
         size: Decimal,
         market_id: Optional[str] = None,
     ) -> tuple[list[FillResult], FillMetrics]:
-        """1:1-Walk aus ``_cross`` (Limit/Cap/Fee) plus Beobachtungs-Metriken.
+        """Buch-Walk (Limit/Cap/Fee) plus Beobachtungs-Metriken.
 
         ``size`` = ``order.size`` bei Frischorders, ``remaining_size`` bei
-        Resting-Nachwertung.
+        Resting-Nachwertung (``RE_CROSS``).
         """
         book_side = snapshot.asks if order.side == OrderSide.BUY else snapshot.bids
         remaining = size

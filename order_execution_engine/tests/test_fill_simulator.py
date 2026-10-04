@@ -1,7 +1,6 @@
-"""Zeugen Fill-Tiefe Commit 1 — FillSimulator neben dem Bestand-Matcher.
+"""Zeugen FillSimulator (Unit) — Walk/Queue/Staleness direkt.
 
-match()/_cross bleiben unberührt; dieses Modul wird direkt gezeugt.
-W-STALE-1/2 laufen gegen den Engine-Harness (siehe test_engine.py).
+Produktiver Seam: ``PaperMatchEngine.match``. W-STALE-1/2: Engine-Harness.
 """
 
 from __future__ import annotations

@@ -1,12 +1,10 @@
 #!/usr/bin/env python3
-"""Dump Golden FillResult-Listen aus dem Kanon-``_cross`` (vor Delegation).
+"""Dump Golden FillResult-Listen über den produktiven ``match()``-Seam.
 
-Einmalig auf dem Vor-Delegations-Stand ausführen:
+Historisch eingefroren vor Delegation (``026d2530``). Neu-Dump nur bei
+bewusster Golden-Aktualisierung:
 
-    python order_execution_engine/scripts/dump_cross_fixtures.py \\
-        > order_execution_engine/tests/fixtures/cross_golden.json
-
-Oder schreibt direkt in den Fixture-Pfad (Default).
+    python order_execution_engine/scripts/dump_cross_fixtures.py
 """
 
 from __future__ import annotations
@@ -123,9 +121,18 @@ def build_cases() -> list[dict]:
         market_id: str | None = "mkt-1",
     ) -> None:
         sz = order.size if size is None else size
-        fills, remaining, ref = eng._cross(
-            order, snapshot, sz, market_id=market_id,
+        if size is not None and size != order.size:
+            order = order.model_copy(update={"size": size})
+        result = eng.match(order, snapshot, market_id=market_id)
+        # Touch-Ref = erstes gültige Level (wie MatchResult-Slippage-Basis)
+        levels = (
+            snapshot.asks if order.side is OrderSide.BUY else snapshot.bids
         )
+        ref = order.price
+        for _lvl in levels:
+            if _lvl.price > 0 and _lvl.size > 0:
+                ref = _lvl.price
+                break
         cases.append({
             "name": name,
             "fee_bps": str(eng.fee_bps),
@@ -137,8 +144,8 @@ def build_cases() -> list[dict]:
             "snapshot": _ser_snap(snapshot),
             "size": str(sz),
             "market_id": market_id,
-            "expected_fills": [_ser_fill(f) for f in fills],
-            "expected_remaining": str(remaining),
+            "expected_fills": [_ser_fill(f) for f in result.fills],
+            "expected_remaining": str(result.remaining_size),
             "expected_reference": str(ref),
         })
 
