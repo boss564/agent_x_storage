@@ -39,7 +39,7 @@ from order_execution_engine.shadow_execution_engine import TelemetryRecord
 
 _LOG = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 _USER_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
 
 
@@ -204,6 +204,16 @@ class SQLiteShadowStorage:
         queue_ahead_at_rest TEXT,
         payload_json TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS dispatched_signals (
+        item_id TEXT PRIMARY KEY,
+        dispatched_at REAL,
+        telemetry_seq INTEGER
+    );
+    CREATE TABLE IF NOT EXISTS bridge_discards (
+        item_id TEXT NOT NULL,
+        reason TEXT NOT NULL,
+        discarded_at REAL NOT NULL
+    );
     """
 
     # Migration v1 -> v2 (F1, VM3). Drei Spalten, zwei Backfill-Semantiken.
@@ -254,6 +264,7 @@ class SQLiteShadowStorage:
         self._migrate_v4()
         self._migrate_v5()
         self._migrate_v6()
+        self._migrate_v7()
         self._conn.execute(
             "INSERT OR REPLACE INTO schema_meta (key, value) VALUES ('schema_version', ?)",
             (str(SCHEMA_VERSION),),
@@ -357,6 +368,67 @@ class SQLiteShadowStorage:
                 "ALTER TABLE telemetry ADD COLUMN run_id INTEGER"
                 " REFERENCES telemetry_runs(run_id)"
             )
+
+    def _migrate_v7(self) -> None:
+        """v6 → v7: Dedup + Bridge-Discard-Belege."""
+        self._conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS dispatched_signals (
+                item_id TEXT PRIMARY KEY,
+                dispatched_at REAL,
+                telemetry_seq INTEGER
+            )
+            """
+        )
+        self._conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS bridge_discards (
+                item_id TEXT NOT NULL,
+                reason TEXT NOT NULL,
+                discarded_at REAL NOT NULL
+            )
+            """
+        )
+
+    def claim_dispatch(self, item_id: str, *, now: Optional[float] = None) -> bool:
+        """Atomarer Dedup: INSERT OR IGNORE. True = neu, False = Duplikat."""
+        import time as _time
+
+        ts = float(now if now is not None else _time.time())
+        with self._lock:
+            cur = self._conn.execute(
+                "INSERT OR IGNORE INTO dispatched_signals"
+                " (item_id, dispatched_at, telemetry_seq) VALUES (?, ?, NULL)",
+                (item_id, ts),
+            )
+            self._conn.commit()
+            return cur.rowcount == 1
+
+    def bind_dispatch_telemetry(
+        self, item_id: str, telemetry_seq: Optional[int],
+    ) -> None:
+        """Nachziehen der telemetry_seq für einen Dispatch."""
+        with self._lock:
+            self._conn.execute(
+                "UPDATE dispatched_signals SET telemetry_seq = ?"
+                " WHERE item_id = ?",
+                (telemetry_seq, item_id),
+            )
+            self._conn.commit()
+
+    def log_bridge_discard(self, item_id: str, reason: str,
+                           *, now: Optional[float] = None) -> None:
+        """Belegter Verwerf-Eintrag (unresolved / no_book / …)."""
+        import time as _time
+
+        ts = float(now if now is not None else _time.time())
+        with self._lock:
+            self._conn.execute(
+                "INSERT INTO bridge_discards (item_id, reason, discarded_at)"
+                " VALUES (?, ?, ?)",
+                (item_id, reason, ts),
+            )
+            self._conn.commit()
 
     def latest_decision_seq(self) -> int:
         """Höchster persistierter `decision_seq` (0, wenn keiner existiert).
