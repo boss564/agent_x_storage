@@ -852,16 +852,21 @@ class ShadowExecutionEngine:
         *,
         now: float,
     ) -> Optional[RejectReason]:
-        """Fail-closed Frischeprüfung vor dem Matcher (Anker D).
+        """Fail-closed Buch-Frische vor dem Matcher (Anker D).
 
         Das Literal ``RejectReason.STALE_SNAPSHOT`` steht bewusst hier —
         der Regex-Scan in ``test_ankerd_meta_*`` findet nur Produzenten
         in dieser Datei. ``FillSimulator.is_stale`` liefert nur bool.
+
+        C7: Publish-Alter der News ist **nicht** Execution-Staleness.
+        Die Signal-Latenz-Komponente im ``max()`` misst Dispatch→Ausführung
+        (hier ≈ 0 ms, weil Preflight am Dispatch-Zeitpunkt läuft). News-Alter
+        filtert die Bridge via ``max_news_age_s`` (kein neuer RejectReason).
         """
         now_ms = now * 1000.0
-        signal_ts_ms = signal.timestamp.timestamp() * 1000.0
+        # Dispatch-Zeitpunkt ≈ now → latency_ms ≈ 0; nur book_age bindet.
         if self.fill_sim.is_stale(
-            snapshot, now_ms=now_ms, signal_timestamp_ms=signal_ts_ms,
+            snapshot, now_ms=now_ms, signal_timestamp_ms=now_ms,
         ):
             if self.fill_sim.staleness_policy is StalenessPolicy.NEXT_TICK:
                 # Parken via bestehendes GTC-Resting;

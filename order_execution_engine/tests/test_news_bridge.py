@@ -155,7 +155,9 @@ def test_w_bridge_4_naive_ts_and_uuid5_determinism() -> None:
     b = uuid.uuid5(SIGNAL_NAMESPACE, "x:1")
     assert a == b
     bridge, engine, store, tmp = _wired()
-    bridge.on_news_item(_item("x:1", ts="2026-08-30T13:18:38.955834"))
+    # Frischer naiver ISO (ohne Offset) — Alter-Gate + UTC-Annahme
+    fresh_naive = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
+    bridge.on_news_item(_item("x:1", ts=fresh_naive))
     assert engine.telemetry._records[0].signal_id == a
     store.close()
     tmp.cleanup()
@@ -206,3 +208,45 @@ def test_policy_maps_direction_and_size_fn() -> None:
     )
     assert p.size_fn(sig, None) == Decimal("100")
     print("OK test_policy_maps_direction_and_size_fn")
+
+
+def test_w_bridge_5_news_age_discard_stale_path_untouched() -> None:
+    """W-BRIDGE-5: News > max_news_age_s → news_too_old, kein Dispatch; STALE unberührt."""
+    bridge, engine, store, tmp = _wired()
+    # Publish weit in der Vergangenheit, Buch frisch
+    old_ts = "2026-01-01T00:00:00+00:00"
+    assert bridge.on_news_item(_item("old:1", ts=old_ts)) is False
+    assert ("old:1", "news_too_old") in bridge.discards
+    assert engine.telemetry._records == []
+    # Kein STALE_SNAPSHOT-Producer aus der Bridge — Engine unberührt
+    assert all(
+        r.reject_reason is not RejectReason.STALE_SNAPSHOT
+        for r in engine.telemetry._records
+    )
+    # Frisches Item bei max_news_age_s=300 → Dispatch
+    assert bridge.on_news_item(_item("fresh:1")) is True
+    assert engine.telemetry._records[-1].reject_reason is not RejectReason.STALE_SNAPSHOT
+    # Buch-STALE-Pfad weiter aktiv (Anker D): gealterter Snapshot
+    from order_execution_engine.shadow_execution_engine import MarketSnapshot, OrderBookLevel
+    from order_execution_engine.models import SignalPayload
+    aged = MarketSnapshot(
+        token_id="0xtokenBTC",
+        asks=(OrderBookLevel(Decimal("0.61"), Decimal("100")),),
+        bids=(OrderBookLevel(Decimal("0.59"), Decimal("100")),),
+        received_at=1.0,
+    )
+    eng2 = ShadowExecutionEngine(
+        risk_config=RiskConfig(max_order_size_shares=Decimal("100")),
+        fill_sim_config=FillSimConfig(max_book_age_ms=500),
+    )
+    sig = SignalPayload(
+        target_token_id="0xtokenBTC", market_id="mkt-btc",
+        direction=Direction.UP, confidence=Decimal("80"),
+        timestamp=datetime.now(timezone.utc),
+    )
+    report = eng2.on_signal(sig, aged)
+    assert not report.approved
+    assert report.reject_reason is RejectReason.STALE_SNAPSHOT
+    store.close()
+    tmp.cleanup()
+    print("OK test_w_bridge_5_news_age_discard_stale_path_untouched")

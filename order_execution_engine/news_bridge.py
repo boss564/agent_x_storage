@@ -76,6 +76,9 @@ class BridgePolicy:
     })
     default_size: Decimal = Decimal("25")
     confidence_mode: str = "abs_sentiment_pct"
+    # C7: Strategie-Frische (Sekunden), getrennt von max_book_age_ms (ms).
+    # v1: Poll-Kadenz 180 s + Puffer → 300 s.
+    max_news_age_s: float = 300.0
     _pending_sizes: dict[uuid.UUID, Decimal] = field(default_factory=dict)
 
     @classmethod
@@ -89,7 +92,16 @@ class BridgePolicy:
             size_by_impact=sizes or cls().size_by_impact,
             default_size=Decimal(str(cfg.get("default_size", "25"))),
             confidence_mode=str(cfg.get("confidence_mode", "abs_sentiment_pct")),
+            max_news_age_s=float(cfg.get("max_news_age_s", 300)),
         )
+
+    def is_news_too_old(
+        self, publish_ts: datetime, *, now: Optional[float] = None,
+    ) -> bool:
+        """True wenn Publish-Alter > max_news_age_s (kein STALE_SNAPSHOT)."""
+        now_s = time.time() if now is None else now
+        age_s = now_s - publish_ts.timestamp()
+        return age_s > self.max_news_age_s
 
     def direction_from(self, sentiment_score: Any) -> Direction:
         score = Decimal(str(sentiment_score))
@@ -126,6 +138,7 @@ class BridgePolicy:
             "size_by_impact": {k: str(v) for k, v in self.size_by_impact.items()},
             "default_size": str(self.default_size),
             "confidence_mode": self.confidence_mode,
+            "max_news_age_s": self.max_news_age_s,
         }
 
 
@@ -196,11 +209,22 @@ class NewsBridge:
         if self._storage is not None:
             self._storage.log_bridge_discard(item_id, reason)
 
-    def on_news_item(self, item: dict) -> bool:
+    def on_news_item(self, item: dict, *, now: Optional[float] = None) -> bool:
         """Dispatched ein News-Item. False = Duplikat/verworfen."""
         item_id = item.get("item_id")
         if not item_id:
             return False
+
+        raw_ts = item.get("timestamp")
+        if not raw_ts:
+            self._log_discard(str(item_id), "missing_timestamp")
+            return False
+        publish_ts = parse_news_timestamp(str(raw_ts))
+        # C7: News-Alter (Strategie) — vor Dedup, kein STALE_SNAPSHOT.
+        if self._policy.is_news_too_old(publish_ts, now=now):
+            self._log_discard(str(item_id), "news_too_old")
+            return False
+
         if not self._dedup.claim(str(item_id)):
             return False
 
@@ -215,11 +239,6 @@ class NewsBridge:
             return False
 
         signal_id = uuid.uuid5(self._namespace, str(item_id))
-        raw_ts = item.get("timestamp")
-        if not raw_ts:
-            self._log_discard(str(item_id), "missing_timestamp")
-            return False
-
         size = self._policy.size_for_impact(item.get("impact_level"))
         self._policy.remember_size(signal_id, size)
 
@@ -231,7 +250,7 @@ class NewsBridge:
             direction=self._policy.direction_from(item.get("sentiment_score", 0)),
             confidence=self._policy.confidence_from(item.get("sentiment_score", 0)),
             suggested_price=None,
-            timestamp=parse_news_timestamp(str(raw_ts)),
+            timestamp=publish_ts,
         )
         self._engine.on_signal(signal, snapshot)
         # telemetry_seq wird vom Sink nachgezogen — hier optional None
