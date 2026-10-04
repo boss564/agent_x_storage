@@ -29,6 +29,7 @@ from typing import Callable, Iterable, Optional, Any
 from pydantic import BaseModel, ConfigDict
 
 from order_execution_engine.fill_simulator import (
+    FillMetrics,
     FillSimConfig,
     FillSimulator,
     StalenessPolicy,
@@ -274,6 +275,8 @@ class MatchResult:
         avg_execution_price: Volumengewichteter Durchschnittspreis.
         total_slippage_bps: Gesamtslippage in Basispunkten (vs. Limit).
         remaining_size: Nicht ausgeführte Restgröße.
+        fill_metrics: Additiv (Commit 2) — Beobachtung aus FillSimulator;
+            Default None, Bestand-Caller bleiben kompatibel.
     """
 
     status: OrderStatus
@@ -281,6 +284,7 @@ class MatchResult:
     avg_execution_price: Optional[Decimal]
     total_slippage_bps: Decimal
     remaining_size: Decimal
+    fill_metrics: Optional[FillMetrics] = None
 
 
 @dataclass
@@ -331,16 +335,36 @@ class PaperMatchEngine:
     und wird bei ``on_book_update`` nachgewertet.
     """
 
-    def __init__(self, fee_bps: Decimal = Decimal("0"), max_slippage_bps: Optional[Decimal] = None) -> None:
+    def __init__(
+        self,
+        fee_bps: Decimal = Decimal("0"),
+        max_slippage_bps: Optional[Decimal] = None,
+        *,
+        fill_sim_config: Optional[FillSimConfig] = None,
+    ) -> None:
         """Initialisiert die Match-Engine.
 
         Args:
             fee_bps: Simulierte Gebühr pro Fill in Basispunkten.
             max_slippage_bps: Optionales Slippage-Limit; darüber wird
                 die Order nicht ausgeführt (Reject).
+            fill_sim_config: Optionale Fill-Tiefe-Knöpfe (Staleness/Queue).
+                ``fee_bps`` / ``max_slippage_bps`` kommen **immer** 1:1 von
+                den Matcher-Args — keine zweite Wahrheitsquelle.
         """
         self.fee_bps = fee_bps
         self.max_slippage_bps = max_slippage_bps
+        # Drift-Risiko 1: Cap/Fee ausschließlich vom Matcher.
+        if fill_sim_config is None:
+            sim_cfg = FillSimConfig(
+                max_slippage_bps=max_slippage_bps, fee_bps=fee_bps,
+            )
+        else:
+            sim_cfg = fill_sim_config.model_copy(update={
+                "max_slippage_bps": max_slippage_bps,
+                "fee_bps": fee_bps,
+            })
+        self._fill_sim = FillSimulator(sim_cfg)
         self._resting: dict[uuid.UUID, _RestingOrder] = {}
 
     @property
@@ -402,59 +426,40 @@ class PaperMatchEngine:
             f"Wert zuerst implementieren, dann aufnehmen."
         )
 
+    def _cross_with_metrics(
+        self, order: PaperOrder, snapshot: MarketSnapshot, size: Decimal,
+        *, market_id: Optional[str] = None,
+    ) -> tuple[list[FillResult], Decimal, Decimal, FillMetrics]:
+        """Walk via FillSimulator + Kanon-Tupel (fills, remaining, ref)."""
+        fills, metrics = self._fill_sim.cross(
+            order, snapshot, size=size, market_id=market_id,
+        )
+        remaining = size - sum(
+            (f.executed_size for f in fills), Decimal("0"),
+        )
+        levels = snapshot.asks if order.side == OrderSide.BUY else snapshot.bids
+        reference_for_total = order.price
+        for _lvl in levels:
+            if _lvl.price > 0 and _lvl.size > 0:
+                reference_for_total = _lvl.price
+                break
+        return fills, remaining, reference_for_total, metrics
+
     def _cross(
         self, order: PaperOrder, snapshot: MarketSnapshot, size: Decimal,
         *, market_id: Optional[str] = None,
     ) -> tuple[list[FillResult], Decimal, Decimal]:
         """Kreuzt ``size`` gegen sichtbare Tiefe (Bestand-Walk 1:1).
 
-        Returns:
-            (fills, remaining, reference_for_total) — reference für Slippage-bps.
+        Commit 2: dünne Delegation an ``FillSimulator.cross``. Signatur und
+        Rückgabe = Kanon ``(fills, remaining, reference_for_total)``.
+        ``FillMetrics`` bleiben intern (über ``_cross_with_metrics`` /
+        ``match``); externe Caller sehen sie nicht. Entfernung des Rumpfs
+        in Commit 3 nach grüner Regression.
         """
-        levels = snapshot.asks if order.side == OrderSide.BUY else snapshot.bids
-        remaining = size
-        fills: list[FillResult] = []
-        notional_sum = Decimal("0")
-        volume_sum = Decimal("0")
-        reference_price = order.price
-        for _lvl in levels:
-            if _lvl.price > 0 and _lvl.size > 0:
-                reference_price = _lvl.price
-                break
-        reference_for_total = reference_price
-
-        for level in levels:
-            if remaining <= 0:
-                break
-            if level.price <= 0 or level.size <= 0:
-                continue
-            if order.side == OrderSide.BUY and level.price > order.price:
-                break
-            if order.side == OrderSide.SELL and level.price < order.price:
-                break
-            executed = min(remaining, level.size)
-            slip = level.price - reference_price
-            if order.side == OrderSide.SELL:
-                slip = -slip
-            slip_bps = (slip / reference_price) * Decimal("10000")
-            if self.max_slippage_bps is not None and slip_bps > self.max_slippage_bps:
-                break
-            reference_price = level.price
-            fee = (level.price * executed) * self.fee_bps / Decimal("10000")
-            fills.append(FillResult(
-                order_id=order.order_id,
-                execution_price=level.price,
-                executed_size=executed,
-                slippage=slip,
-                fee=fee,
-                side=order.side,
-                token_id=order.token_id,
-                market_id=market_id,
-            ))
-            notional_sum += level.price * executed
-            volume_sum += executed
-            remaining -= executed
-
+        fills, remaining, reference_for_total, _metrics = self._cross_with_metrics(
+            order, snapshot, size, market_id=market_id,
+        )
         return fills, remaining, reference_for_total
 
     def _build_result(
@@ -464,6 +469,7 @@ class PaperMatchEngine:
         reference_for_total: Decimal,
         *,
         idle_status: OrderStatus,
+        fill_metrics: Optional[FillMetrics] = None,
     ) -> MatchResult:
         """Status/avg/slippage — idle_status = PENDING (FAK) oder RESTING (GTC)."""
         total_slip_bps = Decimal("0")
@@ -492,6 +498,7 @@ class PaperMatchEngine:
             avg_execution_price=avg_price,
             total_slippage_bps=total_slip_bps,
             remaining_size=remaining,
+            fill_metrics=fill_metrics,
         )
 
     def _match_fak(
@@ -502,11 +509,13 @@ class PaperMatchEngine:
         market_id: Optional[str] = None,
     ) -> MatchResult:
         """FAK: heutiger Pfad — Rest verworfen, idle = PENDING."""
-        fills, remaining, ref = self._cross(
+        fills, remaining, ref, metrics = self._cross_with_metrics(
             order, snapshot, order.size, market_id=market_id,
         )
         return self._build_result(
-            fills, remaining, ref, idle_status=OrderStatus.PENDING,
+            fills, remaining, ref,
+            idle_status=OrderStatus.PENDING,
+            fill_metrics=metrics,
         )
 
     def _match_gtc(
@@ -520,7 +529,7 @@ class PaperMatchEngine:
         decision_seq: int,
     ) -> MatchResult:
         """GTC: kreuzt, Rest ruht im Register; idle = RESTING."""
-        fills, remaining, ref = self._cross(
+        fills, remaining, ref, metrics = self._cross_with_metrics(
             order, snapshot, order.size, market_id=market_id,
         )
         if remaining > 0:
@@ -533,23 +542,41 @@ class PaperMatchEngine:
                 decision_seq=decision_seq,
                 resting_since=datetime.now(timezone.utc),
             )
+            # Queue-Beobachtung additiv; Kanon-Register bleibt _resting.
+            rest = self._fill_sim.place_resting(
+                order, snapshot, remaining_size=remaining,
+            )
+            metrics = metrics.model_copy(update={
+                "queue_ahead_at_rest": rest.queue_ahead_at_rest,
+                "staleness_applied": rest.staleness_applied,
+            })
         return self._build_result(
-            fills, remaining, ref, idle_status=OrderStatus.RESTING,
+            fills, remaining, ref,
+            idle_status=OrderStatus.RESTING,
+            fill_metrics=metrics,
         )
 
     def on_book_update(self, snapshot: MarketSnapshot) -> list[RestingEvaluation]:
-        """Nachwertung ruhender GTC-Orders gegen neuen Snapshot."""
+        """Nachwertung ruhender GTC-Orders gegen neuen Snapshot.
+
+        Commit 2: Walk-Umleitung über delegiertes ``_cross`` /
+        ``FillSimulator.cross`` mit ``remaining_size`` aus ``_RestingOrder``.
+        Kanon-Semantik (Re-Cross gegen sichtbare Tiefe) bleibt — nicht der
+        Trade-Through-Observer ``FillSimulator.on_book_update``.
+        """
         out: list[RestingEvaluation] = []
         for oid, resting in list(self._resting.items()):
             if resting.order.token_id != snapshot.token_id:
                 continue
-            fills, remaining, ref = self._cross(
+            fills, remaining, ref, metrics = self._cross_with_metrics(
                 resting.order, snapshot, resting.remaining_size,
                 market_id=resting.market_id,
             )
             resting.remaining_size = remaining
             result = self._build_result(
-                fills, remaining, ref, idle_status=OrderStatus.RESTING,
+                fills, remaining, ref,
+                idle_status=OrderStatus.RESTING,
+                fill_metrics=metrics,
             )
             out.append(RestingEvaluation(
                 order_id=oid,
@@ -561,6 +588,7 @@ class PaperMatchEngine:
             ))
             if remaining <= 0:
                 del self._resting[oid]
+                self._fill_sim._resting_queue.pop(oid, None)
         return out
 
     def reap_expired(self, now: datetime) -> list[RestingExpiry]:
@@ -622,6 +650,8 @@ class TelemetryRecord(BaseModel):
     reject_reason: RejectReason = RejectReason.NONE
     requested_size: Optional[Decimal] = None
     decision_seq: int = 0
+    fill_metrics: Optional[FillMetrics] = None
+    """Additiv Commit 2 — nicht persistiert (Spaltenliste unverändert)."""
 
 
 class TelemetryLogger:
@@ -763,15 +793,17 @@ class ShadowExecutionEngine:
         cfg = risk_config or RiskConfig()
         self.guard = SafetyGuard(mode=mode)
         self.risk = RiskController(cfg)
-        self.matcher = PaperMatchEngine(fee_bps=cfg.fee_bps)
+        # Commit 2: ein FillSimulator — Cap/Fee 1:1 vom Matcher; Staleness-
+        # Knöpfe optional über fill_sim_config (fee/slippage werden überschrieben).
+        self.matcher = PaperMatchEngine(
+            fee_bps=cfg.fee_bps, fill_sim_config=fill_sim_config,
+        )
+        self._fill_sim = self.matcher._fill_sim
         self.portfolio = VirtualPortfolio()
         self.telemetry = telemetry or TelemetryLogger()
         self.invert_weak_signals = invert_weak_signals
         self.confidence_threshold = confidence_threshold
         self.size_fn: SizeFn = size_fn or self._default_size_fn
-        # Commit 1: daneben gestellt; Delegation erst Commit 2
-        sim_cfg = fill_sim_config or FillSimConfig(fee_bps=cfg.fee_bps)
-        self._fill_sim = FillSimulator(sim_cfg)
         self._order_book: dict[uuid.UUID, PaperOrder] = {}
         # Fill-Log fuer TelemetrySink / Replay-Zeugen (order_id -> Fills)
         self._fills_by_order: dict[uuid.UUID, list[FillResult]] = {}
@@ -1226,6 +1258,7 @@ class ShadowExecutionEngine:
             latency_ms=self._elapsed_ms(t0), approved=True,
             reject_reason=RejectReason.NONE, status=order.status,
             requested_size=requested_size, decision_seq=decision_seq,
+            fill_metrics=match.fill_metrics,
         )
         self.telemetry.log(record)
         return self._report(signal, record, match)
@@ -1276,6 +1309,7 @@ class ShadowExecutionEngine:
                 status=order.status,
                 requested_size=ev.requested_size,
                 decision_seq=self.telemetry.next_decision_seq(),
+                fill_metrics=ev.result.fill_metrics,
             )
             self.telemetry.log(rec)
             records.append(rec)
