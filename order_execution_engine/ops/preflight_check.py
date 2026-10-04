@@ -30,6 +30,10 @@ from order_execution_engine.market_data_feed import PolymarketWsFeed  # noqa: E4
 
 DEFAULT_FREEZE = OPS / "allowlist.freeze.json"
 DEFAULT_POLICY = OPS / "run_policy.json"
+# launchd-writable runtime (THX volumes are EPERM for LaunchAgents)
+_DEFAULT_APP = Path.home() / "Library" / "Application Support" / "agentx"
+DEFAULT_DATA_ROOT = _DEFAULT_APP / "shadow_live"
+DEFAULT_NEWS_JSONL = _DEFAULT_APP / "news_scores.jsonl"
 
 REQUIRED_CONFIG_KEYS = (
     "max_book_age_ms",
@@ -273,12 +277,12 @@ def main(argv: Optional[list[str]] = None) -> int:
     parser.add_argument("--policy", type=Path, default=DEFAULT_POLICY)
     parser.add_argument(
         "--data-root", type=Path,
-        default=REPO / "data" / "shadow_live",
+        default=DEFAULT_DATA_ROOT,
     )
     parser.add_argument("--user-id", default="shadow")
     parser.add_argument(
         "--news-jsonl", type=Path,
-        default=REPO / "data" / "news_scores.jsonl",
+        default=DEFAULT_NEWS_JSONL,
     )
     parser.add_argument(
         "--expect-commit", default="bfcc856d",

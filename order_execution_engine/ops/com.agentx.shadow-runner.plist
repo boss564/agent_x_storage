@@ -8,6 +8,7 @@
 	<true/>
 	<key>RunAtLoad</key>
 	<true/>
+	<!-- Code on THX (read); runtime DB/JSONL under ~/Library (launchd-writable). -->
 	<key>WorkingDirectory</key>
 	<string>/Volumes/THX_OS_ULTRA/Users/olivermueller/agent_x_storage</string>
 	<key>ProgramArguments</key>
@@ -17,11 +18,11 @@
 		<string>-m</string>
 		<string>order_execution_engine.shadow_runner</string>
 		<string>--data-root</string>
-		<string>/Volumes/THX_OS_ULTRA/Users/olivermueller/agent_x_storage/data/shadow_live</string>
+		<string>/Users/olivermueller/Library/Application Support/agentx/shadow_live</string>
 		<string>--user-id</string>
 		<string>shadow</string>
 		<string>--news-jsonl</string>
-		<string>/Volumes/THX_OS_ULTRA/Users/olivermueller/agent_x_storage/data/news_scores.jsonl</string>
+		<string>/Users/olivermueller/Library/Application Support/agentx/news_scores.jsonl</string>
 		<string>--allowlist</string>
 		<string>/Volumes/THX_OS_ULTRA/Users/olivermueller/agent_x_storage/order_execution_engine/ops/allowlist.freeze.json</string>
 		<string>--policy-json</string>
@@ -40,6 +41,8 @@
 		<string>1</string>
 		<key>PYTHONPATH</key>
 		<string>/Volumes/THX_OS_ULTRA/Users/olivermueller/agent_x_storage</string>
+		<key>HOME</key>
+		<string>/Users/olivermueller</string>
 	</dict>
 </dict>
 </plist>
