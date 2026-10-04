@@ -4,8 +4,10 @@ Charter: `diagnostic_only=true`, `live_execution=false`, `order_send=false`.
 
 ## Volume- / Launchd-Regel (kritisch)
 
-`launchd` darf auf `/Volumes/THX_OS_ULTRA*` **nicht schreiben** (`Operation not permitted` / sealed).  
-Deshalb:
+**Muster Exit 78 / EPERM:** Jeder LaunchAgent, der auf `/Volumes/THX_OS_ULTRA*` schreibt
+(Logs, JSONL, SQLite, Offset), scheitert mit `last exit code = 78: EX_CONFIG` bzw.
+`Operation not permitted` (sealed / Volume-Policy). Code und Freeze dürfen dort **gelesen**
+werden; Runtime-Writes immer unter `~/Library/…`. Gilt für künftige Jobs genauso.
 
 | Artefakt | Pfad |
 |---|---|
@@ -14,7 +16,17 @@ Deshalb:
 | `shadow.db` + Tail-Offset | `~/Library/Application Support/agentx/shadow_live/` |
 | Logs | `~/Library/Logs/agentx-shadow/` |
 
-News-Agent und Runner teilen **denselben** Application-Support-JSONL-Pfad — nicht den Aug-Altbestand unter `data/news_scores.jsonl` auf THX.
+**Pfad-Split (Auswertung):** DB und JSONL der Messperiode liegen **nur** unter
+`~/Library/Application Support/agentx/` — nicht unter `data/` auf THX (Aug-Altbestand /
+EPERM-Falle). `sqlite3 …/shadow_live/shadow/shadow/shadow.db`.
+
+News-Agent und Runner teilen denselben Application-Support-JSONL-Pfad.
+
+## Messperiode 2026-10-04 — Run-Notiz
+
+- Mess-Commit in `config_json`: **`87fba94d`** (`run_id=7`).
+- **`run_id` 1–6 ausschließen:** Restart-Spam beim KeepAlive-Warmup (pydantic/WS-Fixes).
+  Auswertung, Gates und Tag-7/21 nur ab **`run_id >= 7`**.
 
 ## Vorbedingungen
 
