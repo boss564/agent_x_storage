@@ -28,6 +28,11 @@ from typing import Callable, Iterable, Optional, Any
 
 from pydantic import BaseModel, ConfigDict
 
+from order_execution_engine.fill_simulator import (
+    FillSimConfig,
+    FillSimulator,
+    StalenessPolicy,
+)
 from order_execution_engine.models import (
     Direction,
     ExecutionMode,
@@ -733,6 +738,7 @@ class ShadowExecutionEngine:
         confidence_threshold: Decimal = Decimal("55"),
         size_fn: Optional[SizeFn] = None,
         telemetry: Optional[TelemetryLogger] = None,
+        fill_sim_config: Optional[FillSimConfig] = None,
     ) -> None:
         """Initialisiert die Engine.
 
@@ -751,15 +757,21 @@ class ShadowExecutionEngine:
             telemetry: Optionaler Logger. Nach einem Prozessneustart mit
                 `TelemetryLogger(initial_decision_seq=storage.latest_decision_seq())`
                 übergeben, sonst kollidiert der Zähler über Sessions hinweg.
+            fill_sim_config: Optional Fill-Tiefe-Config (Commit 1; Match
+                bleibt unberührt — Simulator steht daneben).
         """
+        cfg = risk_config or RiskConfig()
         self.guard = SafetyGuard(mode=mode)
-        self.risk = RiskController(risk_config or RiskConfig())
-        self.matcher = PaperMatchEngine(fee_bps=(risk_config or RiskConfig()).fee_bps)
+        self.risk = RiskController(cfg)
+        self.matcher = PaperMatchEngine(fee_bps=cfg.fee_bps)
         self.portfolio = VirtualPortfolio()
         self.telemetry = telemetry or TelemetryLogger()
         self.invert_weak_signals = invert_weak_signals
         self.confidence_threshold = confidence_threshold
         self.size_fn: SizeFn = size_fn or self._default_size_fn
+        # Commit 1: daneben gestellt; Delegation erst Commit 2
+        sim_cfg = fill_sim_config or FillSimConfig(fee_bps=cfg.fee_bps)
+        self._fill_sim = FillSimulator(sim_cfg)
         self._order_book: dict[uuid.UUID, PaperOrder] = {}
         # Fill-Log fuer TelemetrySink / Replay-Zeugen (order_id -> Fills)
         self._fills_by_order: dict[uuid.UUID, list[FillResult]] = {}
@@ -780,6 +792,31 @@ class ShadowExecutionEngine:
         self._ceiling_checker = PeakCeilingChecker(
             start_balance=self.portfolio.start_balance,
         )
+
+    def _preflight_staleness(
+        self,
+        signal: SignalPayload,
+        snapshot: MarketSnapshot,
+        *,
+        now: float,
+    ) -> Optional[RejectReason]:
+        """Fail-closed Frischeprüfung vor dem Matcher (Anker D).
+
+        Das Literal ``RejectReason.STALE_SNAPSHOT`` steht bewusst hier —
+        der Regex-Scan in ``test_ankerd_meta_*`` findet nur Produzenten
+        in dieser Datei. ``FillSimulator.is_stale`` liefert nur bool.
+        """
+        now_ms = now * 1000.0
+        signal_ts_ms = signal.timestamp.timestamp() * 1000.0
+        if self._fill_sim.is_stale(
+            snapshot, now_ms=now_ms, signal_timestamp_ms=signal_ts_ms,
+        ):
+            if self._fill_sim.staleness_policy is StalenessPolicy.NEXT_TICK:
+                # Parken via bestehendes GTC-Resting (Commit 2 verdichtet
+                # staleness_applied=NEXT_TICK am place_resting-Seam).
+                return None
+            return RejectReason.STALE_SNAPSHOT
+        return None
 
     def fills_for(self, order_id: uuid.UUID) -> list[FillResult]:
         """Liefert persistierbare Fills zu einer Order (Test-/Sink-Seam)."""
@@ -1135,6 +1172,20 @@ class ShadowExecutionEngine:
             expiration=default_expiration(5),
             mode=self.guard.mode,
         )
+
+        # Fill-Tiefe Commit 1: Signal-Ref + Staleness-Preflight (vor Match).
+        # match()/_cross bleiben unangetastet — Simulator steht daneben.
+        self._fill_sim.register_signal_ref(order.order_id, signal.suggested_price)
+        stale_reason = self._preflight_staleness(signal, active, now=time.time())
+        if stale_reason is not None:
+            record = TelemetryRecord(
+                signal_id=signal.signal_id, order_id=order.order_id,
+                latency_ms=self._elapsed_ms(t0), approved=False,
+                reject_reason=stale_reason, status=None,
+                requested_size=requested_size, decision_seq=decision_seq,
+            )
+            self.telemetry.log(record)
+            return self._report(signal, record)
 
         decision = self.risk.check(order, self.portfolio, marks)
         if not decision.approved:

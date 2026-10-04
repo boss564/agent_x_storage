@@ -987,6 +987,66 @@ def test_restore_peak_events_validation() -> None:
     print("OK test_restore_peak_events_validation")
 
 
+def test_w_stale_1_reject_stale_snapshot() -> None:
+    """W-STALE-1: gealterter Snapshot → STALE_SNAPSHOT; match() unberührt."""
+    from datetime import datetime, timezone
+
+    from order_execution_engine.fill_simulator import FillSimConfig
+
+    eng = ShadowExecutionEngine(
+        risk_config=RiskConfig(max_order_size_shares=Decimal("100")),
+        fill_sim_config=FillSimConfig(max_book_age_ms=500),
+    )
+    # received_at weit in der Vergangenheit → book_age >> 500 ms
+    aged = MarketSnapshot(
+        token_id="0xtokenA",
+        asks=(OrderBookLevel(Decimal("0.61"), Decimal("200")),),
+        bids=(OrderBookLevel(Decimal("0.59"), Decimal("150")),),
+        received_at=1.0,
+    )
+    sig = SignalPayload(
+        target_token_id="0xtokenA", market_id="mkt-1",
+        direction=Direction.UP, confidence=Decimal("80"),
+        timestamp=datetime.fromtimestamp(1.0, tz=timezone.utc),
+    )
+    report = eng.on_signal(sig, aged)
+    assert not report.approved
+    assert report.reject_reason is RejectReason.STALE_SNAPSHOT
+    assert eng.matcher.resting_count == 0
+    assert report.fills == ()
+    print("OK test_w_stale_1_reject_stale_snapshot")
+
+
+def test_w_stale_2_next_tick_does_not_reject() -> None:
+    """W-STALE-2: NEXT_TICK → kein STALE_SNAPSHOT; Match-Pfad bleibt offen."""
+    from datetime import datetime, timezone
+
+    from order_execution_engine.fill_simulator import FillSimConfig, StalenessPolicy
+
+    eng = ShadowExecutionEngine(
+        risk_config=RiskConfig(max_order_size_shares=Decimal("100")),
+        fill_sim_config=FillSimConfig(
+            max_book_age_ms=500,
+            staleness_policy=StalenessPolicy.NEXT_TICK,
+        ),
+    )
+    aged = MarketSnapshot(
+        token_id="0xtokenA",
+        asks=(OrderBookLevel(Decimal("0.61"), Decimal("200")),),
+        bids=(OrderBookLevel(Decimal("0.59"), Decimal("150")),),
+        received_at=1.0,
+    )
+    sig = SignalPayload(
+        target_token_id="0xtokenA", market_id="mkt-1",
+        direction=Direction.UP, confidence=Decimal("80"),
+        timestamp=datetime.fromtimestamp(1.0, tz=timezone.utc),
+    )
+    report = eng.on_signal(sig, aged)
+    assert report.reject_reason is not RejectReason.STALE_SNAPSHOT
+    assert report.approved
+    print("OK test_w_stale_2_next_tick_does_not_reject")
+
+
 if __name__ == "__main__":
     for fn in list(globals().values()):
         if callable(fn) and fn.__name__.startswith("test_"):

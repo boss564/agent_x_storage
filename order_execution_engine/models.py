@@ -184,6 +184,13 @@ class RejectReason(str, Enum):
     DRAWDOWN_LOCKOUT = "DRAWDOWN_LOCKOUT"
     INSUFFICIENT_CASH = "INSUFFICIENT_CASH"
     INVALID_PRICE = "INVALID_PRICE"
+    STALE_SNAPSHOT = "STALE_SNAPSHOT"
+    """Buch- oder Signal-Alter über ``FillSimConfig.max_book_age_ms``.
+
+    Produzent: ``ShadowExecutionEngine._preflight_staleness`` (Anker D —
+    Literal muss in dieser Engine-Datei stehen; ``FillSimulator.is_stale``
+    liefert nur bool). Default-Politik ``REJECT_STALE`` (fail-closed).
+    """
 
 
 # ---------------------------------------------------------------------------
