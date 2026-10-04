@@ -39,7 +39,7 @@ from order_execution_engine.shadow_execution_engine import TelemetryRecord
 
 _LOG = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 _USER_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
 
 
@@ -185,6 +185,18 @@ class SQLiteShadowStorage:
         peak_equity TEXT NOT NULL,
         marks_json TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS telemetry_fill_metrics (
+        telemetry_seq INTEGER PRIMARY KEY REFERENCES telemetry(seq),
+        fill_ratio TEXT,
+        levels_consumed INTEGER,
+        vwap TEXT,
+        vs_touch_ref_bps TEXT,
+        vs_signal_bps TEXT,
+        capped INTEGER,
+        staleness_applied TEXT,
+        queue_ahead_at_rest TEXT,
+        payload_json TEXT NOT NULL
+    );
     """
 
     # Migration v1 -> v2 (F1, VM3). Drei Spalten, zwei Backfill-Semantiken.
@@ -232,6 +244,7 @@ class SQLiteShadowStorage:
         self._migrate_v2()
         self._migrate_v3()
         self._migrate_v4()
+        self._migrate_v5()
         self._conn.execute(
             "INSERT OR REPLACE INTO schema_meta (key, value) VALUES ('schema_version', ?)",
             (str(SCHEMA_VERSION),),
@@ -291,6 +304,25 @@ class SQLiteShadowStorage:
                 journal_pos INTEGER NOT NULL,
                 peak_equity TEXT NOT NULL,
                 marks_json TEXT NOT NULL
+            )
+            """
+        )
+
+    def _migrate_v5(self) -> None:
+        """v4 → v5: Neben-Tabelle telemetry_fill_metrics (Fill-Tiefe Persistenz)."""
+        self._conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS telemetry_fill_metrics (
+                telemetry_seq INTEGER PRIMARY KEY REFERENCES telemetry(seq),
+                fill_ratio TEXT,
+                levels_consumed INTEGER,
+                vwap TEXT,
+                vs_touch_ref_bps TEXT,
+                vs_signal_bps TEXT,
+                capped INTEGER,
+                staleness_applied TEXT,
+                queue_ahead_at_rest TEXT,
+                payload_json TEXT NOT NULL
             )
             """
         )
@@ -369,7 +401,7 @@ class SQLiteShadowStorage:
             }
 
         with self._lock:
-            self._conn.execute(
+            cur = self._conn.execute(
                 "INSERT INTO telemetry (signal_id, order_id, latency_ms, approved,"
                 " reject_reason, status, requested_size, decision_seq)"
                 " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
@@ -386,7 +418,70 @@ class SQLiteShadowStorage:
                     row["decision_seq"] if row.get("decision_seq") else None,
                 ),
             )
+            telemetry_seq = int(cur.lastrowid)
+            metrics = getattr(record, "fill_metrics", None)
+            if metrics is not None:
+                self._insert_fill_metrics(telemetry_seq, metrics)
             self._conn.commit()
+
+    def _insert_fill_metrics(self, telemetry_seq: int, metrics: Any) -> None:
+        """Schreibt typed Spalten + payload_json (Aufrufer hält den Lock)."""
+        slip = metrics.slippage
+        payload = metrics.model_dump_json()
+        self._conn.execute(
+            "INSERT INTO telemetry_fill_metrics ("
+            " telemetry_seq, fill_ratio, levels_consumed, vwap,"
+            " vs_touch_ref_bps, vs_signal_bps, capped, staleness_applied,"
+            " queue_ahead_at_rest, payload_json)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                telemetry_seq,
+                _dec_to_text(metrics.fill_ratio),
+                int(metrics.levels_consumed),
+                _dec_to_text(metrics.vwap) if metrics.vwap is not None else None,
+                (
+                    _dec_to_text(slip.vs_touch_ref_bps)
+                    if slip.vs_touch_ref_bps is not None else None
+                ),
+                (
+                    _dec_to_text(slip.vs_signal_bps)
+                    if slip.vs_signal_bps is not None else None
+                ),
+                1 if slip.capped else 0,
+                (
+                    metrics.staleness_applied.value
+                    if metrics.staleness_applied is not None else None
+                ),
+                (
+                    _dec_to_text(metrics.queue_ahead_at_rest)
+                    if metrics.queue_ahead_at_rest is not None else None
+                ),
+                payload,
+            ),
+        )
+
+    def read_fill_metrics(self, telemetry_seq: int) -> Optional[Any]:
+        """Liest FillMetrics per payload_json (None wenn keine Neben-Zeile)."""
+        from order_execution_engine.fill_simulator import FillMetrics
+
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT payload_json FROM telemetry_fill_metrics"
+                " WHERE telemetry_seq = ?",
+                (telemetry_seq,),
+            ).fetchone()
+        if row is None:
+            return None
+        return FillMetrics.model_validate_json(row["payload_json"])
+
+    def count_fill_metrics_rows(self) -> int:
+        """Anzahl Neben-Zeilen (Test-Seam)."""
+        with self._lock:
+            return int(
+                self._conn.execute(
+                    "SELECT COUNT(*) FROM telemetry_fill_metrics"
+                ).fetchone()[0]
+            )
 
     def write_fill(self, fill: FillResult, fill_idx: int = 0,
                    requested_size: Optional[Decimal] = None,

@@ -71,8 +71,11 @@ def test_schema_version_and_tables() -> None:
         store = SQLiteShadowStorage.for_user(Path(tmp), "u1")
         conn = sqlite3.connect(str(Path(tmp) / "u1" / "shadow" / "shadow.db"))
         version = conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'").fetchone()[0]
-        assert version == "4"  # v4: peak_events (Befund 4)
-        for table in ("telemetry", "fills", "portfolio_snapshots", "peak_events"):
+        assert version == "5"  # v5: telemetry_fill_metrics
+        for table in (
+            "telemetry", "fills", "portfolio_snapshots",
+            "peak_events", "telemetry_fill_metrics",
+        ):
             conn.execute(f"SELECT 1 FROM {table} LIMIT 0")
         # Die neuen Spalten sind da
         tcols = {r[1] for r in conn.execute("PRAGMA table_info(telemetry)")}
@@ -82,6 +85,8 @@ def test_schema_version_and_tables() -> None:
         assert {"side", "token_id", "market_id", "decision_seq"} <= fcols
         pcols = {r[1] for r in conn.execute("PRAGMA table_info(peak_events)")}
         assert {"seq", "raised_at", "journal_pos", "peak_equity", "marks_json"} <= pcols
+        mcols = {r[1] for r in conn.execute("PRAGMA table_info(telemetry_fill_metrics)")}
+        assert {"telemetry_seq", "fill_ratio", "payload_json", "capped"} <= mcols
         conn.close()
         store.close()
     print("OK test_schema_version_and_tables")
@@ -156,10 +161,12 @@ def test_schema_migrates_v3_to_v4_peak_events() -> None:
 
         store = SQLiteShadowStorage(db)
         conn2 = sqlite3.connect(str(db))
+        # Kette: v3 → v4 (peak_events) → v5 (fill_metrics)
         assert conn2.execute(
             "SELECT value FROM schema_meta WHERE key='schema_version'"
-        ).fetchone()[0] == "4"
+        ).fetchone()[0] == "5"
         conn2.execute("SELECT 1 FROM peak_events LIMIT 0")
+        conn2.execute("SELECT 1 FROM telemetry_fill_metrics LIMIT 0")
         conn2.close()
 
         ev = PeakEvent(
@@ -171,6 +178,151 @@ def test_schema_migrates_v3_to_v4_peak_events() -> None:
         assert store.read_peak_events() == [ev]
         store.close()
     print("OK test_schema_migrates_v3_to_v4_peak_events")
+
+
+def test_schema_migrates_v4_to_v5_fill_metrics() -> None:
+    """C4: v4-DB ohne telemetry_fill_metrics → v5 idempotent."""
+    import sqlite3
+
+    with tempfile.TemporaryDirectory() as tmp:
+        db = Path(tmp) / "u1" / "shadow" / "shadow.db"
+        db.parent.mkdir(parents=True)
+        conn = sqlite3.connect(str(db))
+        conn.executescript(
+            """
+            CREATE TABLE schema_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+            CREATE TABLE telemetry (
+                seq INTEGER PRIMARY KEY AUTOINCREMENT,
+                signal_id TEXT NOT NULL,
+                order_id TEXT,
+                latency_ms REAL NOT NULL,
+                approved INTEGER NOT NULL,
+                reject_reason TEXT,
+                status TEXT,
+                requested_size TEXT,
+                decision_seq INTEGER
+            );
+            CREATE TABLE fills (
+                order_id TEXT NOT NULL,
+                fill_idx INTEGER NOT NULL,
+                execution_price TEXT NOT NULL,
+                executed_size TEXT NOT NULL,
+                slippage TEXT NOT NULL,
+                fee TEXT NOT NULL,
+                filled_at TEXT NOT NULL,
+                latency_ms REAL,
+                requested_size TEXT,
+                side TEXT,
+                token_id TEXT,
+                market_id TEXT,
+                decision_seq INTEGER,
+                PRIMARY KEY (order_id, fill_idx)
+            );
+            CREATE TABLE portfolio_snapshots (
+                seq INTEGER PRIMARY KEY AUTOINCREMENT,
+                taken_at TEXT NOT NULL,
+                cash TEXT NOT NULL,
+                start_balance TEXT NOT NULL,
+                realized_pnl TEXT NOT NULL,
+                peak_equity TEXT NOT NULL,
+                positions_json TEXT NOT NULL
+            );
+            CREATE TABLE peak_events (
+                seq INTEGER PRIMARY KEY,
+                raised_at TEXT NOT NULL,
+                journal_pos INTEGER NOT NULL,
+                peak_equity TEXT NOT NULL,
+                marks_json TEXT NOT NULL
+            );
+            INSERT INTO schema_meta (key, value) VALUES ('schema_version', '4');
+            """
+        )
+        conn.commit()
+        assert "telemetry_fill_metrics" not in {
+            r[0] for r in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            )
+        }
+        conn.close()
+
+        store = SQLiteShadowStorage(db)
+        store2 = SQLiteShadowStorage(db)  # zweites Init — idempotent
+        conn2 = sqlite3.connect(str(db))
+        assert conn2.execute(
+            "SELECT value FROM schema_meta WHERE key='schema_version'"
+        ).fetchone()[0] == "5"
+        conn2.execute("SELECT 1 FROM telemetry_fill_metrics LIMIT 0")
+        n = conn2.execute(
+            "SELECT COUNT(*) FROM telemetry_fill_metrics"
+        ).fetchone()[0]
+        assert n == 0
+        conn2.close()
+        store.close()
+        store2.close()
+    print("OK test_schema_migrates_v4_to_v5_fill_metrics")
+
+
+def test_w_persist_1_fill_metrics_roundtrip() -> None:
+    """W-PERSIST-1: Record mit fill_metrics → Neben-Zeile, typed + JSON identisch."""
+    from order_execution_engine.fill_simulator import (
+        FillMetrics, SlippageReport,
+    )
+
+    metrics = FillMetrics(
+        requested_size=Decimal("100"),
+        filled_size=Decimal("40"),
+        fill_ratio=Decimal("0.4"),
+        levels_consumed=1,
+        vwap=Decimal("0.55"),
+        slippage=SlippageReport(
+            vs_touch_ref_bps=Decimal("100"),
+            vs_signal_bps=Decimal("200"),
+            capped=False,
+        ),
+    )
+    with tempfile.TemporaryDirectory() as tmp:
+        store = SQLiteShadowStorage.for_user(Path(tmp), "u1")
+        rec = TelemetryRecord(
+            signal_id=uuid.uuid4(),
+            order_id=uuid.uuid4(),
+            latency_ms=2.0,
+            approved=True,
+            status=None,
+            reject_reason=RejectReason.NONE,
+            decision_seq=1,
+            fill_metrics=metrics,
+        )
+        store.write_telemetry(rec)
+        assert store.count_fill_metrics_rows() == 1
+        restored = store.read_fill_metrics(1)
+        assert restored is not None
+        assert restored == metrics
+        assert FillMetrics.model_validate_json(
+            restored.model_dump_json()
+        ) == metrics
+        store.close()
+    print("OK test_w_persist_1_fill_metrics_roundtrip")
+
+
+def test_w_persist_2_reject_has_no_fill_metrics_row() -> None:
+    """W-PERSIST-2: Reject (z. B. STALE) → keine Neben-Zeile."""
+    with tempfile.TemporaryDirectory() as tmp:
+        store = SQLiteShadowStorage.for_user(Path(tmp), "u1")
+        rec = TelemetryRecord(
+            signal_id=uuid.uuid4(),
+            order_id=uuid.uuid4(),
+            latency_ms=0.5,
+            approved=False,
+            status=None,
+            reject_reason=RejectReason.STALE_SNAPSHOT,
+            decision_seq=1,
+            fill_metrics=None,
+        )
+        store.write_telemetry(rec)
+        assert store.count_fill_metrics_rows() == 0
+        assert store.read_fill_metrics(1) is None
+        store.close()
+    print("OK test_w_persist_2_reject_has_no_fill_metrics_row")
 
 
 def test_telemetry_sink_end_to_end() -> None:
