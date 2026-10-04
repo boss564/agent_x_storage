@@ -266,8 +266,9 @@ async def run_ws_hub_and_tail(
     tail: JsonlTail,
     tail_interval_s: float = DEFAULT_TAIL_INTERVAL_S,
     stop_event: Optional[asyncio.Event] = None,
+    ws_reconnect_s: float = 5.0,
 ) -> None:
-    """Dauer-WS + Hub-Takt + JSONL-Tail parallel."""
+    """Dauer-WS + Hub-Takt + JSONL-Tail parallel (WS reconnect, kein Exit bei Drop)."""
     stop = stop_event or asyncio.Event()
 
     async def _tail_loop() -> None:
@@ -288,19 +289,37 @@ async def run_ws_hub_and_tail(
             except asyncio.TimeoutError:
                 continue
 
+    async def _ws_loop() -> None:
+        if binding.feed is None or not token_ids:
+            await stop.wait()
+            return
+        while not stop.is_set():
+            try:
+                _LOG.info("ws_connect tokens=%s", len(token_ids))
+                await binding.feed.run(token_ids)
+                _LOG.warning("ws_stream_ended — reconnect in %ss", ws_reconnect_s)
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:  # noqa: BLE001 — KeepAlive must not die on WS blips
+                _LOG.warning("ws_error %s — reconnect in %ss", exc, ws_reconnect_s)
+            try:
+                await asyncio.wait_for(stop.wait(), timeout=ws_reconnect_s)
+            except asyncio.TimeoutError:
+                continue
+
     tasks = [
         asyncio.create_task(hub.run(interval_seconds=1.0, stop_event=stop)),
         asyncio.create_task(_tail_loop()),
+        asyncio.create_task(_ws_loop()),
     ]
-    if binding.feed is not None and token_ids:
-        tasks.append(asyncio.create_task(binding.feed.run(token_ids)))
     try:
-        await asyncio.wait(tasks, return_when=asyncio.FIRST_EXCEPTION)
+        # Stay alive until external stop / cancel (not FIRST_EXCEPTION).
+        await stop.wait()
     finally:
         stop.set()
         for t in tasks:
             t.cancel()
-
+        await asyncio.gather(*tasks, return_exceptions=True)
 
 async def run_ws_and_hub(
     binding: Any,
@@ -423,9 +442,16 @@ def main(argv: Optional[list[str]] = None) -> int:
         store.close()
         return 0
 
-    if not args.no_tail_from_end and args.tail_from_end:
+    # Erststart: Altbestand überspringen. KeepAlive-Restart: Offset behalten.
+    if (
+        not args.no_tail_from_end
+        and args.tail_from_end
+        and not offset_path.exists()
+    ):
         tail.seek_end()
         _LOG.info("tail_from_end offset=%s path=%s", tail._offset, args.news_jsonl)
+    else:
+        _LOG.info("tail_resume offset=%s path=%s", tail._offset, args.news_jsonl)
 
     if args.no_ws:
         store.close()

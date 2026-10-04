@@ -5,3 +5,5 @@
 # Charter-Parameter (diagnostic_only/live_execution/order_send) sind bewusst
 # KEINE Environment-Variablen und stehen nicht in der Config.
 pydantic==2.12.5
+# Optional at import time; required for live PolymarketWsFeed under KeepAlive.
+websockets>=12,<18
