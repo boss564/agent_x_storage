@@ -39,7 +39,7 @@ from order_execution_engine.shadow_execution_engine import TelemetryRecord
 
 _LOG = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 _USER_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
 
 
@@ -142,6 +142,12 @@ class SQLiteShadowStorage:
         key TEXT PRIMARY KEY,
         value TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS telemetry_runs (
+        run_id INTEGER PRIMARY KEY,
+        started_at REAL,
+        git_commit TEXT,
+        config_json TEXT
+    );
     CREATE TABLE IF NOT EXISTS telemetry (
         seq INTEGER PRIMARY KEY AUTOINCREMENT,
         signal_id TEXT NOT NULL,
@@ -151,7 +157,8 @@ class SQLiteShadowStorage:
         reject_reason TEXT,  -- NULL bei genehmigten Signalen (Normalfall)
         status TEXT,
         requested_size TEXT,  -- NULL = vor Messbeginn, nicht: fehlend
-        decision_seq INTEGER   -- NULL = vor Messbeginn, nicht: fehlend
+        decision_seq INTEGER,  -- NULL = vor Messbeginn, nicht: fehlend
+        run_id INTEGER REFERENCES telemetry_runs(run_id)
     );
     CREATE TABLE IF NOT EXISTS fills (
         order_id TEXT NOT NULL,
@@ -241,10 +248,12 @@ class SQLiteShadowStorage:
         self._conn = sqlite3.connect(str(self._db_path), check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
         self._conn.executescript(self._DDL)
+        self._active_run_id: Optional[int] = None
         self._migrate_v2()
         self._migrate_v3()
         self._migrate_v4()
         self._migrate_v5()
+        self._migrate_v6()
         self._conn.execute(
             "INSERT OR REPLACE INTO schema_meta (key, value) VALUES ('schema_version', ?)",
             (str(SCHEMA_VERSION),),
@@ -327,6 +336,28 @@ class SQLiteShadowStorage:
             """
         )
 
+    def _migrate_v6(self) -> None:
+        """v5 → v6: telemetry_runs + telemetry.run_id (Messperioden-Kontext)."""
+        self._conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS telemetry_runs (
+                run_id INTEGER PRIMARY KEY,
+                started_at REAL,
+                git_commit TEXT,
+                config_json TEXT
+            )
+            """
+        )
+        cols = {
+            row[1]
+            for row in self._conn.execute("PRAGMA table_info(telemetry)")
+        }
+        if "run_id" not in cols:
+            self._conn.execute(
+                "ALTER TABLE telemetry ADD COLUMN run_id INTEGER"
+                " REFERENCES telemetry_runs(run_id)"
+            )
+
     def latest_decision_seq(self) -> int:
         """Höchster persistierter `decision_seq` (0, wenn keiner existiert).
 
@@ -403,8 +434,8 @@ class SQLiteShadowStorage:
         with self._lock:
             cur = self._conn.execute(
                 "INSERT INTO telemetry (signal_id, order_id, latency_ms, approved,"
-                " reject_reason, status, requested_size, decision_seq)"
-                " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                " reject_reason, status, requested_size, decision_seq, run_id)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     row["signal_id"],
                     row["order_id"],
@@ -416,6 +447,7 @@ class SQLiteShadowStorage:
                     if row.get("requested_size") is not None
                     else None,
                     row["decision_seq"] if row.get("decision_seq") else None,
+                    self._active_run_id,
                 ),
             )
             telemetry_seq = int(cur.lastrowid)
@@ -423,6 +455,37 @@ class SQLiteShadowStorage:
             if metrics is not None:
                 self._insert_fill_metrics(telemetry_seq, metrics)
             self._conn.commit()
+
+    def open_run(
+        self,
+        *,
+        git_commit: str,
+        config_json: dict[str, Any],
+        started_at: Optional[float] = None,
+    ) -> int:
+        """Erzeugt einen telemetry_runs-Eintrag und setzt den aktiven run_id.
+
+        Alle folgenden ``write_telemetry``-Zeilen tragen diesen ``run_id``.
+        """
+        import time as _time
+
+        started = float(started_at if started_at is not None else _time.time())
+        payload = json.dumps(config_json, sort_keys=True, default=str)
+        with self._lock:
+            cur = self._conn.execute(
+                "INSERT INTO telemetry_runs (started_at, git_commit, config_json)"
+                " VALUES (?, ?, ?)",
+                (started, git_commit, payload),
+            )
+            run_id = int(cur.lastrowid)
+            self._conn.commit()
+        self._active_run_id = run_id
+        return run_id
+
+    @property
+    def active_run_id(self) -> Optional[int]:
+        """Aktiver Run-Kontext (None = Legacy/kein Messlauf)."""
+        return self._active_run_id
 
     def _insert_fill_metrics(self, telemetry_seq: int, metrics: Any) -> None:
         """Schreibt typed Spalten + payload_json (Aufrufer hält den Lock)."""

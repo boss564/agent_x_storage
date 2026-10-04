@@ -71,16 +71,16 @@ def test_schema_version_and_tables() -> None:
         store = SQLiteShadowStorage.for_user(Path(tmp), "u1")
         conn = sqlite3.connect(str(Path(tmp) / "u1" / "shadow" / "shadow.db"))
         version = conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'").fetchone()[0]
-        assert version == "5"  # v5: telemetry_fill_metrics
+        assert version == "6"  # v6: telemetry_runs + run_id
         for table in (
             "telemetry", "fills", "portfolio_snapshots",
-            "peak_events", "telemetry_fill_metrics",
+            "peak_events", "telemetry_fill_metrics", "telemetry_runs",
         ):
             conn.execute(f"SELECT 1 FROM {table} LIMIT 0")
         # Die neuen Spalten sind da
         tcols = {r[1] for r in conn.execute("PRAGMA table_info(telemetry)")}
         fcols = {r[1] for r in conn.execute("PRAGMA table_info(fills)")}
-        assert {"requested_size", "decision_seq"} <= tcols
+        assert {"requested_size", "decision_seq", "run_id"} <= tcols
         assert "requested_size" in fcols
         assert {"side", "token_id", "market_id", "decision_seq"} <= fcols
         pcols = {r[1] for r in conn.execute("PRAGMA table_info(peak_events)")}
@@ -161,12 +161,13 @@ def test_schema_migrates_v3_to_v4_peak_events() -> None:
 
         store = SQLiteShadowStorage(db)
         conn2 = sqlite3.connect(str(db))
-        # Kette: v3 → v4 (peak_events) → v5 (fill_metrics)
+        # Kette: v3 → … → v6 (runs)
         assert conn2.execute(
             "SELECT value FROM schema_meta WHERE key='schema_version'"
-        ).fetchone()[0] == "5"
+        ).fetchone()[0] == "6"
         conn2.execute("SELECT 1 FROM peak_events LIMIT 0")
         conn2.execute("SELECT 1 FROM telemetry_fill_metrics LIMIT 0")
+        conn2.execute("SELECT 1 FROM telemetry_runs LIMIT 0")
         conn2.close()
 
         ev = PeakEvent(
@@ -250,7 +251,7 @@ def test_schema_migrates_v4_to_v5_fill_metrics() -> None:
         conn2 = sqlite3.connect(str(db))
         assert conn2.execute(
             "SELECT value FROM schema_meta WHERE key='schema_version'"
-        ).fetchone()[0] == "5"
+        ).fetchone()[0] == "6"
         conn2.execute("SELECT 1 FROM telemetry_fill_metrics LIMIT 0")
         n = conn2.execute(
             "SELECT COUNT(*) FROM telemetry_fill_metrics"
@@ -260,6 +261,113 @@ def test_schema_migrates_v4_to_v5_fill_metrics() -> None:
         store.close()
         store2.close()
     print("OK test_schema_migrates_v4_to_v5_fill_metrics")
+
+
+def test_schema_migrates_v5_to_v6_runs() -> None:
+    """C5: v5-DB ohne runs → v6 + run_id-Spalte idempotent."""
+    import sqlite3
+
+    with tempfile.TemporaryDirectory() as tmp:
+        db = Path(tmp) / "u1" / "shadow" / "shadow.db"
+        db.parent.mkdir(parents=True)
+        conn = sqlite3.connect(str(db))
+        conn.executescript(
+            """
+            CREATE TABLE schema_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+            CREATE TABLE telemetry (
+                seq INTEGER PRIMARY KEY AUTOINCREMENT,
+                signal_id TEXT NOT NULL,
+                order_id TEXT,
+                latency_ms REAL NOT NULL,
+                approved INTEGER NOT NULL,
+                reject_reason TEXT,
+                status TEXT,
+                requested_size TEXT,
+                decision_seq INTEGER
+            );
+            CREATE TABLE fills (
+                order_id TEXT NOT NULL, fill_idx INTEGER NOT NULL,
+                execution_price TEXT NOT NULL, executed_size TEXT NOT NULL,
+                slippage TEXT NOT NULL, fee TEXT NOT NULL, filled_at TEXT NOT NULL,
+                latency_ms REAL, requested_size TEXT, side TEXT,
+                token_id TEXT, market_id TEXT, decision_seq INTEGER,
+                PRIMARY KEY (order_id, fill_idx)
+            );
+            CREATE TABLE portfolio_snapshots (
+                seq INTEGER PRIMARY KEY AUTOINCREMENT,
+                taken_at TEXT NOT NULL, cash TEXT NOT NULL,
+                start_balance TEXT NOT NULL, realized_pnl TEXT NOT NULL,
+                peak_equity TEXT NOT NULL, positions_json TEXT NOT NULL
+            );
+            CREATE TABLE peak_events (
+                seq INTEGER PRIMARY KEY, raised_at TEXT NOT NULL,
+                journal_pos INTEGER NOT NULL, peak_equity TEXT NOT NULL,
+                marks_json TEXT NOT NULL
+            );
+            CREATE TABLE telemetry_fill_metrics (
+                telemetry_seq INTEGER PRIMARY KEY REFERENCES telemetry(seq),
+                fill_ratio TEXT, levels_consumed INTEGER, vwap TEXT,
+                vs_touch_ref_bps TEXT, vs_signal_bps TEXT, capped INTEGER,
+                staleness_applied TEXT, queue_ahead_at_rest TEXT,
+                payload_json TEXT NOT NULL
+            );
+            INSERT INTO schema_meta (key, value) VALUES ('schema_version', '5');
+            """
+        )
+        conn.commit()
+        assert "run_id" not in {
+            r[1] for r in conn.execute("PRAGMA table_info(telemetry)")
+        }
+        conn.close()
+
+        store = SQLiteShadowStorage(db)
+        SQLiteShadowStorage(db).close()  # idempotent re-open
+        conn2 = sqlite3.connect(str(db))
+        assert conn2.execute(
+            "SELECT value FROM schema_meta WHERE key='schema_version'"
+        ).fetchone()[0] == "6"
+        cols = {r[1] for r in conn2.execute("PRAGMA table_info(telemetry)")}
+        assert "run_id" in cols
+        conn2.execute("SELECT 1 FROM telemetry_runs LIMIT 0")
+        conn2.close()
+        store.close()
+    print("OK test_schema_migrates_v5_to_v6_runs")
+
+
+def test_w_run_1_open_run_stamps_telemetry() -> None:
+    """W-RUN-1: ein Run-Eintrag; alle Telemetrie-Zeilen tragen run_id + git_commit."""
+    import sqlite3
+
+    with tempfile.TemporaryDirectory() as tmp:
+        store = SQLiteShadowStorage.for_user(Path(tmp), "u1")
+        run_id = store.open_run(
+            git_commit="3e312825",
+            config_json={"signal_ref_mode": "fallback_limit", "max_book_age_ms": 2000},
+        )
+        assert run_id == store.active_run_id
+        for i in range(3):
+            store.write_telemetry(TelemetryRecord(
+                signal_id=uuid.uuid4(),
+                order_id=None,
+                latency_ms=0.1,
+                approved=False,
+                status=None,
+                reject_reason=RejectReason.STALE_SNAPSHOT,
+                decision_seq=i + 1,
+            ))
+        conn = sqlite3.connect(str(Path(tmp) / "u1" / "shadow" / "shadow.db"))
+        runs = conn.execute("SELECT run_id, git_commit, config_json FROM telemetry_runs").fetchall()
+        assert len(runs) == 1
+        assert runs[0][0] == run_id
+        assert runs[0][1] == "3e312825"
+        assert "fallback_limit" in runs[0][2]
+        stamped = conn.execute(
+            "SELECT DISTINCT run_id FROM telemetry"
+        ).fetchall()
+        assert stamped == [(run_id,)]
+        conn.close()
+        store.close()
+    print("OK test_w_run_1_open_run_stamps_telemetry")
 
 
 def test_w_persist_1_fill_metrics_roundtrip() -> None:
