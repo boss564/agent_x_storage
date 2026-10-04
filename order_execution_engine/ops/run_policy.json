@@ -1,0 +1,18 @@
+{
+  "theta": "0.1",
+  "max_book_age_ms": 2000,
+  "max_news_age_s": 3900,
+  "staleness_policy": "reject_stale",
+  "resting_model": "re_cross",
+  "signal_ref_mode": "fallback_limit",
+  "confidence_mode": "abs_sentiment_pct",
+  "default_size": "25",
+  "size_by_impact": {
+    "LOW": "25",
+    "MEDIUM": "50",
+    "MID": "50",
+    "HIGH": "100"
+  },
+  "cache_max_age_s": 10,
+  "notes": "Messperiode v1: stündlicher News-Agent → 65min Fenster. Config während Periode nicht ändern."
+}

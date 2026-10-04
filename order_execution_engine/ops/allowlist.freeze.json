@@ -1,0 +1,29 @@
+{
+  "entries": {
+    "BTC": {
+      "asset": "BTC",
+      "end_date": "2026-11-01T04:00:00Z",
+      "market_id": "0x8717c39520cadcb8ad6f88af148c30acf7d044c92a9cf48416b9b9a5ed65d6d8",
+      "market_question": "Will Bitcoin reach $150,000 in October?",
+      "resolved_at": "2026-10-04T06:49:52.139063+00:00",
+      "slug": "will-bitcoin-reach-150k-in-october-2026",
+      "source": "gamma",
+      "token_id": "41251280258301071693658139147514794627654924789315378408251020029063087170571",
+      "volume_24hr": 36384.106158
+    },
+    "ETH": {
+      "asset": "ETH",
+      "end_date": "2026-11-01T04:00:00Z",
+      "market_id": "0xc02f22c25226ff155f018908878fe2ca79e8a9150dbcc474f66992f0c4c14d1a",
+      "market_question": "Will Ethereum dip to $2,100 in October?",
+      "resolved_at": "2026-10-04T06:49:52.464910+00:00",
+      "slug": "will-ethereum-dip-to-2100-in-october-2026",
+      "source": "gamma",
+      "token_id": "70701796779544739018709051006930498536514248833685668168079156565277584354368",
+      "volume_24hr": 165788.384417
+    }
+  },
+  "frozen_at": "2026-10-04T06:49:52.581302+00:00",
+  "min_horizon_days": 14.0,
+  "schema": "allowlist.freeze/v1"
+}

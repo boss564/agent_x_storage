@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>com.agentx.shadow-runner</string>
+	<key>KeepAlive</key>
+	<true/>
+	<key>RunAtLoad</key>
+	<true/>
+	<key>WorkingDirectory</key>
+	<string>/Volumes/THX_OS_ULTRA/Users/olivermueller/agent_x_storage</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/Volumes/THX_OS_ULTRA/Users/olivermueller/agent_x_storage/.venv/bin/python3</string>
+		<string>-u</string>
+		<string>-m</string>
+		<string>order_execution_engine.shadow_runner</string>
+		<string>--data-root</string>
+		<string>/Volumes/THX_OS_ULTRA/Users/olivermueller/agent_x_storage/data/shadow_live</string>
+		<string>--user-id</string>
+		<string>shadow</string>
+		<string>--news-jsonl</string>
+		<string>/Volumes/THX_OS_ULTRA/Users/olivermueller/agent_x_storage/data/news_scores.jsonl</string>
+		<string>--allowlist</string>
+		<string>/Volumes/THX_OS_ULTRA/Users/olivermueller/agent_x_storage/order_execution_engine/ops/allowlist.freeze.json</string>
+		<string>--policy-json</string>
+		<string>/Volumes/THX_OS_ULTRA/Users/olivermueller/agent_x_storage/order_execution_engine/ops/run_policy.json</string>
+		<string>--tail-from-end</string>
+	</array>
+	<key>StandardOutPath</key>
+	<string>/Users/olivermueller/Library/Logs/agentx-shadow/shadow-runner.log</string>
+	<key>StandardErrorPath</key>
+	<string>/Users/olivermueller/Library/Logs/agentx-shadow/shadow-runner.err.log</string>
+	<key>EnvironmentVariables</key>
+	<dict>
+		<key>PATH</key>
+		<string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+		<key>PYTHONUNBUFFERED</key>
+		<string>1</string>
+		<key>PYTHONPATH</key>
+		<string>/Volumes/THX_OS_ULTRA/Users/olivermueller/agent_x_storage</string>
+	</dict>
+</dict>
+</plist>
