@@ -112,6 +112,10 @@ PYTHONPATH=. python3 order_execution_engine/ops/preflight_check.py --after-start
 `dispatched_signals` ab `run_id=7.started_at` **ohne** `bridge_discards`-Zeile
 (Claim vor Resolve zählt unresolved/no_book nicht als Dispatch-Erfolg).
 
+`CLAIM_DISCARD_ACCOUNTING`: `claims = success + post_claim` und
+`discards = post_claim + pre_claim` (gleiche Zeitfenster). Divergenz der
+beiden post-Views → RED (Schreiblücke). Run-8: 8 = 1+7, 11 = 7+4 (`empty_list`).
+
 Freeze-Ende 2026-11-01 — Tag-7 Settle-Check. Config nicht anfassen.
 
 ## Tag-7-Review (Risiken, nicht ändern während Messung)

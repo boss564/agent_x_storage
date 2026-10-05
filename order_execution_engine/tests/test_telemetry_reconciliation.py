@@ -10,6 +10,7 @@ from contextlib import redirect_stdout
 from pathlib import Path
 
 from order_execution_engine.ops.preflight_check import (
+    gate_claim_discard_accounting,
     gate_snapshot,
     gate_telemetry_reconciliation,
 )
@@ -206,5 +207,92 @@ def test_gate_snapshot_discards_use_min_run_started_at() -> None:
         assert "unresolved_asset" not in snap["discard_reasons"]
         assert snap["dispatched_signals"] == 1
         assert snap["duplicate_item_ids"] == 0
+        acct = snap["claim_discard_accounting"]
+        assert acct.status == "GREEN"
+        assert acct.detail == {
+            "claims": 1,
+            "success": 1,
+            "post_claim_discards": 0,
+            "discards": 2,
+            "pre_claim_discards": 2,
+            "post_claim_from_discards": 0,
+        }
         assert errors == []
     print("OK test_gate_snapshot_discards_use_min_run_started_at")
+
+
+def test_gate_claim_discard_accounting_run8_shape() -> None:
+    """Run-8-Form: claims=success+post; discards=post+pre (empty_list vor Claim)."""
+    with tempfile.TemporaryDirectory() as td:
+        db = Path(td) / "t.db"
+        conn = sqlite3.connect(db)
+        _schema(conn)
+        t0 = 2_000_000.0
+        conn.execute(
+            "INSERT INTO telemetry_runs VALUES (8, ?, 'x', '{}')", (t0,),
+        )
+        # pre-claim (empty_list): discard ohne Claim
+        conn.execute(
+            "INSERT INTO bridge_discards VALUES "
+            "('pre1', 'unresolved_asset:empty_list', ?)",
+            (t0 + 1,),
+        )
+        # post-claim: Claim dann Discard
+        conn.execute(
+            "INSERT INTO dispatched_signals VALUES ('post1', ?, NULL)",
+            (t0 + 2,),
+        )
+        conn.execute(
+            "INSERT INTO bridge_discards VALUES "
+            "('post1', 'unresolved_asset:mapping_miss', ?)",
+            (t0 + 2,),
+        )
+        # success: Claim ohne Discard
+        conn.execute(
+            "INSERT INTO dispatched_signals VALUES ('ok', ?, NULL)",
+            (t0 + 3,),
+        )
+        conn.commit()
+        g = gate_claim_discard_accounting(conn, started_at=t0)
+        assert g.status == "GREEN"
+        assert g.detail["claims"] == 2
+        assert g.detail["success"] == 1
+        assert g.detail["post_claim_discards"] == 1
+        assert g.detail["discards"] == 2
+        assert g.detail["pre_claim_discards"] == 1
+        assert g.detail["claims"] == (
+            g.detail["success"] + g.detail["post_claim_discards"]
+        )
+        assert g.detail["discards"] == (
+            g.detail["post_claim_from_discards"] + g.detail["pre_claim_discards"]
+        )
+        conn.close()
+    print("OK test_gate_claim_discard_accounting_run8_shape")
+
+
+def test_gate_claim_discard_accounting_red_on_orphan_claim() -> None:
+    """Claim im Fenster, Discard nur außerhalb → post-Views divergieren → RED."""
+    with tempfile.TemporaryDirectory() as td:
+        db = Path(td) / "t.db"
+        conn = sqlite3.connect(db)
+        _schema(conn)
+        t0 = 3_000_000.0
+        conn.execute(
+            "INSERT INTO telemetry_runs VALUES (8, ?, 'x', '{}')", (t0,),
+        )
+        conn.execute(
+            "INSERT INTO dispatched_signals VALUES ('orphan', ?, NULL)",
+            (t0 + 1,),
+        )
+        conn.execute(
+            "INSERT INTO bridge_discards VALUES "
+            "('orphan', 'no_book', ?)",
+            (t0 - 10,),
+        )
+        conn.commit()
+        g = gate_claim_discard_accounting(conn, started_at=t0)
+        assert g.status == "RED"
+        assert g.detail["post_claim_discards"] == 1
+        assert g.detail["post_claim_from_discards"] == 0
+        conn.close()
+    print("OK test_gate_claim_discard_accounting_red_on_orphan_claim")

@@ -281,6 +281,85 @@ def check_run_config(
             _ok("run ws_token_ids == freeze")
 
 
+def gate_claim_discard_accounting(
+    conn: sqlite3.Connection,
+    *,
+    started_at: Optional[float],
+) -> GateResult:
+    """Claims = Erfolg + Verwurf-nach-Claim; Discards = nach + vor Claim.
+
+    ``post_from_claims`` vs ``post_from_discards`` müssen übereinstimmen —
+    Divergenz (z. B. Claim im Fenster, Discard außerhalb) ⇒ Schreiblücke.
+    Ohne Zeitanker (``started_at`` None) über die ganze DB.
+    """
+    if started_at is None:
+        claim_sql = "SELECT COUNT(*) FROM dispatched_signals"
+        claim_post_sql = """
+            SELECT COUNT(*) FROM dispatched_signals d
+            WHERE EXISTS (
+              SELECT 1 FROM bridge_discards b WHERE b.item_id = d.item_id
+            )
+            """
+        discard_sql = "SELECT COUNT(*) FROM bridge_discards"
+        discard_post_sql = """
+            SELECT COUNT(*) FROM bridge_discards b
+            WHERE EXISTS (
+              SELECT 1 FROM dispatched_signals d WHERE d.item_id = b.item_id
+            )
+            """
+        params: tuple[Any, ...] = ()
+    else:
+        claim_sql = (
+            "SELECT COUNT(*) FROM dispatched_signals WHERE dispatched_at >= ?"
+        )
+        claim_post_sql = """
+            SELECT COUNT(*) FROM dispatched_signals d
+            WHERE d.dispatched_at >= ?
+              AND EXISTS (
+                SELECT 1 FROM bridge_discards b WHERE b.item_id = d.item_id
+              )
+            """
+        discard_sql = (
+            "SELECT COUNT(*) FROM bridge_discards WHERE discarded_at >= ?"
+        )
+        discard_post_sql = """
+            SELECT COUNT(*) FROM bridge_discards b
+            WHERE b.discarded_at >= ?
+              AND EXISTS (
+                SELECT 1 FROM dispatched_signals d WHERE d.item_id = b.item_id
+              )
+            """
+        params = (started_at,)
+
+    claims = int(conn.execute(claim_sql, params).fetchone()[0])
+    post_from_claims = int(conn.execute(claim_post_sql, params).fetchone()[0])
+    discards = int(conn.execute(discard_sql, params).fetchone()[0])
+    post_from_discards = int(conn.execute(discard_post_sql, params).fetchone()[0])
+    success = claims - post_from_claims
+    pre_claim = discards - post_from_discards
+    detail = {
+        "claims": claims,
+        "success": success,
+        "post_claim_discards": post_from_claims,
+        "discards": discards,
+        "pre_claim_discards": pre_claim,
+        "post_claim_from_discards": post_from_discards,
+    }
+    # Algebra claims=success+post / discards=post+pre holds by construction;
+    # RED only when the two post-views diverge (orphan claim↔discard).
+    if post_from_claims != post_from_discards:
+        return GateResult(
+            name="CLAIM_DISCARD_ACCOUNTING",
+            status="RED",
+            detail=detail,
+        )
+    return GateResult(
+        name="CLAIM_DISCARD_ACCOUNTING",
+        status="GREEN",
+        detail=detail,
+    )
+
+
 def gate_snapshot(
     db_path: Path,
     errors: list[str],
@@ -347,6 +426,7 @@ def gate_snapshot(
             (min_run_id,),
         ).fetchone()[0]
         recon = gate_telemetry_reconciliation(conn, min_run_id=min_run_id)
+        accounting = gate_claim_discard_accounting(conn, started_at=started_at)
     except sqlite3.Error as exc:
         _warn(f"gate snapshot skipped: {exc}")
         return None
@@ -364,6 +444,7 @@ def gate_snapshot(
         "telemetry_fill_metrics": int(fills),
         "duplicate_item_ids": len(dup),
         "reconciliation": recon,
+        "claim_discard_accounting": accounting,
     }
     print("--- Gate-Schnappschuss ---")
     if time_filter == "unscoped":
@@ -380,6 +461,14 @@ def gate_snapshot(
     print(f"  telemetry_fill_metrics rows (run_id>={min_run_id}): {fills}")
     print(f"  duplicate item_ids: {len(dup)}")
     print(f"  {recon.name}: {recon.status} detail={recon.detail}")
+    ad = accounting.detail
+    print(
+        f"  {accounting.name}: {accounting.status} "
+        f"claims={ad.get('claims')} = success={ad.get('success')} "
+        f"+ post_claim={ad.get('post_claim_discards')}; "
+        f"discards={ad.get('discards')} = post={ad.get('post_claim_from_discards')} "
+        f"+ pre={ad.get('pre_claim_discards')}"
+    )
     if dup:
         print(f"  FAIL duplicates: {dup[:5]}")
         _fail(f"duplicate item_ids: {dup[:5]}", errors)
@@ -387,6 +476,14 @@ def gate_snapshot(
         _fail(
             f"{recon.name}: dispatched_success={recon.detail.get('dispatched_success')} "
             f"> telemetry_rows={recon.detail.get('telemetry_rows')}",
+            errors,
+        )
+    if accounting.status == "RED":
+        _fail(
+            f"{accounting.name}: claims={ad.get('claims')} "
+            f"success={ad.get('success')} post={ad.get('post_claim_discards')} "
+            f"discards={ad.get('discards')} pre={ad.get('pre_claim_discards')} "
+            f"post_from_discards={ad.get('post_claim_from_discards')}",
             errors,
         )
     return snapshot
