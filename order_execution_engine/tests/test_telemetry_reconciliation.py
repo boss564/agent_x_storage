@@ -2,12 +2,17 @@
 
 from __future__ import annotations
 
+import io
 import sqlite3
 import tempfile
 import time
+from contextlib import redirect_stdout
 from pathlib import Path
 
-from order_execution_engine.ops.preflight_check import gate_telemetry_reconciliation
+from order_execution_engine.ops.preflight_check import (
+    gate_snapshot,
+    gate_telemetry_reconciliation,
+)
 
 
 def _schema(conn: sqlite3.Connection) -> None:
@@ -139,3 +144,67 @@ def test_gate_ignores_discarded_claims() -> None:
         assert g.detail["dispatched_success"] == 0
         conn.close()
     print("OK test_gate_ignores_discarded_claims")
+
+
+def test_gate_snapshot_discards_use_min_run_started_at() -> None:
+    """Discards + Dispatches + Dups ab min_run_id.started_at (wie Reconciliation)."""
+    with tempfile.TemporaryDirectory() as td:
+        db = Path(td) / "t.db"
+        conn = sqlite3.connect(db)
+        _schema(conn)
+        conn.executescript(
+            """
+            CREATE TABLE telemetry_fill_metrics (
+                telemetry_seq INTEGER PRIMARY KEY
+            );
+            """
+        )
+        t0 = 1_000_000.0
+        conn.execute(
+            "INSERT INTO telemetry_runs VALUES (7, ?, 'x', '{}')", (t0,),
+        )
+        # Vor Anker — darf nicht in discard_reasons / dispatched erscheinen
+        conn.execute(
+            "INSERT INTO bridge_discards VALUES "
+            "('legacy', 'unresolved_asset', ?)",
+            (t0 - 100,),
+        )
+        conn.execute(
+            "INSERT INTO dispatched_signals VALUES ('legacy-d', ?, NULL)",
+            (t0 - 50,),
+        )
+        conn.execute(
+            "INSERT INTO bridge_discards VALUES "
+            "('ok1', 'no_book', ?)",
+            (t0 + 1,),
+        )
+        conn.execute(
+            "INSERT INTO bridge_discards VALUES "
+            "('ok2', 'unresolved_asset:mapping_miss', ?)",
+            (t0 + 2,),
+        )
+        conn.execute(
+            "INSERT INTO dispatched_signals VALUES ('ok-d', ?, NULL)",
+            (t0 + 3,),
+        )
+        conn.execute(
+            "INSERT INTO telemetry (signal_id, latency_ms, approved, run_id)"
+            " VALUES ('s1', 0.2, 0, 7)",
+        )
+        conn.commit()
+        conn.close()
+
+        errors: list[str] = []
+        with redirect_stdout(io.StringIO()):
+            snap = gate_snapshot(db, errors, min_run_id=7)
+        assert snap is not None
+        assert snap["time_filter"] == "run_id=7.started_at"
+        assert snap["discard_reasons"] == {
+            "no_book": 1,
+            "unresolved_asset:mapping_miss": 1,
+        }
+        assert "unresolved_asset" not in snap["discard_reasons"]
+        assert snap["dispatched_signals"] == 1
+        assert snap["duplicate_item_ids"] == 0
+        assert errors == []
+    print("OK test_gate_snapshot_discards_use_min_run_started_at")

@@ -286,15 +286,55 @@ def gate_snapshot(
     errors: list[str],
     *,
     min_run_id: int = DEFAULT_MIN_RUN_ID,
-) -> None:
+) -> Optional[dict[str, Any]]:
+    """Gate-Schnappschuss; Zähler ab ``min_run_id.started_at`` (wie Reconciliation).
+
+    Fehlt der Run-Anker, zählen Discards/Dispatches/Dups über die ganze DB
+    (``time_filter=unscoped`` in Rückgabe und Ausgabe).
+    """
     if not db_path.exists():
         _warn("keine DB für Gate-Schnappschuss")
-        return
+        return None
     conn = sqlite3.connect(str(db_path))
     try:
-        discards = conn.execute(
-            "SELECT reason, COUNT(*) FROM bridge_discards GROUP BY reason"
-        ).fetchall()
+        # Same time anchor as TELEMETRY_RECONCILIATION (min_run_id.started_at).
+        started_row = conn.execute(
+            "SELECT started_at FROM telemetry_runs WHERE run_id = ?",
+            (min_run_id,),
+        ).fetchone()
+        started_at = float(started_row[0]) if started_row is not None else None
+        if started_at is None:
+            discards = conn.execute(
+                "SELECT reason, COUNT(*) FROM bridge_discards GROUP BY reason"
+            ).fetchall()
+            disp = int(
+                conn.execute("SELECT COUNT(*) FROM dispatched_signals").fetchone()[0]
+            )
+            dup = conn.execute(
+                "SELECT item_id, COUNT(*) c FROM dispatched_signals "
+                "GROUP BY item_id HAVING c > 1"
+            ).fetchall()
+            time_filter = "unscoped"
+        else:
+            discards = conn.execute(
+                "SELECT reason, COUNT(*) FROM bridge_discards "
+                "WHERE discarded_at >= ? GROUP BY reason",
+                (started_at,),
+            ).fetchall()
+            disp = int(
+                conn.execute(
+                    "SELECT COUNT(*) FROM dispatched_signals "
+                    "WHERE dispatched_at >= ?",
+                    (started_at,),
+                ).fetchone()[0]
+            )
+            dup = conn.execute(
+                "SELECT item_id, COUNT(*) c FROM dispatched_signals "
+                "WHERE dispatched_at >= ? "
+                "GROUP BY item_id HAVING c > 1",
+                (started_at,),
+            ).fetchall()
+            time_filter = f"run_id={min_run_id}.started_at"
         stale = conn.execute(
             "SELECT COUNT(*) FROM telemetry WHERE run_id >= ? "
             "AND reject_reason = 'STALE_SNAPSHOT'",
@@ -306,22 +346,36 @@ def gate_snapshot(
             "WHERE t.run_id >= ?",
             (min_run_id,),
         ).fetchone()[0]
-        disp = conn.execute(
-            "SELECT COUNT(*) FROM dispatched_signals"
-        ).fetchone()[0]
-        dup = conn.execute(
-            "SELECT item_id, COUNT(*) c FROM dispatched_signals "
-            "GROUP BY item_id HAVING c > 1"
-        ).fetchall()
         recon = gate_telemetry_reconciliation(conn, min_run_id=min_run_id)
     except sqlite3.Error as exc:
         _warn(f"gate snapshot skipped: {exc}")
-        return
+        return None
     finally:
         conn.close()
+
+    discard_reasons = {str(r): int(c) for r, c in discards}
+    snapshot = {
+        "min_run_id": min_run_id,
+        "started_at": started_at,
+        "time_filter": time_filter,
+        "dispatched_signals": disp,
+        "discard_reasons": discard_reasons,
+        "stale_snapshot": int(stale),
+        "telemetry_fill_metrics": int(fills),
+        "duplicate_item_ids": len(dup),
+        "reconciliation": recon,
+    }
     print("--- Gate-Schnappschuss ---")
+    if time_filter == "unscoped":
+        scope = (
+            f"unscoped — no telemetry_runs.run_id={min_run_id}; "
+            "counts over full DB"
+        )
+    else:
+        scope = f">={time_filter}"
+    print(f"  time_filter: {scope}")
     print(f"  dispatched_signals: {disp}")
-    print(f"  discard_reasons: {dict(discards)}")
+    print(f"  discard_reasons: {discard_reasons}")
     print(f"  STALE_SNAPSHOT telemetry (run_id>={min_run_id}): {stale}")
     print(f"  telemetry_fill_metrics rows (run_id>={min_run_id}): {fills}")
     print(f"  duplicate item_ids: {len(dup)}")
@@ -335,6 +389,7 @@ def gate_snapshot(
             f"> telemetry_rows={recon.detail.get('telemetry_rows')}",
             errors,
         )
+    return snapshot
 
 
 def check_paths(news_jsonl: Path, data_root: Path, errors: list[str], *, after_start: bool) -> None:

@@ -113,3 +113,13 @@ PYTHONPATH=. python3 order_execution_engine/ops/preflight_check.py --after-start
 (Claim vor Resolve zählt unresolved/no_book nicht als Dispatch-Erfolg).
 
 Freeze-Ende 2026-11-01 — Tag-7 Settle-Check. Config nicht anfassen.
+
+## Tag-7-Review (Risiken, nicht ändern während Messung)
+
+Preflight für Run-8-Bilanz explizit: `--min-run-id 8` (Default `7` inkl. 10:00-Alt-`unresolved` vor Run-8-Start).
+
+| Risiko | Stand Run-8 (Stand 2026-10-05) |
+|---|---|
+| Erfolgspfad-Quote | 1 Dispatch vs. 11 Verwürfe ≈ 8 % — Fill-Pfad bleibt wahrscheinlich unbelegt |
+| `STALE`/`no_book` vs. 2-s-Fenster | `telemetry` speichert kein `book_age_ms`; bei STALE nur `latency_ms≈0` → Buch-Alter war bindend, exakter ms-Wert fehlt. `book_age_ms`-Logging erst nach Messperiode |
+| Working-Tree-Runner | KeepAlive-Restart lädt aktuellen Tree, nicht gepinnten Commit — während Messung kein Checkout/Code-Edit |
