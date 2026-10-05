@@ -110,5 +110,7 @@ deploy/hetzner/telemetry-bridge.env
 # Nested newsagent-Checkout / Review-Artefakte / Bridge-Output
 newsagent/
 krypto_steuer_analytix/
+krypto_news_journalist/
+polysentinel-issue2-gate-drop/
 dashboard/_review_newsagent_cutover/
 artifacts/
