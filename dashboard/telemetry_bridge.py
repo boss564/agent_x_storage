@@ -993,6 +993,22 @@ def build_alerts(repos: Iterable[RepoStatus], agents: Iterable[AgentStatus],
                             f"gepusht (Upstream kennt HEAD nicht)"),
             })
 
+        # REPO_BEHIND — nur fuer role "deploy". Ein Deploy-Checkout, der
+        # hinter origin steht, faehrt einen aelteren Stand als der Remote:
+        # genau die Drift, die der Read-only Deploy-Key strukturell
+        # verhindern sollte (er ermoeglicht pull, erzwingt ihn aber nicht).
+        # An Dev-/Satelliten-Repos ist behind normal (man arbeitet lokal
+        # weiter) und waere nur Rauschen — deshalb role-gebunden.
+        # behind=None (kein Upstream) erzeugt bewusst KEINEN Alert.
+        if repo.role == "deploy" and repo.behind is not None and repo.behind > 0:
+            alerts.append({
+                "severity": "warn",
+                "code": "REPO_BEHIND",
+                "source": repo.name,
+                "message": (f"{repo.name}: Deploy-Checkout ist {repo.behind} "
+                            f"Commit(s) hinter origin (aelterer Stand als der Remote)"),
+            })
+
     for agent in agents:
         if agent.state == "failed":
             alerts.append({

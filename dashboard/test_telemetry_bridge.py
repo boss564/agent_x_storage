@@ -517,6 +517,74 @@ class RepoAheadTests(unittest.TestCase):
                       "(orthogonal zur Health-Achse)")
 
 
+class RepoBehindTests(unittest.TestCase):
+    """
+    REPO_BEHIND — Deploy-Checkout hinter origin (2026-10-08).
+
+    Der Read-only Deploy-Key ERMOEGLICHT `git pull`, er ERZWINGT es nicht.
+    Ein Deploy-Checkout mit behind>0 faehrt einen aelteren Stand als der
+    Remote — die Drift-Klasse, die der Key strukturell verhindern sollte.
+    Nur fuer role "deploy": an Dev-Repos ist behind normal und Rauschen.
+    """
+
+    def _repo(self, role: str, behind) -> "tb.RepoStatus":
+        return tb.RepoStatus(name="d", path="/x", role=role, state="ok",
+                             kind="worktree", head="abc", branch="main",
+                             dirty=False, changed_count=0, health="CLEAN",
+                             ahead=0, behind=behind)
+
+    def test_deploy_behind_raises_warn(self) -> None:
+        a = tb.build_alerts([self._repo("deploy", 3)], [], {"error": None})
+        behind = [x for x in a if x["code"] == "REPO_BEHIND"]
+        self.assertEqual(len(behind), 1)
+        self.assertEqual(behind[0]["severity"], "warn",
+                         "Deploy-Drift ist eine Warnung, kein Hinweis")
+
+    def test_dev_repo_behind_is_silent(self) -> None:
+        for role in ("hub", "satellite", "module"):
+            a = tb.build_alerts([self._repo(role, 3)], [], {"error": None})
+            self.assertNotIn("REPO_BEHIND", [x["code"] for x in a],
+                             f"role={role}: behind darf keinen Alert erzeugen")
+
+    def test_deploy_behind_zero_is_silent(self) -> None:
+        a = tb.build_alerts([self._repo("deploy", 0)], [], {"error": None})
+        self.assertNotIn("REPO_BEHIND", [x["code"] for x in a])
+
+    def test_deploy_no_upstream_is_silent(self) -> None:
+        """behind=None (kein Upstream) => kein Alert, kein Fehlalarm."""
+        a = tb.build_alerts([self._repo("deploy", None)], [], {"error": None})
+        self.assertNotIn("REPO_BEHIND", [x["code"] for x in a])
+
+    def test_measure_push_drift_sets_behind_on_deploy(self) -> None:
+        """Ende-zu-Ende: ein echter behind-Zustand liefert behind>0."""
+        tmp = Path(tempfile.mkdtemp(prefix="tbbehind-"))
+        try:
+            origin = tmp / "origin.git"
+            subprocess.run(["git", "init", "-q", "--bare", str(origin)],
+                           capture_output=True)
+            work = tmp / "work"
+            subprocess.run(["git", "clone", "-q", str(origin), str(work)],
+                           capture_output=True)
+            _git(["config", "user.email", "t@t"], work)
+            _git(["config", "user.name", "t"], work)
+            for n in ("a", "b"):
+                (work / f"{n}.txt").write_text(n)
+                _git(["add", "-A"], work)
+                _git(["commit", "-qm", n], work)
+            _git(["push", "-q", "origin", "HEAD"], work)
+            server = tmp / "server"
+            subprocess.run(["git", "clone", "-q", str(origin), str(server)],
+                           capture_output=True)
+            _git(["reset", "--hard", "HEAD~1"], server)
+            s = tb.inspect_repo("deploy-repo", str(server), "deploy", tmp)
+            self.assertEqual(s.behind, 1)
+            self.assertEqual(s.ahead, 0)
+            self.assertIn("REPO_BEHIND",
+                          [x["code"] for x in tb.build_alerts([s], [], {"error": None})])
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+
 class SnapshotContractTests(unittest.TestCase):
     """Der Vertrag, den das Dashboard liest."""
 
