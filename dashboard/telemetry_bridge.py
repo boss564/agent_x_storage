@@ -695,18 +695,36 @@ def collect_log(path: Path = LOG_PATH, lines: int = LOG_TAIL_LINES) -> dict[str,
         return result
 
     try:
-        collected: list[str] = []
         block = 8192
+        chunks: list[bytes] = []
+        newlines = 0
+        start = 0
         with path.open("rb") as fh:
             fh.seek(0, os.SEEK_END)
             pos = fh.tell()
-            buffer = b""
-            while pos > 0 and collected.count("\n") <= lines:
+            # Rueckwaerts lesen, aber auf BYTES zaehlen und erst am Ende
+            # dekodieren. Zwei Fehler waren hier uebereinander:
+            #   1. `collected.count("\n")` zaehlte in einer Liste von bereits
+            #      gesplitteten Zeilen — dort gibt es nie ein "\n"-Element,
+            #      die Bedingung war immer wahr und die Schleife lief bis 0.
+            #   2. `decode` + `splitlines` auf dem wachsenden Gesamtpuffer pro
+            #      Block machten das vollstaendige Lesen quadratisch.
+            # Abbruch bei lines + 1 Umbruechen: die erste der letzten N Zeilen
+            # ist dann garantiert vollstaendig (nicht mitten im Block).
+            while pos > 0 and newlines < lines + 1:
                 step = min(block, pos)
                 pos -= step
                 fh.seek(pos)
-                buffer = fh.read(step) + buffer
-                collected = buffer.decode("utf-8", errors="replace").splitlines()
+                chunk = fh.read(step)
+                chunks.append(chunk)
+                newlines += chunk.count(b"\n")
+            start = pos
+        buffer = b"".join(reversed(chunks))
+        collected = buffer.decode("utf-8", errors="replace").splitlines()
+        # Bei Offset > 0 ist die erste Zeile angeschnitten (oder eine
+        # UTF-8-Sequenz an der Blockgrenze) — sie gehoert nicht zum Tail.
+        if start > 0 and collected:
+            collected = collected[1:]
         tail = [ln.rstrip("\r") for ln in collected[-lines:]]
         result["lines"] = tail
         result["line_count"] = len(tail)
