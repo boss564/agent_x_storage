@@ -108,7 +108,10 @@ DEFAULT_REPO_REGISTRY: list[dict[str, Any]] = [
 # Prozess-Registry. 'required=False' = taucht nicht als Fehler auf,
 # wenn er fehlt (sondern als "not_running" — Information, kein Alarm).
 DEFAULT_PROCESS_REGISTRY: list[dict[str, Any]] = [
-    {"name": "polymarket_monitor", "pattern": "polymarket_monitor.py", "required": True},
+    # polymarket_monitor: Skript nicht vorhanden, nie implementiert — nicht in Registry.
+    # Ein dauerhaftes "laeuft nicht (required)" auf ein Phantom stumpft den
+    # Alert-Strip ab (Muster b2966579). Kommt das Produkt, dann als neuer
+    # Eintrag mit echter Datei + LaunchAgent — nicht als Wiederbelebung.
     {"name": "polysentinel", "pattern": "polysentinel", "required": False},
 ]
 

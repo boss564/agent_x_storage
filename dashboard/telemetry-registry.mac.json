@@ -31,11 +31,6 @@
   ],
   "processes": [
     {
-      "name": "polymarket_monitor",
-      "pattern": "polymarket_monitor.py",
-      "required": true
-    },
-    {
       "name": "polysentinel",
       "pattern": "polysentinel",
       "required": false
