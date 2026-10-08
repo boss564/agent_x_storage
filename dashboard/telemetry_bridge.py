@@ -311,6 +311,11 @@ class RepoStatus:
     changed_count: int = 0
     health: str = "UNKNOWN"         # CLEAN | WARN | DIRTY | NOT FOUND | NESTED | BARE | EMPTY
     error: str | None = None
+    # Push-Rueckstand gegen den Upstream. None = kein Upstream vorhanden
+    # (Fehlen ist Information, nicht 0) — 0 = synchron, >0 = lokale Commits
+    # noch nicht gepusht. Grund fuer REPO_AHEAD (info).
+    ahead: int | None = None
+    behind: int | None = None
 
 
 def _find_enclosing_repo(path: Path) -> Path | None:
@@ -484,7 +489,44 @@ def inspect_repo(name: str, rel_path: str, role: str, base: Path,
     else:
         status.health = "DIRTY"
 
+    _measure_push_drift(status, target)
     return status
+
+
+def _measure_push_drift(status: RepoStatus, target: Path) -> None:
+    """
+    Misst Push-Rueckstand: lokale Commits, die noch nicht im Upstream sind.
+
+    WARUM DAS EINE EIGENE MESSUNG IST: `git status` sieht nur den
+    Arbeitsbaum. Ein Repo kann CLEAN sein und trotzdem sechs produktive
+    Commits tragen, die nur lokal existieren (Befund 2026-10-08:
+    alpha-pipeline — Quelle eines produktiven Dienstes, health CLEAN,
+    ahead 6). Diese Luecke ist eine Vertragsblindstelle, kein Randfall.
+
+    SEMANTIK: Fehlen ist Information. Ohne Upstream bleiben ahead/behind
+    None — NICHT 0. Eine 0 wuerde "synchron" behaupten und den fehlenden
+    Upstream verschweigen (dieselbe Klasse wie der []-vs-None-Fehler).
+    """
+    # Upstream ermitteln. Kein Upstream -> beide None (Fehlen, nicht 0).
+    rc, out, _ = _run_git(
+        ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"],
+        repo=target,
+    )
+    if rc != 0 or not out.strip():
+        return
+    # Links = behind (Upstream voraus), rechts = ahead (lokal voraus).
+    rc, out, _ = _run_git(
+        ["rev-list", "--left-right", "--count", "@{u}...HEAD"],
+        repo=target,
+    )
+    if rc != 0 or not out.strip():
+        return
+    try:
+        behind_s, ahead_s = out.split()
+        status.behind = int(behind_s)
+        status.ahead = int(ahead_s)
+    except (ValueError, TypeError):
+        return
 
 
 def collect_repos(base: Path) -> list[RepoStatus]:
@@ -935,6 +977,21 @@ def build_alerts(repos: Iterable[RepoStatus], agents: Iterable[AgentStatus],
             # keine UNTRACKED — sonst luegt der Alert-Typ (Befund 2026-10-01).
             _append_untracked_nested_alerts(alerts, repo, nested_registered,
                                            emit_plain_untracked=True)
+
+        # REPO_AHEAD ist orthogonal zum Health-Wert: Ein Repo kann CLEAN,
+        # WARN oder DIRTY sein und trotzdem unpushed Commits tragen. Deshalb
+        # AUSSERHALB der elif-Kette (sonst wuerde z. B. ein CLEAN-Repo mit
+        # ahead>0 nie gemeldet — genau der Fall alpha-pipeline 2026-10-08).
+        # ahead=None (kein Upstream) erzeugt bewusst KEINEN Alert: Fehlen
+        # ist Information, kein Befund.
+        if repo.ahead is not None and repo.ahead > 0:
+            alerts.append({
+                "severity": "info",
+                "code": "REPO_AHEAD",
+                "source": repo.name,
+                "message": (f"{repo.name}: {repo.ahead} lokale Commits nicht "
+                            f"gepusht (Upstream kennt HEAD nicht)"),
+            })
 
     for agent in agents:
         if agent.state == "failed":

@@ -411,6 +411,112 @@ class BareAlertTests(unittest.TestCase):
         self.assertIn("REPO_BARE_EMPTY", [a["code"] for a in alerts])
 
 
+class RepoAheadTests(unittest.TestCase):
+    """
+    REPO_AHEAD — Push-Rueckstand als eigener Befund (2026-10-08).
+
+    Der Fall, der das ausgeloest hat: alpha-pipeline, Quelle eines
+    produktiven Dienstes, health CLEAN, aber 6 lokale Commits unpushed.
+    `git status` sieht das nicht — eine echte Vertragsblindstelle.
+    """
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.tmp = Path(tempfile.mkdtemp(prefix="tbahead-"))
+        cls.remote = cls.tmp / "remote.git"
+        cls.work = cls.tmp / "work"
+        subprocess.run(["git", "init", "-q", "--bare", str(cls.remote)],
+                       capture_output=True)
+        subprocess.run(["git", "clone", "-q", str(cls.remote), str(cls.work)],
+                       capture_output=True)
+        _git(["config", "user.email", "t@t"], cls.work)
+        _git(["config", "user.name", "t"], cls.work)
+        (cls.work / "a.txt").write_text("a")
+        _git(["add", "-A"], cls.work)
+        _git(["commit", "-qm", "init"], cls.work)
+        _git(["push", "-q", "origin", "HEAD"], cls.work)
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        shutil.rmtree(cls.tmp, ignore_errors=True)
+
+    def test_synced_repo_has_ahead_zero(self) -> None:
+        """Synchron: ahead=0, kein REPO_AHEAD."""
+        s = tb.inspect_repo("work", str(self.work), "hub", self.tmp)
+        self.assertEqual(s.ahead, 0)
+        self.assertEqual(s.behind, 0)
+        self.assertNotIn("REPO_AHEAD", [a["code"]
+                         for a in tb.build_alerts([s], [], {"error": None})])
+
+    def test_unpushed_commit_sets_ahead_and_raises_info(self) -> None:
+        """Ein lokaler Commit -> ahead=1 und REPO_AHEAD (info, nicht warn)."""
+        (self.work / "b.txt").write_text("b")
+        _git(["add", "-A"], self.work)
+        _git(["commit", "-qm", "lokal"], self.work)
+        s = tb.inspect_repo("work", str(self.work), "hub", self.tmp)
+        self.assertEqual(s.ahead, 1, "lokaler Commit muss als ahead=1 erscheinen")
+        # health bleibt CLEAN: Der Arbeitsbaum ist sauber, der Befund liegt
+        # auf der Push-Achse — genau die Trennung, die den Fall ausmachte.
+        self.assertEqual(s.health, "CLEAN")
+        alerts = tb.build_alerts([s], [], {"error": None})
+        ahead = [a for a in alerts if a["code"] == "REPO_AHEAD"]
+        self.assertEqual(len(ahead), 1)
+        self.assertEqual(ahead[0]["severity"], "info",
+                         "Push-Rueckstand ist ein Hinweis, keine Warnung")
+
+    def test_ahead_zero_after_push(self) -> None:
+        """Nach dem Push faellt ahead auf 0 — der Alert verschwindet."""
+        _git(["push", "-q", "origin", "HEAD"], self.work)
+        s = tb.inspect_repo("work", str(self.work), "hub", self.tmp)
+        self.assertEqual(s.ahead, 0)
+        self.assertNotIn("REPO_AHEAD", [a["code"]
+                         for a in tb.build_alerts([s], [], {"error": None})])
+
+    def test_no_upstream_is_none_not_zero(self) -> None:
+        """
+        Fehlen ist Information: ohne Upstream ahead=None, NICHT 0.
+
+        Eine 0 wuerde "synchron" behaupten und den fehlenden Upstream
+        verschweigen — dieselbe Fehlerklasse wie []-vs-None in der Registry.
+        """
+        solo = self.tmp / "solo"
+        solo.mkdir()
+        _git(["init", "-q"], solo)
+        _git(["config", "user.email", "t@t"], solo)
+        _git(["config", "user.name", "t"], solo)
+        (solo / "x.txt").write_text("x")
+        _git(["add", "-A"], solo)
+        _git(["commit", "-qm", "x"], solo)
+        s = tb.inspect_repo("solo", str(solo), "hub", self.tmp)
+        self.assertIsNone(s.ahead, "ohne Upstream muss ahead None sein")
+        self.assertIsNone(s.behind)
+        self.assertNotIn("REPO_AHEAD", [a["code"]
+                         for a in tb.build_alerts([s], [], {"error": None})],
+                         "ohne Upstream kein Alert — Fehlen ist kein Befund")
+
+    def test_ahead_alert_is_orthogonal_to_health(self) -> None:
+        """
+        REPO_AHEAD feuert auch bei DIRTY — er darf kein elif sein.
+
+        Sabotage-Probe: Wird REPO_AHEAD in die elif-Kette eingehaengt,
+        verschwindet er bei jedem nicht-CLEAN-Repo. Der Test erzwingt die
+        Unabhaengigkeit von der Health-Achse.
+        """
+        (self.work / "c.txt").write_text("c")
+        _git(["add", "-A"], self.work)
+        _git(["commit", "-qm", "lokal2"], self.work)
+        # Arbeitsbaum zusaetzlich schmutzig machen -> health=DIRTY
+        (self.work / "a.txt").write_text("geaendert")
+        s = tb.inspect_repo("work", str(self.work), "hub", self.tmp)
+        self.assertEqual(s.health, "DIRTY")
+        self.assertGreater(s.ahead, 0)
+        codes = [a["code"] for a in tb.build_alerts([s], [], {"error": None})]
+        self.assertIn("REPO_DIRTY", codes)
+        self.assertIn("REPO_AHEAD", codes,
+                      "REPO_AHEAD muss auch bei DIRTY gemeldet werden "
+                      "(orthogonal zur Health-Achse)")
+
+
 class SnapshotContractTests(unittest.TestCase):
     """Der Vertrag, den das Dashboard liest."""
 
