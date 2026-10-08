@@ -52,6 +52,7 @@ import concurrent.futures
 import json
 import os
 import platform
+import re
 import shutil
 import socket
 import subprocess
@@ -512,9 +513,27 @@ def _pgrep(pattern: str) -> tuple[list[int], str | None]:
     """
     PID-Suche via pgrep. Faellt auf 'ps -ax -o pid=,command=' zurueck,
     falls pgrep fehlt. Gibt (pids, error) zurueck.
+
+    ENGES MUSTER (seit 2026-10-08): Das Muster wird verankert, damit es nur
+    auf einen *Prozessnamen* oder ein *Skriptargument* passt — nicht auf eine
+    beliebige Teilzeichenkette irgendwo in der Kommandozeile.
+
+    Gemessener Anlass: Der Mac-Agent `polysentinel` (pattern 'polysentinel',
+    ohne unit) wurde als `running` gemeldet, weil ein verwaister Prozess
+    `tail -f /tmp/polysentinel-erster-lauf.log` (PID 13495, 19 Tage alt, Log
+    laengst geloescht) das Muster in seinem Argument trug. Dasselbe Muster
+    traefe auch einen Editor, ein grep, einen SSH-Wrapper oder einen Cronjob.
+
+    Grenzen: `(^|[/ ])name([/ ]|$)` verlangt, dass der Name an einer
+    Pfad-/Argumentgrenze beginnt UND an einer solchen endet.
+    `python /opt/polysentinel/run.py` passt (vor `/`, nach `/`),
+    `exec -a polysentinel sleep 30` passt (Argumentanfang, Wortende),
+    `tail -f /tmp/polysentinel.log` passt NICHT (nach dem Namen folgt `.`),
+    `my-polysentinel-wrapper` passt NICHT (davor `-`, danach `-`).
     """
+    anchored = rf"(^|[/ ]){re.escape(pattern)}([/ ]|$)"
     if shutil.which("pgrep"):
-        rc, out, err = _run(["pgrep", "-f", pattern])
+        rc, out, err = _run(["pgrep", "-f", anchored])
         if rc == 0 and out:
             pids = []
             for line in out.splitlines():
@@ -526,7 +545,8 @@ def _pgrep(pattern: str) -> tuple[list[int], str | None]:
             return [], None  # kein Treffer — kein Fehler
         return [], err or "pgrep fehlgeschlagen"
 
-    # Fallback ohne pgrep
+    # Fallback ohne pgrep: dieselbe Verankerung, in Python.
+    rx = re.compile(anchored)
     rc, out, err = _run(["ps", "-ax", "-o", "pid=,command="])
     if rc != 0:
         return [], err or "ps fehlgeschlagen"
@@ -536,7 +556,7 @@ def _pgrep(pattern: str) -> tuple[list[int], str | None]:
         if not line:
             continue
         head, _, rest = line.partition(" ")
-        if head.isdigit() and pattern in rest:
+        if head.isdigit() and rx.search(rest):
             pids.append(int(head))
     return pids, None
 
