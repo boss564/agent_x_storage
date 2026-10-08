@@ -1067,7 +1067,7 @@ def serve(out_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 def _print_summary(snapshot: dict[str, Any]) -> None:
-    print(f"[bridge] {snapshot['generated_at']}  ({snapshot['meta']['duration_ms']}ms)")
+    print(f"[bridge] {snapshot['generated_at']}  ({snapshot['meta']['duration_ms']}ms)", flush=True)
     for r in snapshot["repos"]:
         head = r["head"] or "—"
         print(f"  repo   {r['name']:<22} {r['health']:<10} {head:<10} {r['state']}")
