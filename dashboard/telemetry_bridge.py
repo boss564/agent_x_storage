@@ -493,7 +493,7 @@ def collect_repos(base: Path) -> list[RepoStatus]:
 @dataclass
 class AgentStatus:
     name: str
-    state: str                      # running | not_running | error
+    state: str                      # running | not_running | starting | failed | error
     required: bool = True
     pids: list[int] = field(default_factory=list)
     pid: int | None = None
@@ -610,7 +610,40 @@ def inspect_process(spec: dict[str, Any]) -> AgentStatus:
 
     st = AgentStatus(name=name, state="not_running", required=required)
 
-    # --- a) pgrep: findet echte Prozesse (Mac wie Host) ----------------------
+    # --- Reihenfolge: systemd ist die Autoritaet fuer SEINE Units ----------
+    # Ist eine unit konfiguriert, entscheidet systemd — pgrep ist dort nur
+    # Fallback, wenn systemd keine Auskunft gibt. Vorher lief pgrep zuerst
+    # und kehrte frueh zurueck: ein fremder Prozess, dessen Kommandozeile das
+    # Muster traegt (tail -f, Editor, grep, SSH-Wrapper), maskierte einen
+    # ausgefallenen Dienst als "running" (gemessen 2026-10-08: inactive-Unit,
+    # fremder sleep mit dem Unit-Namen in argv -> state=running,
+    # detected_by=pgrep, kein PROCESS_DOWN).
+    #
+    # Der pids-Filter unten faengt nur den eigenen PID ab — nicht die Shell,
+    # die die Bridge startet, und schon gar nicht fremde Prozesse.
+    if unit:
+        unit_state, unit_err = _systemd_unit_state(unit)
+        st.unit = unit
+        st.unit_state = unit_state
+        if unit_state is not None:
+            st.detected_by = "systemd"
+            if unit_state == "active":
+                st.state = "running"
+                st.uptime_human = "— (systemd)"
+            elif unit_state == "activating":
+                st.state = "starting"
+            elif unit_state == "failed":
+                st.state = "failed"
+                st.error = f"systemd-Unit {unit} ist failed"
+            else:
+                # inactive / deactivating / dead
+                st.state = "not_running"
+            return st
+        if unit_err:
+            st.error = unit_err
+
+    # --- pgrep: findet echte Prozesse (Mac wie Host) ----------------------
+    # Greift ohne unit — oder wenn systemd nicht antworten konnte (unit_err).
     pids, err = _pgrep(pattern)
     if err:
         st.state = "error"
@@ -632,31 +665,6 @@ def inspect_process(spec: dict[str, Any]) -> AgentStatus:
         st.uptime_human = _humanize_seconds(uptime)
         st.cmdline = _process_cmdline(st.pid)
         st.cwd = _process_cwd(st.pid)
-        return st
-
-    # --- b) systemd-Unit: greift, wenn pgrep nichts findet -------------------
-    # Ein oneshot-/timer-getriebener Dienst hat zwischen zwei Laeufen keinen
-    # Prozess. pgrep sagt "laeuft nicht", systemd sagt "active (waiting)".
-    # Ohne diesen Zweig waeren alle Timer-Dienste dauerhaft rot.
-    if unit:
-        unit_state, unit_err = _systemd_unit_state(unit)
-        st.unit = unit
-        st.unit_state = unit_state
-        if unit_state is not None:
-            st.detected_by = "systemd"
-            if unit_state == "active":
-                st.state = "running"
-                st.uptime_human = "— (systemd)"
-            elif unit_state == "activating":
-                st.state = "starting"
-            elif unit_state == "failed":
-                st.state = "failed"
-                st.error = f"systemd-Unit {unit} ist failed"
-            else:
-                # inactive / deactivating / dead
-                st.state = "not_running"
-        elif unit_err:
-            st.error = unit_err
 
     return st
 
