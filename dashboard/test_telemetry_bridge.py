@@ -193,13 +193,34 @@ class RegistryTests(unittest.TestCase):
         self.assertIsNone(repos)
         self.assertIsNone(procs)
 
-    def test_empty_lists_fall_back_to_default(self) -> None:
-        """Leere Liste = stiller Ausfall, nicht Wunsch. Also Default."""
+    def test_empty_list_is_wish_not_failure(self) -> None:
+        """
+        Leere Liste = bewusster Wunsch ("keine Prozesse"), nicht stiller Ausfall.
+
+        Korrektur 2026-10-08: Die fruehere Annahme ("leer = Ausfall -> Default")
+        war falsch. Gemessen: Mac-Registry mit "processes": [] liess
+        polysentinel weiter als Agent auftauchen, weil `[] or DEFAULT` auf die
+        eingebaute Liste zurueckfiel. Die Semantik ist jetzt:
+          - Feld FEHLT (None)  -> Default (Abwesenheit eines Wunsches)
+          - Feld LEER   ([])   -> leer, kein Default (Wunsch "nichts")
+        """
         path = self._write({"repos": [], "processes": []})
         repos, procs = tb._load_registry_file(path)
-        # Leere Liste ist truthy-falsy: _load_registry_file gibt [] zurueck,
-        # der Aufrufer faellt per `or` auf den Default zurueck.
-        self.assertFalse(repos or tb.DEFAULT_REPO_REGISTRY is None)
+        self.assertEqual(repos, [])
+        self.assertEqual(procs, [])
+        # Der Aufrufer darf hier NICHT auf Default zurueckfallen.
+        self.assertIsNotNone(repos)
+        self.assertIsNotNone(procs)
+
+    def test_missing_key_falls_back_to_default(self) -> None:
+        """Fehlt der Schluessel ganz, ist das Abwesenheit eines Wunsches -> Default."""
+        path = self._write({"repos": [{"name": "r1", "path": "/x"}]})
+        repos, procs = tb._load_registry_file(path)
+        self.assertEqual([r["name"] for r in repos], ["r1"])
+        self.assertIsNone(procs)
+        # So wendet die Bridge den Default an:
+        effective = procs if procs is not None else tb.DEFAULT_PROCESS_REGISTRY
+        self.assertIs(effective, tb.DEFAULT_PROCESS_REGISTRY)
 
     def test_default_registry_names_are_stable(self) -> None:
         names = [r["name"] for r in tb.DEFAULT_REPO_REGISTRY]

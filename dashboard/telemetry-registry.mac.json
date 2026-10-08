@@ -1,6 +1,7 @@
 {
   "_comment": "Mac-Registry (LaunchAgent). Pfade relativ zu WorkingDirectory=agent_x_storage, ausser absolute/tilde.",
-  "_comment_planned": "data_infrastructure / farcaster_app / lokales polysentinel: geplant ohne git init — nicht hier. polysentinel live auf Hetzner (/opt/polysentinel).",
+  "_comment_planned": "data_infrastructure / farcaster_app: geplant ohne git init — nicht hier. polysentinel laeuft produktiv auf Hetzner (/opt/polysentinel, unit polysentinel.service); auf dem Mac liegt nur die QUELLE (alpha-pipeline, F7), kein Prozess.",
+  "_comment_polysentinel": "2026-10-08: Prozess-Eintrag entfernt. Belege: kein LaunchAgent, kein laufender Prozess auf dem Mac (pgrep fand nur einen verwaisten tail, 19d alt). Der produktive Dienst laeuft auf Hetzner und ist dort mit unit gefuehrt. Der Cronjob '*/15 * * * * check_18h_kriterien.py' ist ein periodischer Lauf, kein Dauerprozess — kein Registry-Prozess. Die Quelle ist jetzt als Repo gefuehrt (siehe alpha-pipeline).",
   "repos": [
     {
       "name": "agent_x_storage",
@@ -27,13 +28,12 @@
       "name": "x-storage-control-center",
       "path": "~/repos/x-storage-control-center",
       "role": "dashboard"
+    },
+    {
+      "name": "alpha-pipeline",
+      "path": "/Users/olivermueller/alpha-pipeline",
+      "role": "source"
     }
   ],
-  "processes": [
-    {
-      "name": "polysentinel",
-      "pattern": "polysentinel",
-      "required": false
-    }
-  ]
+  "processes": []
 }

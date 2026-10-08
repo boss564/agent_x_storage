@@ -165,8 +165,22 @@ if _REGISTRY_PATH and _REGISTRY_FILE_REPOS is None:
         "auf einem Remote-Host NICHT die erwarteten Repos enthaelt.\n"
     )
 
-REPO_REGISTRY: list[dict[str, Any]] = _REGISTRY_FILE_REPOS or DEFAULT_REPO_REGISTRY
-PROCESS_REGISTRY: list[dict[str, Any]] = _REGISTRY_FILE_PROCESSES or DEFAULT_PROCESS_REGISTRY
+# Datei schlaegt Default — und zwar auch dann, wenn die Datei eine LEERE
+# Liste traegt. `leer` ist ein Wunsch ("keine Prozesse"), `nicht gesetzt`
+# ist die Abwesenheit eines Wunsches. Mit `or` verschmolzen waere der
+# Unterschied verloren: `[] or DEFAULT` faellt auf die eingebaute Liste
+# zurueck und zeigt damit Prozesse an, die die Registry bewusst entfernt hat
+# (gemessen 2026-10-08: Mac-Registry mit "processes": [] -> polysentinel
+# tauchte weiter als Agent auf).
+# Nur None (Feld fehlt oder Datei nicht ladbar) faellt auf Default zurueck.
+REPO_REGISTRY: list[dict[str, Any]] = (
+    _REGISTRY_FILE_REPOS if _REGISTRY_FILE_REPOS is not None
+    else DEFAULT_REPO_REGISTRY
+)
+PROCESS_REGISTRY: list[dict[str, Any]] = (
+    _REGISTRY_FILE_PROCESSES if _REGISTRY_FILE_PROCESSES is not None
+    else DEFAULT_PROCESS_REGISTRY
+)
 
 LOG_PATH = Path(os.environ.get("AGENTX_TELEMETRY_LOG", "/tmp/ref_run.log"))
 LOG_TAIL_LINES = 10
