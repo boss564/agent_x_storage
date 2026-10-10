@@ -52,7 +52,7 @@
 | **Daten-Weg (Wächter-Paste)** | **Option 2 = Standard.** |
 | **Gemessener Checkout = Anker** | Mit live `hub_rev=`-Logging: **Journal-`hub_rev` am Lauf = Laufzeit-Anker Hub**, unabhängig vom Commit-Typ. Docs/Runtime-Trennung war Messlücke, kein Prinzip. Nachzug ohne Zwischenstopp auf überholten Ständen. |
 | **Diff-Lärm-Regel** | Hook-Diff / „hash:FEHLT" = Rauschen; Summary maßgeblich. |
-| **Offsite-Trend-Toleranz** | ≈ **+2,5/Lauf** (ab 0.3.15; real SP11–SP17: 230→244 = +14 in 6 Läufen); Abweichung **> ±4** = Befund (B-OFF-*). Bis 0.3.14: „≈ +4/Lauf“ (SP5–SP10-Verlauf, zu steil). |
+| **Offsite-Trend-Toleranz** | ≈ **+2,3/Lauf** (ab 0.3.15; real SP11–SP17: 230→244 = +14 in 6 Läufen = 14/6 = +2,33); Abweichung **> ±4** = Befund (B-OFF-*). Bis 0.3.14: „≈ +4/Lauf“ (SP5–SP10-Verlauf, zu steil). |
 | **Zählweise (ab 0.3.10)** | **Serienpunkt (SPn)** = laufende Nummer des Wächter-Laufs seit SP1. **Exit-0-Serie** = Anzahl aufeinanderfolgender Exit-0-Läufe (seit SP4). Bis 0.3.9 vermischt („Serie = 11“ meinte SP11, nicht 11 Exit-0). |
 | **Exit-0-Serie vs. Offsite-Befund** | Serie zählt `ExecMainStatus=0` + Hook/Zähler sauber + keine `[OPS]`. Offsite-Einbruch = Vollständigkeits-Befund, **kein** automatischer Serienbruch. |
 
