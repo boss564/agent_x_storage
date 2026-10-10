@@ -211,6 +211,30 @@ Tip `2a19a1d8` + Inventar · SP8–SP10 + §1.1-Entscheidung (0.3.8).
 | NA Kontext | `8afde1f` (unverändert, Host-Checkout) |
 | Timer | LAST 09.10. 03:45:02 · NEXT 10.10. 03:45:00 UTC |
 | Repo bei Paste | lokal = origin = Hub `f7e0b294`; Ledger-Datei 0.3.13 |
+### 3.23 Telemetrie-Befunde 09.10. (kein Wächter-Bezug, reine Beleg-Aufnahme)
+
+| Punkt | Messung (09.10.2026) |
+|---|---|
+| **Rolle `/opt/polysentinel`** | ✅ **belegt:** `/etc/agent-x/telemetry-registry.json` (Hetzner) → `role: deploy`; mtime **2026-10-08 17:48:56.455322818 +0000**. Live-Snapshot `/var/lib/agent-x-telemetry/status.json`: `role=deploy · behind=0 · ahead=0 · state=ok · health=WARN`. Vorher-Zustand über zwei Backups belegt (`.bak-20261008-174856`, `.bak-20261008-164347` → jeweils `satellite`). |
+| **Mac-Checkout `newsagent`** | Pfad aus Registry (`dashboard/telemetry-registry.mac.json` → `newsagent`): `/Volumes/THX_OS_ULTRA/Users/olivermueller/agent_x_storage/newsagent`. Stand vor Korrektur: `f72279d9` auf Branch `tor-hook-eine-quelle`, ahead 1. Nach Korrektur + Push: `master` = `origin/master` = **`319607d1`**, ahead 0. |
+| **Bridge-Gegenprobe `newsagent`** | **Belegter Funktionsnachweis `REPO_AHEAD` in beide Richtungen:** **06:10:48** → `ahead=1`, `behind=0`, Alert `REPO_AHEAD` (info) „1 lokale Commits nicht gepusht", Upstream `@{u}` = `origin/master`; **06:16:35** (nach Push) → `ahead=0`, `behind=0`, Alerts `[]`. Die Bridge folgt dem Push korrekt; kein Bridge-Befund. |
+| **Korrigierter Befund-Doc** | `newsagent@319607d1:docs/kanonizitaet/BEFUND_TOR_HOOK_NICHT_DECKUNGSGLEICH_2026-10-08.md` — polysentinel-Abschnitt korrigiert (Behauptung „nie umgestellt" ersetzt, mtime-Beleg, „toter Code" berichtigt, Rollen-Matrix auf `deploy`). Push über Tor (allow, FF, keine Freigabe). |
+
+
+### 3.24 Offene Punkte aus der Telemetrie-Sitzung 08.10. (Verweise, keine Buchungen)
+
+> Nur Verweise auf Befund-Docs. Was nicht schriftlich belegt ist, ist als **nicht belegt** gekennzeichnet.
+
+| Punkt | Quelle |
+|---|---|
+| Hook-Scope jenseits von `master` | `newsagent@44d5db2:docs/kanonizitaet/BEFUND_TOR_HOOK_NICHT_DECKUNGSGLEICH_2026-10-08.md` (auf `origin/master`; `git cat-file -e` OK) |
+| `LEITPLANKEN.md` veraltet | derselbe Befund-Doc **+** `newsagent@44d5db2:docs/LEITPLANKEN.md` (Kopf: „Stand: 2026-09-12 … jede Aussage trägt eine Fundstelle") |
+| `NOT FOUND`-Literal an der Quelle | `x-storage-control-center@d621eb3:SCHEMA.md:85ff` („`NOT FOUND` trägt ein Leerzeichen, keinen Unterstrich") **+** `agent_x_storage@01620033:dashboard/telemetry_bridge.py:425` |
+| **Fetch-Timer für `/opt/polysentinel` fehlt** | `behind` ist nur so aktuell wie der letzte Fetch. Letzter `FETCH_HEAD`: **2026-10-08 17:39:09Z** (der Snapshot-`behind=0` gilt **nur bezogen auf diesen Zeitpunkt**); kein systemd-Timer, kein Cron-Eintrag. Ohne periodischen Fetch bleibt `REPO_BEHIND` trotz korrekt gesetztem `role: deploy` **blind** (`behind=0` = Blindheit, keine Aussage). |
+| Rolle `/opt/polysentinel` | ✅ **erledigt** (Beleg §3.23). `role: deploy` gesetzt 08.10. 17:48:56Z. Der gestrige Widerspruch „`deploy` existiert nirgends" ist aufgelöst (Suche galt einer nicht existenten Repo-Datei). |
+| Image-Herkunft `newsagent` | **nicht schriftlich belegt** — nur Sitzung 2026-10-08. Inhalt: Der Dienst läuft aus `localhost/newsagent:latest`, **nicht** aus dem Checkout; der Herkunfts-Commit des Images ist unbekannt. Vorschlag: `org.opencontainers.image.revision=<commit>` beim Build setzen, Telemetrie vergleicht das Label gegen `origin/master`. Randbeleg: `dashboard/CLAUDE_TELEMETRY.md` §Betrieb. |
+| **§1.1 vs. B-OFF-1 (Regel-Abweichung)** | §1.1 nennt Offsite-Trend „≈ +4/Lauf"; die realen Läufe seit SP11 liegen bei **+2/+3** (230→232→235→238→240→242). Die Regel ist damit zu steil und widerspricht dem B-OFF-1-Review unkommentiert. ✅ **Erledigt 0.3.15:** §1.1 auf ≈ +2,5/Lauf korrigiert (Abweichung > ±4 = Befund). |
+
 
 ### 3.25 SP17 + Hub-FF-Beleg 0.3.14 + Anker-Nachzug (Paste 10.10.)
 
@@ -227,15 +251,6 @@ Tip `2a19a1d8` + Inventar · SP8–SP10 + §1.1-Entscheidung (0.3.8).
 | Timer | LAST 10.10. 03:45:00 · NEXT 11.10. 03:45:00 UTC |
 | Repo bei Paste | lokal = origin = Hub `2728ca0c`; Ledger-Datei 0.3.14 |
 
-### 3.23 Telemetrie-Befunde 09.10. (kein Wächter-Bezug, reine Beleg-Aufnahme)
-
-| Punkt | Messung (09.10.2026) |
-|---|---|
-| **Rolle `/opt/polysentinel`** | ✅ **belegt:** `/etc/agent-x/telemetry-registry.json` (Hetzner) → `role: deploy`; mtime **2026-10-08 17:48:56.455322818 +0000**. Live-Snapshot `/var/lib/agent-x-telemetry/status.json`: `role=deploy · behind=0 · ahead=0 · state=ok · health=WARN`. Vorher-Zustand über zwei Backups belegt (`.bak-20261008-174856`, `.bak-20261008-164347` → jeweils `satellite`). |
-| **Mac-Checkout `newsagent`** | Pfad aus Registry (`dashboard/telemetry-registry.mac.json` → `newsagent`): `/Volumes/THX_OS_ULTRA/Users/olivermueller/agent_x_storage/newsagent`. Stand vor Korrektur: `f72279d9` auf Branch `tor-hook-eine-quelle`, ahead 1. Nach Korrektur + Push: `master` = `origin/master` = **`319607d1`**, ahead 0. |
-| **Bridge-Gegenprobe `newsagent`** | **Belegter Funktionsnachweis `REPO_AHEAD` in beide Richtungen:** **06:10:48** → `ahead=1`, `behind=0`, Alert `REPO_AHEAD` (info) „1 lokale Commits nicht gepusht", Upstream `@{u}` = `origin/master`; **06:16:35** (nach Push) → `ahead=0`, `behind=0`, Alerts `[]`. Die Bridge folgt dem Push korrekt; kein Bridge-Befund. |
-| **Korrigierter Befund-Doc** | `newsagent@319607d1:docs/kanonizitaet/BEFUND_TOR_HOOK_NICHT_DECKUNGSGLEICH_2026-10-08.md` — polysentinel-Abschnitt korrigiert (Behauptung „nie umgestellt" ersetzt, mtime-Beleg, „toter Code" berichtigt, Rollen-Matrix auf `deploy`). Push über Tor (allow, FF, keine Freigabe). |
-
 ---
 
 ## 4. Baustellen-Tracker (B-Tracks)
@@ -249,21 +264,6 @@ Tip `2a19a1d8` + Inventar · SP8–SP10 + §1.1-Entscheidung (0.3.8).
 | **B8** | Hub-`rev-parse` Journal | ✅ | SP11 `hub_rev=16e48880`; Fix `3250be4` / `waechter_lauf.sh` |
 | **B-OFF-1** | Offsite-Einbruch | 🟠 | SP11: 230 · SP12: 232 · SP13: 235 · SP14: 238 · SP15: 240 · SP16: 242 · SP17: 244 (Band 250–258); Ursache offen; Review SP18 |
 | Track 12 / m2 | — | 🔴/🟡 | |
-
-### 3.24 Offene Punkte aus der Telemetrie-Sitzung 08.10. (Verweise, keine Buchungen)
-
-> Nur Verweise auf Befund-Docs. Was nicht schriftlich belegt ist, ist als **nicht belegt** gekennzeichnet.
-
-| Punkt | Quelle |
-|---|---|
-| Hook-Scope jenseits von `master` | `newsagent@44d5db2:docs/kanonizitaet/BEFUND_TOR_HOOK_NICHT_DECKUNGSGLEICH_2026-10-08.md` (auf `origin/master`; `git cat-file -e` OK) |
-| `LEITPLANKEN.md` veraltet | derselbe Befund-Doc **+** `newsagent@44d5db2:docs/LEITPLANKEN.md` (Kopf: „Stand: 2026-09-12 … jede Aussage trägt eine Fundstelle") |
-| `NOT FOUND`-Literal an der Quelle | `x-storage-control-center@d621eb3:SCHEMA.md:85ff` („`NOT FOUND` trägt ein Leerzeichen, keinen Unterstrich") **+** `agent_x_storage@01620033:dashboard/telemetry_bridge.py:425` |
-| **Fetch-Timer für `/opt/polysentinel` fehlt** | `behind` ist nur so aktuell wie der letzte Fetch. Letzter `FETCH_HEAD`: **2026-10-08 17:39:09Z** (der Snapshot-`behind=0` gilt **nur bezogen auf diesen Zeitpunkt**); kein systemd-Timer, kein Cron-Eintrag. Ohne periodischen Fetch bleibt `REPO_BEHIND` trotz korrekt gesetztem `role: deploy` **blind** (`behind=0` = Blindheit, keine Aussage). |
-| Rolle `/opt/polysentinel` | ✅ **erledigt** (Beleg §3.23). `role: deploy` gesetzt 08.10. 17:48:56Z. Der gestrige Widerspruch „`deploy` existiert nirgends" ist aufgelöst (Suche galt einer nicht existenten Repo-Datei). |
-| Image-Herkunft `newsagent` | **nicht schriftlich belegt** — nur Sitzung 2026-10-08. Inhalt: Der Dienst läuft aus `localhost/newsagent:latest`, **nicht** aus dem Checkout; der Herkunfts-Commit des Images ist unbekannt. Vorschlag: `org.opencontainers.image.revision=<commit>` beim Build setzen, Telemetrie vergleicht das Label gegen `origin/master`. Randbeleg: `dashboard/CLAUDE_TELEMETRY.md` §Betrieb. |
-| **§1.1 vs. B-OFF-1 (Regel-Abweichung)** | §1.1 nennt Offsite-Trend „≈ +4/Lauf"; die realen Läufe seit SP11 liegen bei **+2/+3** (230→232→235→238→240→242). Die Regel ist damit zu steil und widerspricht dem B-OFF-1-Review unkommentiert. ✅ **Erledigt 0.3.15:** §1.1 auf ≈ +2,5/Lauf korrigiert (Abweichung > ±4 = Befund). |
-
 ## 5. Schnittstellen-Verträge (v1.3)
 
 ### 5.3 Exit 0/1/2/3
