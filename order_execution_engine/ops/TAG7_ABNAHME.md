@@ -1928,3 +1928,126 @@ Und der Befund, der größer ist als alle vier Buchungen:
 erfüllt.** Die Gleichung stimmt, weil sie zwei Dinge zählt, die dasselbe Maß
 haben. Das Etikett hat darüber nie gelogen — aber es hat auch nie darüber
 gesprochen.
+
+## 28. §5.4bd — 391, 392, 393, 426: vier Zahlen, eine gültige
+
+```
+bridge_discards 393  = mapping_miss 202 + no_book 124 + empty_list 66 + unresolved_asset 1
+                          (nicht 201 — Runde 17 zitierte eine 6 h alte Zahl)
+dispatched_signals 361 = 327 (mit Discard) + 34 (ohne Discard)
+bridge_discards 393  = 327 (zu Dispatches) + 66 (empty_list, ohne Dispatch)
+```
+
+**Die Runde-17-Zahlen waren eine Momentaufnahme um 18:00.** Um 20:00:08
+schrieb der Loop eine neue Zeile: 360 → 361, 392 → 393. `mapping_miss` 201 →
+202. Das ist keine Korrektur, das ist Fortschreibung — die Quelle lebt.
+
+**`426` war keine Gesamtzahl.** `361 + 66` addiert zwei disjunkte
+Grundmengen: Dispatches und verwaiste Discards. Die 66 stehen nicht *neben*
+den Dispatches, sie sind eine Teilmenge, die *nie* einen Dispatch bekam.
+Richtig gerechnet wird jede Seite für sich.
+
+Und ein Artefakt, das die Klasse beweist: eine Prüfung
+`WHERE dispatched_at > '2026-10-17 18:00:09'` liefert **0**, weil
+`dispatched_at` `REAL` ist und der String-Vergleich immer falsch. Die
+Tabelle hatte zu dem Zeitpunkt 361 Zeilen. **Die fünfte Instanz der Klasse
+war in meiner eigenen Abfrage** — String gegen Zahl, in derselben Form wie
+`year == 2025`.
+
+## 29. §5.4az — `delivered` zählt nicht Fills
+
+```
+delivered (Gate)  = telemetry.approved = 1 AND run_id >= 9  = 0
+fills (real)      = 1, decision_seq = 12, PARTIALLY_FILLED,
+                    filled_at '2026-10-06T18:00:06.993672Z'
+```
+
+Die Zeile „0 Auslieferungen" ist **korrekt über das Fenster** und **falsch
+über den Dienst**. Beide Sätze sind wahr, und 13 Runden lang stand nur der
+erste da. `delivery` steht jetzt daneben:
+
+```
+delivery:  NO_DELIVERY_SINCE (4 Erfolge, 0 genehmigt, 1 Fills, letzter 2026-10-06T18:00:06)
+```
+
+### Die Kette, vier Stufen, drei Übergänge
+
+| Stufe | Wert | Verlust |
+|---|---|---|
+| Dispatches | 361 | — |
+| Erfolge (ohne Discard) | 34 | **90,6 %** im Mapping |
+| `approved = 1` | **1** | **33 von 34** |
+| Fills | **1** | 0 nach Approval |
+
+**Die zweite taube Stelle ist die Approval-Stufe**, und sie hat keinen
+Namen: `reject_reason` existiert nur für `approved = 0`. Die 33 Übergänge
+34 → 1 sind in der Tabelle nicht als Ursache, sondern als *Abwesenheit*
+von `approved` verzeichnet. Wer fragt „warum nur eine", findet keine
+Spalte, die antwortet.
+
+## 30. §5.4ba — Zwei Etiketten, weil ein Etikett nicht beides sagen kann
+
+```
+verdict:   PROVISIONAL_LEDGER_CONSISTENT   (der Ledger)
+delivery:  NO_DELIVERY_SINCE               (der Dienst)
+```
+
+`(8)` blockt **nicht** — sie ist ein zweites Etikett, kein sechstes Wort im
+ersten. Sonst wäre der Ledger rot, weil der Dienst steht: zwei Aussagen in
+einer Zeile, von denen keine mehr lesbar ist.
+
+## 31. §5.4bb — `wired` und `read_by` sind zwei Zustände
+
+```
+wired:    nein — kein Import in Produktionscode
+read_by:  nichts — kein Skript liest die Urteilszeile
+```
+
+`_blocking_callers()` findet Importe. Der erste Aufrufer am 20.10. wird ein
+Cronjob sein, der die **Ausgabe** liest — und den kann ein Import-Scan per
+Konstruktion nicht sehen. `read_by` ist die Angabe, die den 20.10.
+beschreibt: sie sagt, wer zuerst handelt.
+
+## 32. §5.4bc — Zwei fehlende Felder, drei Zeitformate
+
+| Tabelle | Zeitfeld | Typ |
+|---|---|---|
+| `telemetry_runs` | `started_at` | REAL (unixepoch), **kein `closed_at`** |
+| `dispatched_signals` | `dispatched_at` | REAL |
+| `fills` | `filled_at` | **TEXT**, ISO-8601 `2026-10-06T18:00:06.993672Z` |
+| `telemetry` | — | **kein Feld** |
+
+Drei Formate in einer Tabellenfamilie. Ohne `telemetry.ts` ist die
+Zuordnung Telemetrie ↔ Dispatch eine **Positionsannahme** (`decision_seq`),
+keine Zeitaussage — und eine Position ist keine Messung. Das ist die fünfte
+Gestalt der Kopie: eine Annahme, die wie ein Schlüssel aussieht.
+
+Dazu: `dispatched_signals.telemetry_seq` ist in **allen 361** Zeilen `NULL`.
+Die Spalte, die Dispatch und Telemetrie verbinden sollte, wurde nie
+geschrieben.
+
+## 33. Tests dieser Runde
+
+| Zeuge | Aussage |
+|---|---|
+| `test_delivery_is_a_second_label_not_a_word_in_the_first` | Ledger-Etikett bleibt grün, Dienst-Etikett sagt NO_DELIVERY |
+| `test_missing_fills_table_is_unknown_not_zero` | fehlend ≠ 0 |
+| `test_verdict_readers_are_reported_separately_from_importers` | zwei Zustände, getrennt abfragbar |
+| `test_rule_constant_guard_catches_history` | Grenze datiert: 17.10.26, Regex vs. Klammerausdruck |
+
+Suite: **184 passed**.
+
+## 34. Der Satz dieser Runde
+
+Die Versöhnung schließt — auf beiden Seiten getrennt, mit 361 und 393, und
+die 66 stehen da, wo sie hingehören: nicht neben den Dispatches, sondern
+als die Menge, die nie eine bekam.
+
+Und die Zahl, die den Dienst beschreibt, ist jetzt endlich sichtbar als
+Kette: **361 → 34 → 1 → 1**. Drei Übergänge, zwei davon mit Namen
+(`mapping_miss`, `no_book`), einer ohne: **34 → 1 bei der Genehmigung.** Die
+taubste Stelle der Kette ist die, für die es keine Spalte gibt.
+
+Das Urteil ist damit vollständig, und vollständig heißt hier: es sagt über
+jede Stufe genau das, was gemessen ist — und nichts über die, die es nicht
+sieht.

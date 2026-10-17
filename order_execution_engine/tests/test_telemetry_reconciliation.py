@@ -677,7 +677,7 @@ def test_criterion_count_matches_red_branches_in_source() -> None:
     # dürfen deshalb auch nicht als Zweig existieren. Die Ausnahme ist
     # benannt: wer eine weitere Zahl ohne Zweig einführt, muß sie hier
     # eintragen und damit begründen.
-    non_blocking = {"5", "6"}
+    non_blocking = {"5", "6", "7", "8"}
     numbered = {n for n in re.findall(r"\((\d+b?)\)", line)} - non_blocking
     # numbered = {0,1,2,3,3B,4}; (0) hat zwei RED-Zweige -> 7 erwartet.
     expected = len(numbered) + 1
@@ -688,6 +688,8 @@ def test_criterion_count_matches_red_branches_in_source() -> None:
     )
     assert "(5) WARNUNG" in line
     assert "(6) NENNER" in line
+    assert "(7) COVERAGE" in line
+    assert "(8) DELIVERY" in line
 
 
 def test_start_md_gate_line_matches_criterion() -> None:
@@ -1061,9 +1063,11 @@ def test_rule_constant_guard_catches_history() -> None:
         ("Ableitung", "if delivered < 0.1 * total:", True),
         ("Ableitung", "if rows > len(all_rows) / 2:", True),
         # Grenze des Wächters, ausdrücklich als Lücke festgehalten:
-        # Klammerausdruck und einfache Division sind regex nicht sicher
-        # zu trennen. Sie stehen hier, damit die Grenze nicht wächst,
-        # ohne daß jemand sie liest.
+        # 17.10.26 — Regex kann einen Klammerausdruck `(n - 1) // 2` nicht
+        # von einer Division `b / 2` trennen; beide sind syntaktisch
+        # dieselbe Form. Wird die Lücke geschlossen (z. B. via AST), bricht
+        # diese Zeile — und das ist die richtige Nachricht: die Grenze
+        # gehört dann datiert aufgehoben, nicht stillschweigend entfernt.
         ("Grenze (nicht erkannt)", "if rows > (n - 1) // 2:", False),
         ("Grenze (nicht erkannt)", "if a < b / 2:", False),
         # Gegenproben: was NICHT gefangen werden darf.
@@ -1088,6 +1092,74 @@ def test_rule_constant_guard_catches_history() -> None:
         if got != want:
             misses.append(f"{kind}: erwartet {want}, bekam {got} — {line}")
     assert misses == [], "Wächter-Lücken:\n  " + "\n  ".join(misses)
+
+
+def test_delivery_is_a_second_label_not_a_word_in_the_first() -> None:
+    """Ein Etikett kann nicht "konsistent" und "steht still" sagen (§5.4ba).
+
+    `delivered` zählt genehmigte Zeilen im Fenster. Run 9 hat 4 Erfolge,
+    0 genehmigt, 0 Fills im Fenster — und der Ledger ist trotzdem
+    konsistent. Beides ist wahr und gehört in zwei Etiketten.
+    """
+    conn = sqlite3.connect(":memory:")
+    _schema(conn)
+    _seed_run(conn, rows=FIXTURE_ROWS, keyed=FIXTURE_ROWS,
+              dispatched=FIXTURE_ROWS, reasons=FIXTURE_ROWS)
+    g = gate_telemetry_reconciliation(conn, min_run_id=9)
+    conn.close()
+    assert g.status.startswith("PROVISIONAL_LEDGER_CONSISTENT"), g.status
+    assert g.detail["delivery"] == "NO_DELIVERY_SINCE", g.detail["delivery"]
+    assert g.detail["dispatched_success"] > 0
+    assert g.detail["delivered"] == 0
+    # Und das Ledger-Etikett darf NICHT rot sein, nur weil nichts
+    # ausgeliefert wurde: das wäre eine Dienst-Aussage im Ledger-Etikett.
+    assert g.status != "RED"
+
+
+def test_missing_fills_table_is_unknown_not_zero() -> None:
+    """Ohne Fill-Schicht ist die vierte Stufe nicht gemessen (§5.4bc).
+
+    Eine Null würde behaupten, es sei nichts geliefert worden. Die
+    Fixtures bauen keine `fills`-Tabelle — deshalb muß das Gate dort
+    `None` melden, nicht 0.
+    """
+    conn = sqlite3.connect(":memory:")
+    _schema(conn)
+    _seed_run(conn, rows=FIXTURE_ROWS, keyed=FIXTURE_ROWS,
+              dispatched=FIXTURE_ROWS, reasons=FIXTURE_ROWS)
+    tables = [r[0] for r in conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table'")]
+    g = gate_telemetry_reconciliation(conn, min_run_id=9)
+    conn.close()
+    assert "fills" not in tables, tables
+    assert g.detail["fills_total"] is None, (
+        f"fehlende Tabelle als {g.detail['fills_total']!r} gemeldet — "
+        "nicht gemessen ist nicht null"
+    )
+
+
+def test_verdict_readers_are_reported_separately_from_importers() -> None:
+    """`wired` (Import) und `read_by` (Leser) sind zwei Zustände (§5.4bb).
+
+    Der erste Aufrufer am 20.10. wird kein Import sein, sondern ein
+    Cronjob, der die Ausgabe liest. `_blocking_callers()` kann den per
+    Konstruktion nicht sehen — deshalb muß `read_by` existieren.
+    """
+    from order_execution_engine.ops import preflight_check
+
+    assert hasattr(preflight_check, "_verdict_readers")
+    assert hasattr(preflight_check, "_blocking_callers")
+    # Beide sind Mengen von Namen und dürfen sich unterscheiden — genau
+    # das ist die Aussage.
+    readers = preflight_check._verdict_readers()
+    callers = preflight_check._blocking_callers()
+    assert isinstance(readers, set) and isinstance(callers, set)
+    # Kein `or True`: der Zeuge prüft, daß beide Mengen existieren und
+    # getrennt abfragbar sind. Ob sie heute leer sind, ist eine Messung,
+    # keine Erwartung — und ein Zeuge über den heutigen Stand wäre der
+    # Zeuge-Typ, den diese Akte dreimal überlebt hat.
+    assert isinstance(preflight_check._verdict_readers(), set)
+    assert isinstance(preflight_check._blocking_callers(), set)
 
 
 def test_derived_observes_the_whole_criterion_set() -> None:

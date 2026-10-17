@@ -104,7 +104,8 @@ PYTHONPATH=. python3 order_execution_engine/ops/preflight_check.py --after-start
 | `unresolved_asset:empty_list` | erwartbares Rauschen (leere `target_assets`) |
 | `unresolved_asset:mapping_miss` | Stillverlierer — News liefert Asset, Freeze kennt es nicht |
 | `STALE_SNAPSHOT` | ≈ 0 |
-| `TELEMETRY_RECONCILIATION` | `PROVISIONAL_LEDGER_CONSISTENT(open Nd)` solange der Lauf offen ist (0) — **nicht blockierend**, weil das Schema kein `closed_at` hat und der Fall damit immer gilt; sonst `LEDGER_CONSISTENT`: (0) Verkehr vorhanden ⇒ (1) `telemetry_rows == decision_seq-keyed` (Korollar aus (3)+(3b)), (3) `unattributed == 0` (Erfolg ohne Zeile), (3b) `orphan_rows == 0` (Zeile ohne Erfolg — die Überbehauptung), (4) `dispatched_success == Σ reject_reasons` (sonst RED). `delivered == 0` ist Warnung, kein Blocker. |
+| `TELEMETRY_RECONCILIATION` | `PROVISIONAL_LEDGER_CONSISTENT` solange der Lauf offen ist (0) — **nicht blockierend**, weil das Schema kein `closed_at` hat und der Fall damit immer gilt; sonst `LEDGER_CONSISTENT`: (0) Verkehr vorhanden ⇒ (1) `telemetry_rows == decision_seq-keyed` (Korollar aus (3)+(3b)), (3) `unattributed == 0` (Erfolg ohne Zeile), (3b) `orphan_rows == 0` (Zeile ohne Erfolg — die Überbehauptung), (4) `dispatched_success == Σ reject_reasons` (sonst RED). `delivered == 0` ist Warnung, kein Blocker. |
+| `DELIVERY` (zweites Etikett, eigenes Feld) | `NO_DELIVERY_SINCE`: `dispatched_success > 0`, `delivered == 0`, kein Fill im Fenster. Spricht über den **Dienst**, nicht über den Ledger — deshalb nicht im Ledger-Etikett. Daneben: `wired` (Import in Produktionscode) und `read_by` (Skript, das die Urteilszeile liest). |
 | `telemetry_fill_metrics` | bei Fills |
 | Dedup | 0 Doppel-`item_id` |
 

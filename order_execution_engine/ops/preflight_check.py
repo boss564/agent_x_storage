@@ -318,6 +318,41 @@ def gate_telemetry_reconciliation(
         ).fetchone()[0]
     )
     coverage_pct = (100.0 * telemetry_rows / in_scope) if in_scope else None
+    # Die Lieferkette, vier Stufen — und `delivered` ist nur die dritte
+    # (§5.4az). `fills` zählt die vierte, unabhängig von `approved`: eine
+    # Entscheidung kann PARTIALLY_FILLED sein, ohne daß `approved = 1` im
+    # Fenster liegt. Beide Zahlen getrennt, weil sie zwei Aussagen tragen.
+    # `fills` kann fehlen (ältere Schemata, Fixtures ohne Fill-Schicht).
+    # Dann ist die vierte Stufe nicht gemessen — `None`, nicht `0`: eine
+    # Null würde behaupten, es sei nichts geliefert worden.
+    try:
+        fills_total = int(conn.execute("SELECT COUNT(*) FROM fills").fetchone()[0])
+        _fs = conn.execute("SELECT MAX(filled_at) FROM fills").fetchone()[0]
+    except sqlite3.OperationalError:
+        fills_total, _fs = None, None
+    # Zeitformate sind heterogen (§5.4bc): dispatched_at/started_at = REAL
+    # (unixepoch), fills.filled_at = TEXT ISO-8601, telemetry = gar keins.
+    # Deshalb wird das Feld ausgegeben, wie es gespeichert ist — nicht in
+    # eine Zahl gekleidet, die es nicht ist.
+    if isinstance(_fs, (int, float)) and _fs:
+        last_fill = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(_fs))
+    else:
+        last_fill = str(_fs) if _fs else None
+    # NO_DELIVERY heißt: es gab Erfolge, aber keine Lieferung — der Dienst
+    # steht, während der Ledger stimmt (§5.4ba). Das ist ein zweites
+    # Etikett, kein sechstes Wort im ersten: ein Etikett kann nicht
+    # gleichzeitig "konsistent" und "steht still" sagen.
+    if delivered > 0:
+        delivery_label = "DELIVERING"
+    elif dispatched > 0:
+        # Es gab Erfolge, aber keine genehmigte Zeile im Fenster. Ob der
+        # Dienst steht, entscheidet die vierte Stufe — nicht die Summe
+        # aller Fills: ein Fill von vor 13 Tagen ist kein Betrieb, sondern
+        # ein Beleg. (Erste Fassung prüfte `fills_total == 0` und nannte
+        # Run 9 bei 1 Fill "NO_TRAFFIC" — falsch in beide Richtungen.)
+        delivery_label = "NO_DELIVERY_SINCE"
+    else:
+        delivery_label = "NO_TRAFFIC"
     detail = {
         "min_run_id": min_run_id,
         "started_at": started_at,
@@ -339,6 +374,9 @@ def gate_telemetry_reconciliation(
         "open_for_hours": round(open_hours, 1),
         "delivered": delivered,
         "delivered_since": delivered_since,
+        "delivery": delivery_label,
+        "fills_total": fills_total,
+        "last_fill": last_fill,
     }
     # Null-Bedingung statt Untergrenze (§5.4v).
     #
@@ -550,6 +588,40 @@ def _blocking_callers() -> set:
             "import preflight_check" in src and "ops" in src
         ):
             hits.add(py.name)
+    return hits
+
+
+def _verdict_readers() -> set:
+    """Wer liest die Urteilszeile? (§5.4bb)
+
+    ``_blocking_callers()`` findet Importe — und kann die Verdrahtung nicht
+    sehen, die am 20.10. passiert: der erste Aufrufer wird ein Cronjob sein,
+    der *die Ausgabe* liest. Ein Import, der nie kommt, und ein Cron, der
+    ``grep verdict`` macht, sind zwei verschiedene Arten von Wirkung.
+
+    Gesucht wird außerhalb der Testsuite nach Skripten, die das Gate
+    starten oder seine Zeile greppen. Ein Treffer heißt: jemand handelt
+    nach diesem Urteil. Null Treffer heißt: das Urteil ist heute ein Text,
+    unabhängig davon, ob es blockierend *wäre*.
+    """
+    root = Path(__file__).resolve().parents[1]
+    hits = set()
+    needles = ("preflight_check.py", "verdict:", "LEDGER_CONSISTENT")
+    for p in root.rglob("*"):
+        if not p.is_file() or "__pycache__" in p.parts:
+            continue
+        if p.parent.name == "tests" or p.suffix not in (
+            ".py", ".sh", ".yml", ".yaml", ".plist", ".toml", ".cfg",
+        ):
+            continue
+        if p.resolve() == Path(__file__).resolve():
+            continue
+        try:
+            txt = p.read_text(encoding="utf-8", errors="ignore")
+        except OSError:
+            continue
+        if any(n in txt for n in needles):
+            hits.add(p.name)
     return hits
 
 
@@ -1035,7 +1107,15 @@ def _gate_criterion(min_run_id: int) -> str:
         "über einem Lauf ohne Auslieferung — das Etikett sagt dazu nichts. "
         "(6) NENNER: das Urteil nennt Zeilen, Auslieferungen und den Anteil "
         "am Verkehr; es sagt nichts über Erreichbarkeit, Verarbeitung "
-        "jenseits des Ledgers oder Leben der Signalquelle."
+        "jenseits des Ledgers oder Leben der Signalquelle. "
+        "(7) COVERAGE = telemetry_rows / dispatched_signals im Fenster "
+        "(heute 4/61 = 6.6 %) — spricht über den Ausschnitt, nicht über "
+        "den Dienst. "
+        "(8) DELIVERY = eigenes Etikett, NICHT dieses: "
+        "NO_DELIVERY_SINCE wenn dispatched_success > 0 und keine "
+        "genehmigte Zeile und kein Fill im Fenster. Zwei Etiketten, weil "
+        "ein Etikett nicht gleichzeitig 'konsistent' und 'steht still' "
+        "sagen kann."
     )
 
 
@@ -1225,12 +1305,30 @@ def gate_snapshot(
         # Satz im Terminal, sondern ein Aufrufer im Dienst. Solange keiner
         # verdrahtet ist, ist das Urteil ein Text — und das steht hier.
         wired = bool(_blocking_callers())
+        readers = _verdict_readers()
         print(
             "  wired:              "
             + ("ja — " + ", ".join(sorted(_blocking_callers()))
                if wired else
-               "nein — der 20.10. schaltet den ersten Aufrufer ein; "
-               "bis dahin wirkt dieses Urteil nicht")
+               "nein — kein Import in Produktionscode")
+        )
+        # Drei Zustände statt zwei (§5.4bb): importiert, gelesen, nichts.
+        # Der erste Aufrufer am 20.10. wird kein Import sein, sondern ein
+        # Cronjob, der die AUSGABE liest — und den kann _blocking_callers()
+        # per Konstruktion nicht sehen.
+        print(
+            "  read_by:            "
+            + (", ".join(sorted(readers)) if readers else
+               "nichts — kein Skript liest die Urteilszeile")
+        )
+        d = recon.detail
+        print(
+            f"  delivery:           {d.get('delivery')} "
+            f"({d.get('dispatched_success')} Erfolge, "
+            f"{d.get('delivered')} genehmigt, "
+            f"{d.get('fills_total')} Fills"
+            + (f", letzter {d.get('last_fill')}" if d.get("last_fill") else "")
+            + ")"
         )
         cov = d.get("coverage_pct")
         print(
