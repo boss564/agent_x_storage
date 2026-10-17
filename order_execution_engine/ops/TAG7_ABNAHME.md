@@ -2703,3 +2703,157 @@ ausliefert — und dessen billigste Reparatur weiterhin eine Zeile im
 Ablehnungsmoment ist. Die zweitbilligste ist jetzt bekannt: nicht eine
 Zeile schreiben, sondern eine Klammer enger ziehen; nicht einen Preis
 senken, sondern eine Schwelle prüfen, bevor sie etwas ablehnt.**
+
+## 47. Runde 23 — zwei Fenster, zwei Typen, eine Konstante
+
+### §5.4ce — `theta` als Konstante, nicht nur als Wirkung
+
+Runde 22 hielt die Wirkung fest: 0.05 → NEUTRAL, 0.15 → UP. Das ist ein
+Gitter mit zwei Maschen, und `theta` liegt dazwischen:
+
+| `theta` | Test 0.05 | Test 0.15 | sichtbar |
+|---|---|---|---|
+| 0.1 | ✓ | ✓ | — |
+| 0.09 | ✓ | ✓ | **nein** |
+| 0.14 | ✓ | ✓ | **nein** |
+
+Eine stille Senkung auf 0.09 bricht keinen der beiden Zeugen. Jetzt steht
+der Wert selbst: `assert BridgePolicy.theta == Decimal("0.1")` mit einer
+Meldung, die sagt, was eine Änderung bräuchte (Datensatz + Datum, nicht
+Commit). **Eine Konstante, die man senken kann, ohne den Test zu brechen,
+ist keine Konstante.**
+
+### §5.4cd — `unattributed = 4` war ein Artefakt. Korrekt: 300.
+
+Der Befund war die Frage, ob `RED (2)` von 4 auf 2 fiel — attribuiert
+oder regressiert. Weder noch: **die 4 waren nie die Zahl der Lücken.**
+
+`dispatches_without_telemetry` reihte alle Dispatches im Fenster ordinal
+auf (`row_number() OVER (ORDER BY dispatched_at)`) und verglich `rn`
+gegen `telemetry.decision_seq` mit `run_id >= 7`. Aber `decision_seq`
+beginnt **je Run bei 1**. Gemessen:
+
+```
+Run 8: 30 Zeilen, decision_seq 1…30
+Run 9:  4 Zeilen, decision_seq 1…4
+```
+
+`rn` 1–4 treffen also *beide* Runs (Fan-out — dieselbe Position zweimal),
+und alles ab 5 trifft nichts. Ergebnis: `4`. Die wahre Zahl: Run 8 hat
+30 von 30 offen, Run 9 **1 von 4** — 0 von 4 heißt es nur, weil der
+ordinale Join die letzte Zeile auf Position 4 einer Run-8-Zeile
+zuordnete.
+
+Was das für `RED (2)` bei Ihnen erklären kann: `4` war die Zahl der
+Positionen, die *nirgends* trafen — nicht die der Lücken. Zwei Läufe
+wurden zu einem Fenster verrechnet, und das Ergebnis sah aus wie ein
+Befund über einen.
+
+**Jetzt:** das Fenster zerfällt in (a) offener Run — ordinal innerhalb
+*seines* Fensters, (b) frühere Runs — gezählt als `nicht zuordenbar`,
+weil `dispatched_signals` keine `run_id`-Spalte hat und Positionen dort
+keine Identität tragen. Für diesen Bestand: **300** (296 früher + 4 im
+offenen Run).
+
+Das ist eine **Verschlechterung der Zahl und eine Verbesserung des
+Urteils**: 300 heißt „fast der ganze Bestand liegt außerhalb des
+Ledgers", und das stimmt (Coverage 9.4 %). `4` hieß „fast alles
+abgedeckt" — und war der Rang einer Position.
+
+### §5.4cd.1 — `origin` zeigt keine Herkunft, sondern eine Differenz
+
+Mit `unattributed = 300` wurde die alte Zeile sichtbar falsch:
+
+```
+origin: {'telemetry': -266, 'unattributed': 300}
+```
+
+`success - unattributed` ist **nur dann** eine Zerlegung, wenn beide
+Zahlen dieselbe Grundgesamtheit haben. `success` zählt Zeilen im Ledger,
+`unattributed` Dispatches im Fenster. Eine negative Herkunft ist ein
+Widerspruch in sich — und der Test forderte sie: `sum(origin) == 34`
+hieße `34 + 4 = 38`, und `4` war der Artefaktwert. **Der Test war die
+Kopie.**
+
+Jetzt getrennt, nicht verrechnet: `{'telemetry_rows': 34,
+'unattributed': 300}`, und der Test prüft nur noch Nicht-Negativität.
+
+### §5.4cc — `fills_total` bleibt, `fills_matched` sagt worüber
+
+| fehlt | `fills_total` | `fills_matched` | Lesart |
+|---|---|---|---|
+| `fills` | `None` | `None` | keine Fill-Schicht |
+| nur `telemetry` | Zahl | **`None`** | Zahl ohne Bezug |
+| beides da | Zahl | Zahl | Zahl über den JOIN |
+
+Ohne `fills_matched` hätte der `except`-Fix ein stilles `None` gegen eine
+stille Zahl getauscht — und Stille mit Zahl ist schwerer zu entdecken als
+Stille mit Nichts. Die Ausgabe hängt den Vermerk an:
+`fills_matched: nicht gemessen, fills_total ohne Bezug`.
+
+### §5.4cf — `source` reist mit
+
+`RejectContext` trägt jetzt `source`. Eine Herkunft, die nur beim
+Schreiber existiert, ist beim Leser weg — und die leere Seite wäre wieder
+doppeldeutig, obwohl `reject_detail` sie trennt. `branch` 1185 schreibt
+`getattr(active, "source", "book")`; `branch` 1174 schreibt `None`
+(kein Buch, keine Herkunft).
+
+### §5.4cg — `anchored at: blob:…`
+
+Runde 17 war der ganze Streit: `belegt_in` zeigte auf einen Blob, der
+Commit war sauber. `blob:` im Feld macht den Typ lesbar, statt ihn am
+Format zu raten. `gate:` trägt ihn bereits; `gate commit:` trägt zwei
+Typen in einem Feld und wird als `commit:blob` gelesen.
+
+### §5.4ch — Die Regel am Modulkopf
+
+Aus vier Runden derselben Form:
+
+| Runde | Form | Umspannt |
+|---|---|---|
+| 12 | `year == 2025` | `str` und `int` |
+| 18 | `WHERE dispatched_at > …` | Text und `REAL` |
+| 21 | `try: order_id; fills` | zwei Tabellen |
+| 22 | `JOIN fills ⋈ telemetry` | zwei Grundgesamtheiten, eine Zahl |
+
+> **Ein `try` darf genau eine Aussage umspannen, und ein `except` darf
+> genau einen Fehlerfall kennen.**
+
+> **Eine Zahl, die über zwei Grundgesamtheiten spricht, darf nicht wie
+> eine über eine aussehen.**
+
+> **Ein Wert darf doppeldeutig sein, wenn seine Herkunft im selben
+> Datensatz steht. Fehlt sie, ist es eine Kopie.**
+
+Die dritte Regel ist die Lösung, die trägt: nicht umbenennen, sondern
+Herkunft mitführen. Zwei von vier Kopien sind so gelöst, und beide hatten
+dasselbe Muster — die Herkunft war da, nur nicht im Zugriff.
+
+## 48. Tests dieser Runde
+
+| Zeuge | Aussage |
+|---|---|
+| `test_ordinal_join_does_not_cross_two_runs` | zwei Runs: alt 31 (gemischt), neu 30 nicht zuordenbar + 2 offen |
+| `test_origin_reports_two_windows_and_never_goes_negative` | `34 − 300 = −266` ist keine Herkunft; getrennt genannt |
+| `test_fills_matched_distinguishes_join_from_fills_only` | JOIN lief und fand nichts (`0`) ≠ JOIN fiel aus (`None`) |
+
+Suite: **200 passed**.
+
+## 49. Der Satz dieser Runde
+
+Zweiundzwanzig Runden, und die Akte fragt nicht mehr, was fehlt, sondern
+was zuviel dasteht: eine Zahl, die bleibt, wenn ihr Bezug wegbricht
+(`fills_total`), ein Urteil, das zwei Fehler nennt und keinen (`RED (2)`),
+eine Schwelle, die sich senken läßt, ohne einen Test zu brechen (`0.1`).
+
+Und sie hat zum ersten Mal eine Lösung, die trägt: **nicht umbenennen,
+sondern Herkunft mitführen** — `source` neben der leeren Seite, `branch`
+neben dem Ablehnungsgrund, `blob:` neben dem Hash.
+
+**Was am 20.10. abgenommen wird, ist ein System, das seine Fehler jetzt
+bezeugt — und die verbleibende Gefahr ist nicht mehr das Schweigen,
+sondern die Zahl, die aussieht wie Wissen: `fills_total` ohne Bezug,
+`RED (2)` ohne Namen, `0.1` ohne Datensatz. Und die billigste Reparatur
+ist keine Zeile mehr, sondern ein `assert`, das den Wert festhält, den
+die Wirkung nicht verrät.**

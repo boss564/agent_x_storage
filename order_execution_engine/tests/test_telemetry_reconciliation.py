@@ -391,14 +391,21 @@ def test_terminal_view_is_two_axes_not_one_sum() -> None:
     }
     classes = terminal_classes(detail)
     assert classes["outcome"] == {"filled": 1, "rejected": 26, "stale": 7}
-    assert classes["origin"] == {"telemetry": 30, "unattributed": 4}
+    # §5.4cd: getrennt, nicht verrechnet. Beide Zahlen beschreiben
+    # verschiedene Fenster — `success` den Ledger, `unattributed` das
+    # Dispatcher-Fenster. Eine Differenz zwischen ihnen ist keine Herkunft.
+    assert classes["origin"] == {"telemetry_rows": 34, "unattributed": 4}
     assert "unattributed" not in classes["outcome"]
     # Die falsche Ein-Achsen-View hätte 1+26+7+4 = 38 gegen 34 gestellt.
     naive = {**classes["outcome"], "unattributed": 4}
     assert sum(naive.values()) == 38
     # Beide Achsen schließen einzeln auf success — keine Achse auf 38.
+    # Die Ausgangs-Achse tut das NICHT (§5.4cd): `unattributed` beschreibt
+    # das Dispatcher-Fenster, nicht den Ledger. 34 + 4 = 38 ist die Summe
+    # zweier Grundgesamtheiten; der frühere Test forderte genau sie und
+    # hätte eine negative Zahl als "Herkunft" durchgelassen.
     assert sum(classes["outcome"].values()) == 34
-    assert sum(classes["origin"].values()) == 34
+    assert all(v >= 0 for v in classes["origin"].values())
     print("OK test_terminal_view_is_two_axes_not_one_sum")
 
 
@@ -1929,9 +1936,180 @@ def test_theta_is_a_calibration_parameter_not_a_state() -> None:
     from order_execution_engine.news_bridge import BridgePolicy
 
     assert BridgePolicy().theta == Decimal("0.1")
+    # Der Wert festgehalten, nicht nur die Wirkung (§5.4ce). Zwei
+    # Verhaltensproben bei 0.05 und 0.15 lassen 0.06…0.14 unbemerkt: eine
+    # stille Senkung auf 0.09 bricht keinen von beiden. Eine Konstante, die
+    # man senken kann, ohne den Test zu brechen, ist keine Konstante.
+    assert BridgePolicy.theta == Decimal("0.1"), (
+        "theta ist eine Setzung, nicht ein Befund — eine Änderung braucht "
+        "einen Datensatz und ein Datum, nicht einen Commit (§5.4by)")
     policy = BridgePolicy()
     # Die Schwelle erzeugt NEUTRAL — und NEUTRAL ist keine Ablehnung,
     # sondern eine fehlende Richtung, die den Orderpfad nie betreten darf.
     assert policy.direction_from(Decimal("0.05")) is Direction.NEUTRAL
     assert policy.direction_from(Decimal("0.15")) is Direction.UP
     assert policy.direction_from(Decimal("-0.15")) is Direction.DOWN
+
+
+# ---------------------------------------------------------------------------
+# §5.4cc–cg — zwei Fenster, zwei Typen, eine Konstante
+# ---------------------------------------------------------------------------
+
+
+def test_ordinal_join_does_not_cross_two_runs() -> None:
+    """`decision_seq` beginnt je Run bei 1 — Position ist keine Identität.
+
+    Gemessen am 17.10.: Fenster ab Run 7, 30 Zeilen in Run 8, 4 in Run 9.
+    Die alte Zählung reihte alle Dispatches ordinal auf und verglich `rn`
+    gegen `decision_seq` mit ``run_id >= 7`` — also trafen ``rn`` 1–4 auf
+    *beide* Runs (Fan-out, doppelt gezählt) und alles ab 5 blieb ohne
+    Treffer. `unattributed = 4` war ein Artefakt; korrekt ist 300.
+
+    Mit ``run_started_at`` zerfällt das Fenster: offener Run ordinal,
+    frühere Runs als nicht zuordenbar gezählt. Der Test prüft beide
+    Zahlen einzeln — 4 war nie die Wahrheit, es war das Loch.
+    """
+    from order_execution_engine.ops.preflight_check import (
+        dispatches_without_telemetry)
+
+    conn = sqlite3.connect(":memory:")
+    conn.executescript("""
+        CREATE TABLE dispatched_signals (
+            item_id TEXT PRIMARY KEY, dispatched_at REAL,
+            telemetry_seq INTEGER);
+        CREATE TABLE telemetry (
+            seq INTEGER PRIMARY KEY AUTOINCREMENT, signal_id TEXT NOT NULL,
+            order_id TEXT, latency_ms REAL NOT NULL, approved INTEGER NOT NULL,
+            reject_reason TEXT, status TEXT, requested_size TEXT,
+            decision_seq INTEGER, run_id INTEGER);
+        CREATE TABLE bridge_discards (
+            item_id TEXT NOT NULL, reason TEXT NOT NULL,
+            discarded_at REAL NOT NULL);
+        CREATE TABLE telemetry_runs (
+            run_id INTEGER PRIMARY KEY, started_at REAL, git_commit TEXT,
+            config_json TEXT);
+    """)
+    t8, t9 = 1_000.0, 5_000.0
+    conn.execute("INSERT INTO telemetry_runs VALUES (8, ?, 'x', '{}')", (t8,))
+    conn.execute("INSERT INTO telemetry_runs VALUES (9, ?, 'x', '{}')", (t9,))
+    # Run 8: 30 Dispatches, 3 Zeilen (seq 1..3)
+    for i in range(30):
+        conn.execute("INSERT INTO dispatched_signals VALUES (?, ?, NULL)",
+                     (f"r8-{i}", t8 + i))
+    for seq in (1, 2, 3):
+        conn.execute(
+            "INSERT INTO telemetry (signal_id, latency_ms, approved,"
+            " decision_seq, run_id) VALUES (?, 1.0, 0, ?, 8)",
+            (f"s8-{seq}", seq))
+    # Run 9: 4 Dispatches, 2 Zeilen (seq 1..2 — Zähler neu bei 1)
+    for i in range(4):
+        conn.execute("INSERT INTO dispatched_signals VALUES (?, ?, NULL)",
+                     (f"r9-{i}", t9 + i))
+    for seq in (1, 2):
+        conn.execute(
+            "INSERT INTO telemetry (signal_id, latency_ms, approved,"
+            " decision_seq, run_id) VALUES (?, 1.0, 0, ?, 9)",
+            (f"s9-{seq}", seq))
+    conn.commit()
+
+    # Alt (ohne run_started_at): der Fan-out. ``rn`` 1–3 treffen *beide*
+    # Runs (doppelt, nicht doppelt gezählt — der Join behält nur die
+    # nicht-getroffenen), ``rn`` 4–30 treffen nichts ⇒ 27; dazu ``rn`` 31–34
+    # aus Run 9, von denen 31–32 auf Run-8-Zeilen passen ⇒ 2. Summe 31 —
+    # eine Zahl, die niemandem gehört, weil sie aus zwei Läufen gemischt ist.
+    old = dispatches_without_telemetry(
+        conn, min_run_id=8, started_at=t8)
+    assert old == 27 + 2 + 2, old
+
+    # Neu: Run 8 (30 Dispatches, 3 Zeilen) liegt im Fenster, ist aber ohne
+    # run_id in `dispatched_signals` nicht auflösbar ⇒ 30 gezählt, nicht
+    # 27 gemessen. Das ist die bewußte Wahl: `nicht zuordenbar` ist ehrlich,
+    # `27` wäre der Rang einer Position, die es nicht gibt. Run 9: 4
+    # Dispatches, 2 Zeilen, offen ⇒ 2. Zusammen 32.
+    new = dispatches_without_telemetry(
+        conn, min_run_id=8, started_at=t8, run_started_at=t9)
+    assert new == 30 + 2, new
+    conn.close()
+
+
+def test_origin_reports_two_windows_and_never_goes_negative() -> None:
+    """`success - unattributed` ist keine Herkunft (§5.4cd).
+
+    Gemessen: 34 - 300 = -266. Beide Zahlen zählen verschiedene Fenster —
+    `success` Zeilen im Ledger, `unattributed` Dispatches im Fenster. Eine
+    negative Herkunft ist ein Widerspruch in sich; die Rechnung war eine,
+    die wie eine Bilanz aussah.
+    """
+    from order_execution_engine.ops.preflight_check import terminal_classes
+
+    classes = terminal_classes({
+        "dispatched_success": 34,
+        "reasons": {"NONE": 1, "INVALID_PRICE": 26, "STALE_SNAPSHOT": 7},
+        "unattributed": 300,
+    })
+    assert classes["origin"]["telemetry_rows"] == 34
+    assert classes["origin"]["unattributed"] == 300
+    assert all(v >= 0 for v in classes["origin"].values())
+    assert "telemetry" not in classes["origin"], "der Differenzname ist weg"
+
+
+def test_fills_matched_distinguishes_join_from_fills_only() -> None:
+    """`fills_total` bleibt, aber mit Vermerk (§5.4cc).
+
+    Fehlt `telemetry`, bleibt `fills_total` die Zahl aus `fills` allein —
+    richtig für die Lesbarkeit, gefährlich für die Deutung: eine Zahl sagt
+    „ich weiß", `None` sagt „ich weiß nicht". `fills_matched` ist die Zahl,
+    die der JOIN gesehen hat; ist sie `None`, hatte `fills_total` keinen
+    Bezug mehr.
+    """
+    from order_execution_engine.ops.preflight_check import (
+        gate_telemetry_reconciliation)
+
+    conn = sqlite3.connect(":memory:")
+    # Bewußt NICHT `_schema()`: das Schema trägt `telemetry`, und genau
+    # dessen Fehlen ist hier der Fall. Die übrigen Tabellen manuell, weil
+    # `gate_telemetry_reconciliation` sie vor dem Fill-Block schon liest.
+    conn.executescript("""
+        CREATE TABLE dispatched_signals (
+            item_id TEXT PRIMARY KEY, dispatched_at REAL,
+            telemetry_seq INTEGER);
+        CREATE TABLE telemetry_runs (
+            run_id INTEGER PRIMARY KEY, started_at REAL, git_commit TEXT,
+            config_json TEXT);
+        CREATE TABLE bridge_discards (
+            item_id TEXT NOT NULL, reason TEXT NOT NULL,
+            discarded_at REAL NOT NULL);
+        CREATE TABLE fills (order_id TEXT, executed_size TEXT,
+            requested_size TEXT, filled_at TEXT);
+        CREATE TABLE telemetry (
+            seq INTEGER PRIMARY KEY AUTOINCREMENT, signal_id TEXT NOT NULL,
+            order_id TEXT, latency_ms REAL NOT NULL, approved INTEGER NOT NULL,
+            reject_reason TEXT, status TEXT, requested_size TEXT,
+            decision_seq INTEGER, run_id INTEGER);
+    """)
+    # `fills` hat eine Zeile, `telemetry` ist leer: der JOIN läuft, findet
+    # nichts — `fills_matched = 0`, nicht `None`. Nur die Tabelle darf
+    # fehlen, um `None` zu erzeugen (zweite Hälfte des Zeugen unten).
+    conn.execute("INSERT INTO fills VALUES ('o1', '5', '5', '2026-10-06T18:00:06Z')")
+    conn.execute("INSERT INTO telemetry_runs VALUES (9, ?, 'x', '{}')",
+                 (time.time() - 3600,))
+    conn.commit()
+    g = gate_telemetry_reconciliation(conn, min_run_id=9)
+    assert g.detail["fills_total"] == 1, "fills allein bleibt gemessen"
+    assert g.detail["fills_matched"] == 0, "der JOIN lief und fand nichts"
+    assert g.detail["fills_full"] == 0
+    # Der zweite Fall (Tabelle fehlt) läßt sich nicht über das ganze Gate
+    # prüfen: es liest `telemetry` schon vorher, dort ist das Fehlen ein
+    # legitimer Abbruch. Geprüft wird der Fill-Block selbst — genau die
+    # Klammer, die §5.4bx eng gezogen hat.
+    conn.execute("DROP TABLE telemetry")
+    conn.commit()
+    _fs = conn.execute("SELECT MAX(filled_at) FROM fills").fetchone()[0]
+    assert _fs == "2026-10-06T18:00:06Z", "fills bleibt lesbar"
+    try:
+        conn.execute("SELECT COUNT(*) FROM fills f JOIN telemetry t"
+                     " ON t.order_id = f.order_id").fetchone()
+        raise AssertionError("JOIN hätte scheitern müssen")
+    except sqlite3.OperationalError:
+        pass  # der eigene Fehlerfall, getrennt vom ersten Versuch
+    conn.close()

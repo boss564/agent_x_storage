@@ -2,6 +2,25 @@
 """Pre-Flight-Stichprobe vor KeepAlive und ~1 h nach Start.
 
 Exit 0 = grün, Exit 1 = rot (Fail-closed für Messperioden-Start).
+
+Die Regel dieser Datei (§5.4ch), aus drei Runden derselben Form:
+
+    Ein ``try`` darf genau eine Aussage umspannen, und ein ``except``
+    darf genau einen Fehlerfall kennen.
+
+    Runde 12  ``year == 2025``            — ein ``==`` über ``str`` und ``int``
+    Runde 18  ``WHERE dispatched_at > …`` — ein ``WHERE`` über Text und ``REAL``
+    Runde 21  ``try: order_id; fills``    — ein ``except`` über zwei Tabellen
+    Runde 22  ``JOIN fills ⋈ telemetry``  — zwei Grundgesamtheiten, eine Zahl
+
+Zweite Regel, ebenso oft verletzt: **eine Zahl, die über zwei
+Grundgesamtheiten spricht, darf nicht wie eine über eine aussehen.**
+Wo zwei Fenster gezählt werden, werden sie getrennt genannt — nicht
+subtrahiert (eine „Herkunft" von −266 ist keine Herkunft). Und: **ein
+Wert darf doppeldeutig sein, wenn seine Herkunft im selben Datensatz
+steht** (``MarketSnapshot.source`` neben der leeren Seite,
+``reject_detail`` neben der Ablehnung, ``blob:``/``commit:`` neben dem
+Hash). Fehlt sie, ist es eine Kopie.
 """
 
 from __future__ import annotations
@@ -300,6 +319,7 @@ def gate_telemetry_reconciliation(
     pairs_ok = _pairs_unique_per_run(conn, min_run_id=min_run_id)
     unattributed = dispatches_without_telemetry(
         conn, min_run_id=min_run_id, started_at=started_at,
+        run_started_at=_latest_run_started_at(conn, min_run_id=min_run_id),
     )
     # Die andere Richtung: Zeile ohne Erfolg. (1) prüft rows-vs-keyed —
     # beides innerhalb des Ledgers. Diese Zahl prüft zwischen Ledger und
@@ -374,18 +394,24 @@ def gate_telemetry_reconciliation(
     except sqlite3.OperationalError:
         fills_total, fill_ratio, _fs = None, None, None
     # Voll / teilweise: braucht `telemetry` — eigener Versuch, eigener Ausfall.
+    # `fills_matched` ist die Zahl, die der JOIN tatsächlich gesehen hat —
+    # ohne sie beschreibt `fills_total` ein `fills ⋈ telemetry`, wenn der
+    # JOIN lief, und nur `fills`, wenn nicht (§5.4cc). Ein Wert, der bleibt,
+    # während sein Bezug verschwindet, braucht einen Vermerk.
     try:
         _v = conn.execute(
-            "SELECT SUM(CASE WHEN t.status = 'FILLED' THEN 1 ELSE 0 END),"
+            "SELECT COUNT(*),"
+            " SUM(CASE WHEN t.status = 'FILLED' THEN 1 ELSE 0 END),"
             " SUM(CASE WHEN t.status = 'PARTIALLY_FILLED' THEN 1 ELSE 0 END)"
             " FROM fills f JOIN telemetry t ON t.order_id = f.order_id"
         ).fetchone()
-        fills_full, fills_partial = int(_v[0] or 0), int(_v[1] or 0)
+        fills_matched = int(_v[0] or 0)
+        fills_full, fills_partial = int(_v[1] or 0), int(_v[2] or 0)
     except sqlite3.OperationalError:
         # `fills` vorhanden, `telemetry` nicht — dann fehlt das Urteil,
         # nicht die Menge. Null hiere wäre eine Behauptung über Fills,
         # die es sehr wohl gibt.
-        fills_full, fills_partial = None, None
+        fills_matched, fills_full, fills_partial = None, None, None
     # Zeitformate sind heterogen (§5.4bc): dispatched_at/started_at = REAL
     # (unixepoch), fills.filled_at = TEXT ISO-8601, telemetry = gar keins.
     # Deshalb wird das Feld ausgegeben, wie es gespeichert ist — nicht in
@@ -503,6 +529,7 @@ def gate_telemetry_reconciliation(
         "delivered_since": delivered_since,
         "delivery": delivery_label,
         "fills_total": fills_total,
+        "fills_matched": fills_matched,
         "fills_full": fills_full,
         "fills_partial": fills_partial,
         "fill_ratio": fill_ratio,
@@ -695,19 +722,80 @@ def latest_run_is_closed(conn: sqlite3.Connection) -> bool:
     return bool(row and row[0] is not None)
 
 
+def _latest_run_started_at(
+    conn: sqlite3.Connection, *, min_run_id: int
+) -> Optional[float]:
+    """Beginn des letzten Runs im Ledger (§5.4cd).
+
+    Trennt das Fenster in offenen Run (ordinal zählbar) und frühere Runs
+    (Positionen tragen dort keine Identität). ``None`` nur, wenn es keinen
+    Run gibt — dann bleibt die Funktion beim alten Verhalten.
+    """
+    row = conn.execute(
+        "SELECT started_at FROM telemetry_runs"
+        " WHERE run_id = (SELECT MAX(run_id) FROM telemetry_runs"
+        "                 WHERE run_id >= ?)",
+        (min_run_id,),
+    ).fetchone()
+    return float(row[0]) if row and row[0] is not None else None
+
+
 def dispatches_without_telemetry(
     conn: sqlite3.Connection,
     *,
     min_run_id: int,
     started_at: float,
+    run_started_at: Optional[float] = None,
 ) -> int:
     """Erfolgs-Dispatches ohne Telemetriezeile (unklassifiziert, Warn-Stufe).
 
     Zählung über ``decision_seq``: Engine und Storage teilen die Id je
     Entscheidung (F1/VM3). ``signal_id`` ist nicht joinbar — ``item_id`` aus
     der Bridge ist ein MD5-Hash, ``telemetry.signal_id`` eine UUID.
+
+    ``run_started_at`` (§5.4cd): ``decision_seq`` beginnt **je Run bei 1**.
+    Ein ordinaler Join über das ganze Fenster trifft deshalb Dispatches aus
+    Run 8 auf Zeilen aus Run 9 und umgekehrt — Positionen sind keine
+    Identitäten. Gemessen am 17.10.: Fenster ab Run 7, 30 Zeilen in Run 8,
+    4 in Run 9 ⇒ ``rn`` 1–4 passen auf *beide* Runs. Ohne ``run_started_at``
+    zählt die Funktion über zwei Grundgesamtheiten und sieht wie eine aus.
+    Mit ihm zerfällt das Fenster in (a) offener Run — ordinal, (b) frühere
+    Runs — nur über ``(run_id, decision_seq)``, was ohne ``run_id``-Spalte
+    in ``dispatched_signals`` nicht auflösbar ist und deshalb als
+    ``nicht zuordenbar`` gezählt wird, nicht als Lücke.
+
+    Args:
+        min_run_id: Kleinste ``run_id``, die als Ledger zählt.
+        started_at: Fensterbeginn in ``dispatched_signals``.
+        run_started_at: Beginn des letzten Runs. ``None`` ⇒ altes Verhalten
+            (ordinal über das ganze Fenster) — nur für Fixtures ohne Runs.
+
+    Returns:
+        Anzahl nicht zuordenbarer Dispatches.
     """
-    return int(
+    if run_started_at is None:
+        return int(
+            conn.execute(
+                """
+                SELECT COUNT(*) FROM (
+                  SELECT d.item_id, row_number() OVER (
+                           ORDER BY d.dispatched_at, d.item_id) AS rn
+                  FROM dispatched_signals d
+                  WHERE d.dispatched_at >= ?
+                    AND NOT EXISTS (
+                      SELECT 1 FROM bridge_discards b
+                      WHERE b.item_id = d.item_id
+                    )
+                ) s
+                LEFT JOIN telemetry t
+                  ON t.run_id >= ? AND t.decision_seq = s.rn
+                WHERE t.seq IS NULL
+                """,
+                (started_at, min_run_id),
+            ).fetchone()[0]
+        )
+    # (a) Offener Run: ordinal innerhalb seines eigenen Fensters.
+    open_gap = int(
         conn.execute(
             """
             SELECT COUNT(*) FROM (
@@ -720,12 +808,25 @@ def dispatches_without_telemetry(
                 )
             ) s
             LEFT JOIN telemetry t
-              ON t.run_id >= ? AND t.decision_seq = s.rn
+              ON t.run_id = (
+                   SELECT MAX(run_id) FROM telemetry_runs WHERE run_id >= ?)
+             AND t.decision_seq = s.rn
             WHERE t.seq IS NULL
             """,
-            (started_at, min_run_id),
+            (max(started_at, run_started_at), min_run_id),
         ).fetchone()[0]
     )
+    # (b) Frühere Runs im Fenster: Positionen sagen dort nichts. Gezählt
+    #     wird die Differenz, nicht ein Join — sie ist die Zahl der
+    #     Dispatches, für die dieses Fenster keine Zuordnung hergibt.
+    earlier = int(
+        conn.execute(
+            "SELECT COUNT(*) FROM dispatched_signals"
+            " WHERE dispatched_at >= ? AND dispatched_at < ?",
+            (started_at, run_started_at),
+        ).fetchone()[0]
+    )
+    return open_gap + earlier
 
 
 def _blocking_callers() -> set:
@@ -1172,7 +1273,15 @@ def terminal_classes(recon_detail: dict[str, Any]) -> dict[str, dict[str, int]]:
 
     Die Herkunfts-Zeile ist ``telemetry_rows`` **nicht** — die Zahl ist auf
     Run-Ebene identisch mit der Ausgangssumme und damit als Herkunftszähler
-    wertlos. Gezählt wird ``dispatched_success - unattributed``.
+    wertlos.
+
+    ``telemetry: success - unattributed`` war ebenfalls keine Herkunft
+    (§5.4cd). Die Differenz ist nur dann eine Zerlegung, wenn beide Zahlen
+    dieselbe Grundgesamtheit haben — und ``unattributed`` zählt Dispatches
+    im ganzen Fenster, ``success`` nur Zeilen im Ledger. Gemessen am 17.10.:
+    34 - 300 = **-266**. Eine Herkunft kann nicht negativ sein; die
+    Subtraktion war eine Rechnung, die wie eine Bilanz aussah. Jetzt werden
+    beide Zahlen nebeneinander genannt, ohne sie zu verrechnen.
     """
     reasons = recon_detail.get("reasons") or {}
     success = int(recon_detail.get("dispatched_success", 0))
@@ -1187,7 +1296,8 @@ def terminal_classes(recon_detail: dict[str, Any]) -> dict[str, dict[str, int]]:
             "stale": int(reasons.get("STALE_SNAPSHOT", 0)),
         },
         "origin": {
-            "telemetry": success - unattributed,
+            # Getrennt, nicht verrechnet: sie beschreiben zwei Fenster.
+            "telemetry_rows": success,
             "unattributed": unattributed,
         },
     }
@@ -1509,7 +1619,13 @@ def gate_snapshot(
             f"{d.get('delivered')} genehmigt, "
             + (f"{_ft} Fills ({d.get('fills_full')} voll, "
                f"{d.get('fills_partial')} teilweise, "
-               f"fillsumme {d.get('fill_ratio')})"
+               f"fillsumme {d.get('fill_ratio')}"
+               # `fills_matched` vermerkt, ob der JOIN lief (§5.4cc). Ohne
+               # den Vermerk beschreibt `fills_total` nach einem Ausfall
+               # weiter eine Zahl, sieht aber gesund aus.
+               + ("" if d.get("fills_matched") is not None else
+                  " — fills_matched: nicht gemessen, fills_total ohne Bezug")
+               + ")"
                if _ft is not None else "Fills: nicht gemessen")
             + (f", letzter {d.get('last_fill')}" if d.get("last_fill") else "")
             + ")"
@@ -1574,6 +1690,10 @@ def gate_snapshot(
         f"  gate commit:        {_gate_blob['commit']}:"
         f"{_gate_blob['committed_blob']}"
     )
+    # Zwei Hashes, zwei Typen (§5.4cg). Runde 17 war der ganze Streit:
+    # `belegt_in` zeigte auf einen Blob, der Commit war sauber. `blob:` und
+    # `commit:` machen den Typ lesbar, statt ihn am Format zu raten.
+    # (`gate:` trägt den Typ bereits im Feld; `gate commit` tut es hier.)
     # Das Kriterium kommt aus dem Werkzeug, nicht aus dem Dokument: was hier
     # steht, ist die Regel, die `current` erzeugt hat. Ändert jemand morgen
     # eine Schwelle, ist jedes archivierte Verdikt nachträglich ein anderes —
@@ -1590,8 +1710,8 @@ def gate_snapshot(
     # eine Datei, die ihren eigenen Hash enthält, hätte einen Fixpunkt, der
     # nicht existiert — jede Korrektur änderte den Wert, den sie korrigiert.
     print(
-        f"  anchored at:        {_gate_blob['blob'][:12]} — der Stand, an dem "
-        "das Urteil gebunden ist; wer diesen Befehl startet, blockiert, "
+        f"  anchored at:        blob:{_gate_blob['blob'][:12]} — der Stand, an "
+        "dem das Urteil gebunden ist; wer diesen Befehl startet, blockiert, "
         "das Urteil selbst bricht nichts ab"
     )
     if recon.detail.get("unattributed"):

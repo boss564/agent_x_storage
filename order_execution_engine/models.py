@@ -261,6 +261,12 @@ class RejectContext(BaseModel):
     best_bid: Optional[Decimal] = None
     best_ask: Optional[Decimal] = None
     snapshot_age_s: Optional[float] = None
+    # Herkunft des Buchs, aus dem best_bid/best_ask stammen (§5.4cf).
+    # Ohne sie ist eine `None`-Seite beim Leser wieder doppeldeutig: „der
+    # Markt hat keine" und „der Ticker hat sie weggelassen" sehen im
+    # Kontext identisch aus — obwohl `reject_detail` sie trennt. Eine
+    # Herkunft, die nur beim Schreiber existiert, ist beim Leser weg.
+    source: Optional[str] = None
     # 1160 / 1174 / 1185 — die Code-Stelle, nicht die Kategorie. Die
     # Kategorie steht in `reject_detail`; beide zusammen sagen erst, ob
     # der Zähler stimmt *und* wo er herkommt.

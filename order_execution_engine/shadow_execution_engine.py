@@ -1206,7 +1206,7 @@ class ShadowExecutionEngine:
                 reject_detail="NO_SNAPSHOT",
                 reject_context=RejectContext(
                     token_id=signal.target_token_id, side=side.value,
-                    branch=1174),
+                    branch=1174, source=None),
                 decision_seq=self.telemetry.next_decision_seq(),
             )
             self.telemetry.log(record)
@@ -1243,6 +1243,7 @@ class ShadowExecutionEngine:
                     # EMPTY_SIDE wäre nicht von STALE_SNAPSHOT zu trennen.
                     snapshot_age_s=max(
                         0.0, time.time() - active.received_at),
+                    source=getattr(active, "source", "book"),
                     branch=1185),
                 decision_seq=self.telemetry.next_decision_seq(),
             )
