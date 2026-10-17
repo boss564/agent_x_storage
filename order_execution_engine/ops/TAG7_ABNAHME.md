@@ -129,7 +129,7 @@ Freifahrtschein für die einzige Zeile, die den Termin selbst trägt.
 | # | Befehl | Erwartete Ausgabe | Verdikt bei Abweichung |
 |---|---|---|---|
 | 0 | `date -j -f "%Y-%m-%d" 2026-10-20 "+%A"` | `Tuesday` (**Ist, eingefügt**) | **NICHT BESTANDEN** |
-| 1 | `pytest order_execution_engine/tests/` | `164 passed` | **NICHT BESTANDEN** |
+| 1 | `pytest order_execution_engine/tests/` | `168 passed` | **NICHT BESTANDEN** |
 | 2a | `pytest -k test_c1_positive` | `1 passed, 2 deselected`; Fill im Spread | **NICHT BESTANDEN** |
 | 2b | `pytest -k test_c2_negative` | `1 passed, 2 deselected`; `INVALID_PRICE`, keine Metrik | **NICHT BESTANDEN** |
 | 3 | `pytest -k test_c3_replay_does_not_touch` | `1 passed, 2 deselected`; Mess-DB 0 Diff | **NICHT BESTANDEN** |
@@ -137,8 +137,8 @@ Freifahrtschein für die einzige Zeile, die den Termin selbst trägt.
 | 5 | `gate_snapshot(min_run_id=8)` | `historical: RED (run 8, unattributed=4)`; Ausgangsachse **34**; `current: GREEN` | **NICHT ENTSCHEIDBAR** (Abweichung benennen, nicht glätten) |
 | 6 | §5.1 + §5.4, dieses Dokument | Zeitstempel, Sweep- und Import-Graph-Ausgabe vorhanden | **NICHT ENTSCHEIDBAR** |
 | 7 | §5.4d, pyc-Inhalt gegen `5c5bc364` | 9/9 Module `OK`; `flags = 0x00000000` dokumentiert | **NICHT BESTANDEN** |
-| 8 | `gate_snapshot` | `criterion:`-Zeile vorhanden, (0)–(4) == RED-Zweige (7 Zeugen) | **NICHT BESTANDEN** |
-| 9 | §5.4f | genau eine `shadow_runner.pyc`, Modul-Ebene `OK` | **NICHT BESTANDEN** |
+| 8 | `gate_snapshot` | Etikett `LEDGER_CONSISTENT`, (0)–(4) == RED-Zweige, (5) Warnung | **NICHT BESTANDEN** |
+| 9 | §5.4f–§5.4j | eine `pyc`, Modul-Ebene `OK`, Schwelle beidseitig, `etime`, Blob↔Commit | **NICHT BESTANDEN** |
 
 **Regel gegen den Haken-Fehler:** Ein Haken bedeutete bisher „ausgeführt",
 nicht „getroffen". Deshalb steht in jeder Zeile die erwartete **Ausgabe**;
@@ -164,7 +164,7 @@ Termin, der beides trägt, verschiebt das Entscheidbare auf das Unentscheidbare.
 | 09:40 | `git diff 5c5bc364 e91916bd -- order_execution_engine/shadow_runner.py` | **Ist-Ausgabe ins Protokoll** (17.10. vorab: leer) |
 | 09:42 | `rg -n "preflight_check" --glob '!tests/**' --glob '!*.md' .` | **Ist-Ausgabe** (17.10. vorab: leer → Gate ist kein Dienstbestandteil) |
 | 09:50 | Preflight **manuell** aufrufen | `current:`/`historical:` vom Werkzeug, nicht vom Dienst |
-| 10:00 | Zeilen 0–8 | `Tuesday`, `164 passed`, `historical: RED`, Wurzel leer |
+| 10:00 | Zeilen 0–8 | `Tuesday`, `168 passed`, `historical: RED`, Wurzel leer |
 | 10:05 | Basis-Zeile | Code je Run, nicht nur Run-Nummern |
 
 **Neustart: entfällt** — solange der Runner-Diff leer bleibt. Der Befund vom
@@ -256,7 +256,7 @@ Daraus folgt für die folgenden Abschnitte:
 **§5.1, §5.4 und §5.4b sind Beweise über den Dienst, nicht über das Gate.**
 Sie stehen hier, weil eine Abnahme ohne intakten Datenlieferanten (Run 8/9)
 nicht beurteilbar wäre — aber sie zertifizieren nicht den Prüfer. Wer am
-20.10. 164 Tests, leere Wurzel und unveränderten Prozess liest und sie für
+20.10. 168 Tests, leere Wurzel und unveränderten Prozess liest und sie für
 Beweise über das Gate hält, liest drei grüne Prüfungen am falschen Ziel.
 Das ist die schlechteste Variante und deshalb steht die Grenze hier oben und
 nicht in einer Fußnote.
@@ -608,10 +608,124 @@ Messung angepaßt hat.
 > erwartete `GREEN` mit der Begründung „nicht unterscheidbar von
 > Inaktivität — erwartet". **Der Test kodifizierte die Tautologie als
 > Erwartung.** Er heißt jetzt `test_gate_red_when_idle_underrun` und erwartet
-> `RED` mit `underrun: True`. Drei weitere Bestandstests mußten auf
-> `MIN_TELEMETRY_ROWS` Zeilen angehoben werden, weil sie die
-> Gleichheitslogik prüfen, nicht die Untergrenze — sie hätten sonst am
-> falschen Zweig gebrochen.
+> `RED` mit `underrun: True`.
+
+**Die drei angehobenen Bestandstests — und ihre Prüfung von beiden Seiten.**
+
+Drei Bestandstests wurden auf `MIN_TELEMETRY_ROWS` Zeilen angehoben, weil
+sie die Gleichheitslogik prüfen und sonst am falschen Zweig gebrochen wären.
+Das ist strukturell dasselbe wie „die Schwelle an die Daten anpassen" —
+deshalb die Gegenprobe:
+
+```
+Untergrenze auf 5 gesetzt, Cache geleert:
+  21 passed (vor dem Beidseiten-Test)   →  die Tests folgen der Schwelle
+```
+
+**Sie prüften die Untergrenze nicht, sie lasen `MIN_TELEMETRY_ROWS`.** Bei
+jeder Schwelle grün — derselbe Fehler wie `test_gate_green_when_idle`, nur
+an einer Stelle, an der niemand mehr hinsieht. Ergänzt:
+
+```python
+PINNED_MIN_TELEMETRY_ROWS = 4      # Literal, nicht die Konstante
+test_threshold_constant_is_the_pinned_value   # Schwelle == gepinnte Zahl
+test_threshold_exact_boundary_is_green        # n = 4  -> LEDGER_CONSISTENT
+test_threshold_one_below_is_red_underrun      # n = 3  -> RED/underrun
+```
+
+Gegenprobe mit geleertem `__pycache__`:
+
+| Schwelle | Ergebnis |
+|---|---|
+| 3 | `one_below_is_red_underrun` **bricht** (erwartet rot, Gate grün) |
+| 4 | 168 passed |
+| 5 | `exact_boundary_is_green` **bricht** (erwartet grün, Gate rot) |
+
+> **Nebenbefund:** Der erste Lauf dieser Probe war bei 3 und 5 grün — weil
+> pytest ein veraltetes `.pyc` las. Erst `__pycache__` leeren ließ die Probe
+> greifen. **Derselbe mtime-blind Bytecode, der in §5.4d das Thema war,
+> hat hier die Messung verfälscht.** Das ist der stärkste Beleg für den
+> `checked-hash`-Nachtrag, den diese Akte hat.
+
+### 5.4g `GREEN` heißt jetzt `LEDGER_CONSISTENT` — und `delivered` steht daneben
+
+**Die Frage, die diese Sektion erzwingt: was prüft Bedingung (4) auf Run 9?**
+
+```
+run 9:  telemetry_rows = 4    reasons = {INVALID_PRICE: 4}
+        dispatched_success = 4 (Zeilen in dispatched_signals ab started_at,
+                               nicht in bridge_discards)
+        delivered = 0          (approved = 1 in keiner Zeile)
+        (4) 4 == 4             → erfüllt
+```
+
+**`dispatched_success` zählt Angebote an die Bridge, nicht Auslieferungen.**
+Der Name trägt „success"; der Wert zählt Zeilen. Auf Run 9 besteht das Gate
+alle Bedingungen über einem Lauf, in dem **nichts gefüllt wurde** — vier
+Zeilen, vier `INVALID_PRICE`, null Lieferungen.
+
+Die drei Lesungen, geprüft:
+
+| Lesung von (4) | Run 9 | Urteil |
+|---|---|---|
+| `approved`-Zeilen == `Σ reasons` | `0 == 4` | hätte Run 9 rot gemacht — er war grün, Also nicht die Lesung |
+| `dispatched` (Fenster) == `Σ reasons` | `4 == 4` | **ist die Lesung** — Ledger-Identität, keine Funktionsaussage |
+| „Erfolg" = Auslieferung | `0` | nicht gemessen, bis jetzt |
+
+**Entscheidung: Etikett ändern, nicht Bedingung hinzufügen.** `GREEN`
+verspricht Funktion; vier Identitäten über einer Menge können nur
+Konsistenz belegen. Also:
+
+```
+GREEN            → LEDGER_CONSISTENT
+RED              → RED (unverändert: rot bleibt rot)
+detail["delivered"]                      neu, gemessen (approved = 1)
+criterion (5)    WARNUNG, kein Blocker: delivered == 0
+```
+
+`delivered = 0` ist **keine** Gate-Bedingung. Begründung: am 20.10. soll
+nichts rot werden, weil das Gate zum ersten Mal etwas gemessen hat — die
+Entscheidung, ob ein Lauf ohne Auslieferung die Abnahme sperrt, gehört
+vor die Abnahme und nicht in ein Werkzeug, das sie nachträglich kippt.
+`criterion:` druckt die Warnung mit, damit sie nicht übersehen wird.
+
+> **Der Etikett-Tausch ist die zehnte Form dieser Akte:** ein Etikett, das
+> mehr verspricht als sein Referent. Der Unterschied zu den neun davor:
+> diesmal steht der Referent daneben, in fünf Zeilen, und sagt es selbst.
+
+#### 5.4h Der Befund hinter dem Befund — zwei Stellen lasen ihren eigenen Ausgang
+
+Beim Umbau gefunden, nicht gesucht:
+
+```python
+# vorher, an zwei Stellen:
+historical = snapshot["verdicts"]["current"] == "GREEN"
+...
+if snapshot["verdicts"]["current"] == "GREEN":
+    _warn(...)          # statt _fail(...)
+```
+
+**`verdicts["current"]` war ein Literal.** Der Docstring sagt „current
+(letzter Lauf)", der Code hat den letzten Lauf nie angesehen:
+
+```python
+return {"current": "GREEN", "historical": historical}   # vorher
+```
+
+Damit degradierte **jeder** rote Befund zur Warnung — die Blockade konnte
+strukturell nie greifen. Nach dem Umbau auf eine gemessene `current`:
+
+```
+Aufruf mit min_run_id=8, Run 9 kaputt:
+  vorher:  current=GREEN  errors=[]            (nichts blockiert)
+  nachher: current=RED    errors=["latest run 9: RED (blockierend)"]
+```
+
+Zweiter Teil des Befunds: `recon` mißt **nur** `min_run_id`. Ein Aufruf mit
+einer alten `min_run_id` sah den jüngsten Lauf nie als blockierend. Ergänzt
+ist ein eigener Zweig für den jüngsten Lauf; Zeugen:
+`test_latest_run_failure_blocks_even_when_called_with_old_min_run_id`
+(beide Seiten: kaputt → blockiert, intakt → nicht).
 
 ### 5.4f Eine Kopie, nicht zwei
 
@@ -639,6 +753,48 @@ stehen im **Modulkörper**, nicht in einer Funktion. Nachgezogen:
 `flags = 0x1`) schließt die mtime-Lücke dauerhaft. Es verlangt Neukompilat
 und Neustart — derselbe falsche Anlaß wie `-B`. **Gebucht, datiert,
 liegengelassen.**
+
+> **Nachtrag mit Gewicht:** Die Schwellen-Probe aus §5.4e war bei 3 und 5
+> zunächst grün, weil pytest ein veraltetes `.pyc` las. Ein Testlauf, der
+> gegen Bytecode von vorgestern mißt, ist genau die Lücke, die `checked-hash`
+> schließt — und sie ist in dieser Runde **nicht theoretisch** gewesen.
+
+### 5.4i `etime` in der Kopfzeile — die Zeile, die nicht rückdatierbar ist
+
+§5.1 hat `etime` als stehende Ist-Ausgabe eingeführt, weil sie monoton
+wächst: ein Lauf läßt sich nicht nachträglich altern. Sie war zuletzt aus
+dem Bericht gefallen. Wieder drin, gemessen im Moment des Aufrufs:
+
+```
+Pre-Flight @ /Volumes/.../order_execution_engine
+runner etime:        962 Wed Oct 14 21:23:32 2026     02-20:56:00  (gemessen jetzt)
+```
+
+Der Hook kann diese Zeile nicht vergessen — die Kopfzeile konnte es.
+
+### 5.4j Blob ↔ Commit — `f86a7901fb5b` gehört zu zwei Commits
+
+Die Selbstauskunft nannte einen Blob und keinen Commit. Nachgezogen:
+
+```
+e88f6d07:order_execution_engine/ops/preflight_check.py = f86a7901fb5b
+08ad2454:order_execution_engine/ops/preflight_check.py = f86a7901fb5b
+```
+
+**`f86a7901` steht in beiden.** Der Prüfer wurde in keinem der beiden
+Commits geändert — `08ad2454` trug nur Tests und Dokument. Die Zeile
+„identisch in Datei und Commit" war also richtig, aber nur für den Blob,
+nicht für einen Commit; das war die alte Form.
+
+Die Ausgabe nennt jetzt beides und markiert die Abweichung:
+
+```
+gate:         df1e024fa8146e68c354970a235226e58a2d1943  (git hash-object)
+gate commit:  08ad2454:f86a7901fb5b  DERIVED (nicht im HEAD-Commit)
+```
+
+`DERIVED` heißt: der laufende Prüfer ist **nicht** der committete. Genau
+der Zustand vor dem Abnahme-Commit — und jetzt sichtbar statt behauptet.
 
 ### 5.4b Der Referent hat sich bewegt — Korrektur von §5.4a
 
@@ -852,7 +1008,7 @@ greift dort richtig; die Handprüfung daneben tat es nicht.
 | `tests/test_fill_replay.py` | C-Positiv, C-Negativ, C-Isolation (3) |
 | `tests/test_telemetry_reconciliation.py` | Vollständigkeit, `<`→Gleichheit, zwei Achsen, `decision_seq`-Kollision, Zeile ohne Key, Neustart je Run, `item_id` ≠ Join-Schlüssel, historical-rot-blockiert-nicht, current-rot-blockiert |
 
-Suite: **164 passed** (157 vor der Untergrenze + 7 Kopplungszeugen). **Grün heißt „die Tests laufen",
+Suite: **168 passed** (157 vor der Untergrenze + 11 Kopplungs-/Schwellenzeugen). **Grün heißt „die Tests laufen",
 nicht „die Tests prüfen das Richtige"** — die erste Fassung dieser Runde war
 grün über einem falschen Join-Schlüssel. Deshalb sind die Negativkontrollen
 (38 vs. 34, `decision_seq`-Kollision, current-RED) ausdrücklich Teil der Suite.

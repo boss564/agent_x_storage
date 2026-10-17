@@ -125,7 +125,7 @@ def test_gate_green_when_telemetry_matches() -> None:
             )
         conn.commit()
         g = gate_telemetry_reconciliation(conn, min_run_id=7)
-        assert g.status == "GREEN"
+        assert g.status == "LEDGER_CONSISTENT"
         assert g.detail["dispatched_success"] == MIN_TELEMETRY_ROWS
         assert g.detail["telemetry_rows"] == MIN_TELEMETRY_ROWS
         conn.close()
@@ -539,18 +539,24 @@ def test_historical_red_does_not_block_current_green() -> None:
         conn.execute(
             "INSERT INTO telemetry (signal_id, latency_ms, approved, run_id,"
             " decision_seq) VALUES ('s8', 1.0, 1, 8, 2)")
-        # Run 9: 1 Dispatch, 1 Zeile -> grün.
-        conn.execute("INSERT INTO dispatched_signals VALUES ('a9', ?, NULL)", (t0 + 100,))
-        conn.execute(
-            "INSERT INTO telemetry (signal_id, latency_ms, approved, run_id,"
-            " decision_seq) VALUES ('s9', 1.0, 1, 9, 1)")
+        # Run 9: genug Zeilen für (0), alle konsistent -> LEDGER_CONSISTENT.
+        for i in range(PINNED_MIN_TELEMETRY_ROWS):
+            conn.execute(
+                "INSERT INTO dispatched_signals VALUES (?, ?, NULL)",
+                (f"a9-{i}", t0 + 100 + i),
+            )
+            conn.execute(
+                "INSERT INTO telemetry (signal_id, latency_ms, approved, run_id,"
+                " decision_seq) VALUES (?, 1.0, 1, 9, ?)",
+                (f"s9-{i}", i + 1),
+            )
         conn.commit()
         errors: list[str] = []
         with redirect_stdout(io.StringIO()):
             snap = gate_snapshot(db, errors, min_run_id=8)
         assert snap is not None
         assert snap["reconciliation"].status == "RED"
-        assert snap["verdicts"]["current"] == "GREEN"
+        assert snap["verdicts"]["current"] == "LEDGER_CONSISTENT"
         assert "RED (run 8" in snap["verdicts"]["historical"]
         # Nicht blockierend: der historische Befund landet nicht in errors.
         assert errors == [], errors
@@ -627,7 +633,7 @@ def _run(rows, keyed, dispatched, reasons) -> tuple[str, dict]:
 def test_criterion_is_printed_in_the_same_order_as_the_red_branches() -> None:
     """(0)…(4) in der criterion-Zeile, in der Reihenfolge der Rückgaben."""
     line = _gate_criterion(9)
-    assert line.startswith("GREEN nur wenn (0)")
+    assert line.startswith("LEDGER_CONSISTENT nur wenn (0)")
     for i in range(1, 5):
         assert f"({i})" in line, f"Bedingung {i} fehlt in der criterion-Zeile"
     assert f"(0) telemetry_rows >= {MIN_TELEMETRY_ROWS}" in line
@@ -650,16 +656,22 @@ def test_criterion_count_matches_red_branches_in_source() -> None:
     from order_execution_engine.ops import preflight_check
 
     src = inspect.getsource(preflight_check.gate_telemetry_reconciliation)
+    # Jede RED-Rückgabe ist ein Zweig. (0) hat zwei Ausgänge — "kein Lauf"
+    # und "zu wenige Zeilen" — beide bedeuten "nicht gemessen" und tragen
+    # deshalb dieselbe Nummer. Deshalb wird gegen numbered + 1 verglichen,
+    # nicht gegen numbered.
     red_returns = len(re.findall(r'status="RED"', src))
     line = _gate_criterion(9)
-    numbered = set(re.findall(r"\((\d)\)", line))
-    # (0) enthält keine Gleichheitsbedingung; die Zweige (1)-(4) plus der
-    # Untergrenzen-Zweig (0) ergeben zusammen die RED-Rückgaben.
-    assert red_returns == len(numbered), (
-        f"{red_returns} RED-Rückgaben im Gate, aber {len(numbered)} "
-        f"Bedingungen ({sorted(numbered)}) in der criterion-Zeile — "
-        "ein Zweig ohne gedruckte Regel (oder umgekehrt)."
+    # (5) ist ausdrücklich als Warnung deklariert und hat keinen RED-Zweig.
+    numbered = {n for n in re.findall(r"\((\d)\)", line) if n != "5"}
+    # numbered = {0,1,2,3,4}; (0) hat zwei RED-Zweige -> 6 erwartet.
+    expected = len(numbered) + 1
+    assert red_returns == expected, (
+        f"{red_returns} RED-Rückgaben im Gate, aber {expected} erwartet "
+        f"({sorted(numbered)} + der zweite (0)-Ausgang) — ein Zweig ohne "
+        "gedruckte Regel (oder umgekehrt)."
     )
+    assert "(5) WARNUNG" in line
 
 
 def test_branch_0_underrun() -> None:
@@ -736,3 +748,139 @@ def test_branch_4_dispatched_not_fully_partitioned() -> None:
     assert g.status == "RED"
     assert g.detail["unattributed"] == 0
     assert sum(g.detail["reasons"].values()) > g.detail["dispatched_success"]
+
+
+# --- Schwelle von beiden Seiten --------------------------------------------
+# Die drei angehobenen Bestandstests (green_when_telemetry_matches,
+# ignores_discarded_claims, snapshot_discards) lesen MIN_TELEMETRY_ROWS und
+# wachsen mit. Probe: Untergrenze auf 5 gesetzt -> 21 passed. Sie prüfen die
+# Untergrenze also nicht, sie folgen ihr. Das ist "Tests an die Schwelle
+# anpassen" in der Form, die grün bleibt, egal wohin die Schwelle wandert.
+# Hier wird sie von beiden Seiten gehalten.
+
+
+def _seed_exact(conn: sqlite3.Connection, n: int) -> None:
+    """Genau n konsistente Dispatches + Telemetriezeilen (alle gefüllt)."""
+    t0 = time.time()
+    conn.execute("INSERT INTO telemetry_runs VALUES (9, ?, 'x', '{}')", (t0,))
+    for i in range(n):
+        conn.execute(
+            "INSERT INTO telemetry (signal_id, latency_ms, approved, run_id,"
+            " decision_seq) VALUES (?, 1.0, 1, 9, ?)",
+            (f"s{i}", i + 1),
+        )
+        conn.execute(
+            "INSERT INTO dispatched_signals VALUES (?, ?, NULL)",
+            (f"s{i}", t0 + 1),
+        )
+    conn.commit()
+
+
+def _status_at(n: int) -> tuple[str, dict]:
+    with tempfile.TemporaryDirectory() as td:
+        conn = sqlite3.connect(Path(td) / "t.db")
+        _schema(conn)
+        _seed_exact(conn, n)
+        g = gate_telemetry_reconciliation(conn, min_run_id=9)
+        conn.close()
+        return g.status, g.detail
+
+
+# Gepinnte Schwelle. NICHT MIN_TELEMETRY_ROWS — sonst wandert der Test mit
+# und ist bei jeder Schwelle grün (Probe: 3 und 5 beide 23 passed).
+# Die Zahl ist die Abnahme-Zahl; wandert sie, bricht hier etwas, und das ist
+# gewollt: eine Schwellenänderung ist eine Kriteriumsänderung.
+PINNED_MIN_TELEMETRY_ROWS = 4
+
+
+def test_threshold_constant_is_the_pinned_value() -> None:
+    """Die Schwelle im Kriterium ist die gepinnte — nicht eine, die mitwächst."""
+    assert MIN_TELEMETRY_ROWS == PINNED_MIN_TELEMETRY_ROWS, (
+        f"MIN_TELEMETRY_ROWS={MIN_TELEMETRY_ROWS}, gepinnt="
+        f"{PINNED_MIN_TELEMETRY_ROWS}. Eine Änderung der Untergrenze ist "
+        "eine Änderung des Kriteriums — criterion-Zeile und Abnahme mitziehen."
+    )
+
+
+def test_threshold_exact_boundary_is_green() -> None:
+    """Genau PINNED_MIN_TELEMETRY_ROWS konsistente Zeilen -> GREEN."""
+    status, detail = _status_at(PINNED_MIN_TELEMETRY_ROWS)
+    assert status == "LEDGER_CONSISTENT", detail
+    assert detail["telemetry_rows"] == PINNED_MIN_TELEMETRY_ROWS
+
+
+def test_threshold_one_below_is_red_underrun() -> None:
+    """PINNED - 1 Zeilen -> RED als underrun, obwohl (1)-(4) erfüllt sind.
+
+    Die Zeilenzahl ist gepinnt, nicht aus der Konstante abgeleitet: sonst
+    wäre der Test bei jeder Schwelle grün und würde die Untergrenze nur
+    mitschreiben statt sie zu halten.
+    """
+    status, detail = _status_at(PINNED_MIN_TELEMETRY_ROWS - 1)
+    assert status == "RED", "Untergrenze greift eine Zeile zu tief" + str(detail)
+    assert detail.get("underrun") is True
+    assert detail["telemetry_rows"] == detail["decision_seq_keyed"]
+    assert detail["unattributed"] == 0
+    assert detail["dispatched_success"] == sum(detail["reasons"].values())
+
+
+def test_latest_run_failure_blocks_even_when_called_with_old_min_run_id() -> None:
+    """Ein Aufruf mit alter min_run_id darf den jüngsten Ausfall nicht schlucken.
+
+    Befund: `recon` mißt nur min_run_id, die Blockade hing an
+    `verdicts.current == "GREEN"` — und current war konstant "GREEN".
+    Ergebnis: ein Aufruf mit min_run_id=8 über einem kaputten Run 9
+    lieferte current=RED und errors==[] (0 blockierend). Der Befund über
+    den laufenden Lauf war unerreichbar.
+
+    Der Test pinnt beide Seiten: kaputter jüngster Lauf blockiert, intakter
+    jüngster Lauf blockiert nicht.
+    """
+    def build(run9_rows: int) -> Path:
+        td = tempfile.mkdtemp()
+        db = Path(td) / "t.db"
+        conn = sqlite3.connect(db)
+        _schema(conn)
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS telemetry_fill_metrics ("
+            "telemetry_seq INTEGER PRIMARY KEY)"
+        )
+        t0 = 1_000_000.0
+        conn.execute("INSERT INTO telemetry_runs VALUES (8, ?, 'x', '{}')", (t0,))
+        conn.execute(
+            "INSERT INTO telemetry_runs VALUES (9, ?, 'y', '{}')", (t0 + 99,)
+        )
+        # Run 8: historisch rot (2 Dispatches, 1 Zeile).
+        conn.execute("INSERT INTO dispatched_signals VALUES ('a8', ?, NULL)", (t0 + 1,))
+        conn.execute("INSERT INTO dispatched_signals VALUES ('b8', ?, NULL)", (t0 + 2,))
+        conn.execute(
+            "INSERT INTO telemetry (signal_id, latency_ms, approved, run_id,"
+            " decision_seq) VALUES ('s8', 1.0, 1, 8, 2)"
+        )
+        for i in range(run9_rows):
+            conn.execute(
+                "INSERT INTO dispatched_signals VALUES (?, ?, NULL)",
+                (f"a9-{i}", t0 + 100 + i),
+            )
+            conn.execute(
+                "INSERT INTO telemetry (signal_id, latency_ms, approved, run_id,"
+                " decision_seq) VALUES (?, 1.0, 1, 9, ?)",
+                (f"s9-{i}", i + 1),
+            )
+        conn.commit()
+        conn.close()
+        return db
+
+    # kaputter jüngster Lauf -> blockiert
+    errors: list[str] = []
+    with redirect_stdout(io.StringIO()):
+        snap = gate_snapshot(build(1), errors, min_run_id=8)
+    assert snap["verdicts"]["current"] == "RED"
+    assert any("latest run 9" in e for e in errors), errors
+
+    # intakter jüngster Lauf -> blockiert nicht (historical bleibt Warnung)
+    errors = []
+    with redirect_stdout(io.StringIO()):
+        snap = gate_snapshot(build(PINNED_MIN_TELEMETRY_ROWS), errors, min_run_id=8)
+    assert snap["verdicts"]["current"] == "LEDGER_CONSISTENT"
+    assert errors == [], errors

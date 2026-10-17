@@ -62,7 +62,8 @@ def _gate_blob_hash() -> dict[str, str]:
             timeout=5,
             check=True,
         )
-        return {"blob": out.stdout.strip(), "source": "git hash-object"}
+        return {"blob": out.stdout.strip(), "source": "git hash-object",
+                **_gate_commit_ref(this)}
     except (subprocess.SubprocessError, OSError):
         import hashlib
 
@@ -70,6 +71,39 @@ def _gate_blob_hash() -> dict[str, str]:
             "blob": hashlib.sha256(this.read_bytes()).hexdigest(),
             "source": "sha256 (git unavailable)",
         }
+
+
+def _gate_commit_ref(this: Path) -> dict[str, str]:
+    """Welcher Commit trägt diesen Blob — und trägt HEAD ihn noch?
+
+    Ein Hash ohne Commit ist die alte Form: er zeigt auf zwei Commits und
+    nennt keinen. ``f86a7901`` steht in ``e88f6d07`` *und* ``08ad2454`` —
+    beide Commits tragen denselben Prüfer, geändert wurden nur die Tests.
+    Diese Funktion macht die Aussage prüfbar: Blob im Commit vs. Blob auf
+    der Platte.
+
+    Laufzeitfehler dürfen die Ausgabe nicht verhindern (ein Prüfer, der
+    beim Datieren stirbt, datiert nichts) — deshalb leerer Fallback.
+    """
+    def _git(*args: str) -> str:
+        out = subprocess.run(
+            ["git", "-C", str(REPO), *args],
+            capture_output=True, text=True, timeout=5, check=True,
+        )
+        return out.stdout.strip()
+
+    try:
+        rel = this.relative_to(REPO).as_posix()
+        head = _git("rev-parse", "HEAD")
+        committed = _git("rev-parse", f"HEAD:{rel}")
+    except (subprocess.SubprocessError, OSError, ValueError):
+        return {"commit": "unknown", "committed_blob": "unknown"}
+    work = _git("hash-object", str(this))
+    suffix = "" if work == committed else "  DERIVED (nicht im HEAD-Commit)"
+    return {
+        "commit": head[:8],
+        "committed_blob": committed[:12] + suffix,
+    }
 
 REQUIRED_CONFIG_KEYS = (
     "max_book_age_ms",
@@ -128,10 +162,13 @@ def gate_telemetry_reconciliation(
         (min_run_id,),
     ).fetchone()
     if row is None:
+        # Kein Lauf = nichts gemessen. GREEN wäre die Tautologie in ihrer
+        # reinsten Form: ein Etikett über einer Prüfung, die nicht stattfand.
         return GateResult(
             name="TELEMETRY_RECONCILIATION",
-            status="GREEN",
-            detail={"note": f"no telemetry_runs.run_id={min_run_id}"},
+            status="RED",
+            detail={"note": f"no telemetry_runs.run_id={min_run_id}",
+                    "underrun": True},
         )
     started_at = float(row[0])
     dispatched = int(
@@ -184,6 +221,15 @@ def gate_telemetry_reconciliation(
     unattributed = dispatches_without_telemetry(
         conn, min_run_id=min_run_id, started_at=started_at,
     )
+    # Geliefert = genehmigte Entscheidungen. Nicht zu verwechseln mit
+    # dispatched (Angebote an die Bridge) und nicht mit classifiable
+    # (Terminalentscheidungen, Ablehnungen eingeschlossen).
+    delivered = int(
+        conn.execute(
+            "SELECT COUNT(*) FROM telemetry WHERE run_id >= ? AND approved = 1",
+            (min_run_id,),
+        ).fetchone()[0]
+    )
     detail = {
         "min_run_id": min_run_id,
         "started_at": started_at,
@@ -195,6 +241,7 @@ def gate_telemetry_reconciliation(
         "reasons": reasons,
         "classifiable": sum(reasons.values()),
         "unattributed": unattributed,
+        "delivered": delivered,
     }
     # Untergrenze: ohne sie sind (1)-(4) bei einem leeren Lauf vier Tautologien
     # (0==0, 0==0, „nichts fehlt“, 0==0) und GREEN bedeutet „keine Daten“.
@@ -234,7 +281,13 @@ def gate_telemetry_reconciliation(
         )
     return GateResult(
         name="TELEMETRY_RECONCILIATION",
-        status="GREEN",
+        # Nicht GREEN: das Gate prüft vier Identitäten über einer Menge, nicht
+        # ob etwas ausgeliefert wurde. Run 9 hat 4 Zeilen, 4 × INVALID_PRICE,
+        # 0 geliefert — und besteht alle vier. GREEN verspräche Funktion;
+        # LEDGER_CONSISTENT verspricht genau, was gehalten wird.
+        # delivered=0 ist eine Warnung (criterion 5), kein Blocker: am 20.10.
+        # soll nichts rot werden, weil das Gate zum ersten Mal etwas gemessen hat.
+        status="LEDGER_CONSISTENT",
         detail=detail,
     )
 
@@ -270,6 +323,32 @@ def dispatches_without_telemetry(
             (started_at, min_run_id),
         ).fetchone()[0]
     )
+
+
+def _print_process_age() -> None:
+    """``etime`` des laufenden Runners — die eine Zeile, die nicht rückdatierbar ist.
+
+    §5.1 hat sie als stehende Ist-Ausgabe eingeführt, weil ``etime`` monoton
+    wächst: man kann einen Lauf nicht nachträglich altern lassen. Sie ist
+    zuletzt aus dem Bericht gefallen; hier steht sie wieder, gemessen im
+    Moment des Aufrufs, mit der PID daneben.
+    """
+    try:
+        out = subprocess.run(
+            ["pgrep", "-f", "shadow_runner"],
+            capture_output=True, text=True, timeout=5,
+        ).stdout.split()
+        if not out:
+            print("runner etime:        (kein shadow_runner-Prozess)")
+            return
+        for pid in out:
+            r = subprocess.run(
+                ["ps", "-o", "pid=,lstart=,etime=", "-p", pid],
+                capture_output=True, text=True, timeout=5,
+            )
+            print(f"runner etime:        {r.stdout.strip()}  (gemessen jetzt)")
+    except (OSError, subprocess.SubprocessError) as exc:  # pragma: no cover
+        print(f"runner etime:        nicht lesbar ({exc})")
 
 
 def check_git(expected_prefix: str, errors: list[str]) -> str:
@@ -622,14 +701,26 @@ def _two_verdicts(
     row = conn.execute("SELECT MAX(run_id) FROM telemetry_runs").fetchone()
     latest = int(row[0]) if row and row[0] is not None else min_run_id
     if latest == min_run_id:
-        return {"current": recon.status, "historical": "n/a"}
+        return {
+            "current": recon.status,
+            "historical": "n/a",
+            "latest_run_id": latest,
+        }
     historical = (
         f"RED (run {min_run_id}, unattributed="
         f"{recon.detail.get('unattributed')})"
         if recon.status == "RED"
-        else f"GREEN (run {min_run_id})"
+        else f"LEDGER_CONSISTENT (run {min_run_id})"
     )
-    return {"current": "GREEN", "historical": historical}
+    # ``current`` wurde hier fest auf "GREEN" gesetzt — eine Behauptung, kein
+    # Meßwert: der Docstring sagt "current (letzter Lauf)", der Code hat den
+    # letzten Lauf nie angesehen. Jetzt wird er gemessen.
+    latest_recon = gate_telemetry_reconciliation(conn, min_run_id=latest)
+    return {
+        "current": latest_recon.status,
+        "historical": historical,
+        "latest_run_id": latest,
+    }
 
 
 def _gate_criterion(min_run_id: int) -> str:
@@ -642,13 +733,15 @@ def _gate_criterion(min_run_id: int) -> str:
     Kriterium ist konstant, die Messung steht daneben.
     """
     return (
-        "GREEN nur wenn "
+        "LEDGER_CONSISTENT nur wenn "
         f"(0) telemetry_rows >= {MIN_TELEMETRY_ROWS} (Untergrenze aus Run 9) "
         "(1) telemetry_rows == decision_seq-keyed "
         "(2) keyed == distinct(run_id, decision_seq) und je run eindeutig "
         "(3) unattributed == 0 "
         "(4) dispatched_success == Σ reject_reasons; "
-        f"scope = run_id >= {min_run_id}"
+        f"scope = run_id >= {min_run_id}. "
+        "(5) WARNUNG, kein Blocker: delivered == 0 heißt Ledger konsistent "
+        "über einem Lauf ohne Auslieferung — das Etikett sagt dazu nichts."
     )
 
 
@@ -837,6 +930,10 @@ def gate_snapshot(
     # Run, aber nicht die Fassung, die urteilte.
     _gate_blob = _gate_blob_hash()
     print(f"  gate:               {_gate_blob['blob']}  ({_gate_blob['source']})")
+    print(
+        f"  gate commit:        {_gate_blob['commit']}:"
+        f"{_gate_blob['committed_blob']}"
+    )
     # Das Kriterium kommt aus dem Werkzeug, nicht aus dem Dokument: was hier
     # steht, ist die Regel, die `current` erzeugt hat. Ändert jemand morgen
     # eine Schwelle, ist jedes archivierte Verdikt nachträglich ein anderes —
@@ -863,7 +960,9 @@ def gate_snapshot(
         )
     if recon.detail.get("dispatched_success"):
         print(f"  invalid_price_by_asset: {invalid_prices}")
-    historical = snapshot["verdicts"]["current"] == "GREEN"
+    historical = snapshot["verdicts"]["latest_run_id"] != recon.detail.get(
+        "min_run_id", snapshot["verdicts"]["latest_run_id"]
+    )
 
     def _report(msg: str, hard: bool = True) -> None:
         if historical and hard:
@@ -892,11 +991,33 @@ def gate_snapshot(
             f"unattributed={recon.detail.get('unattributed')} "
             f"outcome_sum={outcome_sum}"
         )
-        if snapshot["verdicts"]["current"] == "GREEN":
-            # Abgeschlossener Lauf: dokumentiert; kein Abbruch, weil niemand verdrahtet ist.
+        # Zuordnung: blockierend ist ein Befund, wenn er den JÜNGSTEN Lauf
+        # betrifft. Vorher stand hier `verdicts.current == "GREEN"` — und
+        # current war fest auf "GREEN" gesetzt, also wurde jeder rote Befund
+        # zur Warnung degradiert: eine Prüfung, die ihren eigenen Ausgang
+        # las, statt den Lauf zu messen.
+        #
+        # `recon` misst nur min_run_id. Der jüngste Lauf wird separat
+        # gemessen (verdicts) — sein Befund muß ebenfalls blockieren,
+        # sonst schluckt ein Aufruf mit alter min_run_id den aktuellen Ausfall.
+        latest_run = snapshot["verdicts"].get("latest_run_id")
+        recon_is_historical = latest_run is not None and int(latest_run) != int(
+            recon.detail.get("min_run_id", latest_run)
+        )
+        if recon_is_historical:
             _warn(f"historical (dokumentiert, kein Abbruch): {msg}")
         else:
             _fail(msg, errors)
+        if (
+            latest_run is not None
+            and recon_is_historical
+            and snapshot["verdicts"]["current"] != "LEDGER_CONSISTENT"
+        ):
+            _fail(
+                f"latest run {latest_run}: "
+                f"{snapshot['verdicts']['current']} (blockierend)",
+                errors,
+            )
     if not partition_ok(classes, recon.detail):
         _report(
             f"terminal partition: outcome={classes['outcome']} "
@@ -969,6 +1090,7 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     errors: list[str] = []
     print(f"Pre-Flight @ {REPO}")
+    _print_process_age()
     if args.expect_commit:
         check_git(args.expect_commit, errors)
     else:
