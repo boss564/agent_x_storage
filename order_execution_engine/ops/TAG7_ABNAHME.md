@@ -1,6 +1,6 @@
 # Tag-7-Abnahme — Shadow Execution Engine
 
-**Abnahme: Montag, 20.10.2025, 10:00** · Berichtstermin: Dienstag, 03.11.2025
+**Abnahme: Montag, 20.10.2025, 10:00** · Berichtstermin: Montag, 03.11.2025
 
 Stand: 17.10.2026. Dieses Dokument ist **vorab** festgeschrieben. Wird später
 etwas anders gelesen, gilt die hier stehende Nummer, nicht eine neue Lesart.
@@ -11,20 +11,24 @@ Das Kriterium beurteilt genau diesen Stand.
 
 ## 0. Termin
 
-**Tag 7 = Montag, 20.10.2025, 10:00.** Auflösung per Befehl, nicht per Etikett:
+**Tag 7 = Montag, 20.10.2025, 10:00.** Auflösung per Befehl, **Ausgaben
+eingefügt, nicht eingetippt** (`date -j -f "%Y-%m-%d" <datum> "+%A"`,
+17.10.2026, 17:27):
 
-| Datum | `date`-Ausgabe | Rolle |
+| Datum | Ist-Ausgabe | Rolle |
 |---|---|---|
-| **2025-10-20** | **Monday** | **Tag 7 — Abnahme** (Code, entscheidbar) |
-| 2026-11-03 | Tuesday | **Berichtstermin Marktbeobachtung** |
-| 2025-11-01 | Saturday | **kein Termin** — Wochenende, niemand zuständig |
-| 2026-10-20 | Tuesday | **nicht** der Abnahmetag (Jahreszahl-Falle) |
+| **2025-10-20** | `Monday` | **Tag 7 — Abnahme** (Code, entscheidbar) |
+| 2025-11-03 | `Monday` | **Berichtstermin Marktbeobachtung** |
+| 2025-11-01 | `Saturday` | **kein Termin** — Wochenende, niemand zuständig |
+| 2026-10-20 | `Tuesday` | **nicht** der Abnahmetag (Jahreszahl-Falle) |
 
-> Historische Notiz: Die Fassungen bis `bd241b1a` nannten „20.10.2026" und
-> „01.11.2026". Beide Angaben waren Etiketten — 2026-10-20 ist ein Dienstag,
-> 2026-11-01 ein Sonntag. Aufgelöst wurde erst, als der Befehl daneben stand.
-> Gleiche Bauform wie §5.1: ein Etikett hat keinen Wochentag, ein Datum hat
-> einen.
+> Historische Notiz: Fassung `4fc93054` nannte „03.11." als Dienstag und
+> `bd241b1a` nannte „01.11.2026" als Samstag. Beides waren Etiketten:
+> 2025-11-03 ist ein **Montag**, 2026-11-01 ein **Sonntag**. Damit sind in
+> dieser Akte **vier** Kalenderangaben nachträglich aufgelöst worden, keine
+> davon beim ersten Schreiben. Die verbleibende Fehlerform: drei Zeilen waren
+> abgeschrieben, die vierte gerechnet — ein aufgelöstes Etikett, das
+> transkribiert statt eingefügt wird, ist wieder ein Etikett.
 
 Das Datum ist **unbedingt**, nicht bedingt auf §5.1: Variante C ist
 synthetisch und hängt weder an Run 8/9 noch am Markt noch an
@@ -66,21 +70,24 @@ Fill-Handler sind unverändert — kein Mock der Entscheidungslogik.
 ## 2. Urteilstabelle (6 Zeilen, je Beobachtung ein Verdikt)
 
 **Abnahmeprotokoll Montag, 20.10.2025, 10:00** — jede Zeile hat Befehl,
-**erwartete Ausgabe** und **Verdikt bei Abweichung**. Die drei zulässigen
-Verdikte sind `BESTANDEN` / `NICHT BESTANDEN` / `NICHT ENTSCHEIDBAR`.
-Das dritte ist ausdrücklich zulässig — sonst wird aus einer offenen Frage
-ein Haken.
+**erwartete Ausgabe** und **Verdikt bei Abweichung**.
+
+**Regel für `NICHT ENTSCHEIDBAR`:** zulässig **nur** in Zeilen 5 und 6 —
+dort hängt die Wahrheit an Daten, die noch nicht existieren (Markt,
+Symbolindex). Bei allen deterministischen Zeilen (0–4) ist eine Abweichung
+**NICHT BESTANDEN**. „Nicht entscheidbar" wäre dort kein Befund, sondern ein
+Freifahrtschein für die einzige Zeile, die den Termin selbst trägt.
 
 | # | Befehl | Erwartete Ausgabe | Verdikt bei Abweichung |
 |---|---|---|---|
-| 0 | `date -j -f "%Y-%m-%d" 2025-10-20 "+%A"` | `Monday` | **NICHT ENTSCHEIDBAR** (Kalender); nicht abnehmen |
+| 0 | `date -j -f "%Y-%m-%d" 2025-10-20 "+%A"` | `Monday` (**Ist, eingefügt**) | **NICHT BESTANDEN** |
 | 1 | `pytest order_execution_engine/tests/` | `157 passed` | **NICHT BESTANDEN** |
-| 2a | `pytest -k test_c1_positive` | `1 passed`; Fill im Spread, `fill_ratio > 0` | **NICHT BESTANDEN** |
-| 2b | `pytest -k test_c2_negative` | `1 passed`; `INVALID_PRICE`, keine Metrik | **NICHT BESTANDEN** |
-| 3 | `pytest -k test_c3_replay_does_not_touch` | `1 passed`; Mess-DB 0 Diff | **NICHT BESTANDEN** |
+| 2a | `pytest -k test_c1_positive` | `1 passed, 2 deselected`; Fill im Spread | **NICHT BESTANDEN** |
+| 2b | `pytest -k test_c2_negative` | `1 passed, 2 deselected`; `INVALID_PRICE`, keine Metrik | **NICHT BESTANDEN** |
+| 3 | `pytest -k test_c3_replay_does_not_touch` | `1 passed, 2 deselected`; Mess-DB 0 Diff | **NICHT BESTANDEN** |
 | 4 | `gate_snapshot` | `join_is_one_to_one: True` über `(run_id, decision_seq)` | **NICHT BESTANDEN** |
 | 5 | `gate_snapshot(min_run_id=8)` | `historical: RED (run 8, unattributed=4)`; Ausgangsachse **34**; `current: GREEN` | **NICHT ENTSCHEIDBAR** (Abweichung benennen, nicht glätten) |
-| 6 | §5.1 + §5.4, dieses Dokument | Zeitstempel und Sweep-Ausgabe vorhanden | **NICHT ENTSCHEIDBAR** |
+| 6 | §5.1 + §5.4, dieses Dokument | Zeitstempel, Sweep- und Import-Graph-Ausgabe vorhanden | **NICHT ENTSCHEIDBAR** |
 
 **Regel gegen den Haken-Fehler:** Ein Haken bedeutete bisher „ausgeführt",
 nicht „getroffen". Deshalb steht in jeder Zeile die erwartete **Ausgabe**;
@@ -255,6 +262,39 @@ für den Fall „jemand hat eine Datei geändert und gelassen" — nicht für
 „jemand hat eine Datei geändert, geladen und die mtime zurückgesetzt". Für
 Letzteres gibt es keinen Beleg, und es gibt auch kein Indiz dafür.
 
+### 5.4a Label vs. Prozess — Import-Graph-Abfrage
+
+**Das Label beschreibt den Tree, gelaufen ist das Gedächtnis.** `git_commit_short()`
+liest HEAD; der Prozess hat seine Module am 14.10. 21:23:32 geladen. Zwischen
+beidem liegen die vier Schreibvorgänge vom 17.10. (16:49–17:20). Ob das
+deckungsgleich ist, entscheidet allein der Import-Graph:
+
+```
+rg -n "preflight_check|test_fill_replay|test_telemetry_reconciliation" \
+   order_execution_engine --glob '!tests/**'
+```
+
+**Ausgabe (17.10.2026, 17:27) — kein einziger Treffer im Ladepfad:**
+
+| Treffer | Datei | Art |
+|---|---|---|
+| `TAG7_ABNAHME.md:53, 243–245, 336–337` | Doku | Text, kein Import |
+| `START.md:59, 90, 111` | Doku | Aufrufzeile, kein Import |
+| `tests/test_telemetry_reconciliation.py:12` | Test | `from …preflight_check import …` |
+
+`shadow_runner.py` importiert ausschließlich
+`allowlist_freeze`, `fill_simulator`, `hub_wiring`, `market_data_feed`,
+`models`, `news_bridge`, `persistence`, `shadow_execution_engine` —
+**keine** der vier berührten Dateien.
+
+**Ergebnis: Label und Prozess sind deckungsgleich.** Der laufende Code ist
+`5c5bc364`, und der Tree an diesem Datum ist ebenfalls `5c5bc364`. Kein
+Neustart nötig, keine Neumessung.
+
+**Grenze:** Die Abfrage ist statisch. Ein dynamischer Import (`importlib`,
+`__import__`) wäre unsichtbar — im Runner gibt es keinen; das ist gelesen,
+nicht gesucht.
+
 ### 5.5 Provenienz-Regel (Korrektur)
 
 Die frühere Formulierung prüfte `git diff --quiet`. Das ist **blind gegenüber
@@ -281,6 +321,30 @@ protokolliert. **Die Trennung schluckt nichts:** ist der *jüngste* Lauf rot,
 ist `current: RED` und blockiert — Zeuge `test_current_red_still_blocks`.
 Der zweite Zeuge (`test_historical_red_does_not_block_current_green`) hält
 fest, dass Run 8 dokumentiert und nicht blockierend erscheint.
+
+**Nachtrag: der Überschriften-Check prüft den Stand, nicht die Historie.**
+Ein `StrReplace` hatte beim Schreiben eine Überschrift verschluckt; der Check,
+der ihn fing, ist jünger als der Fehler. Die Abfrage, die die drei früheren
+Commits einschließt:
+
+```
+git log -p --follow -- ops/TAG7_ABNAHME.md | rg '^[-+]#{1,4} '
+```
+
+**Ausgabe (17.10.2026, 17:27):** genau **eine** Zeile mit `-`:
+
+| entfernt | Gegenstück | bewertet |
+|---|---|---|
+| `-## 5.3 Zwei Verdikte statt eines` | `+### 5.3 Zwei Verdikte statt eines` | Ebenenwechsel (`##`→`###`), keine Löschung |
+
+Alle übrigen `+`-Zeilen sind Neuzugänge derselben Runde. Keine Überschrift
+ist ohne Gegenstück verlorengegangen — die drei früheren Commits haben
+nichts stillschweigend gelöscht.
+
+**Grenze:** Die Abfrage zeigt Überschriften, nicht Absätze. Eine gelöschte
+Zusage ohne Überschrift (ein Satz in der Mitte) bliebe unsichtbar; dafür
+wäre ein zeilenweiser Vergleich nötig, der bei fünf Rewrites nicht mehr
+lesbar ist. Er ist nicht geführt — und das ist benannt, nicht behoben.
 
 ## 6. `telemetry_seq` — tot, kein Backfill
 
@@ -309,12 +373,29 @@ war blind gegen untracked, `gitignore` macht `git status` blind gegen dieselbe
 Datei. Dieselbe Blindstelle, eine Ebene höher.
 
 **Ausgeführt:** `mv scripts/address_register_0r.py ~/notes/address_register_0r.py`.
-Inhalt und mtime erhalten (17.425 B, 10.10. 15:38). `git status --porcelain`
-in der Wurzel: **leer**.
+Inhalt und mtime erhalten. `git status --porcelain` in der Wurzel: **leer**.
 
-**Offen für den Eigentümer:** ob die Datei einen benannten Ort im Repo-Ökosystem
-bekommt (Weg B, mit Pfad · Grund · Eigentümer · Datum) oder in `~/notes/`
-bleibt. Das ist eine Zugehörigkeitsfrage, keine Gate-Frage.
+**Beleg des zitierten Satzes (unabhängig vom Pfad):**
+
+```
+sha256  42f29ebe581cfe36bf3d2ac53da9da10607e3dd1006c307a4c0bd6bd821943e3
+bytes   17425
+mtime   2026-10-10 15:38:18
+pfad    ~/notes/address_register_0r.py
+```
+
+Der Satz, der hier zitiert wird: *„Ein Alarm wird nicht dadurch quittiert,
+dass er sich nicht wiederholt."* Er ist über den Hash belegt, nicht über den
+Pfad — die Datei kann verschwinden, das Zitat bleibt prüfbar.
+
+**Weg B entfällt.** Er war eine Alternative für eine Datei **im** Tree; nach
+`mv` liegt sie außerhalb. Eine benannte Ausnahme für einen Pfad, der nicht im
+Gate-Bereich liegt, ist eine Ausnahme ohne Fall — ein Loch mit unbesetztem
+Platzhalter, das wie eine geprüfte Freigabe aussieht. Kommt die Datei zurück,
+ist das korrekte Verhalten bereits implementiert: `untracked`, unbenannt,
+**RED**. Eine Ausnahme wird gebaut, wenn der Fall eintritt, nicht bevor.
+Weg C (committen) wäre eine Zugehörigkeitsentscheidung mit eigenem Commit —
+nicht vorbereitet.
 
 ## 7. Offener Punkt: Symbolkonzentration
 
