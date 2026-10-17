@@ -129,7 +129,7 @@ Freifahrtschein für die einzige Zeile, die den Termin selbst trägt.
 | # | Befehl | Erwartete Ausgabe | Verdikt bei Abweichung |
 |---|---|---|---|
 | 0 | `date -j -f "%Y-%m-%d" 2026-10-20 "+%A"` | `Tuesday` (**Ist, eingefügt**) | **NICHT BESTANDEN** |
-| 1 | `pytest order_execution_engine/tests/` | `157 passed` | **NICHT BESTANDEN** |
+| 1 | `pytest order_execution_engine/tests/` | `163 passed` | **NICHT BESTANDEN** |
 | 2a | `pytest -k test_c1_positive` | `1 passed, 2 deselected`; Fill im Spread | **NICHT BESTANDEN** |
 | 2b | `pytest -k test_c2_negative` | `1 passed, 2 deselected`; `INVALID_PRICE`, keine Metrik | **NICHT BESTANDEN** |
 | 3 | `pytest -k test_c3_replay_does_not_touch` | `1 passed, 2 deselected`; Mess-DB 0 Diff | **NICHT BESTANDEN** |
@@ -137,7 +137,8 @@ Freifahrtschein für die einzige Zeile, die den Termin selbst trägt.
 | 5 | `gate_snapshot(min_run_id=8)` | `historical: RED (run 8, unattributed=4)`; Ausgangsachse **34**; `current: GREEN` | **NICHT ENTSCHEIDBAR** (Abweichung benennen, nicht glätten) |
 | 6 | §5.1 + §5.4, dieses Dokument | Zeitstempel, Sweep- und Import-Graph-Ausgabe vorhanden | **NICHT ENTSCHEIDBAR** |
 | 7 | §5.4d, pyc-Inhalt gegen `5c5bc364` | 9/9 Module `OK`; `flags = 0x00000000` dokumentiert | **NICHT BESTANDEN** |
-| 8 | `gate_snapshot` | `criterion:`-Zeile vorhanden und == vier RED-Bedingungen | **NICHT BESTANDEN** |
+| 8 | `gate_snapshot` | `criterion:`-Zeile vorhanden, (0)–(4) == RED-Zweige (6 Zeugen) | **NICHT BESTANDEN** |
+| 9 | §5.4f | genau eine `shadow_runner.pyc`, Modul-Ebene `OK` | **NICHT BESTANDEN** |
 
 **Regel gegen den Haken-Fehler:** Ein Haken bedeutete bisher „ausgeführt",
 nicht „getroffen". Deshalb steht in jeder Zeile die erwartete **Ausgabe**;
@@ -163,7 +164,7 @@ Termin, der beides trägt, verschiebt das Entscheidbare auf das Unentscheidbare.
 | 09:40 | `git diff 5c5bc364 e91916bd -- order_execution_engine/shadow_runner.py` | **Ist-Ausgabe ins Protokoll** (17.10. vorab: leer) |
 | 09:42 | `rg -n "preflight_check" --glob '!tests/**' --glob '!*.md' .` | **Ist-Ausgabe** (17.10. vorab: leer → Gate ist kein Dienstbestandteil) |
 | 09:50 | Preflight **manuell** aufrufen | `current:`/`historical:` vom Werkzeug, nicht vom Dienst |
-| 10:00 | Zeilen 0–6 | `Monday`, `157 passed`, `historical: RED`, Wurzel leer |
+| 10:00 | Zeilen 0–8 | `Tuesday`, `163 passed`, `historical: RED`, Wurzel leer |
 | 10:05 | Basis-Zeile | Code je Run, nicht nur Run-Nummern |
 
 **Neustart: entfällt** — solange der Runner-Diff leer bleibt. Der Befund vom
@@ -255,7 +256,7 @@ Daraus folgt für die folgenden Abschnitte:
 **§5.1, §5.4 und §5.4b sind Beweise über den Dienst, nicht über das Gate.**
 Sie stehen hier, weil eine Abnahme ohne intakten Datenlieferanten (Run 8/9)
 nicht beurteilbar wäre — aber sie zertifizieren nicht den Prüfer. Wer am
-20.10. 157 Tests, leere Wurzel und unveränderten Prozess liest und sie für
+20.10. 163 Tests, leere Wurzel und unveränderten Prozess liest und sie für
 Beweise über das Gate hält, liest drei grüne Prüfungen am falschen Ziel.
 Das ist die schlechteste Variante und deshalb steht die Grenze hier oben und
 nicht in einer Fußnote.
@@ -563,11 +564,72 @@ criterion: GREEN nur wenn (1) telemetry_rows == decision_seq-keyed
            scope = run_id >= 8
 ```
 
-Die vier Bedingungen sind `_gate_criterion` und spiegeln die vier
-`RED`-Rückgaben von `gate_telemetry_reconciliation` in derselben Reihenfolge.
-Beide Stellen tragen im Docstring den Hinweis auf die andere. Wird eine
-geändert, ohne die andere, ist die Ausgabe eine Lüge in einer Zeile — der
-paarweise Hinweis ist das, was hier ein Test nicht leisten kann.
+Die vier Bedingungen sind `_gate_criterion` und spiegeln die `RED`-Rückgaben
+von `gate_telemetry_reconciliation` in derselben Reihenfolge. Beide Stellen
+tragen im Docstring den Hinweis auf die andere.
+
+> **Der Docstring sagte, ein Test könne diese Kongruenz nicht prüfen.**
+> Das war falsch — und der Satz war die Erlaubnis, vier Kopien zu behalten.
+> Sechs Zeugen prüfen die Kopplung jetzt (`test_criterion_*`,
+> `test_branch_0…4`): vier Fixtures, je ein `RED`-Zweig, plus die
+> Reihenfolge der `criterion:`-Zeile. Wird ein fünfter Zweig eingefügt,
+> bricht der Test an der Stelle, an der die Zeile nicht mitwächst.
+
+**Bedingung (0): die Untergrenze — ohne sie ist das Gate eine Tautologie.**
+
+Bei einem leeren Lauf sind (1)–(4) sämtlich erfüllt: `0 == 0`, `0 == 0`,
+Nichtexistenz über einer leeren Menge, `0 == 0`. **Ein stiller Ausfall liest
+sich dann als GREEN** — und „nichts da" ist genau der Zustand, in dem man
+wissen will, ob der Dienst arbeitet.
+
+Die Untergrenze stammt aus dem dokumentierten Lauf, nicht aus der Absicht:
+
+```
+run 8: 30 Zeilen / 30 decisions
+run 9:  4 Zeilen /  4 decisions   (started_at 2026-10-14T19:23:36)
+→ MIN_TELEMETRY_ROWS = 4
+```
+
+Die Zahl steht im **selben Blob** wie das Kriterium, das sie verwendet —
+das ist die Bedingung dafür, daß sie keine nachträgliche Anpassung ist.
+Stünde sie in einem späteren Commit, wäre sie eine Schwelle, die sich der
+Messung angepaßt hat.
+
+> **Nebenbefund beim Einbau:** `test_gate_green_when_idle` hieß so und
+> erwartete `GREEN` mit der Begründung „nicht unterscheidbar von
+> Inaktivität — erwartet". **Der Test kodifizierte die Tautologie als
+> Erwartung.** Er heißt jetzt `test_gate_red_when_idle_underrun` und erwartet
+> `RED` mit `underrun: True`. Drei weitere Bestandstests mußten auf
+> `MIN_TELEMETRY_ROWS` Zeilen angehoben werden, weil sie die
+> Gleichheitslogik prüfen, nicht die Untergrenze — sie hätten sonst am
+> falschen Zweig gebrochen.
+
+### 5.4f Eine Kopie, nicht zwei
+
+Der `pyc`-Vergleich aus §5.4d prüft **einen** Pfad. Geladen wird der, den
+`sys.path` zuerst findet:
+
+```
+find . -name 'shadow_runner*.pyc' -not -path './.git/*'
+  → ./order_execution_engine/__pycache__/shadow_runner.cpython-314.pyc
+Plist: WorkingDirectory = Repo-Wurzel, PYTHONPATH = Repo-Wurzel
+```
+
+**Genau eine Kopie.** Die Frage ist damit geschlossen — und zwar billiger als
+über einen Zeugen aus dem laufenden Prozeß.
+
+**Modul-Ebene mitgeprüft (§5.4d, verfeinert):** `co_consts` je Funktion zu
+vergleichen übersieht die eine Änderung, die zählt — Schwellen und `scope`
+stehen im **Modulkörper**, nicht in einer Funktion. Nachgezogen:
+
+```
+9/9 Module: module-level co_code = OK, module-level co_consts = OK
+```
+
+**Nachträglich, nicht jetzt:** `--invalidation-mode=checked-hash` (PEP 552,
+`flags = 0x1`) schließt die mtime-Lücke dauerhaft. Es verlangt Neukompilat
+und Neustart — derselbe falsche Anlaß wie `-B`. **Gebucht, datiert,
+liegengelassen.**
 
 ### 5.4b Der Referent hat sich bewegt — Korrektur von §5.4a
 
@@ -781,7 +843,7 @@ greift dort richtig; die Handprüfung daneben tat es nicht.
 | `tests/test_fill_replay.py` | C-Positiv, C-Negativ, C-Isolation (3) |
 | `tests/test_telemetry_reconciliation.py` | Vollständigkeit, `<`→Gleichheit, zwei Achsen, `decision_seq`-Kollision, Zeile ohne Key, Neustart je Run, `item_id` ≠ Join-Schlüssel, historical-rot-blockiert-nicht, current-rot-blockiert |
 
-Suite: **157 passed** auf `01fdbb1d`-Stand. **Grün heißt „die Tests laufen",
+Suite: **163 passed** (157 vor der Untergrenze + 6 Kopplungszeugen). **Grün heißt „die Tests laufen",
 nicht „die Tests prüfen das Richtige"** — die erste Fassung dieser Runde war
 grün über einem falschen Join-Schlüssel. Deshalb sind die Negativkontrollen
 (38 vs. 34, `decision_seq`-Kollision, current-RED) ausdrücklich Teil der Suite.

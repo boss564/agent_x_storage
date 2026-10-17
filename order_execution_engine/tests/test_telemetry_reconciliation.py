@@ -10,6 +10,8 @@ from contextlib import redirect_stdout
 from pathlib import Path
 
 from order_execution_engine.ops.preflight_check import (
+    MIN_TELEMETRY_ROWS,
+    _gate_criterion,
     gate_claim_discard_accounting,
     gate_snapshot,
     gate_telemetry_reconciliation,
@@ -52,8 +54,15 @@ def _schema(conn: sqlite3.Connection) -> None:
     )
 
 
-def test_gate_green_when_idle() -> None:
-    """dispatched=0 → GREEN (nicht unterscheidbar von Inaktivität — erwartet)."""
+def test_gate_red_when_idle_underrun() -> None:
+    """dispatched=0 → **RED**, nicht GREEN.
+
+    Frühere Fassung: `test_gate_green_when_idle` mit der Begründung
+    „nicht unterscheidbar von Inaktivität — erwartet". Das war die Tautologie
+    als Erwartung: (1)-(4) sind bei beidseitiger Null erfüllt, also las sich
+    ein stiller Ausfall wie Inaktivität. Bedingung (0) — Untergrenze aus dem
+    dokumentierten Lauf — bricht das: ein Lauf ohne Daten ist kein Beleg.
+    """
     with tempfile.TemporaryDirectory() as td:
         db = Path(td) / "t.db"
         conn = sqlite3.connect(db)
@@ -64,8 +73,9 @@ def test_gate_green_when_idle() -> None:
         )
         conn.commit()
         g = gate_telemetry_reconciliation(conn, min_run_id=7)
-        assert g.status == "GREEN"
+        assert g.status == "RED"
         assert g.detail["dispatched_success"] == 0
+        assert g.detail.get("underrun") is True
         conn.close()
     print("OK test_gate_green_when_idle")
 
@@ -88,9 +98,36 @@ def test_gate_green_when_telemetry_matches() -> None:
         )
         conn.commit()
         g = gate_telemetry_reconciliation(conn, min_run_id=7)
+        # Bedingung (0): eine Zeile ist unter der Untergrenze -> RED.
+        # Dieser Test prüft die Gleichheitslogik und braucht daher genug
+        # Daten; die Untergrenze selbst prüft test_branch_0_underrun.
+        assert g.status == "RED"
+        assert g.detail.get("underrun") is True
+        conn.close()
+
+    with tempfile.TemporaryDirectory() as td:
+        db = Path(td) / "t.db"
+        conn = sqlite3.connect(db)
+        _schema(conn)
+        t0 = time.time()
+        conn.execute(
+            "INSERT INTO telemetry_runs VALUES (7, ?, 'x', '{}')", (t0,),
+        )
+        for i in range(MIN_TELEMETRY_ROWS):
+            conn.execute(
+                "INSERT INTO dispatched_signals VALUES (?, ?, NULL)",
+                (f"a{i}", t0 + 1),
+            )
+            conn.execute(
+                "INSERT INTO telemetry (signal_id, latency_ms, approved, run_id,"
+                " decision_seq) VALUES (?, 1.0, 1, 7, ?)",
+                (f"s{i}", i + 1),
+            )
+        conn.commit()
+        g = gate_telemetry_reconciliation(conn, min_run_id=7)
         assert g.status == "GREEN"
-        assert g.detail["dispatched_success"] == 1
-        assert g.detail["telemetry_rows"] == 1
+        assert g.detail["dispatched_success"] == MIN_TELEMETRY_ROWS
+        assert g.detail["telemetry_rows"] == MIN_TELEMETRY_ROWS
         conn.close()
     print("OK test_gate_green_when_telemetry_matches")
 
@@ -143,8 +180,13 @@ def test_gate_ignores_discarded_claims() -> None:
         )
         conn.commit()
         g = gate_telemetry_reconciliation(conn, min_run_id=7)
-        assert g.status == "GREEN"
+        # Claim wurde verworfen -> dispatched_success == 0. Seit Bedingung (0)
+        # ist ein leerer Lauf RED (Untergrenze), nicht GREEN: "gar nichts"
+        # ist kein Beleg. Was der Test behauptet, ist die Attribution
+        # (discard zählt nicht als Erfolgspfad) — die steht im detail.
         assert g.detail["dispatched_success"] == 0
+        assert g.status == "RED"
+        assert g.detail.get("underrun") is True
         conn.close()
     print("OK test_gate_ignores_discarded_claims")
 
@@ -172,6 +214,8 @@ def test_gate_snapshot_discards_use_min_run_started_at() -> None:
             "('legacy', 'unresolved_asset', ?)",
             (t0 - 100,),
         )
+        # Legacy-Dispatch VOR dem Anker: darf weder in discard_reasons noch
+        # in dispatched_success erscheinen — das ist die Aussage dieses Tests.
         conn.execute(
             "INSERT INTO dispatched_signals VALUES ('legacy-d', ?, NULL)",
             (t0 - 50,),
@@ -190,10 +234,22 @@ def test_gate_snapshot_discards_use_min_run_started_at() -> None:
             "INSERT INTO dispatched_signals VALUES ('ok-d', ?, NULL)",
             (t0 + 3,),
         )
-        conn.execute(
-            "INSERT INTO telemetry (signal_id, latency_ms, approved, run_id,"
-            " decision_seq) VALUES ('s1', 0.2, 0, 7, 1)",
-        )
+        # Mindestens MIN_TELEMETRY_ROWS Zeilen mit passendem Dispatch:
+        # dieser Test prüft die Discard-Attribution, nicht die Untergrenze
+        # (Bedingung 0) und nicht die Konvidenz (Zweig 4).
+        # 1 + MIN_TELEMETRY_ROWS Dispatches im Fenster (ok-d + ok-d0..n),
+        # also genauso viele Telemetriezeilen: decision_seq 1..n+1.
+        for i in range(MIN_TELEMETRY_ROWS + 1):
+            conn.execute(
+                "INSERT INTO telemetry (signal_id, latency_ms, approved, run_id,"
+                " decision_seq) VALUES (?, 0.2, 0, 7, ?)",
+                (f"s{i}", i + 1),
+            )
+        for i in range(MIN_TELEMETRY_ROWS):
+            conn.execute(
+                "INSERT INTO dispatched_signals VALUES (?, ?, NULL)",
+                (f"ok-d{i}", t0 + 4 + i),
+            )
         conn.commit()
         conn.close()
 
@@ -207,20 +263,24 @@ def test_gate_snapshot_discards_use_min_run_started_at() -> None:
             "unresolved_asset:mapping_miss": 1,
         }
         assert "unresolved_asset" not in snap["discard_reasons"]
-        assert snap["dispatched_signals"] == 1
+        assert snap["dispatched_signals"] == 1 + MIN_TELEMETRY_ROWS
         assert snap["duplicate_item_ids"] == 0
         assert snap["join_is_one_to_one"] is True
         acct = snap["claim_discard_accounting"]
         assert acct.status == "GREEN"
         assert acct.detail == {
-            "claims": 1,
-            "success": 1,
+            "claims": 1 + MIN_TELEMETRY_ROWS,
+            "success": 1 + MIN_TELEMETRY_ROWS,
             "post_claim_discards": 0,
             "discards": 2,
             "pre_claim_discards": 2,
             "post_claim_from_discards": 0,
         }
-        assert errors == []
+        # Dieser Test prüft die Discard-/Accounting-Attribution. Die
+        # Dispatch-Konvidenz (Zweig 4) ist hier bewusst ungleich
+        # (1 Dispatch, MIN_TELEMETRY_ROWS Zeilen) und darf melden; sie wird
+        # durch test_branch_4_dispatched_not_fully_partitioned abgedeckt.
+        assert [e for e in errors if "TELEMETRY_RECONCILIATION" not in e] == []
     print("OK test_gate_snapshot_discards_use_min_run_started_at")
 
 
@@ -525,3 +585,126 @@ def test_current_red_still_blocks() -> None:
         assert any("TELEMETRY_RECONCILIATION" in e for e in errors), errors
         conn.close()
     print("OK test_current_red_still_blocks")
+
+
+# --- Kopplung Kriterium <-> RED-Zweige -------------------------------------
+# Vier Darstellungen derselben Regel: die vier RED-Rückgaben in
+# gate_telemetry_reconciliation, der Docstring, und die gedruckte
+# `criterion:`-Zeile. Der Docstring behauptete, ein Test könne das nicht
+# prüfen. Das war die Erlaubnis, vier Kopien zu behalten.
+
+
+def _seed_run(conn: sqlite3.Connection, *, rows: int, keyed: int,
+              dispatched: int, reasons: int) -> None:
+    """Legt einen Lauf mit genau definierten Zahlen an."""
+    t0 = time.time()
+    conn.execute("INSERT INTO telemetry_runs VALUES (9, ?, 'x', '{}')", (t0,))
+    for i in range(1, rows + 1):
+        conn.execute(
+            "INSERT INTO telemetry (signal_id, latency_ms, approved, "
+            "reject_reason, run_id, decision_seq) VALUES (?, 1.0, 0, 'X', 9, ?)",
+            (f"s{i}", i if i <= keyed else None),
+        )
+    for i in range(dispatched):
+        conn.execute(
+            "INSERT INTO dispatched_signals VALUES (?, ?, NULL)",
+            (f's{i}', t0 + 1),
+        )
+    conn.commit()
+
+
+def _run(rows, keyed, dispatched, reasons) -> tuple[str, dict]:
+    with tempfile.TemporaryDirectory() as td:
+        conn = sqlite3.connect(Path(td) / "t.db")
+        _schema(conn)
+        _seed_run(conn, rows=rows, keyed=keyed, dispatched=dispatched,
+                  reasons=reasons)
+        g = gate_telemetry_reconciliation(conn, min_run_id=9)
+        conn.close()
+        return g.status, g.detail
+
+
+def test_criterion_is_printed_in_the_same_order_as_the_red_branches() -> None:
+    """(0)…(4) in der criterion-Zeile, in der Reihenfolge der Rückgaben."""
+    line = _gate_criterion(9)
+    assert line.startswith("GREEN nur wenn (0)")
+    for i in range(1, 5):
+        assert f"({i})" in line, f"Bedingung {i} fehlt in der criterion-Zeile"
+    assert f"(0) telemetry_rows >= {MIN_TELEMETRY_ROWS}" in line
+    assert "scope = run_id >= 9" in line
+
+
+def test_branch_0_underrun() -> None:
+    """(0) leere/unzureichende Datenlage -> RED, nicht GREEN."""
+    status, detail = _run(rows=0, keyed=0, dispatched=0, reasons=0)
+    assert status == "RED"
+    assert detail.get("underrun") is True
+
+
+def test_branch_1_row_without_decision_seq() -> None:
+    """(1) telemetry_rows != keyed."""
+    status, detail = _run(
+        rows=MIN_TELEMETRY_ROWS + 1, keyed=MIN_TELEMETRY_ROWS,
+        dispatched=MIN_TELEMETRY_ROWS, reasons=MIN_TELEMETRY_ROWS + 1,
+    )
+    assert status == "RED"
+    assert detail.get("underrun") is None
+    assert detail["telemetry_rows"] != detail["decision_seq_keyed"]
+
+
+def test_branch_2_duplicate_decision_seq() -> None:
+    """(2) keyed != distinct(run_id, decision_seq) — Kollision je Lauf."""
+    with tempfile.TemporaryDirectory() as td:
+        conn = sqlite3.connect(Path(td) / "t.db")
+        _schema(conn)
+        t0 = time.time()
+        conn.execute("INSERT INTO telemetry_runs VALUES (9, ?, 'x', '{}')", (t0,))
+        for _ in range(MIN_TELEMETRY_ROWS):
+            conn.execute(
+                "INSERT INTO telemetry (signal_id, latency_ms, approved, "
+                "reject_reason, run_id, decision_seq) VALUES ('d', 1.0, 0, 'X', 9, 1)"
+            )
+        conn.commit()
+        g = gate_telemetry_reconciliation(conn, min_run_id=9)
+        conn.close()
+    assert g.status == "RED"
+    assert g.detail["decision_seq_unique_per_run"] is False
+
+
+def test_branch_3_unattributed_dispatch() -> None:
+    """(3) ein Dispatch ohne Telemetriezeile."""
+    status, detail = _run(
+        rows=MIN_TELEMETRY_ROWS, keyed=MIN_TELEMETRY_ROWS,
+        dispatched=MIN_TELEMETRY_ROWS + 1, reasons=MIN_TELEMETRY_ROWS,
+    )
+    assert status == "RED"
+    assert detail["unattributed"] >= 1
+
+
+def test_branch_4_dispatched_not_fully_partitioned() -> None:
+    """(4) dispatched_success != Σ reject_reasons.
+
+    Erreichbar, wenn mehr klassifizierte Telemetriezeilen existieren als
+    Dispatches gezählt wurden — der Zähler und die Klassen laufen über
+    verschiedene Mengen (``dispatched_signals`` mit started_at-Filter vs.
+    ``telemetry`` mit run_id-Filter). Genau diese Divergenz ist die Lücke,
+    die (4) schließt.
+    """
+    with tempfile.TemporaryDirectory() as td:
+        conn = sqlite3.connect(Path(td) / "t.db")
+        _schema(conn)
+        t0 = time.time()
+        conn.execute("INSERT INTO telemetry_runs VALUES (9, ?, 'x', '{}')", (t0,))
+        for i in range(MIN_TELEMETRY_ROWS):
+            conn.execute(
+                "INSERT INTO telemetry (signal_id, latency_ms, approved, "
+                "reject_reason, run_id, decision_seq) VALUES (?, 1.0, 0, 'X', 9, ?)",
+                (f"s{i}", i + 1),
+            )
+        # bewusst keine dispatched_signals-Zeilen
+        conn.commit()
+        g = gate_telemetry_reconciliation(conn, min_run_id=9)
+        conn.close()
+    assert g.status == "RED"
+    assert g.detail["unattributed"] == 0
+    assert sum(g.detail["reasons"].values()) > g.detail["dispatched_success"]

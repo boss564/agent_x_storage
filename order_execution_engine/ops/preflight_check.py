@@ -37,6 +37,13 @@ DEFAULT_DATA_ROOT = _DEFAULT_APP / "shadow_live"
 DEFAULT_NEWS_JSONL = _DEFAULT_APP / "news_scores.jsonl"
 DEFAULT_MIN_RUN_ID = 7
 
+# Untergrenze für TELEMETRY_RECONCILIATION. Herkunft: Run 9
+# (started_at 2026-10-14T19:23:36) hat 4 Zeilen mit decision_seq. Ohne diese
+# Schwelle sind die Gleichheitsbedingungen bei leerem Lauf erfüllt und ein
+# stiller Ausfall liest sich als GREEN. Die Zahl beschreibt den dokumentierten
+# Gegenstand, nicht die Absicht — sie steht im selben Blob wie das Kriterium.
+MIN_TELEMETRY_ROWS = 4
+
 
 def _gate_blob_hash() -> dict[str, str]:
     """Identify the version of *this* file that produced the verdict.
@@ -189,6 +196,17 @@ def gate_telemetry_reconciliation(
         "classifiable": sum(reasons.values()),
         "unattributed": unattributed,
     }
+    # Untergrenze: ohne sie sind (1)-(4) bei einem leeren Lauf vier Tautologien
+    # (0==0, 0==0, „nichts fehlt“, 0==0) und GREEN bedeutet „keine Daten“.
+    # Die Zahl stammt aus dem dokumentierten Lauf, nicht aus der Absicht:
+    # Run 9 (2026-10-14T19:23:36) hat 4 decision_seq-Zeilen. Wer sie ändert,
+    # ändert das Kriterium — und das steht im selben Blob.
+    if telemetry_rows < MIN_TELEMETRY_ROWS:
+        return GateResult(
+            name="TELEMETRY_RECONCILIATION",
+            status="RED",
+            detail={**detail, "underrun": True},
+        )
     # Kardinalität: jede Telemetriezeile braucht ihren Schlüssel, und der
     # Schlüssel darf sich weder je Lauf noch über Läufe wiederholen.
     if telemetry_rows != keyed:
@@ -625,6 +643,7 @@ def _gate_criterion(min_run_id: int) -> str:
     """
     return (
         "GREEN nur wenn "
+        f"(0) telemetry_rows >= {MIN_TELEMETRY_ROWS} (Untergrenze aus Run 9) "
         "(1) telemetry_rows == decision_seq-keyed "
         "(2) keyed == distinct(run_id, decision_seq) und je run eindeutig "
         "(3) unattributed == 0 "
