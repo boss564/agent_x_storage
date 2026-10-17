@@ -4178,6 +4178,14 @@ zehn Runden:
 | **`cwd == root`** | 31, 34 | der Lauf im Repo stattfand; `Path.cwd()` war das Repo | 31: Test (Vorlauf liegt immer vor) · **34: Code** (`gd = (root or Path.cwd()) / gd`) |
 | **geteilter Zustand** | 32, 32′, 33′ | der Fall den Zustand des Vorgängers erbte | Harness: kein `reset()`, `_SNAPSHOT_SEEN` gesetzt und nie geräumt |
 | **der Test erreicht den Code** | 29, 30, 35 | die Mutante lag außerhalb des Prüfbereichs; zwei Erwartungen lasen dieselbe Zeile; der Test übergab `root` — das Argument, das den Fehler **abschaltet** | Test: Prüfbereich, geteilte Zeile, explizites `root` |
+| **die Zahl mißt den Weg, den sie meint** | 34, 35, 36 | der Docstring prüfte das Wort, nicht den Wert; die Zeile prüfte *daß* etwas dasteht; der Test prüfte die Anzahl der Aufrufe, ohne den Pfad zu kennen | zwischen Messung und Benennung |
+
+**Die vierte Annahme ist die einzige, die keine Vorbedingung schließt.** Sie
+braucht zwei Werte, die **verschieden** sein müssen — sonst sieht der Test
+nichts. Als Regel (§A-JW): *jeder Test braucht einen zweiten Fall, in dem der
+Wert anders ist.* Die Gegenprobe steht seit Runde 35 in Fall 19
+(`root` ≠ `root=None`) und seit Runde 36 in Fall 22 (zwei `Checks`-Paare,
+`(21,210)` und `(7,4)`).
 
 Runde 34 ist damit **kein neuer Fehler**, sondern Runde 31 eine Schicht
 tiefer: die Annahme hat die Testgrenze überschritten. Und sie wurde beim
@@ -4211,6 +4219,7 @@ den Fehler ab. Drei Annahmen, elf Runden.
 | 33′ | vier Einzelfixes, keine Vorbedingung | Einwand | **Architektur**: Harness-Reset + Kreuztest |
 | 34 | relativer `--git-common-dir` gegen `Path.cwd()`; `_SNAPSHOT_SEEN` ohne Reset | Lesen (`rg "cwd"`) | **Architektur**: Test 16/17/18, `reset()` vollständig, Docstring Einheit |
 | 35 | Tests übergaben `root` und übersprangen den Produktionspfad; `_status_line` zählte 21 als „Angaben"; Fall 17 kannte Namen statt Menge | Einwand + `rg` | **Architektur**: Fall 19 (Zwillings ohne `root`), `Checks`-Typ, Fall 17 gegen Globals-Menge, `repo_root()` mit Cache |
+| 36 | `reset()` und Cache-Reset waren zwei Vorbedingungen; `chdir` ohne Wiederherstellung; Filter ohne eigenen Test; `223` dreimal getippt | Einwand + Mutation | **Architektur**: `reset_all()` inkl. cwd, Fall 16b, Filter-Fixture, `Checks(n, excluded)` mit `total` |
 
 ### §71.1 — was Runde 33 wirklich geändert hat
 
@@ -4330,6 +4339,63 @@ Beweis ist mechanisch: `rg "Path\.cwd\(\)"` → ein funktionaler Treffer.
 Die Nebenwirkung ist benannt und getestet: der Cache macht aus drei
 `git`-Aufrufen einen — und wer die Snapshot-Datei anfaßt, muß den Cache
 leeren (`lines_for` tat es nicht, der Test fiel sofort).
+
+### §71.10 — Runde 36: `chdir` ist Zustand, den der AST-Check nicht sieht
+
+`reset()` und `_reset_root_cache()` waren **zwei** Vorbedingungen mit
+eigener Aufrufregel, die nirgends stand. Jetzt `reset_all()`: Dateien,
+Globals, Cache — und `Path.cwd()`. Der letzte Punkt ist der neue:
+
+| Zustand | erfaßt von Runde 33′–35 | Runde 36 |
+|---|---|---|
+| `.git/…last.json` | ✓ | ✓ |
+| `_SNAPSHOT_SEEN`, `_test_results` | ✓ | ✓ |
+| `_ROOT_CACHE`, `_SNAPSHOT_CACHE` | ✓ | ✓ |
+| **Prozess-cwd** | **✗** | **✓** |
+
+`os.getcwd()` ist kein Modulglobal — der AST-Check kann ihn strukturell
+nicht sehen. Ein Fall, der vor seinem `finally` scheitert, ließ jeden
+folgenden in `/tmp` laufen. Fall 16b beweist es: `chdir`, Ausnahme,
+`reset_all()` → cwd ist der Startwert (Mutation rot).
+
+Nebenwirkung, benannt: `chdir` macht die Suite reihenfolgeabhängig per
+Konstruktion und unparallelisierbar. Deshalb nur in Fall 16/16b, danach
+`reset_all()`. Der Verzicht auf `chdir` (stattdessen `root` übergeben)
+wäre sauberer — aber genau das war der Fehler aus Runde 35.
+
+### §71.11 — Runde 36: wer prüft den Filter?
+
+Der Formen-Filter war einmal falsch, und falsch hieß grün (`globals: []`).
+Jetzt prüft ihn ein Fixture mit je einer Zustandsform und einer
+**vollständigen** Erwartung — ein Wert, kein Muster:
+
+| Form | erwartet |
+|---|---|
+| Liste, Dict, Set, annotiert, Ausdruck | **Zustand** |
+| Tuple, str, compiled regex, frozenset | unveränderlich |
+
+Mutationen: `ast.List` zurück in die Literal-Liste → 2 FAIL;
+`set()` als unveränderlich → 1 FAIL.
+
+**Dabei fiel toter Code auf:** der `mutable`-Merker aus Runde 35 half nur,
+weil `ast.List`/`ast.Dict` damals noch in der `literal`-Tupel standen. Seit
+sie dort heraus sind, war der Zweig redundant — drei Mutationen blieben
+grün, bevor das klar war. Entfernt; jetzt fängt `not literal` beide.
+
+### §71.12 — Runde 36: die Zeile hat drei Zahlen, nicht eine
+
+`Checks` deckte die 21. `223`, `433`, `210` entstanden in `_status_line`
+aus `checked.n + excluded`, mit `excluded` separat übergeben — die Identität
+war zweimal getippt. Jetzt trägt `Checks(n, excluded)` sie, `total` ist eine
+Property, und die Zeile rechnet nicht mehr:
+
+```
+223 Angaben geprueft / 433 Angaben gezaehlt (210 ausgeschlossen), 0 Abweichungen
+```
+
+`Checks(223, 210)` → die Zeile liest drei Felder eines Objekts. Mutation
+`total` gibt `self.n` zurück → 6 FAIL, mit zweitem Paar `(7,4)` als
+Gegenprobe.
 
 ## 72. Der Satz dieser Runde
 

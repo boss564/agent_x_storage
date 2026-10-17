@@ -629,16 +629,49 @@ def _self_test_count_delta() -> list[str]:
         # jeder Befund ein Einzelfall — Fall 13a las seinen Snapshot
         # selbst, der naechste konnte den vorigen erben. Der Harness setzt
         # vor **jedem** Fall zurueck und beweist es mit einem Kreuztest.
+        # §A-JU: eine Vorbedingung, nicht zwei. Runde 33′ buchte `reset()`;
+        # Runde 35 kam `_reset_root_cache()` dazu, mit eigener Aufrufregel,
+        # die nirgends stand. Jetzt gibt es `reset_all()`: Dateien, Globals,
+        # Cache — und `chdir`. Letzteres ist Prozesszustand und der erste
+        # Zustand, den der AST-Check strukturell nicht sieht: `os.getcwd()`
+        # ist kein Modulglobal.
         def reset() -> None:
             for p in (root / _COUNT_SNAPSHOT,
-                      root / "ort_test" / _COUNT_SNAPSHOT):
+                      root / "ort_test" / _COUNT_SNAPSHOT,
+                      root / "repo2" / "sub" / ".git" / _COUNT_SNAPSHOT):
                 p.unlink(missing_ok=True)
             _SNAPSHOT_SEEN[0] = None
             _test_results.clear()          # §A-JN: Speicher, nicht nur Datei
             _reset_root_cache()            # §A-JQ: sonst merkt sich der
                                            # Test das root des Vorgaengers
 
-        reset()
+        # Der Prozess-cwd beim Start der Suite. `reset_all()` kehrt hierher
+        # zurueck, egal was ein Fall hinterlaesst.
+        suite_cwd = Path.cwd()
+
+        def reset_all() -> None:
+            """Vorbedingung fuer **jeden** Fall: Dateien, Globals, Cache, cwd.
+
+            `chdir` ist die einzige Zustandsform, die kein Modulglobal ist.
+            Ohne diese Zeile laesst ein Fall, der vor seinem `finally`
+            scheitert, jeden folgenden in `/tmp` laufen — die Erbfalle
+            eine Ebene weiter aussen: nicht der Snapshot wird geerbt, das
+            Verzeichnis.
+
+            Nebenwirkung, benannt: `chdir` macht die Suite
+            reihenfolgeabhaengig per Konstruktion (`-p no:randomly` hilft
+            nicht) und unparallelisierbar — unter xdist teilen Worker den
+            Prozess-cwd nicht, aber ein Worker mit `chdir` sieht seine
+            eigene Kopie. Deshalb: `chdir` nur dort, wo der Test **genau
+            das** pruefen muss, und danach `reset_all()`.
+            """
+            reset()
+            try:
+                os.chdir(suite_cwd)
+            except OSError:
+                pass                       # cwd verschwunden: nichts zu tun
+
+        reset_all()
         (root / _COUNT_SNAPSHOT).write_text(json.dumps(
             {"checked": 1, "why": "x", "when": "x", "ref": "abc1234",
              "counting": "x", "counting_label": "v1"}), encoding="utf-8")
@@ -838,8 +871,7 @@ def _self_test_count_delta() -> list[str]:
         #     nicht beide nur "geprueft" heissen. Geprueft wird die
         #     Ausgabeform selbst — sie ist die Stelle, an der zwei
         #     Einheiten ein Wort teilten.
-        line = _status_line(Checks(223), {"waves": 116, "agents<50": 82,
-                                  "tests_ohne_skript": 12}, 0)
+        line = _status_line(Checks(223, 210), 0)
         for need in ("223 Angaben geprueft", "433 Angaben gezaehlt",
                      "210 ausgeschlossen", "0 Abweichungen"):
             if need not in line:
@@ -871,6 +903,25 @@ def _self_test_count_delta() -> list[str]:
         # Ort der Shell. Nur so trifft der Fehler `Path.cwd()`.
         here = Path(__file__).resolve().parent.parent
         prev_cwd = Path.cwd()
+        # 16b. `chdir` ist Prozesszustand — der einzige, den `reset()`
+        #      strukturell nicht sieht (§A-JU). Ein Fall, der vor seinem
+        #      `finally` scheitert, laesst jeden folgenden in `other`
+        #      laufen. Also: eine Ausnahme **innerhalb** eines Kaefigs,
+        #      danach `reset_all()` — und `cwd` muss der Startwert sein.
+        try:
+            os.chdir(other)
+            try:
+                raise RuntimeError("Abbruch mitten im Test")
+            finally:
+                pass                       # bewusst KEIN chdir hier
+        except RuntimeError:
+            pass
+        if Path.cwd() != other.resolve():   # Zustand absichtlich falsch
+            failures.append("chdir hat den Prozess nicht erreicht — Test blind")
+        reset_all()
+        if Path.cwd() != suite_cwd:
+            failures.append(
+                f"reset_all() stellt cwd nicht her: {Path.cwd()} statt {suite_cwd}")
         try:
             os.chdir(other)                    # cwd != Repo
             got = _snapshot_path()             # root=None
@@ -880,6 +931,7 @@ def _self_test_count_delta() -> list[str]:
                 not str(got).startswith(str(here)):
             failures.append(
                 f"Ohne root gegen cwd aufgeloest statt gegen die Datei: {got}")
+
 
         # 17. Jeder Modulglobal mit Zustand wird zurueckgesetzt (§A-JN/§A-JR).
         #     Ein Test, der zwei **Namen** kennt, sagt nichts ueber einen
@@ -931,9 +983,69 @@ def _self_test_count_delta() -> list[str]:
         if not str(no_root["_snapshot_path"]).startswith(str(here)):
             failures.append(
                 f"ohne root zeigt der Ort nicht auf das eigene Repo: {no_root['_snapshot_path']}")
-        if str(no_root["_snapshot_path"]) == str(with_root["_snapshot_path"]):
+        # 20. Wer prueft den Filter? (§A-JV) Der Filter war einmal falsch,
+        #     und falsch hiess gruen. Ein Fixture mit je einer Zustandsform
+        #     und der **vollstaendigen** Erwartung — ein Wert, kein Muster.
+        got_forms = _module_state_globals_in(_filter_fixture())
+        expected = ["A", "B", "C", "H", "I"]
+        if got_forms != expected:
             failures.append(
-                "root und root=None liefern denselben Ort — der Test misst nichts")
+                f"Filter erkennt Zustandsformen falsch: {got_forms} != {expected}")
+        for free_form in ("D", "E", "F", "G"):
+            if free_form in got_forms:
+                failures.append(
+                    f"unveraenderliche Form als Zustand gemeldet: {free_form}")
+        # Zwei Wege fuehren zu "Zustand": `mutable` (Liste/Dict) und
+        # `not literal` (Ausdruck/Call). Ein Fixture, das nur den zweiten
+        # beweist, laesst den ersten ungeprueft — genau der Originalfehler.
+        # Also: ein Fall, in dem **nur** `mutable` die Antwort traegt.
+        only_mutable = _module_state_globals_in("A = [0]\nB = {}\n")
+        if only_mutable != ["A", "B"]:
+            failures.append(
+                f"mutable wirkt nicht isoliert: {only_mutable} != ['A', 'B']")
+        only_literal = _module_state_globals_in("A = (0,)\nB = 'x'\n")
+        if only_literal:
+            failures.append(
+                f"unveraenderliche Literale als Zustand: {only_literal}")
+
+        # 21. Zwei verschiedene Werte pro Test (§A-JW). Ein Test, dessen
+        #     zweiter Fall denselben Wert liefert, sieht keinen Unterschied
+        #     — die vierte Annahme. Gegenprobe an der Stelle, an der sie
+        #     sich schon einmal geraeumt hat: `root` gegen `root=None`.
+        if _snapshot_path(root) == _snapshot_path():
+            failures.append("Gegenprobe fehlt: root und root=None gleich")
+        if Checks(21).n == Checks(22).n:
+            failures.append("Checks traegt die Zahl nicht")
+
+        # 22. Die Identitaet `total = checked + excluded` (§A-JX). Vorher
+        #     stand `223 = 433 - 210` zweimal getippt in der Zeile; jetzt
+        #     haelt der Typ sie. Gegenprobe mit **verschiedenen** Werten:
+        #     Rechentypen, die eine Zahl hart eintippen, bestehen ein
+        #     einzelnes Beispiel (Regel §A-JW).
+        c1 = Checks(21, 210)
+        if c1.total != 231:
+            failures.append(f"total falsch: {c1.total} != 231")
+        c3 = Checks(7, 4)
+        if c3.total != 11:
+            failures.append(f"total falsch (zweites Paar): {c3.total} != 11")
+        c2 = Checks(11, 220)
+        if c1.total != c2.total or c1 == c2:
+            failures.append("Aufteilung nicht im Objekt: gleiche Summe, gleicher Wert")
+        if Checks(5, 1) == Checks(5, 2):
+            failures.append("__eq__ ignoriert excluded")
+        line_ident = _status_line(c1, 0)
+        if "21 Angaben geprueft" not in line_ident or \
+                "231 Angaben gezaehlt" not in line_ident or \
+                "210 ausgeschlossen" not in line_ident:
+            failures.append(f"Zeile rechnet nicht aus dem Typ: {line_ident!r}")
+        line_ident3 = _status_line(c3, 0)
+        if "11 Angaben gezaehlt" not in line_ident3:
+            failures.append(f"Zeile rechnet nicht (zweites Paar): {line_ident3!r}")
+        try:
+            Checks(-1, 0)
+            failures.append("negativer Wert akzeptiert")
+        except ValueError:
+            pass
         # und die Funktion selbst: `repo_root()` ist der eine Weg
         if repo_root(None) != here:
             failures.append(f"repo_root(None) != Dateiort: {repo_root(None)}")
@@ -983,7 +1095,7 @@ def _self_test_count_delta() -> list[str]:
         if "21 Angaben" not in str(demo):
             failures.append(f"Checks bringt die Zahl nicht mit: {demo!r}")
         try:
-            _status_line(21, {}, 0)          # type: ignore[arg-type]
+            _status_line(21, 0)              # type: ignore[arg-type]
             failures.append("_status_line akzeptiert int — die Einheit fehlt")
         except TypeError:
             pass
@@ -1302,18 +1414,42 @@ _STATE_FREE = ("AGENTS_PER_WAVE SCRIPT_SCOPE MIN_AGENT_CLAIM _COUNTING_LABEL "
                "_RESET_GLOBALS _STATE_FREE")
 
 
-def _module_state_globals() -> list[str]:
-    """Modulglobals, die Zustand tragen koennten — ohne AST-Raterei.
+def _filter_fixture() -> str:
+    """Ein Modul, je eine Zustandsform (§A-JV) — ziffernfrei.
 
-    Ein Name faellt raus, wenn er in `_STATE_FREE` steht, `Final`
-    annotiert ist oder ein Literal/Tupel/frozenset/compiled regex ist.
-    Alles andere gilt als Zustand: lieber eine Deklaration zu viel als
-    ein Erbfall, den niemand sieht.
+    Der Filter in `_module_state_globals` war einmal falsch, und falsch
+    hiess gruen: `globals: []`, weil eine Liste fuer ein Literal gehalten
+    wurde. Wer prueft den Filter? Ein Fixture, dessen **vollstaendige**
+    erwartete Liste daneben steht — nicht ein Muster, sondern ein Wert.
+
+    Keine Ziffern im Fixture: der Zahlen-Guard sucht Zahlen in Prosa und
+    wuerde auf dem Test zuschlagen, der den Guard prueft.
     """
-    import ast
+    return '''
+import re
+A = [None]                 # Liste: Speicherplatz, kein Literal
+B = {}                     # Dict: dito
+C = set()                  # Set: veraenderlich
+D = (None,)                # Tuple: unveraenderlich
+E = "text"                 # str: unveraenderlich
+F = re.compile("x")        # compiled: unveraenderlich
+G = frozenset()            # frozenset: unveraenderlich
+H: list = []               # Annotation aendert die Form nicht
+I = A + [None]             # Ausdruck: Zustand (unbekannt)
+'''
+
+
+def _module_state_globals() -> list[str]:
+    """Die echten Modulglobals, ueber die pruefbare Formen-Erkennung."""
     src = Path(__file__).read_text(encoding="utf-8")
-    tree = ast.parse(src)
     free = set(_STATE_FREE.split())
+    return [n for n in _module_state_globals_in(src) if n not in free]
+
+
+def _module_state_globals_in(src: str) -> list[str]:
+    """Die Formen-Erkennung, isoliert — damit sie pruefbar ist."""
+    import ast
+    tree = ast.parse(src)
     out: list[str] = []
     for node in tree.body:
         if not isinstance(node, (ast.Assign, ast.AnnAssign)):
@@ -1322,31 +1458,26 @@ def _module_state_globals() -> list[str]:
                    else [node.target])
         names = [t.id for t in targets if isinstance(t, ast.Name)]
         for n in names:
-            if not n.startswith("_"):
-                continue
-            if n in free:
+            if not n.startswith("_") and not (len(n) == 1 and n.isupper()):
                 continue
             val = node.value
-            # Mutable Behaelter sind Zustand, auch wenn sie literale sind:
-            # `[None]` und `{}` sehen aus wie Werte und sind Speicherplaetze.
-            if isinstance(val, (ast.List, ast.Dict)):
-                mutable = True
-            else:
-                mutable = False
+            # Zustand ist: mutable Behaelter (Liste, Dict, Set) und alles,
+            # was kein Literal ist. `[None]` und `{}` sind **keine**
+            # Literale in diesem Sinn — sie sind Speicherplaetze. Der
+            # Fehler in Runde 35 war, beide in der Literal-Liste zu haben;
+            # ein `mutable`-Merker daneben half nur, weil sie dort noch
+            # standen. Er ist entfernt: er war ab dem Moment tot, in dem
+            # `ast.List` nicht mehr als Literal galt.
             literal = isinstance(val, (ast.Tuple, ast.Constant))
             if isinstance(val, ast.Call) and isinstance(val.func, ast.Name) \
-                    and val.func.id == "frozenset":
-                literal = True
+                    and val.func.id in ("frozenset", "set", "dict", "list"):
+                literal = val.func.id == "frozenset"
             if isinstance(val, ast.Call) and isinstance(val.func, ast.Attribute) \
                     and val.func.attr == "compile":
                 literal = True
-            if isinstance(val, ast.Tuple) and mutable:
-                literal = False
-            if not literal or mutable:
+            if not literal:
                 out.append(n)
     return out
-
-
 def _count_reason(argv: list[str]) -> str:
     """`--write-count "<grund>"` — der Grund steht im Snapshot, nicht im Kopf."""
     i = argv.index("--write-count")
@@ -1558,52 +1689,58 @@ def _snapshot_writable(root: Path | None = None) -> bool:
 
 
 class Checks:
-    """Pruefungen — **die Einheit traegt den Namen** (§A-JS).
+    """Pruefungen — **die Einheit traegt den Namen** (§A-JS/§A-JX).
 
     Runde 23 in kleinster Form: zwei Zahlen, ein Wort. `Report.checked`
     ist die Zahl der **Pruefungen**; `_status_line` sagte dazu "Angaben".
     Solange Zahl und Wort getrennt entstehen, ist der Docstring eine
-    Behauptung neben der Messung — und ein Test, der nur prueft, *dass*
-    ein Wort dasteht, kann 21 nicht von 223 unterscheiden.
+    Behauptung neben der Messung.
 
-    Diese Klasse macht den Fehler unmoeglich: der Ausdruck, der die Zahl
-    erzeugt, sagt seine Einheit selbst, und `__str__` ist der einzige
-    Weg, sie in die Ausgabe zu bringen.
+    Runde 36 eine Ebene weiter: die Zeile hat **drei** Zahlen —
+    `checked`, `excluded`, `total`. Wurde `total = checked + excluded`
+    dreimal getippt, war die Identitaet eine Behauptung. Jetzt traegt
+    der Typ sie und wirft, wenn sie nicht gilt: die Zeile kann nicht
+    mehr luegen, weil sie nicht mehr rechnen muss.
     """
 
-    __slots__ = ("n",)
+    __slots__ = ("n", "excluded")
 
-    def __init__(self, n: int) -> None:
+    def __init__(self, n: int, excluded: int = 0) -> None:
         self.n = int(n)
+        self.excluded = int(excluded)
+        if self.n < 0 or self.excluded < 0:
+            raise ValueError("Pruefungen und Ausschluesse sind nicht negativ")
+
+    @property
+    def total(self) -> int:
+        """`checked + excluded` — hier, einmal, nicht in der Zeile."""
+        return self.n + self.excluded
 
     def __str__(self) -> str:
         return f"{self.n} Angaben geprueft"
 
     def __repr__(self) -> str:
-        return f"Checks({self.n})"
+        return f"Checks({self.n}, {self.excluded})"
 
     def __eq__(self, other: object) -> bool:
-        return isinstance(other, Checks) and self.n == other.n
+        return (isinstance(other, Checks) and self.n == other.n
+                and self.excluded == other.excluded)
 
     def __hash__(self) -> int:
-        return hash(("Checks", self.n))
+        return hash(("Checks", self.n, self.excluded))
 
 
-def _status_line(checked: Checks, skips: dict[str, int],
-                 problems: int) -> str:
+def _status_line(checked: Checks, problems: int) -> str:
     """Die Kopfzeile: **jede Zahl mit ihrer Einheit** (§A-NI).
 
-    `checked` kommt als `Checks` herein und bringt Wort und Zahl mit —
-    nicht als `int`, bei dem der Aufrufer das Wort danebenstellen muss.
-    `223` ist die Summe aus Pruefungen und Ausschluessen; auch sie
-    entsteht hier, in derselben Zeile wie das Wort.
+    `checked` kommt als `Checks` herein und bringt Wort, Zahl und die
+    Identitaet `total = checked + excluded` mit. Die Zeile rechnet nicht
+    mehr — sie liest drei Felder eines Objekts, das sie zusammen haelt.
     """
     if not isinstance(checked, Checks):
         raise TypeError("checks muss Checks sein, int ist die alte Falle")
-    excluded = sum(skips.values())
-    total = checked.n + excluded
-    return (f"{checked.n} Angaben geprueft / {total} Angaben gezaehlt "
-            f"({excluded} ausgeschlossen), {problems} Abweichungen")
+    return (f"{checked.n} Angaben geprueft / {checked.total} Angaben gezaehlt "
+            f"({checked.excluded} ausgeschlossen), {problems} Abweichungen")
 
 
 def _counting_signature() -> str:
@@ -1744,7 +1881,8 @@ def main() -> int:
     # §A-NI: `checked` heisst im Report "Pruefungen", in der Ausgabe
     # "Angaben" — zwei Einheiten, ein Wort. Die Einheit gehoert an die
     # Zahl; keine Zahl dieser Zeile ist mehr ambivalent.
-    status = _status_line(Checks(rep.checked), rep.skips, len(rep.problems))
+    status = _status_line(Checks(rep.checked, sum(rep.skips.values())),
+                              len(rep.problems))
     if skipped:
         status += f", {skipped} uebersprungen (Umgebung)"
     # §A-NC: die Zahl, die sich aendert, nennt den Grund. Ohne diese Zeile
