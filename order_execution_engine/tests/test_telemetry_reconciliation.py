@@ -1646,7 +1646,7 @@ def test_invalid_price_carries_three_causes_not_one_label() -> None:
     from order_execution_engine.models import RejectDetail
 
     assert {d.value for d in RejectDetail} == {
-        "NEUTRAL_SIGNAL", "NO_SNAPSHOT", "EMPTY_SIDE"}
+        "NEUTRAL_SIGNAL", "NO_SNAPSHOT", "EMPTY_SIDE", "SIDE_NOT_DELIVERED"}
     # Optional, weil 26 Zeilen der Akte das Feld nicht kennen.
     from order_execution_engine.shadow_execution_engine import TelemetryRecord
     assert TelemetryRecord.model_fields["reject_detail"].default is None
@@ -1822,3 +1822,116 @@ def test_engine_writes_three_branches_through_the_real_path() -> None:
     assert empty.snapshot_age_s is not None
     # Und NEUTRAL_SIGNAL hat keine Seite — es gab nie eine.
     assert records[2].reject_context.side is None
+
+
+# ---------------------------------------------------------------------------
+# §5.4bx–ca — die Klammer eng, die Schwelle benannt, das Etikett geteilt
+# ---------------------------------------------------------------------------
+
+
+def test_fk_report_survives_a_missing_fills_table() -> None:
+    """Der `except` war nie falsch — sein Umfang war es (§5.4bx).
+
+    Erste Fassung: ein `try` um `order_id` UND `fills`. Fehlte `fills`,
+    verschwand der ganze FK-Bericht. Das ist dieselbe Form wie `WHERE` über
+    zwei Typen (Runde 18) und `==` über zwei `year`s (Runde 12): eine
+    Klammer, die mehr umspannt als die Sache, die sie schützt. Jetzt fehlt
+    nur, was wirklich fehlt: `fills_full`/`fills_partial` werden `None`,
+    der Befund über `order_id` bleibt.
+    """
+    conn = sqlite3.connect(":memory:")
+    _schema(conn)          # enthält KEINE fills-Tabelle — absichtlich
+    t0 = time.time() - 3600
+    conn.execute("INSERT INTO telemetry_runs VALUES (9, ?, 'x', '{}')", (t0,))
+    conn.execute(
+        "INSERT INTO telemetry (signal_id, order_id, latency_ms, approved,"
+        " reject_reason, requested_size, run_id, decision_seq)"
+        " VALUES ('s1', 'o1', 1.0, 0, 'STALE_SNAPSHOT', '50', 9, 1)")
+    conn.execute("INSERT INTO dispatched_signals VALUES ('i1', ?, NULL)",
+                 (t0 + 1,))
+    conn.commit()
+    g = gate_telemetry_reconciliation(conn, min_run_id=9)
+    conn.close()
+    # Der Fill-Bericht fehlt — ehrlich.
+    assert g.detail["fills_total"] is None
+    assert g.detail["fills_full"] is None
+    # Der FK-Bericht lebt: der Schreiber hängt nicht an der Fill-Schicht.
+    assert g.detail["fk_rows"] == 1
+    assert g.detail["fk_set"] == 1
+    assert g.detail["fk_expected"] == 1
+
+
+def test_side_not_delivered_is_not_the_same_as_empty_side() -> None:
+    """Leere Seite aus Ticker ≠ leere Seite im Buch (§5.4cb).
+
+    `on_ticker` läßt eine fehlende Seite *konstruktiv* weg (Preis 0/None ⇒
+    keine Stufe). Ein solcher Snapshot kann eine Gegenseite haben, die nur
+    nicht mitkam. Ein vollständiges Buch ohne Gegenseite hat keine.
+    Dieselbe leere `asks`-Tupel, zwei Bedeutungen:
+
+    - Ticker  → SIDE_NOT_DELIVERED, Datenfluß — Buch abwarten
+    - Book    → EMPTY_SIDE,         Marktzustand — nichts zu reparieren
+
+    Ohne `MarketSnapshot.source` sind die beiden ununterscheidbar, und ein
+    Fehleretikett auf einer Markteigenschaft erzeugt eine Reparatur, die
+    nichts reparieren kann.
+    """
+    from order_execution_engine.market_data_feed import PolySentinelBookHandler
+    from order_execution_engine.shadow_execution_engine import (
+        MarketSnapshot, OrderBookLevel, ShadowExecutionEngine,
+        SignalPayload, TelemetryLogger)
+    from order_execution_engine.models import Direction
+
+    class _Cache:
+        def update(self, snap): self.last = snap
+
+    def signal(tok: str) -> SignalPayload:
+        return SignalPayload(
+            signal_id=uuid.uuid4(), source="t", target_token_id=tok,
+            market_id="0xabc", direction=Direction.UP,
+            confidence=Decimal("80"), suggested_price=None,
+            timestamp=datetime.datetime.now(datetime.timezone.utc))
+
+    # A — vollständiges Buch, leere Ask-Seite: Marktzustand.
+    log_a = TelemetryLogger()
+    eng_a = ShadowExecutionEngine(telemetry=log_a)
+    eng_a.on_signal(signal("TOK1"), MarketSnapshot(
+        token_id="TOK1",
+        bids=(OrderBookLevel(Decimal("0.004"), Decimal("100")),),
+        asks=(), source="book"))
+
+    # B — Ticker mit nur Bid: die Ask-Seite wurde weggelassen.
+    handler = PolySentinelBookHandler(_Cache())  # type: ignore[arg-type]
+    ticker = handler.on_ticker("TOK1", best_bid=Decimal("0.004"),
+                               best_ask=Decimal("0"), size=Decimal("100"))
+    assert ticker.source == "ticker"
+    log_b = TelemetryLogger()
+    eng_b = ShadowExecutionEngine(telemetry=log_b)
+    eng_b.on_signal(signal("TOK1"), ticker)
+
+    a = log_a._records[0].reject_detail.value
+    b = log_b._records[0].reject_detail.value
+    assert a == "EMPTY_SIDE", a
+    assert b == "SIDE_NOT_DELIVERED", b
+    assert a != b, "zwei Ursachen dürfen nicht einen Namen tragen"
+
+
+def test_theta_is_a_calibration_parameter_not_a_state() -> None:
+    """`theta` ist die einzige Zahl der Akte, die entscheidet (§5.4by).
+
+    Jeder andere Wert hier ist ein Befund; `theta` ist eine Setzung:
+    |sentiment| < 0.1 → NEUTRAL → kein Orderpfad. Gewählt, nicht
+    kalibriert — es gibt keinen Datensatz, gegen den 0.1 geprüft wurde.
+    Der Test hält beides fest: den Wert (damit eine Änderung sichtbar
+    wird) und die Regel, daß er nicht sinkt, um Fortschritt zu erzeugen.
+    """
+    from order_execution_engine.models import Direction
+    from order_execution_engine.news_bridge import BridgePolicy
+
+    assert BridgePolicy().theta == Decimal("0.1")
+    policy = BridgePolicy()
+    # Die Schwelle erzeugt NEUTRAL — und NEUTRAL ist keine Ablehnung,
+    # sondern eine fehlende Richtung, die den Orderpfad nie betreten darf.
+    assert policy.direction_from(Decimal("0.05")) is Direction.NEUTRAL
+    assert policy.direction_from(Decimal("0.15")) is Direction.UP
+    assert policy.direction_from(Decimal("-0.15")) is Direction.DOWN

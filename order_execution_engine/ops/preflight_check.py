@@ -355,6 +355,12 @@ def gate_telemetry_reconciliation(
     # ausgeführt (Quotient 1,0), aber 5 von 100 angefragt (Quotient 0,05).
     # Die Zeile sagte `PARTIALLY_FILLED`, obwohl der Fill voll war — und die
     # Akte las daraus "1 Fills".
+    # Die Klammer eng halten (§5.4bx): erst `fills` allein, dann der JOIN.
+    # Erste Fassung umspannte beides mit einem `except` — fehlte `telemetry`,
+    # verschwand auch `fills_total`, und der Bericht behauptete, es gäbe
+    # keine Fill-Schicht. Das ist dieselbe Form wie `WHERE` über zwei Typen
+    # (Runde 18) und `try` über zwei Tabellen (Runde 21): der Fehler war
+    # nie der `except`, sondern sein Umfang.
     try:
         _f = conn.execute(
             "SELECT COUNT(*), SUM(CAST(executed_size AS REAL)),"
@@ -364,17 +370,22 @@ def gate_telemetry_reconciliation(
         _ex, _rq = _f[1], _f[2]
         fill_ratio = (round(_ex / _rq, 6)
                       if _ex is not None and _rq else None)
-        # Voll / teilweise nach Urteil des Ausführers, wo vorhanden.
+        _fs = conn.execute("SELECT MAX(filled_at) FROM fills").fetchone()[0]
+    except sqlite3.OperationalError:
+        fills_total, fill_ratio, _fs = None, None, None
+    # Voll / teilweise: braucht `telemetry` — eigener Versuch, eigener Ausfall.
+    try:
         _v = conn.execute(
             "SELECT SUM(CASE WHEN t.status = 'FILLED' THEN 1 ELSE 0 END),"
             " SUM(CASE WHEN t.status = 'PARTIALLY_FILLED' THEN 1 ELSE 0 END)"
             " FROM fills f JOIN telemetry t ON t.order_id = f.order_id"
         ).fetchone()
         fills_full, fills_partial = int(_v[0] or 0), int(_v[1] or 0)
-        _fs = conn.execute("SELECT MAX(filled_at) FROM fills").fetchone()[0]
     except sqlite3.OperationalError:
-        fills_total, fills_full, fills_partial = None, None, None
-        fill_ratio, _fs = None, None
+        # `fills` vorhanden, `telemetry` nicht — dann fehlt das Urteil,
+        # nicht die Menge. Null hiere wäre eine Behauptung über Fills,
+        # die es sehr wohl gibt.
+        fills_full, fills_partial = None, None
     # Zeitformate sind heterogen (§5.4bc): dispatched_at/started_at = REAL
     # (unixepoch), fills.filled_at = TEXT ISO-8601, telemetry = gar keins.
     # Deshalb wird das Feld ausgegeben, wie es gespeichert ist — nicht in
@@ -1451,12 +1462,20 @@ def gate_snapshot(
         )
         # Die Adresse des Urteils (§5.4bk): ein RED ohne genannte Bedingung
         # ist ein Zustand, keine Aussage.
+        # Wer das Urteil durchsetzt, entscheidet, ob `blocking` eine
+        # Tatsache oder eine Absicht beschreibt (§5.4ca). Muß VOR der
+        # blocking-Zeile stehen, nicht danach.
+        wired = bool(_blocking_callers())
         if recon.status != "GREEN" and recon.reason:
             print(f"  reason:             {recon.reason}")
             # WER blockt (§5.4br): dieses Gate bewertet Buchführung, nicht
             # Betrieb. Ohne diese Zeile liest der 20.10. `RED`, schaut auf
             # die vier Zeilen und repariert die falsche Seite.
-            print(f"  blocking:           {recon.blocking or '?'} — "
+            # `(unenforced)` steht im Wert (§5.4ca): ohne Aufrufer
+            # beschreibt `ledger` nicht, was blockt, sondern was blockieren
+            # würde — und wer das nicht liest, nimmt an, es sei vollzogen.
+            print(f"  blocking:           {recon.blocking}"
+                  f"{'' if wired else ' (unenforced)'} — "
                   "dieses Gate prüft den Ledger; der Dienst steht oder "
                   "steht nicht, und das steht im delivery-Etikett")
         print(f"  open_for:           {d.get('open_for_hours')} h"
@@ -1466,7 +1485,6 @@ def gate_snapshot(
         # etwas angehalten. Ob dieses Etikett wirkt, entscheidet nicht der
         # Satz im Terminal, sondern ein Aufrufer im Dienst. Solange keiner
         # verdrahtet ist, ist das Urteil ein Text — und das steht hier.
-        wired = bool(_blocking_callers())
         readers = _verdict_readers()
         print(
             "  wired:              "
@@ -1572,8 +1590,9 @@ def gate_snapshot(
     # eine Datei, die ihren eigenen Hash enthält, hätte einen Fixpunkt, der
     # nicht existiert — jede Korrektur änderte den Wert, den sie korrigiert.
     print(
-        f"  enforced:           kein Aufrufer verdrahtet (Stand {_gate_blob['blob'][:12]})"
-        " — wer diesen Befehl startet, blockiert; das Urteil selbst bricht nichts ab"
+        f"  anchored at:        {_gate_blob['blob'][:12]} — der Stand, an dem "
+        "das Urteil gebunden ist; wer diesen Befehl startet, blockiert, "
+        "das Urteil selbst bricht nichts ab"
     )
     if recon.detail.get("unattributed"):
         print(

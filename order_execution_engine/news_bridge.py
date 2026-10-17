@@ -67,6 +67,17 @@ class MarketResolver:
 class BridgePolicy:
     """Minimale Side/Size/Confidence-Vorschrift — eingefroren pro Run."""
 
+    # KALIBRIERUNGSPARAMETER, nicht Zustand (§5.4by). `theta` ist die einzige
+    # Zahl dieser Akte, die eine Entscheidung erzeugt statt sie zu zählen:
+    # |sentiment| < theta → Direction.NEUTRAL → resolved_side() None →
+    # kein Orderpfad. Jeder andere Wert hier ist ein Befund; dieser ist eine
+    # Setzung — gewählt, nicht kalibriert. Beweis: es gibt keinen Datensatz,
+    # gegen den 0.1 geprüft wurde; die Zeile trägt nur den Default.
+    #
+    # NICHT JETZT JUSTIEREN (§5.4bz): theta senken erzeugt mehr Signale, die
+    # den Bridge passieren — bei einem Dienst, der seit 264.5 h nichts
+    # ausliefert, erzeugt das mehr Ablehnungen, die wie Fortschritt aussehen.
+    # Erst bezeugen (reject_context zählt NEUTRAL_SIGNAL), dann justieren.
     theta: Decimal = Decimal("0.1")
     size_by_impact: dict[str, Decimal] = field(default_factory=lambda: {
         "LOW": Decimal("25"),

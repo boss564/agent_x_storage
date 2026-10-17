@@ -215,6 +215,22 @@ class RejectDetail(str, Enum):
     NEUTRAL_SIGNAL = "NEUTRAL_SIGNAL"
     NO_SNAPSHOT = "NO_SNAPSHOT"
     EMPTY_SIDE = "EMPTY_SIDE"
+    SIDE_NOT_DELIVERED = "SIDE_NOT_DELIVERED"
+    """Leere Seite aus einem Ticker-Snapshot (§5.4cb) — nicht dasselbe.
+
+    ``EMPTY_SIDE`` heißt: das Buch war vollständig, und die Gegenseite
+    existiert nicht (Auflösung, dünner Markt). Richtige Antwort: nicht
+    handeln. Nichts zu reparieren.
+
+    ``SIDE_NOT_DELIVERED`` heißt: das Buch war ein Ein-Level-Ticker, und
+    die fehlende Seite wurde konstruktiv weggelassen (`on_ticker`). Der
+    Markt *kann* eine Gegenseite haben — sie wurde nicht mitgeliefert.
+    Richtige Antwort: vollständiges Buch abwarten, nicht handeln.
+
+    Zwei Ursachen, zwei Reparaturen — und nur eine davon ist eine. Ohne
+    diese Trennung erzeugt ein Fehleretikett auf einer Markteigenschaft
+    eine Reparatur, die nichts reparieren kann.
+    """
 
 
 class RejectContext(BaseModel):

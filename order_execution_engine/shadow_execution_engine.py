@@ -246,6 +246,17 @@ class MarketSnapshot:
     bids: tuple[OrderBookLevel, ...] = ()
     asks: tuple[OrderBookLevel, ...] = ()
     received_at: float = field(default_factory=time.time)
+    # Herkunft des Buchs (§5.4cb) — entscheidet, was eine leere Seite *ist*:
+    #   "book"   — vollständiges Orderbuch-Event: leere Seite heißt, der
+    #              Markt hat keine (Auflösung, dünner Markt). Marktzustand.
+    #   "ticker" — EIN Level, fehlende Seite wurde konstruktiv weggelassen
+    #              (`on_ticker`: Preis 0/None ⇒ keine Stufe). Eine leere
+    #              Seite heißt hier „nicht geliefert", nicht „existiert
+    #              nicht" — potenziell ein Artefakt, kein Zustand.
+    # Ohne dieses Feld sind beide Fälle dasselbe Etikett (EMPTY_SIDE), und
+    # ein Fehleretikett auf einer Markteigenschaft erzeugt eine Reparatur,
+    # die nichts reparieren kann.
+    source: str = "book"
 
     def best_bid(self) -> Optional[Decimal]:
         """Gibt den besten Bid zurück (None bei leerer Seite)."""
@@ -1204,11 +1215,20 @@ class ShadowExecutionEngine:
         # Preis: Limit auf bestem verfügbaren Level setzen
         ref_price = active.best_ask() if side == OrderSide.BUY else active.best_bid()
         if ref_price is None:
+            # Zwei Ursachen, zwei Namen (§5.4cb). Ein Ticker-Snapshot hat die
+            # fehlende Seite konstruktiv weggelassen — das Buch *kann* eine
+            # Gegenseite haben, sie kam nicht. Ein vollständiges Buch ohne
+            # Gegenseite hat keine. Die erste ist ein Datenfluß-Artefakt,
+            # die zweite eine Markteigenschaft; „nicht handeln" ist beide
+            # Male richtig, „reparieren" nur beim ersten.
+            _detail = ("SIDE_NOT_DELIVERED"
+                       if getattr(active, "source", "book") == "ticker"
+                       else "EMPTY_SIDE")
             record = TelemetryRecord(
                 signal_id=signal.signal_id, order_id=None,
                 latency_ms=self._elapsed_ms(t0), approved=False,
                 reject_reason=RejectReason.INVALID_PRICE, status=None,
-                reject_detail="EMPTY_SIDE",
+                reject_detail=_detail,
                 # Hier ist der Wert noch da — genau in diesem Moment.
                 # `snapshot_age_s`: die dritte Lücke der Akte ist nicht der
                 # Zeitstempel (den hat MarketSnapshot), sondern seine

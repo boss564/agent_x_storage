@@ -2574,3 +2574,132 @@ Und die Lückenliste ist geschrumpft, nicht gewachsen: zwei Felder
 fehlende Version (der Snapshot im Ablehnungsmoment). **Was diese Akte
 seit dreizehn Tagen beschreibt, sind nicht vier fehlende Felder — es ist
 ein System, das seine eigenen Fehler nicht mehr bezeugen kann.**
+
+## 44. Runde 22 — die Schwelle, die Klammer, und was eine leere Seite ist
+
+### §5.4by — `theta = 0.1` ist die erste Entscheidung dieser Akte
+
+Alle Zahlen in dieser Akte sind Befunde; `theta` ist die einzige, die
+**erzeugt** statt zählt. `|sentiment| < 0.1` → `Direction.NEUTRAL` →
+`resolved_side()` None → kein Orderpfad. Gewählt, nicht kalibriert: es gibt
+keinen Datensatz, gegen den 0.1 geprüft wurde — die Zeile trägt nur den
+Default.
+
+Damit ist `NEUTRAL_SIGNAL` auch keine Ablehnung, sondern eine **fehlende
+Richtung, die den Orderpfad nie hätte betreten dürfen**. Sie wird
+abgelehnt, *weil* sie ihn betreten hat. Der Fehler liegt eine Stufe früher
+als das Etikett — und das ist die erste Stelle der Akte, an der die
+Reparatur nicht am Etikett hängt, sondern am Filter davor.
+
+### §5.4bz — `theta` ist kein Fix, solange die Kette nicht steht
+
+`theta` senken erzeugt mehr Signale, die den Bridge passieren. Bei einem
+Dienst, der seit 264,5 h nichts ausliefert, erzeugt das mehr Ablehnungen,
+die wie Fortschritt aussehen — dieselbe Form wie `MIN_TELEMETRY_ROWS = 4`,
+der Wert von Run 9.
+
+**Reihenfolge: erst bezeugen, dann justieren.** Ab dem nächsten Lauf zählt
+`reject_context.branch` die `NEUTRAL_SIGNAL`-Fälle (1160). Solange diese
+Zahl unbekannt ist, wäre jede Senkung eine Setzung gegen eine Setzung.
+
+### §5.4ca — `blocking: ledger (unenforced)`
+
+`enforced: kein Aufrufer verdrahtet` war die ehrlichste Zeile — sie sagte,
+daß das Urteil rot sein kann und niemanden aufhält. Daraus folgt: `ledger`
+beschreibt nicht, was blockt, sondern was blockieren **würde**. Ein Wert,
+der eine Absicht beschreibt, braucht beides im Feld:
+
+```
+blocking:  ledger (unenforced)
+wired:     nein — kein Import in Produktionscode
+read_by:   nichts — kein Skript liest die Urteilszeile
+```
+
+Dabei zwei Umbenennungen, beide gegen Namenskollisionen: die Zeile
+„kein Aufrufer verdrahtet" hieß zuerst `blocking:` (zwei Zeilen, ein Name,
+zwei Bedeutungen — die Kopie, die diese Akte seit Runde 12 jagt), dann
+`enforced:`, und heißt jetzt `wired:` — den Namen gab es schon, er ist der
+richtige. Die Blob-Verankerung heißt `anchored at:`.
+
+**Warum das heute harmlos und morgen gefährlich ist:** ungefährlich, weil
+niemand die Zeile parst. Gefährlich an genau dem Tag, den `read_by`
+beschreibt — der erste Aufrufer wird ein Leser, und ein Leser, der
+`^blocking:` greift, trifft zwei Zeilen mit zwei Bedeutungen.
+
+### §5.4bx — Die Klammer enger gezogen: `try` über `fills` und `telemetry`
+
+`grep "try:" | wc -l` = 20, `grep "except" | wc -l` = 19. Die Differenz
+sind zwei `try/finally` (`shadow_runner.py:315`, `:336`) — kein Fehler,
+meine Zählung war naiv. Die AST-Suche nach `try`-Blöcken, die
+`OperationalError` schlucken und mehr als eine DB-Aktion umspannen, fand
+vier Kandidaten, alle in `preflight_check.py` — alle meine eigenen.
+
+Der schlimmste: ein `try` über `fills` **und** einen `JOIN fills ×
+telemetry`. Fehlte `telemetry`, verschwand auch `fills_total`, und der
+Bericht behauptete, es gäbe keine Fill-Schicht. Jetzt zwei Versuche,
+zwei Ausfälle:
+
+| fehlt | `fills_total` | `fills_full` |
+|---|---|---|
+| `fills` | `None` | `None` |
+| nur `telemetry` | Zahl | `None` |
+
+Dieselbe Form wie `WHERE` über zwei Typen (Runde 18) und `==` über zwei
+`year`s (Runde 12): **der `except` war nie falsch, sein Umfang war es.**
+
+### §5.4cb — `EMPTY_SIDE` war zwei Fälle unter einem Namen
+
+Die Frage war, ob ein Snapshot in den Cache landet, bevor beide Seiten
+geparst sind. **Nein** — die Ursache ist eine Festlegung, und sie steht
+seit immer im Code:
+
+```python
+# market_data_feed.py:170
+FESTLEGUNG: Fehlende Seiten (Preis 0 oder None) erzeugen KEINE Stufe —
+ein Ticker mit nur Bid-Seite liefert ein leeres Ask-Buch.
+```
+
+Kein Rennen. Zwei Herkünfte, die dieselbe leere Tupel erzeugen:
+
+| Herkunft | leere Seite heißt | Name | Antwort |
+|---|---|---|---|
+| `book` (vollständiges Event) | Markt hat keine | `EMPTY_SIDE` | nicht handeln, nichts reparieren |
+| `ticker` (ein Level) | nicht mitgeliefert | `SIDE_NOT_DELIVERED` | vollständiges Buch abwarten |
+
+`MarketSnapshot.source` trägt die Herkunft; `on_ticker` setzt `"ticker"`.
+Ohne das Feld sind die beiden ununterscheidbar — und ein Fehleretikett auf
+einer Markteigenschaft erzeugt eine Reparatur, die nichts reparieren kann.
+Für einen Markt ohne Gegenseite ist **nichts tun** die richtige Antwort.
+
+Und `EMPTY_SIDE` bleibt damit, was §5.4bv gesagt hat: **nicht** unter
+`no_book`. `no_book` = kein Buch, `EMPTY_SIDE` = Buch ohne Gegenseite,
+`SIDE_NOT_DELIVERED` = Buch ohne Gegenseite *weil nicht geliefert*.
+
+## 45. Tests dieser Runde
+
+| Zeuge | Aussage |
+|---|---|
+| `test_fk_report_survives_a_missing_fills_table` | `fills` fehlt → FK-Bericht bleibt, nur die Fill-Zahlen gehen |
+| `test_side_not_delivered_is_not_the_same_as_empty_side` | echter `on_ticker`: `ticker` ≠ `book` bei gleicher leerer Ask-Seite |
+| `test_theta_is_a_calibration_parameter_not_a_state` | 0.1 festgehalten, NEUTRAL bei 0.05, Richtung ab 0.15 |
+
+Suite: **197 passed**.
+
+## 46. Der Satz dieser Runde
+
+Die 26 sind nicht mehr 26: sie sind fünf Zahlen, von denen eine —
+`NEUTRAL_SIGNAL` — gar keine Ablehnung ist, sondern eine Schwelle, die
+niemand kalibriert hat, und eine andere — `SIDE_NOT_DELIVERED` — kein
+Marktzustand, sondern eine Auslassung, die seit immer im Code steht.
+
+Die Akte zeigt damit zum ersten Mal nicht auf ein Feld, sondern auf einen
+**Parameter** — und zum zweiten Mal auf eine Klammer, die zu weit greift:
+der `except` um zwei Tabellen ist dieselbe Form wie der `WHERE` um zwei
+Typen und der `==` um zwei `year`s.
+
+**Was am 20.10. abgenommen wird, ist ein Urteil, das rot ist und niemanden
+aufhält (`unenforced`), über ein System, das seit 264,5 h nichts
+ausliefert — und dessen billigste Reparatur weiterhin eine Zeile im
+Ablehnungsmoment ist. Die zweitbilligste ist jetzt bekannt: nicht eine
+Zeile schreiben, sondern eine Klammer enger ziehen; nicht einen Preis
+senken, sondern eine Schwelle prüfen, bevor sie etwas ablehnt.**

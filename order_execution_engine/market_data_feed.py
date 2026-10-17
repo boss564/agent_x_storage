@@ -143,6 +143,7 @@ class PolySentinelBookHandler:
         bids: list[tuple[Decimal, Decimal]],
         asks: list[tuple[Decimal, Decimal]],
         received_at: Optional[float] = None,
+        source: str = "book",
     ) -> MarketSnapshot:
         """Übersetzt ein PolySentinel-Book-Event in einen Snapshot.
 
@@ -160,6 +161,7 @@ class PolySentinelBookHandler:
             bids=tuple(OrderBookLevel(price=p, size=s) for p, s in sorted(bids, key=lambda x: -x[0])),
             asks=tuple(OrderBookLevel(price=p, size=s) for p, s in sorted(asks, key=lambda x: x[0])),
             received_at=received_at or time.time(),
+            source=source,
         )
         self._cache.update(snapshot)
         return snapshot
@@ -182,7 +184,8 @@ class PolySentinelBookHandler:
         """
         bids = [(best_bid, size)] if best_bid > 0 else []
         asks = [(best_ask, size)] if best_ask > 0 else []
-        return self.on_book_update(token_id, bids=bids, asks=asks)
+        return self.on_book_update(token_id, bids=bids, asks=asks,
+                                   source="ticker")
 
 
 class BookEventSource(Protocol):
