@@ -111,6 +111,10 @@ def gate_telemetry_reconciliation(
 
     Erkennt stille Telemetry-Write-Ausfälle, die bei dispatched=0 von
     „keine Aktivität“ nicht unterscheidbar wären.
+
+    **Die vier RED-Bedingungen unten sind mit ``_gate_criterion`` gepaart.**
+    Wird eine hier geändert, muß der Satz dort mitgeändert werden — sonst
+    behauptet die Ausgabe eine Regel, die sie nicht anwendet.
     """
     row = conn.execute(
         "SELECT started_at FROM telemetry_runs WHERE run_id = ?",
@@ -610,6 +614,25 @@ def _two_verdicts(
     return {"current": "GREEN", "historical": historical}
 
 
+def _gate_criterion(min_run_id: int) -> str:
+    """Die Regel, die aus Zahlen ein Verdikt macht — als ausdruckbarer Satz.
+
+    Spiegelt die vier RED-Bedingungen von ``gate_telemetry_reconciliation``
+    in derselben Reihenfolge. Wird eine dort geändert und hier nicht, ist
+    die Ausgabe eine Lüge in einer Zeile — deshalb steht in beiden Docstrings
+    der Hinweis auf den jeweils anderen. Bewusst keine Zahl aus der DB: das
+    Kriterium ist konstant, die Messung steht daneben.
+    """
+    return (
+        "GREEN nur wenn "
+        "(1) telemetry_rows == decision_seq-keyed "
+        "(2) keyed == distinct(run_id, decision_seq) und je run eindeutig "
+        "(3) unattributed == 0 "
+        "(4) dispatched_success == Σ reject_reasons; "
+        f"scope = run_id >= {min_run_id}"
+    )
+
+
 def _pairs_unique_per_run(conn: sqlite3.Connection, *, min_run_id: int) -> bool:
     """Je ``run_id``: ``count(*) == count(DISTINCT decision_seq)``."""
     rows = conn.execute(
@@ -795,6 +818,11 @@ def gate_snapshot(
     # Run, aber nicht die Fassung, die urteilte.
     _gate_blob = _gate_blob_hash()
     print(f"  gate:               {_gate_blob['blob']}  ({_gate_blob['source']})")
+    # Das Kriterium kommt aus dem Werkzeug, nicht aus dem Dokument: was hier
+    # steht, ist die Regel, die `current` erzeugt hat. Ändert jemand morgen
+    # eine Schwelle, ist jedes archivierte Verdikt nachträglich ein anderes —
+    # der Blob datiert den Code, diese Zeile datiert die Regel.
+    print(f"  criterion:          {_gate_criterion(min_run_id)}")
     print(
         f"  verdict current:    {verdicts['current']}  (letzter Lauf)"
     )

@@ -136,6 +136,8 @@ Freifahrtschein für die einzige Zeile, die den Termin selbst trägt.
 | 4 | `gate_snapshot` | `join_is_one_to_one: True` über `(run_id, decision_seq)` | **NICHT BESTANDEN** |
 | 5 | `gate_snapshot(min_run_id=8)` | `historical: RED (run 8, unattributed=4)`; Ausgangsachse **34**; `current: GREEN` | **NICHT ENTSCHEIDBAR** (Abweichung benennen, nicht glätten) |
 | 6 | §5.1 + §5.4, dieses Dokument | Zeitstempel, Sweep- und Import-Graph-Ausgabe vorhanden | **NICHT ENTSCHEIDBAR** |
+| 7 | §5.4d, pyc-Inhalt gegen `5c5bc364` | 9/9 Module `OK`; `flags = 0x00000000` dokumentiert | **NICHT BESTANDEN** |
+| 8 | `gate_snapshot` | `criterion:`-Zeile vorhanden und == vier RED-Bedingungen | **NICHT BESTANDEN** |
 
 **Regel gegen den Haken-Fehler:** Ein Haken bedeutete bisher „ausgeführt",
 nicht „getroffen". Deshalb steht in jeder Zeile die erwartete **Ausgabe**;
@@ -377,6 +379,13 @@ git rev-parse <commit>:order_execution_engine/ops/preflight_check.py
   → muß dem `gate:`-Wert der vorgelegten Ausgabe entsprechen
 ```
 
+**Das Dokument sagt nie „aktueller Prüfer", immer „Prüfer des gezeigten
+Laufs".** Ein `Stand` ist per Definition historisch: der Kommentar, der vor
+dem Eintippen des Hashs warnt, hat den Hash selbst verändert — der Satz, der
+vor dem Fehler warnt, ist das Beispiel für den Fehler. Wer den Prüfer als
+„aktuell" zitiert, zitiert beim nächsten Commit eine Fassung, die die
+gezeigten Zahlen nicht gerechnet hat.
+
 Der umgekehrte Weg (Blob → Commit) ist nicht eindeutig. Deshalb steht in der
 Basis-Zeile kein Blob, sondern der Commit des Laufs, dessen Ausgabe vorgelegt
 wird — und diese Ausgabe trägt ihren eigenen Blob. Wer beides nebeneinander
@@ -467,6 +476,98 @@ Neustart nötig, keine Neumessung.
 **Grenze:** Die Abfrage ist statisch. Ein dynamischer Import (`importlib`,
 `__import__`) wäre unsichtbar — im Runner gibt es keinen; das ist gelesen,
 nicht gesucht.
+
+### 5.4d Die Bytecode-Frage — welches Glied fehlte
+
+Die Kette lautet: *Blob der `.py` == Blob in `5c5bc364` ⇒ geladener Code ==
+`5c5bc364`*. **Geladen wird aber Bytecode**, und CPython entscheidet über
+`(mtime, size)` der Quelle, nicht über ihren Inhalt. Eine Bearbeitung, die
+mtime und Größe erhält, bliebe unsichtbar. Das war der eine Zeuge, den diese
+Akte nicht hatte.
+
+**Erster Befund: `git status --ignored` war nie gelaufen.** Die „0 Zeilen"
+aus Runde 1 stammten ohne `--ignored`; mit `--ignored` sind es **11 Zeilen**.
+Und `__pycache__` existiert:
+
+```
+find order_execution_engine -name '*.pyc' | wc -l   → 44
+git status --porcelain --ignored order_execution_engine | wc -l → 11
+```
+
+**Zweiter Befund: Bytecode ist nicht abgeschaltet.**
+
+```
+ps -ww -o command= -p 962   → kein -B
+plist                       → kein PYTHONDONTWRITEBYTECODE
+```
+
+**Dritter Befund: der pyc ist mtime-basiert, nicht inhaltlich geprüft.**
+
+```
+shadow_runner.cpython-314.pyc   header flags = 0x00000000
+pyc speichert (mtime=1792248615, size=16358)
+Quelle jetzt  (mtime=1792248615, size=16358)   → CPython würde laden: True
+```
+
+`True` heißt hier nur **„mtime und Größe passen"**. Es heißt nicht „der Code
+ist derselbe". Die Probe, die das entscheidet, wurde deshalb nachgezogen —
+Vergleich der Code-Objekte (`co_code`, `co_consts`, Namen je Funktion)
+zwischen dem gespeicherten `pyc` und frisch kompiliertem Quelltext aus
+`5c5bc364`:
+
+| Modul im Ladepfad | pyc == kompiliert | pyc == `5c5bc364` |
+|---|---|---|
+| `shadow_runner` (32 Codes) | ✅ | ✅ |
+| `shadow_execution_engine` (124) | ✅ | ✅ |
+| `fill_simulator` (38) | ✅ | ✅ |
+| `hub_wiring` (17) | ✅ | ✅ |
+| `market_data_feed` (47) | ✅ | ✅ |
+| `models` (69) | ✅ | ✅ |
+| `news_bridge` (49) | ✅ | ✅ |
+| `persistence` (79) | ✅ | ✅ |
+| `allowlist_freeze` (12) | ✅ | ✅ |
+
+**Die Kette ist damit inhaltlich geschlossen, nicht über mtime.** Der
+laufende Bytecode ist der von `5c5bc364` — geprüft am Code-Objekt, nicht am
+Zeitstempel.
+
+> Ein Zwischenschritt war falsch und bleibt hier stehen: der erste Vergleich
+> (`marshal.dumps` der Objekte) meldete **neunmal `False`**. Das war ein
+> Artefakt des Marshalling (Adressen, Docstring-Objekte), kein Befund —
+> auffällig war, daß **alle** Module abwichen, was bei echtem Drift
+> unwahrscheinlich ist. Uniforme Abweichung ist ein Werkzeugfehler, keine
+> Messung.
+
+**Warum kein `-B` gesetzt wird:** Das ändert die Startzeile und verlangt einen
+Neustart — und ein Neustart aus diesem Anlaß ist der Neustart aus falschem
+Anlaß. Der Befund genügt; die Plist bleibt unberührt. Für die Zukunft wäre
+`PYTHONDONTWRITEBYTECODE=1` in der Plist die ehrlichere Konfiguration (kein
+Bytecode, kein Cache, keine Frage) — **nach** dem 20.10.
+
+### 5.4e Das Kriterium — „GREEN" trägt jetzt seinen Maßstab
+
+Ein Verdikt ohne Kriterium ist ein Etikett für eine Prüfung, die anders
+hieß. Die Schwelle ist der **einzige** Teil dieser Akte, der sich nachträglich
+ändern läßt, ohne daß es auffällt: von `unattributed == 0` auf `== 1` gesetzt,
+wäre jedes archivierte RED nachträglich ein GRÜN — und der `Stand`-Hash zeigt
+auf ein Werkzeug, das die alte Schwelle nicht mehr enthält. Der datierte
+Richter datiert den **Code**, nicht die **Regel**.
+
+Deshalb gibt das Werkzeug seine Regel selbst aus:
+
+```
+criterion: GREEN nur wenn (1) telemetry_rows == decision_seq-keyed
+           (2) keyed == distinct(run_id, decision_seq) und je run eindeutig
+           (3) unattributed == 0
+           (4) dispatched_success == Σ reject_reasons
+           scope = run_id >= 8
+```
+
+Die vier Bedingungen sind `_gate_criterion` und spiegeln die vier
+`RED`-Rückgaben von `gate_telemetry_reconciliation` in derselben Reihenfolge.
+Beide Stellen tragen im Docstring den Hinweis auf die andere. Wird eine
+geändert, ohne die andere, ist die Ausgabe eine Lüge in einer Zeile — der
+paarweise Hinweis ist das, was hier ein Test nicht leisten kann.
 
 ### 5.4b Der Referent hat sich bewegt — Korrektur von §5.4a
 
@@ -654,7 +755,9 @@ einem einzigen toten Symbol genauso vereinbar wie mit zwanzig. Es gibt derzeit
 | Prüfung | Gegenstand | Aufrufer |
 |---|---|---|
 | `gate:`-Hash in der Ausgabe | Werkzeug | Dienst-Werkzeug selbst |
+| `criterion:` in der Ausgabe | Regel, nicht Code | Werkzeug selbst |
 | `blocking: … (Stand <blob>)` | Werkzeug, datiert | Werkzeug selbst |
+| pyc-Inhalt == `5c5bc364` (§5.4d) | geladener Bytecode | Mensch, bei Abnahme |
 | Kopfzeilen-Regel im pre-commit | Doku | **Hook** (nicht mehr von Hand) |
 | `git rev-parse <commit>:<path>` | Adressauflösung Doc↔Werkzeug | Mensch, bei Abnahme |
 
