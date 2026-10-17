@@ -63,6 +63,15 @@ class MarketResolver:
         }
 
 
+_THETA_PINNED = Decimal("0.1")
+"""Der einzige geprüfte Wert von ``theta`` (§5.4by/cl).
+
+Eine Setzung, kein Befund: es gibt keinen Datensatz, gegen den 0.1
+geprüft wurde. Geprüft wird sie an beiden Stellen, an denen sie entsteht —
+der Signatur-Default (Test) und ``from_config`` (Laufzeit).
+"""
+
+
 @dataclass
 class BridgePolicy:
     """Minimale Side/Size/Confidence-Vorschrift — eingefroren pro Run."""
@@ -78,7 +87,7 @@ class BridgePolicy:
     # den Bridge passieren — bei einem Dienst, der seit 264.5 h nichts
     # ausliefert, erzeugt das mehr Ablehnungen, die wie Fortschritt aussehen.
     # Erst bezeugen (reject_context zählt NEUTRAL_SIGNAL), dann justieren.
-    theta: Decimal = Decimal("0.1")
+    theta: Decimal = _THETA_PINNED
     size_by_impact: dict[str, Decimal] = field(default_factory=lambda: {
         "LOW": Decimal("25"),
         "MEDIUM": Decimal("50"),
@@ -98,11 +107,27 @@ class BridgePolicy:
             str(k).upper(): Decimal(str(v))
             for k, v in (cfg.get("size_by_impact") or {}).items()
         }
+        # Der geprüfte Wert, nicht der Default der Signatur (§5.4cl).
+        # `theta` ist die einzige Zahl dieser Akte, die entscheidet statt
+        # zählt — und `from_config` ist der Weg, auf dem sie zur Laufzeit
+        # aus einer Datei kommt. Der Import-Assert deckt diesen Pfad nicht
+        # ab: eine Config mit `"theta": "0.09"` würde still mehr Orders
+        # erzeugen. Deshalb steht die Prüfung am **Lesepfad**.
+        theta = Decimal(str(cfg.get("theta", "0.1")))
+        if theta != _THETA_PINNED:
+            raise ValueError(
+                f"theta={theta} — diese Akte hat genau einen geprüften Wert "
+                f"({_THETA_PINNED}). Eine Änderung braucht einen Datensatz "
+                "und ein Datum, keine Konfigurationszeile (§5.4by): bei "
+                "einem Dienst, der seit 264,5 h nichts ausliefert, erzeugt "
+                "ein kleineres theta mehr Ablehnungen, die wie Fortschritt "
+                "aussehen.")
         return cls(
-            theta=Decimal(str(cfg.get("theta", "0.1"))),
+            theta=theta,
             size_by_impact=sizes or cls().size_by_impact,
             default_size=Decimal(str(cfg.get("default_size", "25"))),
-            confidence_mode=str(cfg.get("confidence_mode", "abs_sentiment_pct")),
+            confidence_mode=str(
+                cfg.get("confidence_mode", "abs_sentiment_pct")),
             max_news_age_s=float(cfg.get("max_news_age_s", 300)),
         )
 

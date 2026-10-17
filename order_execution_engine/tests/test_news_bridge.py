@@ -198,11 +198,24 @@ def test_w_charter_2_bridge_and_runner_ast() -> None:
 
 
 def test_policy_maps_direction_and_size_fn() -> None:
-    """Policy: θ → Direction; Size über size_fn, nicht Payload."""
-    p = BridgePolicy.from_config({"theta": "0.2", "size_by_impact": {"HIGH": "100"}})
+    """Policy: θ → Direction; Size über size_fn, nicht Payload.
+
+    ``from_config`` akzeptiert nur den gepinnten Wert (§5.4cl) — dieser
+    Test lief bis Runde 23 mit ``"0.2"`` und hätte jede Senkung der
+    Schwelle mitgemacht, weil er nur die Wirkung prüfte, nie den Wert.
+    """
+    p = BridgePolicy.from_config({"theta": "0.1", "size_by_impact": {"HIGH": "100"}})
+    assert p.theta == Decimal("0.1")
     assert p.direction_from("0.5") is Direction.UP
     assert p.direction_from("-0.5") is Direction.DOWN
     assert p.direction_from("0.05") is Direction.NEUTRAL
+    # Die Umgebung, die der Assert verhindert: eine Config-Zeile, die mehr
+    # Orders erzeugt, während die Delivery-Kette steht.
+    try:
+        BridgePolicy.from_config({"theta": "0.09"})
+        raise AssertionError("theta=0.09 muss am Lesepfad scheitern")
+    except ValueError as exc:
+        assert "0.09" in str(exc)
     sid = uuid.uuid4()
     p.remember_size(sid, Decimal("100"))
     from order_execution_engine.models import SignalPayload

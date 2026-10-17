@@ -1653,7 +1653,8 @@ def test_invalid_price_carries_three_causes_not_one_label() -> None:
     from order_execution_engine.models import RejectDetail
 
     assert {d.value for d in RejectDetail} == {
-        "NEUTRAL_SIGNAL", "NO_SNAPSHOT", "EMPTY_SIDE", "SIDE_NOT_DELIVERED"}
+        "NEUTRAL_SIGNAL", "NO_SNAPSHOT", "EMPTY_SIDE", "SIDE_NOT_DELIVERED",
+        "SIDE_UNKNOWN_SOURCE"}
     # Optional, weil 26 Zeilen der Akte das Feld nicht kennen.
     from order_execution_engine.shadow_execution_engine import TelemetryRecord
     assert TelemetryRecord.model_fields["reject_detail"].default is None
@@ -2113,3 +2114,150 @@ def test_fills_matched_distinguishes_join_from_fills_only() -> None:
     except sqlite3.OperationalError:
         pass  # der eigene Fehlerfall, getrennt vom ersten Versuch
     conn.close()
+
+
+# ---------------------------------------------------------------------------
+# §5.4ci–cl — der Nenner
+# ---------------------------------------------------------------------------
+
+
+def _split_db(tmp_rows, *, telemetry_seq, discarded_ids=(), t_open=5_000.0):
+    """Kleine DB mit Dispatch-Zeilen, optional Discards und Ledger."""
+    conn = sqlite3.connect(":memory:")
+    conn.executescript("""
+        CREATE TABLE dispatched_signals (
+            item_id TEXT PRIMARY KEY, dispatched_at REAL,
+            telemetry_seq INTEGER);
+        CREATE TABLE telemetry (
+            seq INTEGER PRIMARY KEY AUTOINCREMENT, signal_id TEXT NOT NULL,
+            order_id TEXT, latency_ms REAL NOT NULL, approved INTEGER NOT NULL,
+            reject_reason TEXT, status TEXT, requested_size TEXT,
+            decision_seq INTEGER, run_id INTEGER);
+        CREATE TABLE bridge_discards (
+            item_id TEXT NOT NULL, reason TEXT NOT NULL,
+            discarded_at REAL NOT NULL);
+        CREATE TABLE telemetry_runs (
+            run_id INTEGER PRIMARY KEY, started_at REAL, git_commit TEXT,
+            config_json TEXT);
+    """)
+    for item, ts in tmp_rows:
+        conn.execute("INSERT INTO dispatched_signals VALUES (?,?,NULL)",
+                     (item, ts))
+    for item in discarded_ids:
+        conn.execute("INSERT INTO bridge_discards VALUES (?, 'NO_BOOK', 0.0)",
+                     (item,))
+    conn.execute("INSERT INTO telemetry_runs VALUES (8, 1000.0, 'x', '{}')")
+    conn.execute("INSERT INTO telemetry_runs VALUES (9, ?, 'x', '{}')", (t_open,))
+    for seq in telemetry_seq:
+        conn.execute(
+            "INSERT INTO telemetry (signal_id, latency_ms, approved,"
+            " decision_seq, run_id) VALUES (?, 1.0, 0, ?, 9)",
+            (f"s{seq}", seq))
+    conn.commit()
+    return conn
+
+
+def test_dispatch_split_closes_on_the_denominator_not_on_itself() -> None:
+    """Σ der Töpfe == N, nicht == die Summe der Töpfe (§5.4ci).
+
+    Vorher standen zwei Zahlen nebeneinander — `telemetry_rows: 34` und
+    `unattributed: 300`, Summe 334 — während dieselbe Ausgabe 9,4 %
+    meldete, also 34/361. Die 27 dazwischen hatten keinen Topf.
+
+    Töpfe sind **disjunkt** und ranggeordnet: attributed > discarded >
+    unattributed > traffic_only. Die erste Fassung legte `unattributed_
+    earlier` (alle Zeilen vor der Grenze) neben `discarded` (alle
+    verworfenen) — Summe 631 über N=361. Dieselbe Form wie
+    `-266 + 300 = 34`: zwei Mengen mit Überlappung, als Zahl addiert.
+    """
+    from order_execution_engine.ops.preflight_check import dispatch_origin_split
+
+    # 2 früher (1 davon discarded), 4 offen: 2 Claims mit Zeile,
+    # 1 Claim ohne, 1 discarded.
+    rows = [(f"e{i}", 2_000.0 + i) for i in range(2)]
+    rows += [("o0", 5_000.0), ("o1", 5_001.0), ("o2", 5_002.0),
+             ("o3", 5_003.0)]
+    conn = _split_db(rows, telemetry_seq=[1, 2],
+                     discarded_ids=("e0", "o3"), t_open=5_000.0)
+    r = dispatch_origin_split(conn, min_run_id=8, started_at=1_000.0,
+                             run_started_at=5_000.0)
+    conn.close()
+    assert r["attributed"] == 2, r      # o0, o1 auf seq 1, 2
+    assert r["discarded"] == 2, r       # e0 und o3
+    assert r["unattributed"] == 2, r    # e1 (früher, Claim) + o2 (offen)
+    assert r["traffic_only"] == 0, r
+    assert r["N"] == 6 and r["sum"] == 6, r
+    # Keine Überlappung: 2 + 2 + 2 + 0, nicht 6 + … doppelt.
+    assert r["sum"] == sum(
+        r[k] for k in ("attributed", "discarded", "unattributed",
+                       "traffic_only"))
+
+
+def test_partition_ok_checks_the_denominator_and_the_sign() -> None:
+    """`sum(...) == success` war blind gegen beides (§5.4cj).
+
+    `-266 + 300 = 34` — der Test war grün, weil zwei Fehler sich aufhoben.
+    Eine Summe kann einen Fehler nicht sehen, den ein anderer kompensiert.
+    Drei Prüfungen statt einer: outcome schließt auf success, die
+    Dispatch-Zerlegung schließt auf N (aus derselben Quelle wie
+    coverage_pct), und kein Wert ist negativ.
+    """
+    from order_execution_engine.ops.preflight_check import partition_ok
+
+    good = {
+        "outcome": {"filled": 1, "rejected": 26, "stale": 7},
+        "origin": {"telemetry_rows": 34, "unattributed": 300},
+        "dispatch_split": {"attributed": 4, "discarded": 327,
+                           "unattributed": 30, "traffic_only": 0,
+                           "N": 361, "sum": 361},
+    }
+    detail = {"dispatched_success": 34, "dispatched_in_scope": 361}
+    assert partition_ok(good, detail)
+
+    # Der Ausgleich: die Summe stimmt, das Vorzeichen ist falsch.
+    balanced = {**good, "origin": {"telemetry_rows": 34, "unattributed": 0}}
+    assert partition_ok(balanced, detail), "Summe allein ist keine Prüfung"
+    negative = {**good, "origin": {"telemetry_rows": -266,
+                                   "unattributed": 300}}
+    assert not partition_ok(negative, detail), "Vorzeichen muss auffallen"
+    # Der Nenner: eine Zerlegung, die nur auf sich selbst schließt.
+    leaky = {**good, "dispatch_split": {"attributed": 4, "discarded": 327,
+                                        "unattributed": 4, "traffic_only": 0,
+                                        "N": 335, "sum": 335}}
+    assert not partition_ok(leaky, detail), "334 ≠ 361 muss auffallen"
+
+
+def test_unknown_source_is_not_guessed_as_book() -> None:
+    """Ein Default, der zwischen zwei Zuständen wählt, ist gefährlich.
+
+    `getattr(active, "source", "book")` wählt die Antwort „nichts tun" für
+    den unbekannten Fall — und macht ihn unsichtbar. `None` heißt:
+    Herkunft unbekannt, eigener Name, eigener Zähler (§5.4ck).
+    """
+    from order_execution_engine.shadow_execution_engine import (
+        MarketSnapshot, OrderBookLevel, ShadowExecutionEngine,
+        SignalPayload, TelemetryLogger)
+    from order_execution_engine.models import Direction
+
+    class _NoSource(MarketSnapshot):
+        """Snapshot ohne `source` — wie ein Fremd-Konstruktor ihn baut."""
+
+        def __init__(self, token_id, bids, asks):
+            super().__init__(token_id=token_id, bids=bids, asks=asks,
+                             source="book")
+            object.__setattr__(self, "source", None)
+
+    log = TelemetryLogger()
+    eng = ShadowExecutionEngine(telemetry=log)
+    eng.on_signal(
+        SignalPayload(
+            signal_id=uuid.uuid4(), source="t", target_token_id="TOK",
+            market_id="0xabc", direction=Direction.UP,
+            confidence=Decimal("80"), suggested_price=None,
+            timestamp=datetime.datetime.now(datetime.timezone.utc)),
+        _NoSource("TOK", (OrderBookLevel(Decimal("0.004"),
+                                         Decimal("100")),), ()),
+    )
+    rec = log._records[0]
+    assert rec.reject_detail.value == "SIDE_UNKNOWN_SOURCE"
+    assert rec.reject_context.source is None

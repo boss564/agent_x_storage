@@ -2857,3 +2857,142 @@ sondern die Zahl, die aussieht wie Wissen: `fills_total` ohne Bezug,
 `RED (2)` ohne Namen, `0.1` ohne Datensatz. Und die billigste Reparatur
 ist keine Zeile mehr, sondern ein `assert`, das den Wert festhält, den
 die Wirkung nicht verrät.**
+
+## 50. Runde 24 — der Nenner
+
+### §5.4ci — Die Zerlegung, die auf die Grundgesamtheit schließt
+
+`origin` nannte zwei Zahlen nebeneinander, `34` und `300`. Summe 334. Und
+dieselbe Ausgabe meldete `coverage: 9,4 %`, also `34 / 361`. Die 27
+dazwischen standen in keiner Summe.
+
+**N = 361** — jede Zeile in `dispatched_signals` im Fenster, nicht die
+Erfolgs-Dispatches und nicht die Telemetriezeilen. Die vier Töpfe:
+
+| Topf | n | Bedeutung |
+|---|---|---|
+| `attributed` | 4 | Claim im offenen Run, Zeile im Ledger |
+| `discarded` | 327 | verworfen — auch wenn der Claim eine Zeile hatte |
+| `unattributed` | 30 | Claim ohne Zeile, nicht verworfen |
+| `traffic_only` | 0 | ohne Claim, ohne Discard |
+| **Σ** | **361** ✓ | |
+
+Die 30 sind die Run-8-Zeilen — die Zahl, die Ihre Intuition vorwegnahm,
+nur nicht als `misattributed`. Sie waren nie falsch zugeordnet; sie sind
+ein Claim ohne Ledger-Zeile in einem Run, dessen Grenze das Fenster nicht
+kennt. **`misattributed: 26` gibt es nicht** — die 26 waren die
+Positionsüberlappung aus §5.4cd, nicht 26 falsche Zuordnungen.
+
+Die erste Fassung dieses Umbaus legte `unattributed_earlier` (alle Zeilen
+vor der Grenze) **neben** `discarded` (alle verworfenen) — beide enthalten
+dieselben 24 Zeilen. Summe 631 über N = 361. **Dieselbe Form, eine Runde
+später, im eigenen Fix.** Töpfe müssen disjunkt sein und eine Rangfolge
+haben: `attributed > discarded > unattributed > traffic_only`.
+
+### §5.4cj — `sum(...) == N` war blind gegen Vorzeichen und Nenner
+
+Der Code trug die Invariante selbst:
+
+```python
+sum(classes["outcome"].values()) == success
+and sum(classes["origin"].values()) == success   # ← blind
+```
+
+Bei `telemetry: -266` und `unattributed: 300` ergibt das exakt 34. Der
+Test war grün, weil sich zwei Fehler aufhoben. Eine Summe kann einen
+Fehler nicht sehen, den ein anderer kompensiert:
+
+```
+sum(origin.values()) == N          # blind
+all(0 <= v <= N for v in ...)      # sieht das Vorzeichen
+max(origin.values()) > N           # sieht den Ausreißer
+```
+
+Jetzt drei Prüfungen: `outcome` schließt auf `success`, `dispatch_split`
+schließt auf `N` **aus derselben Abfrage wie `coverage_pct`**, und kein
+Wert ist negativ. `origin` wird nicht mehr gegen `success` geprüft — die
+Achse nennt zwei Fenster, sie ist keine Zerlegung.
+
+Die Auditsuche über die Suite fand genau einen Treffer im Code
+(`partition_ok`) und keinen in der Suite, der auf eine fremde
+Grundgesamtheit schließt.
+
+### §5.4ck — Der Default entscheidet
+
+```python
+getattr(active, "source", "book")   # ← wählt „nichts tun"
+```
+
+`"book"` heißt *Markt hat keine Gegenseite, nicht handeln* — und nicht
+`SIDE_NOT_DELIVERED` = *warten*. Ein Default, der zwischen zwei Zuständen
+mit **gegenteiliger** Antwort wählt, ist gefährlicher als `None`: er macht
+den unbekannten Fall unsichtbar und behandelt ihn wie den, der nichts
+verlangt. Jetzt `None` → eigener Name **`SIDE_UNKNOWN_SOURCE`**, eigener
+Zähler. Ein Zähler, der zeigt, wie oft geraten werden müßte.
+
+### §5.4cl — `theta` am Lesepfad
+
+Der Assert beim Import deckt `from_config` nicht ab — und das war der
+einzige Pfad, auf dem `theta` zur Laufzeit aus einer Datei entsteht:
+
+```python
+theta = Decimal(str(cfg.get("theta", "0.1")))
+if theta != _THETA_PINNED:
+    raise ValueError(...)
+```
+
+**Der Beweis, daß es nötig war:** ein bestehender Test
+(`test_policy_maps_direction_and_size_fn`) konfigurierte `theta = 0.2` und
+war grün. Er prüfte die Wirkung, nie den Wert — genau das Loch aus
+§5.4ce, eine Ebene tiefer. Er läuft jetzt mit `0.1` und prüft, daß `0.09`
+am Lesepfad scheitert.
+
+### §5.4ci.1 — Eine Zahl, zwei Bedeutungen, jetzt mit Vermerk
+
+`unattributed` trägt nach wie vor zwei Lesarten: `300` (frühere Runs
+**plus** offener Run) und `30` (nur der offene Run, in `dispatches`). Das
+ist eine Kopie im eigenen Haus. **Nicht stillschweigend repariert, sondern
+ausgesprochen** — `reason:` nennt jetzt N, `discarded` und `attributed`,
+und die WARN-Zeile sagt, welche 30 in den 300 stecken.
+
+### Die vierte Regel
+
+Der Modulkopf hatte drei Zeilen. Die vierte, aus dieser Runde:
+
+> **Eine Sequenz braucht ihren Partitionierungsschlüssel.**
+
+`decision_seq` beginnt je Run bei 1 — der vollständige Schlüssel war immer
+`(run_id, decision_seq)`. Dieselbe Form wie `requested_size` (zwei
+Tabellen), `year` (zwei Typen), `except` (zwei Aussagen) — nur diesmal
+zwei **Partitionen**. Und: Herkunft (`source`) deckt das nicht ab.
+Herkunft sagt *woher*, Partition sagt *innerhalb wovon*. Ein Sequenzwert
+braucht beides.
+
+## 51. Tests dieser Runde
+
+| Zeuge | Aussage |
+|---|---|
+| `test_dispatch_split_closes_on_the_denominator_not_on_itself` | Σ = N = 6; Töpfe disjunkt und ranggeordnet, nicht 6 + Überlappung |
+| `test_partition_ok_checks_the_denominator_and_the_sign` | `-266 + 300` fällt; `334 ≠ 361` fällt; die Summe allein ist keine Prüfung |
+| `test_unknown_source_is_not_guessed_as_book` | ohne `source` → `SIDE_UNKNOWN_SOURCE`, nicht `EMPTY_SIDE` |
+| `test_policy_maps_direction_and_size_fn` | `theta=0.09` scheitert am **Lesepfad** |
+
+Suite: **203 passed**.
+
+## 52. Der Satz dieser Runde
+
+Dreiundzwanzig Runden, und zum ersten Mal ist die Zahl schlechter und das
+Urteil besser geworden: `4` war die Breite einer Überlappung, `300` ist
+die Zahl der Lücken, und die Zerlegung geht auf, weil daneben jetzt der
+Nenner steht — `Σ=N=361`.
+
+Zwei Fehler dieser Runde sind Fehler aus der vorigen: `-266 + 300 = 34`
+war ein Test, der zwei Fehler gegeneinander ausglich; und die erste
+Fassung des Fixes legte zwei überlappende Mengen nebeneinander und kam
+auf 631 über 361.
+
+**Was am 20.10. abgenommen wird, ist ein System, das seine Fehler
+bezeugt — und dessen nächste Disziplin nicht die Herkunft ist, sondern
+der Nenner: eine Zahl, eine Grundgesamtheit, ein Vorzeichen. Die
+billigste Reparatur dieser Runde war kein Feld, sondern eine Zeile im
+Test, die nicht `== 34` sagt, sondern `== 361`.**

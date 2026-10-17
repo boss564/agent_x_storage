@@ -1221,9 +1221,16 @@ class ShadowExecutionEngine:
             # Gegenseite hat keine. Die erste ist ein Datenfluß-Artefakt,
             # die zweite eine Markteigenschaft; „nicht handeln" ist beide
             # Male richtig, „reparieren" nur beim ersten.
-            _detail = ("SIDE_NOT_DELIVERED"
-                       if getattr(active, "source", "book") == "ticker"
-                       else "EMPTY_SIDE")
+            # Der Default ist `None`, nicht `"book"` (§5.4ck). Ein Default,
+            # der zwischen zwei Zuständen mit **gegenteiliger** Antwort
+            # wählt, ist gefährlicher als keiner: `"book"` hieße „Markt hat
+            # keine Gegenseite, nichts tun" — und macht den unbekannten Fall
+            # unsichtbar, indem er ihn wie den behandelt, der nichts
+            # verlangt. `None` sagt: Herkunft unbekannt, eigene Antwort.
+            _source = getattr(active, "source", None)
+            _detail = {"ticker": "SIDE_NOT_DELIVERED",
+                       "book": "EMPTY_SIDE"}.get(
+                           _source, "SIDE_UNKNOWN_SOURCE")
             record = TelemetryRecord(
                 signal_id=signal.signal_id, order_id=None,
                 latency_ms=self._elapsed_ms(t0), approved=False,
@@ -1243,7 +1250,7 @@ class ShadowExecutionEngine:
                     # EMPTY_SIDE wäre nicht von STALE_SNAPSHOT zu trennen.
                     snapshot_age_s=max(
                         0.0, time.time() - active.received_at),
-                    source=getattr(active, "source", "book"),
+                    source=_source,
                     branch=1185),
                 decision_seq=self.telemetry.next_decision_seq(),
             )

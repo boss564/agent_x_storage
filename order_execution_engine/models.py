@@ -216,6 +216,14 @@ class RejectDetail(str, Enum):
     NO_SNAPSHOT = "NO_SNAPSHOT"
     EMPTY_SIDE = "EMPTY_SIDE"
     SIDE_NOT_DELIVERED = "SIDE_NOT_DELIVERED"
+    SIDE_UNKNOWN_SOURCE = "SIDE_UNKNOWN_SOURCE"
+    """Leere Seite, Herkunft unbekannt (§5.4ck).
+
+    Weder ``book`` noch ``ticker``: der Snapshot trägt kein ``source``.
+    Beide Antworten wären geraten — und die eine davon („nichts tun")
+    verschweigt den Fall, der „warten" verlangt. Eigener Name, damit der
+    Zähler zeigt, wie oft geraten werden müßte.
+    """
     """Leere Seite aus einem Ticker-Snapshot (§5.4cb) — nicht dasselbe.
 
     ``EMPTY_SIDE`` heißt: das Buch war vollständig, und die Gegenseite

@@ -16,11 +16,22 @@ Die Regel dieser Datei (§5.4ch), aus drei Runden derselben Form:
 Zweite Regel, ebenso oft verletzt: **eine Zahl, die über zwei
 Grundgesamtheiten spricht, darf nicht wie eine über eine aussehen.**
 Wo zwei Fenster gezählt werden, werden sie getrennt genannt — nicht
-subtrahiert (eine „Herkunft" von −266 ist keine Herkunft). Und: **ein
-Wert darf doppeldeutig sein, wenn seine Herkunft im selben Datensatz
-steht** (``MarketSnapshot.source`` neben der leeren Seite,
-``reject_detail`` neben der Ablehnung, ``blob:``/``commit:`` neben dem
-Hash). Fehlt sie, ist es eine Kopie.
+subtrahiert (eine „Herkunft" von −266 ist keine Herkunft), nicht addiert
+(631 aus zwei überlappenden Mengen über 361), und nie ohne den Nenner
+daneben (`Σ=N=361`, nicht `Σ=334`). Eine Summe ist keine Prüfung: sie
+kann einen Fehler nicht sehen, den ein anderer kompensiert.
+
+Dritte Regel: **ein Wert darf doppeldeutig sein, wenn seine Herkunft im
+selben Datensatz steht** — ``MarketSnapshot.source`` neben der leeren
+Seite, ``reject_detail`` neben der Ablehnung, ``blob:``/``commit:`` neben
+dem Hash. Fehlt sie, ist es eine Kopie. Und ein Default, der zwischen
+zwei Zuständen mit gegenteiliger Antwort wählt (``"book"`` statt
+``None``), ist gefährlicher als keiner.
+
+Vierte Regel: **eine Sequenz braucht ihren Partitionierungsschlüssel.**
+``decision_seq`` beginnt je Run bei 1 — der vollständige Schlüssel war
+immer ``(run_id, decision_seq)``. Herkunft sagt *woher*, Partition sagt
+*innerhalb wovon*; ein Sequenzwert braucht beides.
 """
 
 from __future__ import annotations
@@ -514,6 +525,10 @@ def gate_telemetry_reconciliation(
         "dispatched_in_scope": in_scope,
         "dispatched_before_scope": before_scope,
         "coverage_pct": coverage_pct,
+        "origin_split": dispatch_origin_split(
+            conn, min_run_id=min_run_id, started_at=started_at,
+            run_started_at=_latest_run_started_at(conn, min_run_id=min_run_id),
+        ),
         "dispatched_success": dispatched,
         "telemetry_rows": telemetry_rows,
         "decision_seq_keyed": keyed,
@@ -592,7 +607,10 @@ def gate_telemetry_reconciliation(
             status="RED",
             blocking="ledger",
             reason=f"(3) unattributed: {unattributed} Dispatch(es) ohne "
-                   f"Telemetriezeile — Erfolg ohne Beleg",
+                   f"Telemetriezeile — Erfolg ohne Beleg "
+                   f"(von N={detail['dispatched_in_scope']}; "
+                   f"discarded={detail['origin_split']['discarded']}, "
+                   f"attributed={detail['origin_split']['attributed']})",
             detail=detail,
         )
     # Die Gegenrichtung (§5.4ac). Bis hierher war nur Erfolg-ohne-Zeile
@@ -827,6 +845,119 @@ def dispatches_without_telemetry(
         ).fetchone()[0]
     )
     return open_gap + earlier
+
+
+def dispatch_origin_split(
+    conn: sqlite3.Connection,
+    *,
+    min_run_id: int,
+    started_at: float,
+    run_started_at: Optional[float],
+) -> dict[str, int]:
+    """Vier Töpfe, deren Summe die Grundgesamtheit ist (§5.4ci).
+
+    Die Grundgesamtheit ist **jede** Zeile in ``dispatched_signals`` im
+    Fenster — nicht die Erfolgs-Dispatches, nicht die Telemetriezeilen.
+    Vorher standen zwei Zahlen nebeneinander (``telemetry_rows`` 34,
+    ``unattributed`` 300), deren Summe 334 ergab, während dieselbe
+    Ausgabe 9,4 % meldete — also 34/361. Zwischen 334 und 361 lagen 27
+    Dispatches, die in keinem Topf waren.
+
+    Töpfe:
+
+    ``attributed``   Claim im offenen Run, ordinal auf seine Zeile
+                     getroffen. Die einzigen Dispatch↔Zeile-Paare, die
+                     dieses Fenster belegen kann.
+    ``unattributed`` Frühere Runs im Fenster plus ungetroffene Claims des
+                     offenen Runs. **Nicht** die 30 Claims aus Run 8 —
+                     die sind dort attributiert, nur nicht über Ranges.
+    ``discarded``    Claim im Fenster, aber in ``bridge_discards``. Der
+                     Dispatcher hat entschieden, der Ledger sah nichts.
+    ``traffic_only`` Dispatch ohne Claim und ohne Discard. Reiner Verkehr
+                     für die Bridge; kein Urteil betrifft ihn.
+
+    ``claims >= dispatches`` nach der Abrechnung 361 = 34 + 327, also
+    dürfen (Claims + traffic_only) ≤ N sein und discarded ⊂ claims.
+
+    Args:
+        conn: Offene Verbindung.
+        min_run_id: Kleinste ``run_id``, die als Ledger zählt.
+        started_at: Fensterbeginn.
+        run_started_at: Beginn des offenen Runs (``None`` ⇒ alles früher).
+
+    Returns:
+        dict mit den vier Töpfen und ``N``.
+    """
+    rows = conn.execute(
+        """
+        SELECT d.item_id, d.dispatched_at,
+               EXISTS (SELECT 1 FROM bridge_discards b
+                       WHERE b.item_id = d.item_id) AS discarded
+        FROM dispatched_signals d
+        WHERE d.dispatched_at >= ?
+        ORDER BY d.dispatched_at, d.item_id
+        """,
+        (started_at,),
+    ).fetchall()
+    n = len(rows)
+    boundary = run_started_at if run_started_at is not None else float("inf")
+    open_rows = sorted(
+        [r for r in rows if r[1] >= boundary], key=lambda r: (r[1], r[0]))
+    hits = {
+        int(seq) for (seq,) in conn.execute(
+            "SELECT decision_seq FROM telemetry"
+            " WHERE run_id = (SELECT MAX(run_id) FROM telemetry_runs"
+            "                 WHERE run_id >= ?)"
+            "   AND decision_seq IS NOT NULL",
+            (min_run_id,),
+        )
+    }
+    attributed = 0
+    open_claims = 0
+    unclaimed_open = 0
+    # `i` ist die Position unter den **Claims** des offenen Runs, nicht
+    # unter allen Zeilen: `decision_seq` zählt Entscheidungen, nicht
+    # Dispatches. Eine verworfene Zeile belegt keinen Zählerwert — sie
+    # weiterzuzählen verschiebt jede folgende Zuordnung um eins (§5.4ci).
+    i = 0
+    for _item, _ts, disc in open_rows:
+        if disc:
+            continue
+        i += 1
+        open_claims += 1
+        if i in hits:
+            attributed += 1
+        else:
+            unclaimed_open += 1
+    # Töpfe müssen **disjunkt** sein (§5.4ci). Die erste Fassung legte
+    # `unattributed_earlier` (alle Zeilen vor der Grenze) neben `discarded`
+    # (alle verworfenen Zeilen) — beide enthalten dieselben 24 Zeilen, und
+    # die Summe war 631 über einer Grundgesamtheit von 361. Dieselbe Form
+    # wie `-266 + 300 = 34`: zwei Mengen mit Überlappung, als Zahl addiert.
+    #
+    # Rangfolge, weil ein Dispatch mehrere Eigenschaften zugleich hat:
+    #   1. attributed      — Claim im offenen Run UND Zeile im Ledger
+    #   2. discarded       — verworfen (auch wenn der Claim eine Zeile hatte)
+    #   3. unattributed    — Claim ohne Zeile, nicht verworfen
+    #   4. traffic_only    — ohne Claim und ohne Discard
+    # Jede Zeile fällt in genau einen Topf; Summe == N per Konstruktion.
+    discarded_all = sum(1 for r in rows if r[2])
+    # Claims = Zeilen ohne Discard. `open_claims` zählt sie im offenen Run.
+    earlier_claims = sum(1 for r in rows if r[1] < boundary and not r[2])
+    buckets = {
+        "attributed": attributed,
+        "discarded": discarded_all,
+        "unattributed": unclaimed_open + earlier_claims,
+        "traffic_only": n - attributed - discarded_all
+                        - unclaimed_open - earlier_claims,
+    }
+    buckets["earlier_claims"] = earlier_claims
+    buckets["N"] = n
+    buckets["sum"] = sum(
+        buckets[k] for k in
+        ("attributed", "discarded", "unattributed", "traffic_only")
+    )
+    return buckets
 
 
 def _blocking_callers() -> set:
@@ -1286,6 +1417,7 @@ def terminal_classes(recon_detail: dict[str, Any]) -> dict[str, dict[str, int]]:
     reasons = recon_detail.get("reasons") or {}
     success = int(recon_detail.get("dispatched_success", 0))
     unattributed = int(recon_detail.get("unattributed", 0))
+    split = recon_detail.get("origin_split") or {}
     return {
         "outcome": {
             "filled": int(reasons.get("NONE", 0)),
@@ -1300,6 +1432,13 @@ def terminal_classes(recon_detail: dict[str, Any]) -> dict[str, dict[str, int]]:
             "telemetry_rows": success,
             "unattributed": unattributed,
         },
+        # §5.4ci: die einzige Achse, die auf die **Grundgesamtheit**
+        # schließt — Summe == N. Vorher standen hier zwei Zahlen
+        # (34 und 300), Summe 334, während dieselbe Ausgabe 9,4 %
+        # meldete, also 34/361. Die 27 dazwischen waren in keinem Topf.
+        "dispatch_split": (
+            {k: int(v) for k, v in split.items()} if split else {}
+        ),
     }
 
 
@@ -1403,12 +1542,42 @@ def _pairs_unique_per_run(conn: sqlite3.Connection, *, min_run_id: int) -> bool:
 
 
 def partition_ok(classes: dict[str, dict[str, int]], recon_detail: dict[str, Any]) -> bool:
-    """Jede Achse muss auf ``dispatched_success`` schließen (kein Doppelzählen)."""
+    """Zerlegung prüfen — **gegen die Grundgesamtheit**, nicht gegen sich.
+
+    §5.4cj. Die frühere Fassung forderte ``sum(origin) == success``. Das ist
+    strukturell blind: bei ``telemetry: -266`` und ``unattributed: 300``
+    ergab die Summe exakt 34, und der Test war grün, weil sich zwei Fehler
+    aufhoben. Eine Summe kann einen Fehler nicht sehen, den ein anderer
+    kompensiert.
+
+    Drei Prüfungen statt einer:
+
+    1. ``outcome`` schließt auf ``dispatched_success`` — die Ausgangsachse
+       klassifiziert Zeilen, keine Dispatches. Diese Schließung ist richtig.
+    2. ``dispatch_split`` schließt auf **N** (alle Dispatches im Fenster) —
+       die einzige Achse, die die Grundgesamtheit kennt.
+    3. Kein Wert ist negativ — sieht das Vorzeichen, das (1) nicht sieht.
+
+    ``origin`` wird hier **nicht** mehr gegen ``success`` geprüft: die Achse
+    nennt zwei Fenster nebeneinander (§5.4cd), sie ist keine Zerlegung.
+    """
     success = int(recon_detail.get("dispatched_success", 0))
-    return (
-        sum(classes["outcome"].values()) == success
-        and sum(classes["origin"].values()) == success
-    )
+    if sum(classes["outcome"].values()) != success:
+        return False
+    if any(v < 0 for v in classes["origin"].values()):
+        return False
+    split = classes.get("dispatch_split") or {}
+    if not split:
+        return True
+    n = int(split.get("N", 0))
+    parts = [int(split.get(k, 0)) for k in
+             ("attributed", "discarded", "unattributed", "traffic_only")]
+    if any(p < 0 for p in parts):
+        return False
+    if int(split.get("sum", sum(parts))) != n:
+        return False
+    # Grundgesamtheit gegen derselben Quelle, aus der `coverage_pct` rechnet.
+    return n == int(recon_detail.get("dispatched_in_scope", n))
 
 
 def count_distinct_item(
@@ -1681,6 +1850,21 @@ def gate_snapshot(
     classes = terminal_classes(recon.detail)
     print(f"  outcome (Σ=claims_mit_telemetrie): {classes['outcome']}")
     print(f"  origin  (Σ=dispatched_success):    {classes['origin']}")
+    # §5.4ci: die Zerlegung, die auf die Grundgesamtheit schließt. `origin`
+    # nennt zwei Zahlen ohne gemeinsamen Nenner — hier steht der Nenner.
+    _ds = classes.get("dispatch_split") or {}
+    if _ds:
+        _n = _ds.get("N")
+        _sum = _ds.get("sum")
+        _ok = "✓" if _sum == _n else f"✗ Σ={_sum} ≠ N={_n}"
+        print(
+            f"  dispatches (Σ=N={_n}):            "
+            f"attributed={_ds.get('attributed')} · "
+            f"unattributed={_ds.get('unattributed')} "
+            f"(frühere Runs: {_ds.get('earlier_claims')}) · "
+            f"discarded={_ds.get('discarded')} · "
+            f"traffic_only={_ds.get('traffic_only')}  {_ok}"
+        )
     verdicts = snapshot["verdicts"]
     # Der Richter datiert sich selbst: ein Verdikt ohne Prüfer-Hash nennt den
     # Run, aber nicht die Fassung, die urteilte.
@@ -1715,9 +1899,13 @@ def gate_snapshot(
         "das Urteil selbst bricht nichts ab"
     )
     if recon.detail.get("unattributed"):
+        _sp = recon.detail.get("origin_split") or {}
         print(
-            f"  WARN unattributed dispatches (no telemetry row, "
-            f"decision_seq join): {recon.detail['unattributed']}"
+            f"  WARN unattributed dispatches (kein Claim, keine Zeile): "
+            f"{recon.detail['unattributed']} — Achtung, dieselbe Zahl "
+            f"steht in `dispatches` als {_sp.get('unattributed')}: die 300 "
+            "zählen frühere Runs **und** den offenen Run, enthalten also "
+            "die 30 aus Run 8, die dort attributiert sind"
         )
     if recon.detail.get("dispatched_success"):
         print(f"  invalid_price_by_asset: {invalid_prices}")
