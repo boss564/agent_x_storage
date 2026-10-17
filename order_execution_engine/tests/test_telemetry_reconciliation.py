@@ -106,7 +106,7 @@ def test_gate_green_when_telemetry_matches() -> None:
         # Eine Zeile, ein passender Erfolgs-Dispatch: Identität erfüllt.
         # Keine Untergrenze mehr (§5.4v) — dieser Zeuge prüft die
         # Gleichheitslogik, und die gilt bei jeder Zeilenzahl.
-        assert g.status == "LEDGER_CONSISTENT"
+        assert g.status == "PROVISIONAL_LEDGER_CONSISTENT"
         assert not g.detail.get("underrun")
         conn.close()
 
@@ -130,7 +130,7 @@ def test_gate_green_when_telemetry_matches() -> None:
             )
         conn.commit()
         g = gate_telemetry_reconciliation(conn, min_run_id=7)
-        assert g.status == "LEDGER_CONSISTENT"
+        assert g.status == "PROVISIONAL_LEDGER_CONSISTENT"
         assert g.detail["dispatched_success"] == FIXTURE_ROWS
         assert g.detail["telemetry_rows"] == FIXTURE_ROWS
         conn.close()
@@ -561,7 +561,7 @@ def test_historical_red_does_not_block_current_green() -> None:
             snap = gate_snapshot(db, errors, min_run_id=8)
         assert snap is not None
         assert snap["reconciliation"].status == "RED"
-        assert snap["verdicts"]["current"] == "LEDGER_CONSISTENT"
+        assert snap["verdicts"]["current"] == "PROVISIONAL_LEDGER_CONSISTENT"
         assert "RED (run 8" in snap["verdicts"]["historical"]
         # Nicht blockierend: der historische Befund landet nicht in errors.
         assert errors == [], errors
@@ -638,9 +638,12 @@ def _run(rows, keyed, dispatched, reasons) -> tuple[str, dict]:
 def test_criterion_is_printed_in_the_same_order_as_the_red_branches() -> None:
     """(0)…(4) in der criterion-Zeile, in der Reihenfolge der Rückgaben."""
     line = _gate_criterion(9)
-    assert line.startswith("LEDGER_CONSISTENT nur wenn (0)")
+    assert line.startswith("PROVISIONAL_LEDGER_CONSISTENT solange der Lauf offen")
+    assert "LEDGER_CONSISTENT nur wenn (0)" in line
     for i in range(1, 5):
         assert f"({i})" in line, f"Bedingung {i} fehlt in der criterion-Zeile"
+    # (3b) ist die Gegenrichtung zu (3) — Zeile ohne Erfolg.
+    assert "(3b) orphan_rows == 0" in line
     assert "(0) dispatched_success > 0 oder telemetry_rows > 0" in line
     assert "scope = run_id >= 9" in line
 
@@ -674,8 +677,8 @@ def test_criterion_count_matches_red_branches_in_source() -> None:
     # benannt: wer eine weitere Zahl ohne Zweig einführt, muß sie hier
     # eintragen und damit begründen.
     non_blocking = {"5", "6"}
-    numbered = {n for n in re.findall(r"\((\d)\)", line)} - non_blocking
-    # numbered = {0,1,2,3,4}; (0) hat zwei RED-Zweige -> 6 erwartet.
+    numbered = {n for n in re.findall(r"\((\d+b?)\)", line)} - non_blocking
+    # numbered = {0,1,2,3,3B,4}; (0) hat zwei RED-Zweige -> 7 erwartet.
     expected = len(numbered) + 1
     assert red_returns == expected, (
         f"{red_returns} RED-Rückgaben im Gate, aber {expected} erwartet "
@@ -711,24 +714,48 @@ def test_start_md_gate_line_matches_criterion() -> None:
         ln for ln in start.splitlines()
         if ln.startswith("| `TELEMETRY_RECONCILIATION`")
     ]
-    assert len(rows) == 1, f"{len(rows)} Zeilen für das Gate in START.md"
+    # Genau ein Treffer, sonst fail — nicht skip. Eine umbrochene Zeile in
+    # der Tabelle erzeugt null Treffer, und ein Zeuge, der bei null Treffern
+    # grün wird, ist der Zeuge, der übersieht, daß er nichts sieht (§5.4af).
+    # Zwei Treffer heißen zwei Wahrheiten; auch das ist ein Bruch.
+    assert len(rows) == 1, (
+        f"{len(rows)} Zeilen für das Gate in START.md — erwartet genau 1. "
+        "Null Treffer heißt: die Zeile ist umbrochen oder umbenannt und "
+        "dieser Zeuge sieht nichts mehr. Zwei heißen: zwei Wahrheiten."
+    )
     row = rows[0]
 
     line = _gate_criterion(9)
+    # Das Label steht am Anfang der Zeile, vor dem "solange der Lauf offen".
     label = line.split(" ")[0]
     assert label in row, (
         f"START.md nennt das Urteil anders als der Code ({label}): {row}"
     )
-    # Dieselben Bedingungsnummern, keine mehr und keine weniger.
-    doc_nums = set(re.findall(r"\((\d)\)", row)) or set()
-    code_nums = set(re.findall(r"\((\d)\)", line))
+    # ZÄHLGRENZE, die diese Akte seit Runde 1 kennt: verglichen werden
+    # Nummern, nicht Inhalte. Der Zeuge prüft, *daß* die Bedingungen
+    # dastehen — nicht, ob sie dasselbe bedeuten. Er kann eine Bedingung
+    # nicht gegen ihre Formel prüfen; das tun die Fixtures unten. Er kann
+    # nur verhindern, daß die Absicht in START.md und der Code
+    # auseinanderlaufen, ohne daß es jemand merkt.
+    doc_nums = set(re.findall(r"\((\d+b?)\)", row)) or set()
+    code_nums = set(re.findall(r"\((\d+b?)\)", line))
     # Die Doku schreibt die Nummern nicht aus; sie muß die Bedingungen aber
     # inhaltlich nennen. Verglichen wird deshalb über die Zahl der
     # RED-tragenden Bedingungen — die steht im Code und muß in der Doku
     # erkennbar sein. Wenn die Doku nummeriert, muß sie exakt passen.
+    # Die Doku nennt die blockierenden Bedingungen im Volltext (0, 3, 3b, 4),
+    # der Code druckt zusätzlich die nicht-blockierenden (5, 6) und die
+    # Kardinalitätsprüfungen (1, 2). Verglichen wird die Schnittmenge, die
+    # in beiden stehen muß: keine mehr, keine weniger.
     if doc_nums:
-        assert doc_nums == code_nums, (
+        assert doc_nums <= code_nums, (
             f"START.md nennt {sorted(doc_nums)}, Code {sorted(code_nums)}"
+        )
+        # (3b) ist neu: die Doku muß die Gegenrichtung nennen, wenn der Code
+        # sie blockierend macht. Wer sie streicht, bricht hier.
+        assert "3b" in doc_nums, (
+            "START.md nennt die Überbehauptungs-Prüfung (3b) nicht — "
+            "der Code blockt sie."
         )
     assert "delivered" in row and "Warnung" in row, (
         "Die Warnung zu delivered steht in (5) — sie fehlt in START.md"
@@ -761,8 +788,9 @@ def test_non_blocking_conditions_have_no_red_branch() -> None:
     # am Ende der Funktion gehört damit zu (5) oder (6) oder ist neu, und in
     # beiden Fällen wächst die Zahl, ohne daß die Ausnahme es merkt.
     red_positions = [m.start() for m in re.finditer(r'status="RED"', src)]
-    assert len(red_positions) == 6, (
-        f"{len(red_positions)} RED-Zweige, 6 erwartet (0 zweimal, 1-4 einmal). "
+    assert len(red_positions) == 7, (
+        f"{len(red_positions)} RED-Zweige, 7 erwartet "
+        "(0 zweimal, 1-4 je einmal, 3b einmal). "
         "Ein neuer Zweig muß entweder eine neue Kriterium-Nummer bekommen "
         "oder die Ausnahme {5,6} muß begründet geändert werden."
     )
@@ -897,6 +925,100 @@ def test_fixture_size_is_the_pinned_value() -> None:
     )
 
 
+def test_fixture_rows_never_reaches_production() -> None:
+    """``FIXTURE_ROWS`` ist Aufbau, keine Regel — strukturell geprüft (§5.4ag).
+
+    Ein ``grep`` über ``order_execution_engine/`` zeigt: die Konstante
+    existiert in keiner Produktionsdatei, nur hier und in der Akte. Das
+    genügt aber nur für den heutigen Stand. Eine Konstante, die in zwei
+    Runden wieder eine Schwelle mit anderem Namen werden kann, braucht
+    einen Zeugen, der das beim nächsten Mal verhindert.
+
+    Der Zeuge prüft nicht den Text, sondern die Import-Richtung: kein
+    Produktionsmodul darf ``test_telemetry_reconciliation`` importieren.
+    Damit kann ``FIXTURE_ROWS`` nicht ins Gate wandern, egal wie oft es
+    umbenannt wird.
+    """
+    root = Path(__file__).resolve().parent.parent
+    offenders = []
+    for py in root.rglob("*.py"):
+        if py.parent.name == "tests" or "__pycache__" in py.parts:
+            continue
+        src = py.read_text(encoding="utf-8", errors="ignore")
+        if "test_telemetry_reconciliation" in src or "FIXTURE_ROWS" in src:
+            offenders.append(str(py.relative_to(root)))
+    assert offenders == [], (
+        f"Produktionsmodule kennen die Test-Fixture: {offenders}. "
+        "FIXTURE_ROWS ist Aufbau, keine Schwelle — es darf das Gate nicht "
+        "erreichen."
+    )
+
+
+def test_orphan_row_without_dispatch_is_red() -> None:
+    """Die Richtung, die bis §5.4ac durchging: Zeile ohne Erfolg.
+
+    Autocommit pro Zeile heißt: Telemetriezeile geschrieben, Erfolg nicht
+    gezählt, ist ein realer Zustand. ``rows > success`` war grün. Die
+    Überbehauptung liegt zwischen Ledger und Dispatcher — (4) sieht sie
+    nicht, weil (4) innerhalb des Ledgers bilanziert.
+    """
+    with tempfile.TemporaryDirectory() as td:
+        conn = sqlite3.connect(Path(td) / "t.db")
+        _schema(conn)
+        t0 = time.time()
+        conn.execute("INSERT INTO telemetry_runs VALUES (9, ?, 'x', '{}')", (t0,))
+        # 4 Erfolgs-Dispatches, aber 5 Telemetriezeilen: die fünfte behauptet
+        # eine Auslieferung, die nie stattfand.
+        for i in range(FIXTURE_ROWS):
+            conn.execute(
+                "INSERT INTO dispatched_signals (item_id, dispatched_at)"
+                " VALUES (?, ?)", (f"d{i}", t0 + i),
+            )
+        for i in range(FIXTURE_ROWS + 1):
+            conn.execute(
+                "INSERT INTO telemetry (signal_id, latency_ms, approved, run_id,"
+                " decision_seq) VALUES (?, 1.0, 1, 9, ?)",
+                (f"s{i}", i + 1),
+            )
+        conn.commit()
+        g = gate_telemetry_reconciliation(conn, min_run_id=9)
+        conn.close()
+    assert g.status == "RED", g.detail
+    assert g.detail["orphan_rows"] == 1, g.detail
+    assert g.detail.get("overclaim") is True, (
+        "RED ohne overclaim-Markierung: der Befund muß als Überbehauptung "
+        "erkennbar sein, nicht als gewöhnliche Lücke"
+    )
+
+
+def test_closed_run_would_be_judged_ledger_consistent() -> None:
+    """Ein geschlossener Lauf trägt das volle Etikett (§5.4ad).
+
+    ``telemetry_runs`` hat kein ``closed_at``. Ein Lauf ist offen, solange
+    kein späterer ihn ablöst — deshalb ist jedes Urteil heute
+    PROVISIONAL. Dieser Zeuge hält den Unterschied fest, damit das Etikett
+    nicht als Kosmetik gelesen wird: er prüft die Bedingung, nicht ihre
+    heutige Ausprägung.
+    """
+    from order_execution_engine.ops import preflight_check
+
+    assert preflight_check.latest_run_is_closed(None) is False, (
+        "latest_run_is_closed muß ohne Ende-Spalte False sein — ein "
+        "Bruchstück trägt kein Urteil"
+    )
+    cols = [c[1] for c in sqlite3.connect(":memory:").execute(
+        "PRAGMA table_info(telemetry_runs)"
+    )]
+    conn = sqlite3.connect(":memory:")
+    _schema(conn)
+    cols = [c[1] for c in conn.execute("PRAGMA table_info(telemetry_runs)")]
+    conn.close()
+    assert "closed_at" not in cols and "status" not in cols, (
+        f"telemetry_runs hat jetzt ein Ende ({cols}) — dann muß "
+        "latest_run_is_closed() es lesen statt konstant False zu sein."
+    )
+
+
 def test_three_rows_all_delivered_is_ledger_consistent() -> None:
     """Die Gegenrichtung, die die alte Untergrenze brach (§5.4v).
 
@@ -906,7 +1028,7 @@ def test_three_rows_all_delivered_is_ledger_consistent() -> None:
     Untergrenze war nicht "zu leicht", sie war in beide Richtungen falsch.
     """
     status, detail = _status_at(3)
-    assert status == "LEDGER_CONSISTENT", detail
+    assert status == "PROVISIONAL_LEDGER_CONSISTENT", detail
     assert detail["telemetry_rows"] == 3
     assert detail["unattributed"] == 0
 
@@ -935,7 +1057,7 @@ def test_observed_window_and_rate_are_reported() -> None:
     erfüllt und damit keine Prüfung.
     """
     status, detail = _status_at(PINNED_FIXTURE_ROWS)
-    assert status == "LEDGER_CONSISTENT", detail
+    assert status == "PROVISIONAL_LEDGER_CONSISTENT", detail
     assert detail["observed_hours"] > 0
     expected = detail["telemetry_rows"] / detail["observed_hours"]
     assert abs(detail["rows_per_hour"] - expected) < 1e-9
@@ -953,7 +1075,7 @@ def test_coverage_against_traffic_is_reported() -> None:
     Ledger.
     """
     status, detail = _status_at(PINNED_FIXTURE_ROWS)
-    assert status == "LEDGER_CONSISTENT", detail
+    assert status == "PROVISIONAL_LEDGER_CONSISTENT", detail
     assert detail["dispatched_in_scope"] >= detail["telemetry_rows"]
     assert 0 < detail["coverage_pct"] <= 100.0
 
@@ -967,7 +1089,7 @@ def test_rate_is_a_report_value_not_a_gate() -> None:
     — sie ist datiert, nicht erraten.
     """
     status, detail = _status_at(PINNED_FIXTURE_ROWS)
-    assert status == "LEDGER_CONSISTENT"
+    assert status == "PROVISIONAL_LEDGER_CONSISTENT"
     assert detail["rows_per_hour"] is not None
     assert detail["observed_hours"] > 0
 
@@ -1039,5 +1161,5 @@ def test_latest_run_failure_blocks_even_when_called_with_old_min_run_id() -> Non
         snap = gate_snapshot(
             build(PINNED_FIXTURE_ROWS), errors, min_run_id=8
         )
-    assert snap["verdicts"]["current"] == "LEDGER_CONSISTENT"
+    assert snap["verdicts"]["current"] == "PROVISIONAL_LEDGER_CONSISTENT"
     assert errors == [], errors

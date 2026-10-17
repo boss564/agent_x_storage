@@ -1496,3 +1496,135 @@ Suite: **168 passed** (157 vor der Untergrenze + 11 Kopplungs-/Schwellenzeugen).
 nicht „die Tests prüfen das Richtige"** — die erste Fassung dieser Runde war
 grün über einem falschen Join-Schlüssel. Deshalb sind die Negativkontrollen
 (38 vs. 34, `decision_seq`-Kollision, current-RED) ausdrücklich Teil der Suite.
+
+## 9. §5.4ac — Die Richtung, die (1) durchließ
+
+`(1)` lautete `telemetry_rows == decision_seq_keyed` und `unattributed == 0`.
+`unattributed` = Erfolg ohne Zeile. **Das Gegenstück fehlte.** Autocommit pro
+Zeile (`persistence.py`) macht beide Brüche real, aber nur einer war rot:
+
+| Bruch | Zustand | vorher | jetzt |
+|---|---|---|---|
+| Erfolg gezählt, Zeile verloren | `rows < success` | RED ✓ | RED ✓ |
+| Zeile geschrieben, Erfolg fehlt | `rows > success` | **GREEN ✗** | **RED ✓** |
+
+`(4)` konnte das nicht fangen: die Bilanz `Σ = n` gilt *innerhalb* des Ledgers.
+Die Überbehauptung liegt *zwischen* Ledger und Dispatcher — genau die Grenze,
+für die (1) zuständig ist. Neu: `telemetry_without_dispatch()` und Bedingung
+`(3b) orphan_rows == 0` mit `detail["overclaim"] = True`.
+
+### §5.4ad — Der offene Lauf
+
+`PRAGMA table_info(telemetry_runs)` → `run_id, started_at, git_commit,
+config_json`. **Es gibt keine Spalte für ein Ende.** Run 9 ist damit per
+Definition offen; `observed: 69,8 h` hat einen Anfang und eine gemessene
+Länge, aber kein aufgeschriebenes Ende.
+
+Konsequenz: das Etikett lautet **`PROVISIONAL_LEDGER_CONSISTENT`**, solange
+der Lauf offen ist. Ein offener Lauf ist keine Beobachtung, sondern ein
+Bruchstück — `delivered = 0` ist dort ein *Stand*, keine *Tatsache*; die vier
+Zeilen können fünf werden, ohne daß der Ledger sich verschlechtert hat.
+
+`latest_run_is_closed()` gibt heute konstant `False` zurück und **das ist die
+Aussage**, nicht ein Platzhalter. Der Zeuge
+`test_closed_run_would_be_judged_ledger_consistent` prüft beide Seiten: keine
+Ende-Spalte ⇒ `False`, und wenn eine dazukommt, muß die Funktion sie lesen.
+
+**Für den 20.10. sind das zwei verschiedene Abnahmen**, und die Akte sagt
+jetzt, welche: wird Run 9 am 17.10. geschlossen, liegen die 13 Tage Stille
+*hinter* der Messung; ist er am 20.10. seit sechs Tagen offen, ist das Urteil
+ein Stand über einem laufenden Lauf. Bisher stand dazu nichts.
+
+### §5.4ae — 360 vs. 359: die eine Zeile
+
+```
+gesamt 360 = 1 vor dem Fenster + 299 (run 8) + 60 (run 9)
+```
+
+Die fehlende Zeile: `9f568b38fd2b46b9`, **2026-10-04 08:00:08**,
+`unresolved_asset` — ein Warmup-Dispatch *vor* `started_at(run 8)`. `START.md`
+schließt `run_id` 1–6 aus, diesen Dispatch nicht. Er liegt außerhalb jedes
+Urteils, war aber unsichtbar, weil nichts ihn zählte.
+
+Neu im Detail: `dispatched_before_scope`, und eine Zeile in der Ausgabe:
+
+```
+traffic:            300 vor dem Fenster + 60 im Fenster = der Rest liegt außerhalb jedes Urteils
+```
+
+Die Versöhnung schließt jetzt auf **360**, nicht auf 359.
+
+### §5.4af — `START.md`-Zeuge: genau 1 Treffer
+
+`assert len(rows) == 1` — **fail, nicht skip.** Null Treffer hieße: die Zeile
+ist umbrochen oder umbenannt, und der Zeuge sieht nicht mehr, was er prüfen
+soll. Zwei hießen: zwei Wahrheiten.
+
+**Zählgrenze, benannt:** verglichen werden **Nummern**, nicht Inhalte. Der
+Zeuge prüft, *daß* `(0) (3) (3b) (4)` dastehen — nicht, ob sie dasselbe
+bedeuten. Das können nur die Fixtures. Er verhindert, daß Absicht und Code
+auseinanderlaufen, ohne daß es jemand merkt; er kann keine Formel prüfen.
+
+### §5.4ag — `FIXTURE_ROWS` ist Aufbau
+
+`grep` über `order_execution_engine/`: die Konstante existiert in **keiner
+Produktionsdatei** — nur im Test und in dieser Akte (Z. 1117). Die drei
+Assertions sind Aufbau-Prüfungen (`== FIXTURE_ROWS`, `== PINNED_FIXTURE_ROWS`),
+keine Schwellen.
+
+Damit das so bleibt: `test_fixture_rows_never_reaches_production` prüft die
+**Import-Richtung** — kein Produktionsmodul darf `FIXTURE_ROWS` oder den
+Testmodulnamen enthalten. Umbenennen hilft nicht mehr.
+
+### §5.4ah — `DERIVED`: Auslöser benannt, und er hat gegriffen
+
+`DERIVED` feuert genau dann, wenn **`hash-object(datei)` ≠ `HEAD:datei`** —
+Datei-Blob gegen Commit-Blob. Nicht `git status`, nicht Semantik, nicht
+„Kriterium geändert".
+
+**Warum es in Runde 13 schwieg, obwohl das Kriterium sich änderte:** Runde 13
+hatte *committet* (`84f1ba95`). Danach war `work == committed`. Der
+Definitionsbereich ist die **Datei**, nicht das **Kriterium** — der Marker
+sagt „dieser Text ist nicht der Text, über den abgestimmt wurde", nicht
+„diese Regel hat sich geändert". Er hätte in Runde 13 nur gefeuert, wenn die
+Änderung uncommittet geblieben wäre.
+
+Heute (uncommittet): `work 9d6942c6…` ≠ `HEAD bfe32160…` ⇒
+`gate commit: 84f1ba95:bfe32160556c  DERIVED (Datei != HEAD-Blob)`. ✓
+
+Das ist kein Fehler des Markers, aber eine **Grenze, die dastehen muß**: er
+markiert Sichtbarkeit von Änderungen, nicht Drift von Kriterien. Ein Marker
+für Kriteriumsdrift wäre der `criterion`-String selbst — und der steht in
+jeder Ausgabe.
+
+### §5.4ai — `x != "LEDGER_CONSISTENT"`: ein zweites Etikett brach die Blockade
+
+Beim Einführen von `PROVISIONAL` schlugen zwei Zeugen fehl mit
+`['latest run 9: PROVISIONAL_LEDGER_CONSISTENT (blockierend)']`. Ursache:
+`preflight_check.py` verglich gegen ein **String-Literal**:
+
+```python
+and snapshot["verdicts"]["current"] != "LEDGER_CONSISTENT"
+```
+
+Ein Set ist die Form. **`test_non_blocking_conditions_have_no_red_branch`
+konnte das nicht fangen** — es zählt RED-Zweige, und ein Literal-Vergleich ist
+kein RED-Zweig. Das ist die *dritte* Stelle dieser Akte, an der eine
+Schwelle als Kopie eines Werts überlebt hat (nach `MIN_TELEMETRY_ROWS` und
+dem Jahr in `--since`).
+
+## 10. Tests dieser Runde
+
+| Zeuge | Aussage |
+|---|---|
+| `test_orphan_row_without_dispatch_is_red` | Zeile ohne Erfolg ⇒ RED + `overclaim` |
+| `test_closed_run_would_be_judged_ledger_consistent` | kein Ende ⇒ `PROVISIONAL`, strukturell |
+| `test_fixture_rows_never_reaches_production` | Import-Richtung, nicht Namen |
+| `test_start_md_gate_line_matches_criterion` | genau 1 Treffer, sonst fail |
+
+Suite: **178 passed**.
+
+Der Satz aus §8 bleibt gültig — und diese Runde hat ihn zweimal bestätigt:
+die Suite war nach dem ersten Durchlauf **nicht** grün, weil die Zeugen die
+Etiketten-Änderung sahen, bevor der Code sie trug. Das ist die Reihenfolge,
+in der eine Akte gelesen werden soll.

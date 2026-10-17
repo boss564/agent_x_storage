@@ -227,6 +227,13 @@ def gate_telemetry_reconciliation(
     unattributed = dispatches_without_telemetry(
         conn, min_run_id=min_run_id, started_at=started_at,
     )
+    # Die andere Richtung: Zeile ohne Erfolg. (1) prüft rows-vs-keyed —
+    # beides innerhalb des Ledgers. Diese Zahl prüft zwischen Ledger und
+    # Dispatcher, und sie ist die einzige, die eine Überbehauptung sieht.
+    orphan_rows = telemetry_without_dispatch(
+        conn, min_run_id=min_run_id, started_at=started_at,
+    )
+    run_closed = latest_run_is_closed(conn)
     # Geliefert = genehmigte Entscheidungen. Nicht zu verwechseln mit
     # dispatched (Angebote an die Bridge) und nicht mit classifiable
     # (Terminalentscheidungen, Ablehnungen eingeschlossen).
@@ -243,6 +250,16 @@ def gate_telemetry_reconciliation(
         telemetry_rows / observed_hours if observed_hours > 0 else None
     )
     in_scope = dispatches_in_scope(conn, started_at=started_at)
+    # Verkehr, der VOR dem Fenster liegt und deshalb in keinem Urteil
+    # auftaucht (§5.4ae). Genau eine Zeile: 2026-10-04 08:00:08,
+    # Warmup, unresolved_asset. 360 = 1 + 299 + 60 — ohne diese Zahl
+    # stimmt die Versöhnung auf 359 und niemand sieht die eine Zeile.
+    before_scope = int(
+        conn.execute(
+            "SELECT COUNT(*) FROM dispatched_signals WHERE dispatched_at < ?",
+            (started_at,),
+        ).fetchone()[0]
+    )
     coverage_pct = (100.0 * telemetry_rows / in_scope) if in_scope else None
     detail = {
         "min_run_id": min_run_id,
@@ -250,6 +267,7 @@ def gate_telemetry_reconciliation(
         "observed_hours": observed_hours,
         "rows_per_hour": rows_per_hour,
         "dispatched_in_scope": in_scope,
+        "dispatched_before_scope": before_scope,
         "coverage_pct": coverage_pct,
         "dispatched_success": dispatched,
         "telemetry_rows": telemetry_rows,
@@ -259,6 +277,8 @@ def gate_telemetry_reconciliation(
         "reasons": reasons,
         "classifiable": sum(reasons.values()),
         "unattributed": unattributed,
+        "orphan_rows": orphan_rows,
+        "run_closed": run_closed,
         "delivered": delivered,
         "delivered_since": delivered_since,
     }
@@ -301,6 +321,16 @@ def gate_telemetry_reconciliation(
             status="RED",
             detail=detail,
         )
+    # Die Gegenrichtung (§5.4ac). Bis hierher war nur Erfolg-ohne-Zeile
+    # blockierend; Zeile-ohne-Erfolg ging grün durch, weil die Bilanz (4)
+    # innerhalb des Ledgers gilt und die Überbehauptung zwischen Ledger und
+    # Dispatcher liegt — auf genau der Grenze, für die (1) zuständig ist.
+    if orphan_rows > 0:
+        return GateResult(
+            name="TELEMETRY_RECONCILIATION",
+            status="RED",
+            detail={**detail, "overclaim": True},
+        )
     if dispatched != sum(reasons.values()):
         return GateResult(
             name="TELEMETRY_RECONCILIATION",
@@ -309,15 +339,70 @@ def gate_telemetry_reconciliation(
         )
     return GateResult(
         name="TELEMETRY_RECONCILIATION",
-        # Nicht GREEN: das Gate prüft vier Identitäten über einer Menge, nicht
+        # Nicht GREEN: das Gate prüft Identitäten über einer Menge, nicht
         # ob etwas ausgeliefert wurde. Run 9 hat 4 Zeilen, 4 × INVALID_PRICE,
-        # 0 geliefert — und besteht alle vier. GREEN verspräche Funktion;
+        # 0 geliefert — und besteht alle. GREEN verspräche Funktion;
         # LEDGER_CONSISTENT verspricht genau, was gehalten wird.
-        # delivered=0 ist eine Warnung (criterion 5), kein Blocker: am 20.10.
-        # soll nichts rot werden, weil das Gate zum ersten Mal etwas gemessen hat.
-        status="LEDGER_CONSISTENT",
+        #
+        # Ein offener Lauf trägt jetzt ein eigenes Etikett (§5.4ad): er ist
+        # keine Beobachtung, sondern ein Bruchstück. „PROVISIONAL" sagt, daß
+        # die Zahl ein Stand ist und keine Tatsache — sie kann sich ändern,
+        # ohne daß der Ledger sich verschlechtert hat.
+        status="PROVISIONAL_LEDGER_CONSISTENT" if not run_closed
+        else "LEDGER_CONSISTENT",
         detail=detail,
     )
+
+
+def telemetry_without_dispatch(
+    conn: sqlite3.Connection,
+    *,
+    min_run_id: int,
+    started_at: float,
+) -> int:
+    """Telemetriezeilen ohne Erfolgs-Dispatch — die fehlende Richtung (§5.4ac).
+
+    ``dispatches_without_telemetry`` zählt Erfolg-ohne-Zeile. Das Gegenstück
+    fehlte, und damit war die einzige Richtung, die (1) durchließ, die, in
+    der der Ledger mehr behauptet als geschehen ist: ``rows > success`` ist
+    grün, weil die Bilanz (4) innerhalb des Ledgers gilt und die
+    Überbehauptung zwischen Ledger und Dispatcher liegt — genau auf der
+    Grenze, für die (1) zuständig ist.
+
+    Zählung wie in ``dispatches_without_telemetry``, nur umgekehrt: jede
+    Telemetriezeile muß eine passende Erfolgs-Position haben
+    (``decision_seq`` == laufende Nummer der Erfolgs-Dispatches im Fenster).
+    """
+    return int(
+        conn.execute(
+            """
+            SELECT COUNT(*) FROM telemetry t
+            LEFT JOIN (
+              SELECT row_number() OVER (
+                       ORDER BY d.dispatched_at, d.item_id) AS rn
+              FROM dispatched_signals d
+              WHERE d.dispatched_at >= ?
+                AND NOT EXISTS (
+                  SELECT 1 FROM bridge_discards b WHERE b.item_id = d.item_id
+                )
+            ) s ON t.decision_seq = s.rn
+            WHERE t.run_id >= ? AND s.rn IS NULL
+            """,
+            (started_at, min_run_id),
+        ).fetchone()[0]
+    )
+
+
+def latest_run_is_closed(conn: sqlite3.Connection) -> bool:
+    """Ist der jüngste Lauf geschlossen?
+
+    ``telemetry_runs`` hat **keine** Spalte für ein Ende (nur ``started_at``).
+    Ein Lauf ist damit per Definition offen, solange kein späterer ihn
+    ablöst. Das ist keine Lücke der Abfrage, sondern der Architektur: ein
+    offener Lauf ist keine Beobachtung, sondern ein Bruchstück — und ein
+    Bruchstück sollte kein Urteil tragen (§5.4ad).
+    """
+    return False
 
 
 def dispatches_without_telemetry(
@@ -817,12 +902,15 @@ def _gate_criterion(min_run_id: int) -> str:
     Kriterium ist konstant, die Messung steht daneben.
     """
     return (
+        "PROVISIONAL_LEDGER_CONSISTENT solange der Lauf offen ist ("
+        "telemetry_runs hat kein Ende: ein Bruchstück trägt kein Urteil); "
         "LEDGER_CONSISTENT nur wenn "
         "(0) dispatched_success > 0 oder telemetry_rows > 0 "
         "(kein leerer Dienst; 0 == 0 wäre sonst vierfach erfüllt) "
         "(1) telemetry_rows == decision_seq-keyed "
         "(2) keyed == distinct(run_id, decision_seq) und je run eindeutig "
-        "(3) unattributed == 0 "
+        "(3) unattributed == 0 (Erfolg ohne Zeile) "
+        "(3b) orphan_rows == 0 (Zeile ohne Erfolg — die Überbehauptung) "
         "(4) dispatched_success == Σ reject_reasons; "
         f"scope = run_id >= {min_run_id}. "
         "(5) WARNUNG, kein Blocker: delivered == 0 heißt Ledger konsistent "
@@ -1025,6 +1113,11 @@ def gate_snapshot(
             f" — {rate_s}; erwartet: unbekannt"
         )
         print(
+            f"  traffic:            {d.get('dispatched_before_scope')} vor dem "
+            f"Fenster + {d.get('dispatched_in_scope')} im Fenster "
+            "= der Rest liegt außerhalb jedes Urteils"
+        )
+        print(
             f"  delivered:          {d['delivered']} "
             f"— {d.get('delivered_since', 'nicht ermittelbar')}"
         )
@@ -1123,10 +1216,19 @@ def gate_snapshot(
             _warn(f"historical (dokumentiert, kein Abbruch): {msg}")
         else:
             _fail(msg, errors)
+        # Konsistente Etiketten — beide zeigen denselben Ledger, eines über
+        # einem offenen Lauf. Ein Literal-Vergleich hier verwandelt jedes
+        # neue Etikett in einen Fehlalarm; deshalb ein Set, und deshalb
+        # diese Begründung: wer ein Etikett hinzufügt, ohne es hier
+        # einzutragen, bricht test_blocking_calls_new_label() (§5.4ad).
+        consistent_labels = {
+            "LEDGER_CONSISTENT",
+            "PROVISIONAL_LEDGER_CONSISTENT",
+        }
         if (
             latest_run is not None
             and recon_is_historical
-            and snapshot["verdicts"]["current"] != "LEDGER_CONSISTENT"
+            and snapshot["verdicts"]["current"] not in consistent_labels
         ):
             _fail(
                 f"latest run {latest_run}: "
