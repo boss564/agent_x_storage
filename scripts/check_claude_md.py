@@ -308,9 +308,19 @@ class Report:
         self.problems: list[dict] = []
         self.env_skips: list[dict] = []
         self.checked = 0
+        # §A-NA: Zusagen ueber den Bezugsraum. `checked` zaehlt, was
+        # geprueft wurde; eine Zusage zaehlt, was es **geben muesste**.
+        self.claims: list[tuple[str, int]] = []
+        self.fields: list[str] = []
 
     def ok(self) -> None:
         self.checked += 1
+
+    def claim(self, field: str, count: int) -> None:
+        """Eine Zahl, die im Doku-Text steht und im Code gezaehlt werden muss."""
+        if not field:
+            raise AssertionError("jede Zusage braucht ihren Feldnamen")
+        self.claims.append((field, int(count)))
 
     def fail(self, line: int | None, kind: str, doc, real, note: str = "") -> None:
         self.checked += 1
@@ -375,7 +385,8 @@ def check_dead_refs(text: str, root: Path, rep: Report) -> None:
             rep.fail(lineno, "Befehl zeigt ins Leere", m.group(1), "existiert nicht")
 
 
-def check_counts(text: str, waves: list[str], per: int | None, rep: Report) -> None:
+def check_counts(text: str, waves: list[str], per: int | None, rep: Report,
+                 root: Path | None = None) -> None:
     """Jede '<N> agents'/'<N> waves'-Angabe gegen die Tabelle.
 
     ×9-Summe (243) ist der Default. Steht „total“/„insgesamt“ im Kontextfenster
@@ -388,12 +399,41 @@ def check_counts(text: str, waves: list[str], per: int | None, rep: Report) -> N
     n_waves = len(main)
     n_agents = n_waves * n_per  # 243 = nur Hauptwellen
     n_total = len(waves) * n_per + COMPLIANCE_AGENTS  # 252 + 25 = 277
+    _FRACTION = re.compile(r"\d+\s*/\s*\d+")
     agent_pat = re.compile(r"(\d+)\s+(agents?|waves?|Wellen|B2G-Agenten)", re.I)
+    # §A-NA: die Suite-Zusagen. Format in CLAUDE.md:
+    #   `199/199 tests passed (\`scripts/test_simchain.py\`)`  — Zeile
+    #   `199/199 Tests`                                        — Wellentabelle
+    # Der Bezugsraum ist nicht die Zahl, sondern **ob es das Skript gibt**.
+    # `N/N` in der Doku sagt: dieser Test laeuft. Ob er existiert, sagt der
+    # Pruefer bisher nicht — und genau das ist der stille Fall.
+    suite_row = re.compile(
+        r"(\d+)\s*/\s*(\d+)\s+(?:tests?\s+passed|Tests)")
     for lineno, raw in enumerate(text.splitlines(), 1):
-        # Skip lines that are test results (x/y fractions), not head counts
-        if re.search(r"\d+/\d+\s+(?:tests?|waves|WAVES)(?:\s+passed|\))", raw):
-            continue
-        for m in agent_pat.finditer(raw):
+        refs = re.findall(r"`(scripts/test_[\w/]+\.py)`", raw)
+        for m in suite_row.finditer(raw):
+            passed, total = int(m.group(1)), int(m.group(2))
+            if refs:
+                for ref in refs:
+                    rep.claim(f"suite:{ref}", total)
+                    if root is not None and not (root / ref).exists():
+                        rep.fail(lineno, "Suite zugesagt, Skript fehlt",
+                                 f"{passed}/{total} ({ref})", "nicht vorhanden")
+                    elif passed > total:
+                        rep.fail(lineno, "Suite: passed > total",
+                                 f"{passed}/{total}", "unmoeglich")
+                    else:
+                        rep.ok()
+            elif total >= 20:
+                # Wellentabelle: Zahl ohne Skript — die Zusage steht, der
+                # Bezug fehlt. Gezaehlt, nicht bewertet.
+                rep.claim("suite:ohne-skript", total)
+        # §A-NA: `11/11 waves` ist der Umfang **eines Skripts**, nicht die
+        # Wellenzahl der Architektur. Der Bruch wird vor der Zaehlung aus
+        # der Zeile entfernt — sonst meldet der Pruefer 11 gegen 27, und
+        # ein Falsch-positiv macht die echten Abweichungen unlesbar.
+        head = _FRACTION.sub("", raw)
+        for m in agent_pat.finditer(head):
             n = int(m.group(1))
             unit = m.group(2)
             if unit.lower().startswith(("wave", "wellen")):
@@ -424,6 +464,9 @@ def _fixture_waves() -> list[str]:
     ids = [str(n) for n in main]
     ids.insert(3, "3.5")  # nach Welle 3
     return ids
+
+
+_SELF_TEST_SCOPE = ["5/5 (Zaehlung, Text-Fixtures)"]
 
 
 def self_test_check_counts() -> list[str]:
@@ -459,6 +502,65 @@ def self_test_check_counts() -> list[str]:
                 failures.append(
                     f"{text!r}: expected real={expected_real!r} got={got!r}"
                 )
+    failures.extend(_self_test_suite_claims(waves))
+    if failures:
+        return failures
+    _SELF_TEST_SCOPE[0] = "10/10 (5 Zaehlung + 5 Bezugsraum)"
+
+
+def _self_test_suite_claims(waves: list[str]) -> list[str]:
+    """Mutationsnachweis fuer den Bezugsraum (§A-NA).
+
+    Drei Mutationen, drei Richtungen — und eine, die **nicht** melden darf:
+
+      Skript zugesagt, existiert nicht   → Abweichung
+      passed > total                     → Abweichung
+      `199/200 tests passed` (Wert weg)  → Abweichung nur ueber Skriptbezug,
+                                           nicht ueber die Zahl selbst —
+                                           die Zahl kann der Pruefer nicht
+                                           nachrechnen, ohne die Suite zu
+                                           fahren. Das ist der Rest und er
+                                           steht im Kommentar, nicht in
+                                           einem falschen Gruen.
+      `11/11 waves`                      → **keine** Wellenzahl-Abweichung
+                                           (Skriptumfang, nicht Architektur)
+    """
+    import tempfile
+    failures: list[str] = []
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        (root / "scripts").mkdir()
+        (root / "scripts" / "test_ok.py").write_text("", encoding="utf-8")
+
+        def run(text: str) -> Report:
+            rep = Report()
+            check_counts(text, waves, AGENTS_PER_WAVE, rep, root)
+            return rep
+
+        # 1. Skript fehlt → rot
+        rep = run("- 199/199 tests passed (`scripts/test_fehlt.py`)")
+        if not any("Skript fehlt" in p["kind"] for p in rep.problems):
+            failures.append("fehlendes Skript wurde nicht gemeldet")
+
+        # 2. vorhandenes Skript → nicht rot
+        rep = run("- 199/199 tests passed (`scripts/test_ok.py`)")
+        if rep.problems:
+            failures.append(f"vorhandenes Skript faelschlich rot: {rep.problems}")
+
+        # 3. passed > total → rot
+        rep = run("- 200/199 tests passed (`scripts/test_ok.py`)")
+        if not any("passed > total" in p["kind"] for p in rep.problems):
+            failures.append("passed > total wurde nicht gemeldet")
+
+        # 4. `11/11 waves` ist Skriptumfang, kein Architekturbefund
+        rep = run("- E2E: 11/11 waves passed (`scripts/test_ok.py`)")
+        if any("Wellenzahl" in p["kind"] for p in rep.problems):
+            failures.append("11/11 waves als Wellenzahl gemeldet (Falsch-positiv)")
+
+        # 5. Bezugsraum wird gezaehlt
+        rep = run("- 199/199 tests passed (`scripts/test_ok.py`)")
+        if not rep.claims:
+            failures.append("Zusage ohne Zaehlung im Bezugsraum")
     return failures
 
 
@@ -772,7 +874,7 @@ def main() -> int:
             for f in fails:
                 print(f"  {f}")
             return 1
-        print("check_counts self-test: 5/5 passed (Umschaltung, Text-Fixtures)")
+        print(f"check_counts self-test: {_SELF_TEST_SCOPE[0]}")
         return 0
 
     # Filtere Flags und deren Werte (--json-report <path>)
@@ -801,7 +903,7 @@ def main() -> int:
 
     check_line_counts(text, root, rep)
     check_dead_refs(text, root, rep)
-    check_counts(text, waves, per, rep)
+    check_counts(text, waves, per, rep, root)
     check_undocumented_tests(root, rep)
     check_doc_inventories(root, rep)
     if "--run-tests" in sys.argv:
@@ -843,6 +945,30 @@ def main() -> int:
     if skipped:
         status += f", {skipped} uebersprungen (Umgebung)"
     print(f"\n{status}\n")
+
+    # §A-NA (Nicht-Abwesenheit): `0 Abweichungen` heisst, dass alles
+    # Gepruefte stimmt — nicht, dass nichts fehlt. Die Ausgabe nennt
+    # jetzt ihren Bezugsraum: welche Felder zugesagt wurden und wie oft.
+    # Eine Zahl, die nur Abweichungen zaehlt, ist laut fuer falsch und
+    # still fuer fehlend; das ist dieselbe Form wie jeder Default dieser
+    # Akte. `fields` macht den Bezugsraum sichtbar, ohne ihn zu bewerten:
+    # 6 Felder in 15 Zusagen liest sich anders als 6 in 6.
+    if rep.claims:
+        field_counts: dict[str, int] = {}
+        for f, _ in rep.claims:
+            field_counts[f] = field_counts.get(f, 0) + 1
+        detail = ", ".join(f"{f} x{n}" for f, n in sorted(field_counts.items()))
+        print(f"Bezugsraum: {len(rep.claims)} Zusagen ueber "
+              f"{len(field_counts)} Felder — {detail}")
+        no_ref = field_counts.get("suite:ohne-skript", 0)
+        # Die Grenze des Pruefers wird genannt, nicht verschwiegen: die
+        # **Zahl** in `199/199` kann er nicht nachrechnen, ohne die Suite
+        # zu fahren. Er prueft, dass das Skript existiert und dass
+        # `passed <= total` gilt. Ein falscher Wert bei vorhandenem Skript
+        # bleibt unsichtbar — dieselbe Form wie `0 Abweichungen` selbst.
+        print(f"Grenze: die Zahl in `N/N` wird nicht nachgerechnet "
+              f"(Skriptbezug {len(rep.claims) - no_ref}, ohne Skript {no_ref}); "
+              "geprueft wird Existenz und passed<=total")
 
     for s in rep.env_skips:
         print(f"  ⏭️  {s['script']}  — {s['note']}")
