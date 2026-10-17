@@ -4623,7 +4623,100 @@ jetzt `geaendert nach 9cfa405d (nicht committet)`, bis der Commit da ist.
 erste, den die eigene Prüfung beim Ausführen gemeldet hat, nicht der
 Autor beim Lesen.**
 
+### §71.26 — Runde 40: `committet <sha>` stempelte beim Schreiben
+
+Der Fix aus §71.25 (`git status --porcelain`) prüfte *wann* gedruckt
+wurde, nicht *was* dasteht. Zwei Gegenbefunde, gemessen:
+
+| Fall | `git status` | Inhalt gegen `<sha>` |
+|---|---|---|
+| `touch` (mtime, Inhalt identisch) | **„geaendert"** (falsch) | identisch ✓ |
+| ein Zeichen angehängt | „geaendert" ✓ | weicht ab ✓ |
+| Datei revertiert | „committet" ✓ | identisch ✓ |
+
+Die erste Zeile ist der Beleg: `git status` ist mtime-getrieben, die
+Behauptung ist eine Inhaltsaussage. **Der einzige Cache in dieser Akte,
+der beim Schreiben stempelte statt beim Lesen zu prüfen.**
+
+Jetzt: `git show <sha>:<pfad>` gegen den Arbeitsbaum, beide Seiten
+`sha256` — ein Blob-Read, mtime-immun, reversibel. Die Zeile nennt
+beides: Herkunft (`committet <sha>`) und Identität (`sha256:…`).
+Gegenprobe: unverändert → `committet` **mit** passendem sha; ein Zeichen
+anders → `geaendert`; revertiert → wieder `committet`.
+
+### §71.27 — Runde 40: achtundzwanzig Zusagen im Nenner
+
+`461 = 433 gemessen + 28 Zusagen`. Die Kopfzahl enthielt Aussagen, die
+per Definition **nicht gemessen** sind — und trug denselben Namen wie
+vorher. Wer Runde 33 gegen diese liest, sieht einen Sprung ohne Grund.
+
+Zwei Fragen, zwei Antworten:
+
+**a) doctest-gedeckt?** **Nein** — `>>>` kommt in `CLAUDE.md` null Mal
+vor. Die 28 stehen einmal in der Zahl und werden nirgends als Prüfung
+gezählt. Der Grund steht jetzt an der Zahl: `(nicht doctest-gedeckt)`.
+
+**b) Wo steht 433?** Nur noch in der Klammer. Die Zeile lautet
+`461 gezaehlt (433 gemessen + 28 Zusagen)`. Die Definitionsänderung ist
+datiert am `Checks.total`-Docstring (2026-10-17, Runde 40), nicht nur
+hier. Und der Zahlen-Guard, der `461` als „ohne Herkunft" ablehnte,
+hielt eine Liste von Literalen — er war ein Guard gegen Veränderung,
+nicht gegen Zahlen ohne Herkunft. Er prüft jetzt die Zerlegung des
+laufenden `Checks`, nicht dreizehn Konstanten.
+
+### §71.28 — Runde 40: sieben Presets, sieben Löcher — und ein achtes
+
+Runde 39 hatte fünf Presets für fünf Fehlerklassen; drei fehlten.
+Jetzt ein Preset je Loch, mit benannter Klasse:
+
+| Kn | Preset | erwartet | was es deckt |
+|---|---|---|---|
+| K1 | `g(Path.cwd())` | Verstoß | Ausdruck statt Name |
+| K2 | `g()` | Verstoß | fehlendes Argument |
+| K3 | `g(1)` bei `g(x, root)` | Verstoß | falsche Position |
+| K4 | `g()` im Kind-`def` | **kein** Verstoß | Scope des Kindes |
+| K5 | `r = Path.cwd(); g(r)` | Verstoß | Fremd-Alias |
+| K6 | `r = root; g(r)` | **kein** Verstoß | root-Alias |
+| K7 | `g(root)` | **kein** Verstoß | korrekt |
+
+**K4 fand sofort ein Loch:** der Einstieg `for stmt in fn.body: visit(stmt)`
+lief in Kind-`def`s **hinein**, ohne sie als Kind zu behandeln — Zeile 3
+wurde `f` zugeschrieben, obwohl sie zu `inner` gehört. Ein Prüfer, der
+Kinder betritt, aber nicht als Kinder behandelt, ist derselbe Fehler wie
+einer, der sie überspringt. Beide Wege jetzt über dieselbe Regel
+(`_binds_root`), an drei Stellen: äußere Schleife, Rekursion, Einstieg.
+
+Zusätzlich: die **Produktionsprobe**. Eine Kopie der eigenen Datei mit
+eingebautem Fehler muss anschlagen — sonst ist der Prüfer ein
+Fixture-Prüfer. Und ein Blind-Test (K2 → `[]`) als Wache gegen den
+stillgrünen Fall aus Versuch 3.
+
+**Dreizehn Stellen, acht davon Ausnahmen.** Keine Majority-Duldung: jede
+Ausnahme ist ein Textanker mit Grund im Code, und `§A-KR` zählt 8
+markierte Zeilen gegen 8 Anker. Das erste Zählverfahren zählte die
+Ankerliste selbst mit (20 gegen 8) — die Abschrift der Ausnahmen ist
+keine Ausnahme.
+
 ## 72. Der Satz dieser Runde
+
+Vierzig Runden, und der Prüfer, der dreizehn Stellen fand, fand sie erst
+im fünften Versuch — und im sechsten fand ein Preset, dass er beim
+Einstieg dasselbe Loch hatte wie beim Überspringen.
+
+**Aber der Satz dieser Runde ist die Zeile.** Sie stempelte beim
+Schreiben, was sie nur beim Lesen wissen konnte. Alle anderen Caches in
+dieser Akte waren an derselben Stelle repariert: `mtime`, `root`,
+Dateiinhalt. Diese prüfte *wann* gedruckt wurde statt *was* dasteht.
+
+**Was am 20.10. auf dem Tisch liegt: 216 Tests, 24/24 Selbsttests, ein
+Prüfer mit sieben Fehlerklassen an sieben Presets, einer Produktionsprobe
+und einer Blind-Wache, dreizehn gefundene Stellen (acht davon benannte
+Ausnahmen) — und eine Kopfzeile, die ihre Zerlegung mitträgt:
+`461 gezaehlt (433 gemessen + 28 Zusagen, nicht doctest-gedeckt)`
+und eine Rundentabelle, deren Zeile sagt, ob ihr Inhalt der des Commits
+ist, statt ob sie seit dem Commit angefasst wurde.**
+
+
 
 Neununddreißig Runden, und der Zähler hat jetzt vier Kategorien, einen
 Test und zwei rote Mutationen — und die fünfte Kategorie, die vorher in

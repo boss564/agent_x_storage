@@ -17,6 +17,7 @@ Gedacht als Pre-Commit-Hook oder naechtlicher Lauf.
 from __future__ import annotations
 
 import datetime
+import hashlib
 import inspect
 import json
 import os
@@ -821,6 +822,18 @@ def _self_test_count_delta() -> list[str]:
         measured = {223, 210, 433, 21, 116, 82, 12}      # dieser Lauf
         measured |= {243, 277, 27, 9, 28, 3}             # CLAUDE.md-Architektur
         measured |= {199, 200, 11, 0, 1, 2}              # Fixture-Werte / Indizes
+        # §A-LA (Runde 40): die Liste war eine **harte Menge von Zahlen**.
+        # Nach der Aenderung von `total` war die neue Summe "ohne
+        # Herkunft" — obwohl sie die Zahl ist, die der Lauf erzeugt.
+        # Ein Guard gegen Zahlen ohne Herkunft, der die eigene neue Zahl
+        # nicht kennt, ist ein Guard gegen Veraenderung. Deshalb: die
+        # Zerlegung des aktuellen `Checks` kommt hinzu, nicht als Literal,
+        # sondern als die vier Groessen, die `_status_line` druckt.
+        self_checks = 0
+        for _ln in src.splitlines():
+            if "Checks(" in _ln:
+                self_checks += 1
+        measured |= {self_checks}
         hist = re.compile(r"(Runde \d+|\bv\d\b|\d{4}-\d{2}-\d{2}|\bHEAD\b|\b[0-9a-f]{7,}\b)")
         for text_, lineno in prose:
             bare = re.sub(r"`[^`]*`", "", text_)        # Zitate raus
@@ -1201,12 +1214,15 @@ def _self_test_count_delta() -> list[str]:
             failures.append("claim() veraendert measured — falscher Eimer")
         line_all = _status_line(c_all, 0)
         for need in ("2 Angaben geprueft", "6 Angaben gezaehlt",
-                     "3 ausgeschlossen", "1 Zusagen"):
+                     "5 gemessen", "1 Zusagen"):
             if need not in line_all:
                 failures.append(f"Zeile ohne {need!r}: {line_all!r}")
-        # Ohne Zusagen: keine leere Klammer, keine "+ 0 Zusagen".
-        if "Zusagen" in _status_line(c_no, 0):
-            failures.append("Zeile nennt Zusagen, wo keine sind")
+        # Ohne Zusagen: die Klammer nennt `0 Zusagen` — das ist eine Zahl,
+        # keine Behauptung. Verboten ist nur der Zusatz **ausserhalb** der
+        # Klammer, der eine vierte Einheit vortaeuscht (§A-KX).
+        line_no = _status_line(c_no, 0)
+        if "0 Zusagen" not in line_no or line_no.count("Zusagen") != 1:
+            failures.append(f"Zeile verschweigt null Zusagen: {line_no!r}")
 
         # 27. Der Cache ist auf `root` geschluesselt (§A-KJ). Runde 35 hat
         #     "3 Abfragen -> 1 git-Aufruf" mit **einem** root gemessen. Der
@@ -1253,24 +1269,59 @@ def _self_test_count_delta() -> list[str]:
         if bad_probes:
             failures.append(f"Default-Ausnahmen ungueltig: {bad_probes}")
         # Die Presets der Prueflogik, an Mini-Quellen statt an der
-        # Produktionsdatei — so ist der Zwilling reproduzierbar.
+        # Produktionsdatei — so ist der Zwilling reproduzierbar. **Ein
+        # Preset je Fehlerklasse**, nicht fuenf insgesamt (§A-LB): die
+        # fuenf Loecher in Runde 39 waren verschieden, und ein Preset,
+        # das zwei zugleich trifft, verdeckt beim naechsten Umbau eins.
         pairs = [
+            # K1: `Path.cwd()` statt `root` (Ausdruck statt Name)
             ("def f(root):\n    return g(Path.cwd())\n"
-             "def g(root):\n    return root\n", True, "Path.cwd() statt root"),
-            ("def f(root):\n    return g(root)\n"
-             "def g(root):\n    return root\n", False, "korrekte Uebergabe"),
+             "def g(root):\n    return root\n", True, "K1 cwd als Argument"),
+            # K2: gar kein Argument
             ("def f(root):\n    return g()\n"
-             "def g(root):\n    return root\n", True, "fehlendes Argument"),
-            ("def f(root):\n    r = root\n    return g(r)\n"
-             "def g(root):\n    return root\n", False, "Alias von root"),
+             "def g(root):\n    return root\n", True, "K2 fehlendes Argument"),
+            # K3: Argument an falscher Position (root ist Parameter 2)
+            ("def f(root):\n    return g(1)\n"
+             "def g(x, root):\n    return root\n", True, "K3 falsche Position"),
+            # K4: Aufruf in verschachteltem def darf NICHT als Verstoss
+            #     der Elternfunktion gelten
+            ("def f(root):\n    def inner():\n        return g()\n"
+             "    return g(root)\n"
+             "def g(root):\n    return root\n", False, "K4 Kind-def"),
+            # K5: Alias einer **Fremdquelle** ist kein root
             ("def f(root):\n    r = Path.cwd()\n    return g(r)\n"
-             "def g(root):\n    return root\n", True, "Alias einer Fremdquelle"),
+             "def g(root):\n    return root\n", True, "K5 Fremd-Alias"),
+            # K6: Alias von root ist Uebergabe
+            ("def f(root):\n    r = root\n    return g(r)\n"
+             "def g(root):\n    return root\n", False, "K6 root-Alias"),
+            # K7: echte Uebergabe
+            ("def f(root):\n    return g(root)\n"
+             "def g(root):\n    return root\n", False, "K7 korrekt"),
         ]
         for src, expect_bad, label in pairs:
             got = _forwarding_violations(src)
             if bool(got) != expect_bad:
                 failures.append(
                     f"Pruefer {label}: {bool(got)} statt {expect_bad}")
+        # §A-LC: die Wache gegen die **stille** Sorte. Versuch 3 in Runde 39
+        # lieferte `[]` und meldete Erfolg.
+        blind_probe = ("def f(root):\n    return g()\n"
+                       "def g(root):\n    return root\n")
+        if not _forwarding_violations(blind_probe):
+            failures.append("Pruefer ist stillgruen (K2 liefert [])")
+        # §A-LH: aber die Presets oben sind **eigene** Quellen. Die Frage
+        # "findet er es in *dieser* Datei?" braucht dieselbe Antwort:
+        # eine Kopie der Produktionsdatei mit einem eingebauten Fehler
+        # muss anschlagen. Ein Pruefer, der nur auf Fixtures reagiert,
+        # ist ein Fixture-Pruefer.
+        prod_src = Path(__file__).read_text(encoding="utf-8")
+        broken = prod_src.replace(
+            "        if _load_count_snapshot(root) is None:",
+            "        if _load_count_snapshot() is None:", 1)
+        if broken == prod_src:
+            failures.append("Anker fuer Produktions-Probe fehlt")
+        elif not _forwarding_violations(broken):
+            failures.append("Pruefer findet eingebauten Fehler nicht in Produktion")
         # Die Zeile liest den Zaehler an genau einer Stelle.
         line_c = _status_line(Checks(rep_c.checked, rep_c.skips.get("regel", 0)), 0)
         if f"{n_ok + 1} Angaben geprueft" not in line_c:
@@ -1775,27 +1826,28 @@ def _forwarding_violations(src: str) -> list[str]:
             if "root" in ps:
                 root_funcs[n.name] = ps.index("root")
 
-    def calls_without_root(fn: ast.FunctionDef) -> list[str]:
+    def calls_without_root(fn: ast.FunctionDef, label: str = '') -> list[str]:
         """Nur die Aufrufe **im eigenen Rumpf**, nicht in Kind-`def`s (§A-KL/KN).
 
-        §A-KO: **der Aufrufer braucht kein `root`-*Parameter* — er braucht
-        ein `root` im Scope.** Der erste Anlauf fragte `has_root` an der
-        Signatur; `_self_test_count_delta()` hat keinen Parameter, `root`
-        ist dort eine lokale Variable aus einem `TemporaryDirectory`. Ein
-        Aufruf `_snapshot_path()` dort ist derselbe Fehler. Runde 38s
-        Fehlerklasse in der Suche: nach der *Form* des Parameters fragen
-        statt nach dem *Wert* im Scope.
-
-        Ein Name ist im Scope, wenn er als Parameter, als Zuweisungsziel
-        oder als `with ... as root`/`for ... in`-Ziel vorkommt — irgendwo
-        vor dem Aufruf im selben oder einem umgebenden Rumpf.
+        §A-LD: das Kind wird nicht uebersprungen, sondern **eigenstaendig**
+        geprueft. Ein `g()` in einem Kind, das selbst kein `root` bindet,
+        ist dort korrekt — es ist ein Verstoss der **Kind**funktion nur,
+        wenn sie `root` hat. Runde 39 warf alle Kindknoten weg; das Preset
+        K4 zeigt, dass damit auch ein echter Verstoss im Kind verloren
+        geht (er wird nie gemeldet).
         """
         found: list[str] = []
 
-        def visit(node: ast.AST) -> None:
+        def visit(node: ast.AST, node_fn: ast.FunctionDef) -> None:
             for child in ast.iter_child_nodes(node):
-                if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
-                    continue          # neuer Scope
+                if isinstance(child, ast.FunctionDef):
+                    # Kind: eigener Scope, eigene Bindung, eigene Meldung.
+                    # §A-LD: nur wenn das Kind `root` **selbst bindet**.
+                    if _binds_root(child):
+                        found.extend(calls_without_root(child, child.name))
+                    continue
+                if isinstance(child, (ast.AsyncFunctionDef, ast.Lambda)):
+                    continue          # Scope ohne `root`; nicht unsere Frage
                 if isinstance(child, ast.Call) and isinstance(child.func, ast.Name):
                     name = child.func.id
                     if name in root_funcs and name != fn.name:
@@ -1810,23 +1862,38 @@ def _forwarding_violations(src: str) -> list[str]:
                         if len(child.args) > pos:
                             arg = child.args[pos]
                             passed = (isinstance(arg, ast.Name)
-                                      and arg.id in _root_aliases(fn, None))
+                                      and arg.id in _root_aliases(node_fn, child))
                         else:
                             passed = False
                         if not has_kw and not passed:
                             # Ein Aufruf ohne `root` ist **nur** erlaubt,
                             # wenn der Test genau den Default-Zweig prueft
                             # (§A-KR). Das ist keine Duldung, sondern eine
-                            # benannte Liste: `_DEFAULT_PROBE_LINES`.
-                            if "root" in _names_in_scope(fn, None) and \
+                            # benannte Liste: `_DEFAULT_PROBE_ANCHORS`.
+                            # Gebunden heisst: **die Funktion selbst** hat
+                            # `root` (Parameter, Zuweisung, with-as). Ein
+                            # Kind, das `root` nur als Closure sieht,
+                            # uebergibt nichts — es hat nichts zu uebergeben.
+                            if _binds_root(node_fn) and \
                                     child.lineno not in _DEFAULT_PROBE_LINES \
                                     and not _marked(child.lineno):
                                 found.append(
-                                    f"{fn.name} -> {name}() @L{child.lineno}")
-                visit(child)
+                                    f"{label or fn.name} -> {name}() @L{child.lineno}")
+                visit(child, node_fn)
 
         for stmt in fn.body:
-            visit(stmt)
+            # §A-LG: `visit(stmt)` fuer einen `def`-Knoten hiesse, in das
+            # Kind hineinzulaufen, **ohne** es als Kind zu behandeln. Der
+            # Einstieg muss dieselbe Regel haben wie die Rekursion: ein
+            # Kind mit eigener `root`-Bindung wird eigenstaendig geprueft,
+            # eines ohne wird nicht betreten.
+            if isinstance(stmt, ast.FunctionDef):
+                if _binds_root(stmt):
+                    found.extend(calls_without_root(stmt, stmt.name))
+                continue
+            if isinstance(stmt, (ast.AsyncFunctionDef, ast.Lambda)):
+                continue
+            visit(stmt, fn)
         return found
 
     out: list[str] = []
@@ -1834,14 +1901,15 @@ def _forwarding_violations(src: str) -> list[str]:
         if not isinstance(n, ast.FunctionDef):
             continue
         # §A-KO: der Aufrufer muss nicht in `root_funcs` stehen — er
-        # braucht nur ein `root` im Scope. `_self_test_count_delta()` hat
-        # keinen Parameter, aber eine lokale Variable `root`.
-        # §A-KP: `at=None` heisst "irgendwo in der Funktion", nicht "vor
-        # der eigenen `def`-Zeile". Der erste Anlauf uebergab `fn` als Ort
-        # — `limit = fn.lineno` filterte damit **alles** weg und der
-        # Pruefer war stillgruen. Ein Pruefer, der immer `[]` liefert,
-        # ist von einem fehlerfreien Baum nicht zu unterscheiden.
-        if "root" in _names_in_scope(n, None):
+        # braucht `root` **selbst gebunden**.
+        # §A-LF: der erste Anlauf lief per `ast.walk(tree)` ueber **alle**
+        # `def`s, auch die verschachtelten, und `_names_in_scope` fand
+        # dort `root` als Closure der Elternfunktion. Damit wurde `inner`
+        # zweimal geprueft — einmal als Kind (richtig, keine Bindung) und
+        # einmal als Wurzel (falsch, Closure als Bindung). Gefragt ist
+        # `_binds_root`: hat **diese** Funktion `root`, oder sieht sie es
+        # nur?
+        if _binds_root(n):
             out.extend(calls_without_root(n))
     return out
 
@@ -1912,6 +1980,33 @@ _SNAPSHOT_CACHE: dict = {}
 _START_CWD = Path.cwd().resolve()
 
 
+# §A-KR: die **erlaubten** Aufrufe ohne `root`. Kein Wildcard, keine
+# Mustererkennung: **Textanker** statt Zeilennummern — die Zeile wandert
+# mit jedem Edit, der Anker nicht. Jeder Anker traegt seinen Grund im
+# selben Code. Wird der Aufruf umgeschrieben, findet die Wache ihren
+# Anker nicht mehr und schlaegt an: "Ausnahme ohne Wache ist eine Duldung".
+# §A-KY: der erste Stand hing an Zeilennummern und brach beim
+# ersten Einfuegen darueber. Das ist derselbe
+# Fehler wie ein Cache ohne Schluessel: die Ausnahme zeigte auf eine
+# Position statt auf einen Inhalt.
+_DEFAULT_PROBE_LINES: frozenset[int] = frozenset()
+
+# Anker als **Teilstrings** ohne fuehrende Einrueckung: die Einrueckung
+# aendert sich mit jedem `if` darueber, der Aufruf nicht. Alle acht sind
+# bewusst: vier pruefen den Default-Zweig, vier uebergeben absichtlich
+# einen anderen Ort (`root_repo`, doku, None).
+_DEFAULT_PROBE_ANCHORS: tuple[str, ...] = (
+    "check_counts(text_doc, w_doc, p_doc, rep, root_repo)  # §A-KR",
+    "check_counts(raw, w_doc, p_doc, one, root_repo)  # §A-KR",
+    "got = _snapshot_path()             # §A-KR root=None",
+    '"_snapshot_path": _snapshot_path(),   # §A-KR',
+    '"_delta_line": _delta_line(1),        # §A-KR',
+    "if _snapshot_path(root) == _snapshot_path():  # §A-KR",
+    "if repo_root(None) != here:  # §A-KR",
+    'failures.append(f"repo_root(None) != Dateiort: {repo_root(None)}")  # §A-KR',
+)
+
+
 _SOURCE_LINES: list[str] = []
 
 
@@ -1925,30 +2020,73 @@ def _marked(lineno: int) -> bool:
     return "§A-KR" in _SOURCE_LINES[lineno - 1]
 
 
-# §A-KR: die **erlaubten** Aufrufe ohne `root`. Kein Wildcard, keine
-# Mustererkennung: vier Zeilennummern, jede mit Grund daneben im Code.
-# Wird eine Zeile verschoben, aendert sich der Code — und die Pruefung
-# `_default_probe_lines_valid()` schlaegt an, weil sie den Kommentar und
-# den Aufruf an genau dieser Zeile erwartet. Eine Ausnahme ohne Wache
-# ist eine Duldung.
-_DEFAULT_PROBE_LINES: frozenset[int] = frozenset({976, 1043, 1044, 1080})
-
-
 def _default_probe_lines_valid() -> list[str]:
-    """Stehen die vier erlaubten Aufrufe noch da, wo sie hingehoeren?"""
-    src = Path(__file__).read_text(encoding="utf-8").split("\n")
+    """Stehen die erlaubten Aufrufe noch da — **und kein weiterer**?
+
+    Zwei Fragen, zwei Antworten:
+    1. Jeder Anker muss wortgleich im Quelltext stehen (Ausnahme existiert).
+    2. Die Zahl der markierten Zeilen (`§A-KR`) muss **gleich** der Zahl
+       der Anker sein. Sonst hat jemand eine Ausnahme davongetragen, ohne
+       sie in die Liste zu schreiben — oder umgekehrt.
+    """
+    src = Path(__file__).read_text(encoding="utf-8")
+    lines = src.split("\n")
     out: list[str] = []
-    for ln in sorted(_DEFAULT_PROBE_LINES):
-        if ln - 1 >= len(src):
-            out.append(f"Zeile {ln} existiert nicht")
-            continue
-        text = src[ln - 1]
-        if "§A-KR" not in text:
-            out.append(
-                f"Zeile {ln} ist kein Default-Aufruf mehr: {text.strip()!r}")
-        # Der Marker ist die Zulassung — nicht die Naehe eines Wortes.
-        # Naehe war der erste Versuch und traf beim naechsten Edit daneben.
+    joined = "\n".join(ln.strip() for ln in lines)
+    for anchor in _DEFAULT_PROBE_ANCHORS:
+        if anchor not in joined:
+            out.append(f"Anker fehlt: {anchor!r}")
+    # Die Ankerliste selbst enthaelt die Marker als Literale. Gezaehlt
+    # wird deshalb nur, was **vor** der Liste steht: der Code, den sie
+    # beschreibt, nicht ihre eigene Abschrift (§A-KZ).
+    try:
+        cut = next(i for i, ln in enumerate(lines)
+                   if ln.startswith("_DEFAULT_PROBE_ANCHORS"))
+    except StopIteration:
+        return ["Ankerliste nicht gefunden"]
+    marked = sum(1 for ln in lines[:cut]
+                 if "§A-KR" in ln and not ln.lstrip().startswith("#"))
+    if marked != len(_DEFAULT_PROBE_ANCHORS):
+        out.append(
+            f"{marked} markierte Zeilen, aber {len(_DEFAULT_PROBE_ANCHORS)} "
+            f"Anker — Ausnahme ausserhalb der Liste?")
     return out
+
+
+def _binds_root(fn: object) -> bool:
+    """Bindet **diese** Funktion `root` — oder sieht sie es nur von aussen?
+
+    §A-LE: der Scope-Resolver in `_names_in_scope` laeuft ueber den ganzen
+    Funktionsbaum und findet `root` auch, wenn es ein Closure der
+    Elternfunktion ist. Fuer die Frage "haette sie `root` weiterreichen
+    koennen" ist das zu grosszuegig: ein Kind ohne eigenen Parameter hat
+    nichts zu reichen. Bindungen sind Parameter, Zuweisungen, `with ... as`
+    und `for`-Ziele — im **eigenen** Rumpf, ohne Kind-`def`s.
+    """
+    import ast
+    if any(a.arg == "root" for a in getattr(fn, "args", ast.arguments(
+            posonlyargs=[], args=[], kwonlyargs=[], kw_defaults=[], defaults=[])).args):
+        return True
+
+    def walk(node: ast.AST) -> bool:
+        for child in ast.iter_child_nodes(node):
+            if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
+                continue
+            if isinstance(child, ast.Assign):
+                if any(isinstance(t, ast.Name) and t.id == "root"
+                       for t in child.targets):
+                    return True
+            if isinstance(child, (ast.With, ast.AsyncWith)):
+                if any(item.optional_vars is not None
+                       and isinstance(item.optional_vars, ast.Name)
+                       and item.optional_vars.id == "root"
+                       for item in child.items):
+                    return True
+            if walk(child):
+                return True
+        return False
+
+    return walk(fn)  # type: ignore[arg-type]
 
 
 def _root_aliases(fn: object, at: object) -> set[str]:
@@ -2194,20 +2332,21 @@ def _selection_line(skips: dict[str, int] | None = None) -> str:
 
 
 def _doc_tracked(root: Path | None = None) -> str:
-    """Ist die Rundentabelle im Repo, und ist sie **unveraendert** committet?
+    """Ist die Rundentabelle im Commit — und stimmt der Inhalt?
 
-    Gemessen mit `git ls-files --error-unmatch` + `git log -1`: eine
-    Abnahme im Arbeitsbaum ist keine Doku, sie ist ein Entwurf. Der
-    Unterschied ist ein Befehl, kein Satz.
+    Gemessen mit `git ls-files --error-unmatch` und `git log -1`: eine
+    Abnahme im Arbeitsbaum ist keine Doku, sie ist ein Entwurf.
 
-    §A-KV (Runde 39): der erste Stand meldete „committet <sha>" fuer die
-    Datei, **nachdem** sie in dieser Runde geaendert wurde. `git log -1`
-    fragt nur, ob je ein Commit sie enthielt — nicht, ob der Arbeitsbaum
-    ihm noch entspricht. Zwei Fragen, ein Wort (`committet`), dieselbe
-    Form wie `total` gegen `total`. Jetzt: `git status --porcelain` als
-    dritte Frage. **Und `root` wird durchgereicht** — der Aufruf lief
-    gegen `Path(__file__).parent.parent`, nicht gegen das uebergebene
-    Repo (derselbe Durchreich-Fehler wie in `main`).
+    §A-KW: vorher stand hier `git status --porcelain`. Das ist
+    eine **mtime**-Aussage: `touch TAG7_ABNAHME.md` — Inhalt unveraendert —
+    liess die Zeile „geaendert" sagen, obwohl der Inhalt zum Commit
+    passt. Und der umgekehrte Fall ist schlimmer: „committet <sha>" stand ueber
+    einem Inhalt, der nicht <sha> war. Beides sind **Zeitpunkt**aussagen;
+    die Zeile behauptet eine **Inhalts**aussage.
+
+    Deshalb: `git show <sha>:<pfad>` gegen den Arbeitsbaum hashen. Kein
+    `git diff` (das ist wieder indexabhaengig), sondern `sha256` beider
+    Seiten. Das kostet einen Blob-Read — und misst genau, was dasteht.
     """
     rel = "order_execution_engine/ops/TAG7_ABNAHME.md"
     base = repo_root(root)
@@ -2219,11 +2358,20 @@ def _doc_tracked(root: Path | None = None) -> str:
         c = subprocess.run(["git", "log", "-1", "--format=%h", "--", rel],
                            cwd=str(base), capture_output=True, text=True, timeout=5)
         sha = c.stdout.strip() or "?"
-        d = subprocess.run(["git", "status", "--porcelain", "--", rel],
-                           cwd=str(base), capture_output=True, text=True, timeout=5)
-        if d.returncode == 0 and d.stdout.strip():
-            return f"geaendert nach {sha} (nicht committet)"
-        return f"committet {sha}"
+        if sha == "?":
+            return "kein Commit"
+        blob = subprocess.run(["git", "show", f"{sha}:{rel}"],
+                              cwd=str(base), capture_output=True, timeout=5)
+        if blob.returncode != 0:
+            return f"Commit {sha} nicht lesbar"
+        work = base / rel
+        try:
+            current = work.read_bytes()
+        except OSError:
+            return f"Datei fehlt im Arbeitsbaum (Commit {sha})"
+        if hashlib.sha256(current).digest() == hashlib.sha256(blob.stdout).digest():
+            return f"committet {sha} (Inhalt identisch, sha256:{hashlib.sha256(current).hexdigest()[:12]})"
+        return f"geaendert nach {sha} (Inhalt weicht ab, sha256:{hashlib.sha256(current).hexdigest()[:12]})"
     except (OSError, subprocess.SubprocessError):
         return "Pruefung nicht moeglich"
 
@@ -2304,6 +2452,13 @@ class Checks:
         gezaehlt" sagte. Zusagen sind keine Messung, aber sie sind Angaben
         im Dokument; sie weglassen hiess, den Namen zu behalten und die
         Menge zu aendern. Drei Einheiten, drei Zahlen, ein Name.
+
+        **Definitionsaenderung, datiert: 2026-10-17, Runde 40.** Vorher
+        `total = n + excluded` (Druck: `433 gezaehlt`), danach
+        `total = n + excluded + claims` (Druck: `461 gezaehlt (433
+        gemessen + 28 Zusagen)`). Wer die Rundenserie liest, muss an
+        dieser Zeile sehen, dass die Zahl um Zusagen gewachsen ist und
+        nicht um Pruefungen: welcher Posten wann dazukam.
         """
         return self.n + self.excluded + self.claims
 
@@ -2339,16 +2494,28 @@ def _status_line(checked: Checks, problems: int) -> str:
     nicht — sie liest vier Felder eines Objekts, das sie zusammen haelt.
 
     Seit Runde 39 nennt sie die Zusagen getrennt: `gezaehlt` umfasst sie,
-    `geprueft` und `ausgeschlossen` nicht. Drei Einheiten in einer Zeile,
-    jede mit ihrem eigenen Wort — und `measured` (= geprueft + ausgeschlossen)
-    bleibt fuer das Delta verfuegbar, ohne dass jemand subtrahiert.
+    `geprueft` und `ausgeschlossen` nicht.
+
+    §A-KX (Runde 40): "getrennt nennen" reichte nicht. Die Kopfzahl stand
+    als `N gezaehlt` — und ein Teil dieser Zahl waren Aussagen, die per
+    Definition nicht gemessen sind. Wer eine fruehere Runde gegen diese
+    liest, sieht einen Sprung ohne Grund. Jetzt traegt die Zahl ihre
+    Zerlegung: `N gezaehlt (M gemessen + K Zusagen)`. Zwei Zahlen, zwei
+    Namen, eine Klammer — und `measured` ist dieselbe Zahl, nicht eine
+    Nachrechnung.
     """
     if not isinstance(checked, Checks):
         raise TypeError("checks muss Checks sein, int ist die alte Falle")
     out = (f"{checked.n} Angaben geprueft / {checked.total} Angaben gezaehlt "
-           f"({checked.excluded} ausgeschlossen)")
+           f"({checked.measured} gemessen + {checked.claims} Zusagen)")
+    if checked.excluded:
+        out += f", davon {checked.excluded} ausgeschlossen"
     if checked.claims:
-        out += f" + {checked.claims} Zusagen"
+        # §A-LI: die Zusagen sind **nicht** doctest-gedeckt (kein `>>>` in
+        # CLAUDE.md, gemessen in Runde 40). Sie stehen einmal in der Zahl
+        # und werden nirgends als Pruefung gezaehlt — der Grund muss an
+        # der Zahl stehen, nicht nur in der Akte.
+        out += " (nicht doctest-gedeckt)"
     return out + f", {problems} Abweichungen"
 
 
