@@ -4519,7 +4519,130 @@ verhalten sich anders, `object.__setattr__` umgeht die Sperre (wie bei
 `frozen=True`). `__delattr__` fehlte — nachgetragen und geprüft (Mutation:
 1 FAIL).
 
+### §71.20 — Runde 39: `claim()` fiel aus der Summe, und `total` behielt den Namen
+
+Drei Eimer, vier Kategorien, ein Name. `ok/fail → checked`,
+`skip/env → excluded`, `claim → ?`. Die Zusage lag in `Report.claims`
+und in keiner der beiden Zahlen — `total` hieß „alle Angaben" und meinte
+„checked + excluded". **Runde 23 eine Ebene höher: nicht `checked` gegen
+`geprueft`, sondern `total` gegen `total`.**
+
+| `claim()` | Entscheidung | Folge |
+|---|---|---|
+| eigener Eimer, `total` umfaßt ihn | **gewählt** | Zeile nennt drei Einheiten; `measured` behält die alte Menge |
+| außerhalb, `total` umbenannt | verworfen | ein Name weniger, aber zwei Mengen bleiben |
+| außerhalb, `claim()` streichen | verworfen | Zusage ohne Ort ist keine Zusage |
+
+Gegenprobe (Fall 26): derselbe `Report` ohne `claim()` — `total` ändert
+sich um **nichts**, `measured` ebenso wenig. Zwei rote Mutationen:
+`total` ohne `claims` → 3 FAIL; `claims` in `measured` → 2 FAIL.
+
+**Die Zahl springt: `433 → 461`.** Nicht weil 28 Prüfungen dazukamen,
+sondern weil die Menge sich verschoben hat, während der Name blieb. Es
+ist dieselbe Zahl wie vorher, um den Anteil erweitert, der vorher
+unerwähnt blieb.
+
+### §71.21 — Runde 39: der Cache war der Kandidat, nicht der Parameter
+
+`_save_count_snapshot` hatte kein `root` — das war der Auslöser. Die
+Ursache konnte der prozessweite `_ROOT_CACHE` sein, der mit **einem**
+root gemessen war (Runde 35: 3 Abfragen → 1 `git`-Aufruf). Fall 27
+misst beide Werte: `repo_root(tmp_a)` ≠ `repo_root(tmp_b)`, zwei
+Einträge; derselbe root zweimal → ein Eintrag. Mutation „Schlüssel ist
+immer `None`" → 20 FAIL. **Der Cache war korrekt — aber das war eine
+Annahme, bis Fall 27 sie gemessen hat.**
+
+Nebenwirkung, benannt: ein prozeßweiter Cache macht die Suite
+reihenfolgeabhängig; `reset_all()` deckt das nur, weil es gerufen wird.
+
+### §71.22 — Runde 39: die Suche fragte nach dem Fund, nicht nach dem Fehler
+
+Runde 38s eigenes `rg` suchte `Path.cwd()` — das **Symptom** aus
+Runde 34/35. Der Fehler ist „ein Aufrufer reicht `root` nicht durch".
+**Das sind zwei Mengen, und die zweite ist größer.**
+
+Der zweite `rg` ist ein AST-Lauf (`_forwarding_violations`). Erster
+echter Lauf: **13 Stellen**, darunter `main` selbst — `_save_count_snapshot`
+und `_delta_line` ohne `root`. Die Produktion schrieb in den
+Default-Ort statt zu `root`. Das war ein echter Fehler, kein Artefakt.
+
+Vier Fehlversuche am Prüfer, jeder eine eigene Fehlerklasse:
+
+| Versuch | Fehler im Prüfer | Symptom |
+|---|---|---|
+| 1 | `ast.walk(n)` stieg in Kind-`def`s | Kind-Aufrufe als Eltern-Verstoß |
+| 2 | Filter auf `root: Path \| None` | `check_line_counts(root: Path)` fehlte |
+| 3 | `_names_in_scope(fn, fn)` → `limit = fn.lineno` | Prüfer stillgrün, immer `[]` |
+| 4 | `root_funcs[name]` als „root ist erster Parameter" | 13 Falschmeldungen |
+| 5 | „Argument vorhanden" als „root übergeben" | `Path.cwd()` galt als korrekt |
+
+Der fünfte ist der wichtigste: **ein Prüfer, der Argumente zählt statt
+Namen liest, prüft die Form der Übergabe, nicht die Übergabe.** Jetzt
+werden Aliase (`root_repo = root`, `case = root / ...`) aufgelöst, und
+`Path.cwd()` fällt durch. Fünf Presets an Mini-Quellen statt an der
+Produktionsdatei — der Prüfer ist gegen sich selbst testbar.
+
+Ausnahmen sind **benannte Zeilen** (`_DEFAULT_PROBE_LINES` + `# §A-KR`),
+jede mit Grund daneben, und `_default_probe_lines_valid()` schlägt an,
+wenn eine Zeile wandert, ohne dass der Marker mitwandert.
+
+### §71.23 — Runde 39: ein Reset, der löscht, ist von einem, der leert, nicht zu unterscheiden
+
+Fall 24 hatte drei Schritte: setzen → zweiten Fall sehen lassen →
+`reset_all()` → weg. Der vierte fehlt: **nach dem Reset wieder
+setzbar.** `del _ROOT_CACHE` oder `= None` macht den nächsten Zugriff
+zum `NameError`/`TypeError`, und der Test sähe nur „weg" — weil der
+erste Schritt beide Fälle gleich zeigt. Mutation `_test_results = None`
+→ 4 FAIL. Der Zyklus läuft jetzt zweimal, und der dritte Schritt setzt
+danach alle vier Zustände erneut.
+
+### §71.24 — Runde 39: die Sperre ist eine Dunder-Liste
+
+`__setattr__` ✓, `__delattr__` ✓. Die Liste steht jetzt an der Klasse,
+mit dem, was sie **nicht** deckt: `object.__setattr__` (umgeht jede
+Fassung, auch `frozen=True`), `copy`/`pickle` (bauen über `__init__`,
+nicht getestet), `vars()` (leer, weil `__slots__` kein `__dict__` gibt).
+Der Grund gegen `frozen=True` steht als Satz daneben — nicht
+„Importkosten", sondern „hält die Klasse klein".
+
+### §71.25 — Runde 39: `committet` war die dritte Kopie desselben Fehlers
+
+Beim Nachlauf nach der Doku-Änderung meldete der Prüfer
+`Rundentabelle: … (committet 9cfa405d)` — für eine Datei, die in
+dieser Minute geändert worden war. `git log -1` fragt, ob **je** ein
+Commit sie enthielt. `git status --porcelain` fragt, ob der Arbeitsbaum
+ihm noch entspricht. Zwei Fragen, ein Wort.
+
+Dieselbe Form wie `total` gegen `total`: der Name blieb, die Menge
+verschob sich. Und derselbe Durchreich-Fehler wie in `main`:
+`_doc_tracked()` nahm kein `root` und lief gegen
+`Path(__file__).parent.parent`. Beides behoben; die Ausgabe lautet
+jetzt `geaendert nach 9cfa405d (nicht committet)`, bis der Commit da ist.
+
+**Das ist der vierte Fund derselben Familie in einer Runde — und der
+erste, den die eigene Prüfung beim Ausführen gemeldet hat, nicht der
+Autor beim Lesen.**
+
 ## 72. Der Satz dieser Runde
+
+Neununddreißig Runden, und der Zähler hat jetzt vier Kategorien, einen
+Test und zwei rote Mutationen — und die fünfte Kategorie, die vorher in
+keinen der beiden Eimer fiel, hat einen eigenen bekommen.
+
+**Aber der Satz dieser Runde ist nicht der Zähler. Er ist der Cache und
+die Suche.** Der Cache, mit einem `root` gemessen, hätte den Fehler
+verursachen können, den der fehlende Parameter nur ausgelöst hat — er
+war korrekt, aber das war eine Annahme. Und die Suche, die sechs
+Aufrufer fand, suchte nach dem Fund und nicht nach dem Fehler: der
+zweite `rg` fand dreizehn Stellen, darunter `main` selbst.
+
+**Was am 20.10. auf dem Tisch liegt: 216 Tests, 24/24 Selbsttests, vier
+benannte Annahmen, drei Gegenproben, ein Nenner von 461 (223 + 210 + 28),
+ein AST-Prüfer mit fünf Presets und fünf benannten Ausnahmezeilen — und
+ein System, dessen Zahl jetzt stimmt, dessen Menge aber erst seit dieser
+Runde einen Namen hat.**
+
+
 
 Dreiunddreißig Runden, und der Selbsttest läuft in CI, ist in drei
 Umgebungen gemessen — und in der dritten stand `kein Vorlauf`, während

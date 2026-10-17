@@ -841,7 +841,7 @@ def _self_test_count_delta() -> list[str]:
             text_doc = doc.read_text(encoding="utf-8")
             w_doc, p_doc = parse_waves(text_doc)
             rep = Report()
-            check_counts(text_doc, w_doc, p_doc, rep, root_repo)
+            check_counts(text_doc, w_doc, p_doc, rep, root_repo)  # §A-KR bewusst: Doku-Ort
             # disjunkt heisst: **je Fundstelle** entweder geprueft oder
             # ausgeschlossen, nie beides. Eine Zeile darf beides enthalten
             # (`27 Waves x 9 Agents`: Architekturzahl geprueft, ein Bruch
@@ -851,7 +851,7 @@ def _self_test_count_delta() -> list[str]:
             per_line_checked = per_line_skips = 0
             for raw in text_doc.splitlines():
                 one = Report()
-                check_counts(raw, w_doc, p_doc, one, root_repo)
+                check_counts(raw, w_doc, p_doc, one, root_repo)  # §A-KR bewusst: Doku-Ort
                 per_line_checked += one.checked
                 per_line_skips += sum(one.skips.values())
             if per_line_checked != rep.checked:
@@ -897,7 +897,7 @@ def _self_test_count_delta() -> list[str]:
         #     nicht beide nur "geprueft" heissen. Geprueft wird die
         #     Ausgabeform selbst — sie ist die Stelle, an der zwei
         #     Einheiten ein Wort teilten.
-        line = _status_line(Checks(223, 210), 0)
+        line = _status_line(Checks(223, 210, 0), 0)
         for need in ("223 Angaben geprueft", "433 Angaben gezaehlt",
                      "210 ausgeschlossen", "0 Abweichungen"):
             if need not in line:
@@ -973,7 +973,7 @@ def _self_test_count_delta() -> list[str]:
                     f"reset_all() hat die Referenz verschoben: {_START_CWD}")
         try:
             os.chdir(other)                    # cwd != Repo
-            got = _snapshot_path()             # root=None
+            got = _snapshot_path()             # §A-KR root=None
         finally:
             os.chdir(prev_cwd)
         if got.parent.resolve() != (here / "sub" / ".git").resolve() and \
@@ -1040,8 +1040,8 @@ def _self_test_count_delta() -> list[str]:
             "_save_count_snapshot": None,
         }
         no_root = {
-            "_snapshot_path": _snapshot_path(),
-            "_delta_line": _delta_line(1),
+            "_snapshot_path": _snapshot_path(),   # §A-KR
+            "_delta_line": _delta_line(1),        # §A-KR
         }
         # ohne root zeigt der Ort auf **dieses** Repo, nicht auf `root`
         here = Path(__file__).resolve().parent.parent
@@ -1077,7 +1077,7 @@ def _self_test_count_delta() -> list[str]:
         #     zweiter Fall denselben Wert liefert, sieht keinen Unterschied
         #     — die vierte Annahme. Gegenprobe an der Stelle, an der sie
         #     sich schon einmal geraeumt hat: `root` gegen `root=None`.
-        if _snapshot_path(root) == _snapshot_path():
+        if _snapshot_path(root) == _snapshot_path():  # §A-KR
             failures.append("Gegenprobe fehlt: root und root=None gleich")
         if Checks(21).n == Checks(22).n:
             failures.append("Checks traegt die Zahl nicht")
@@ -1144,6 +1144,18 @@ def _self_test_count_delta() -> list[str]:
             reset_all()
             if _SNAPSHOT_SEEN[0] is not None or _test_results:
                 failures.append(f"Reset wirkt nur im Zyklus {zyklus}")
+            # Dritter Schritt (§A-KI): nach dem Reset **wieder setzbar**.
+            # Ein Reset, der das Objekt entfernt statt leert, ist von einem,
+            # der leert, im ersten Schritt nicht zu unterscheiden — erst der
+            # zweite Zugriff scheitert dann.
+            try:
+                _SNAPSHOT_SEEN[0] = root / "fall_c"
+                _test_results["c"] = zyklus
+                _ROOT_CACHE[Path("/fall_c")] = Path("/fall_c")
+                _SNAPSHOT_CACHE[Path("/fall_c")] = Path("/fall_c")
+            except (NameError, TypeError, KeyError, AttributeError) as e:
+                failures.append(f"Zustand nach Reset nicht wieder setzbar: {e}")
+            reset_all()
 
         # 25. Der Schreiber leert beide Caches (§A-KD). Zwei Caches zeigen
         #     auf dieselbe Datei; wer schreibt und sie stehen laesst, liest
@@ -1159,11 +1171,106 @@ def _self_test_count_delta() -> list[str]:
             failures.append(
                 f"Schreiber laesst Caches stehen: "
                 f"{list(_SNAPSHOT_CACHE)} / {list(_ROOT_CACHE)}")
+
+        # 26. Alle Kategorien in einem Report (§A-KH). `claim()` fiel aus
+        #     `total`, waehrend die Zeile "Angaben gezaehlt" sagte — Runde 23
+        #     eine Ebene hoeher: `total` gegen `total`.
+        rep_all = Report()
+        rep_all.ok()                                  # 1 Pruefung
+        rep_all.fail(None, "k", "d", "r")             # 2 Pruefungen
+        rep_all.skip("regel", 3)                      # 3 Ausschluesse
+        rep_all.claim("feld", 9)                      # 1 Zusage
+        c_all = Checks(rep_all.checked, sum(rep_all.skips.values()),
+                       len(rep_all.claims))
+        if c_all.n != 2:
+            failures.append(f"geprueft falsch: {c_all.n} != 2")
+        if c_all.excluded != 3:
+            failures.append(f"ausgeschlossen falsch: {c_all.excluded} != 3")
+        if c_all.measured != 5:
+            failures.append(f"measured falsch: {c_all.measured} != 5")
+        if c_all.total != 6:
+            failures.append(
+                f"total zaehlt Zusagen nicht: {c_all.total} != 6")
+        # Gegenprobe (§A-JW): derselbe Report **ohne** claim() — `total`
+        # muss sich um die Zusagen aendern, nicht um die Messung.
+        c_no = Checks(rep_all.checked, sum(rep_all.skips.values()), 0)
+        if c_no.total != 5 or c_no.total == c_all.total:
+            failures.append(
+                f"claim() veraendert total nicht: {c_no.total} vs {c_all.total}")
+        if c_no.measured != c_all.measured:
+            failures.append("claim() veraendert measured — falscher Eimer")
+        line_all = _status_line(c_all, 0)
+        for need in ("2 Angaben geprueft", "6 Angaben gezaehlt",
+                     "3 ausgeschlossen", "1 Zusagen"):
+            if need not in line_all:
+                failures.append(f"Zeile ohne {need!r}: {line_all!r}")
+        # Ohne Zusagen: keine leere Klammer, keine "+ 0 Zusagen".
+        if "Zusagen" in _status_line(c_no, 0):
+            failures.append("Zeile nennt Zusagen, wo keine sind")
+
+        # 27. Der Cache ist auf `root` geschluesselt (§A-KJ). Runde 35 hat
+        #     "3 Abfragen -> 1 git-Aufruf" mit **einem** root gemessen. Der
+        #     Fall, der zaehlt, ist der zweite: zwei roots, zwei Ergebnisse.
+        #     Sonst ist "auf root geschluesselt" eine Annahme — und der
+        #     Fund aus Runde 38 waere nicht der fehlende Parameter gewesen,
+        #     sondern der Cache.
+        other_root = root / "zweiter_root"
+        other_root.mkdir(exist_ok=True)
+        _reset_root_cache()
+        ra = repo_root(root)
+        rb = repo_root(other_root)
+        if ra == rb:
+            failures.append(f"Cache ignoriert root: {ra} == {rb}")
+        if len(_ROOT_CACHE) != 2:
+            failures.append(
+                f"Cache hat nicht zwei Eintraege: {list(_ROOT_CACHE)}")
+        # Gegenprobe (§A-JW): derselbe root zweimal -> gleicher Wert, ein
+        # Eintrag. Sonst ist der Cache entweder wirkungslos oder waechst.
+        _reset_root_cache()
+        r1 = repo_root(root)
+        r2 = repo_root(root)
+        if r1 != r2 or len(_ROOT_CACHE) != 1:
+            failures.append(
+                f"Cache waechst bei gleichem root: {list(_ROOT_CACHE)}")
+        _reset_root_cache()
         # Gegenprobe: der Schreiber muss wirklich geschrieben haben
         got_snap = _load_count_snapshot(root)
         if not got_snap or got_snap.get("checked") != rep_c.checked:
             failures.append(f"Schreiber hat nicht geschrieben: {got_snap}")
         _reset_root_cache()
+
+        # 28. Der zweite `rg` gegen fehlendes `root` (§A-KK/KO/KQ/KS/KT).
+        #     Runde 38s Suche fragte nach `Path.cwd()` — dem **Fund**. Der
+        #     Fehler ist "ein Aufrufer reicht `root` nicht durch", und die
+        #     Menge ist groesser: beim ersten echten Lauf (`rg`-Lauf R39)
+        #     dreizehn Stellen,
+        #     darunter `main`. Geprueft wird am AST — mit rotem Zwilling,
+        #     sonst ist es ein Pruefer, der prueft, dass er nichts findet.
+        viol = _root_forwarding_violations()
+        if viol:
+            failures.append(f"root nicht durchgereicht: {viol[:3]}")
+        bad_probes = _default_probe_lines_valid()
+        if bad_probes:
+            failures.append(f"Default-Ausnahmen ungueltig: {bad_probes}")
+        # Die Presets der Prueflogik, an Mini-Quellen statt an der
+        # Produktionsdatei — so ist der Zwilling reproduzierbar.
+        pairs = [
+            ("def f(root):\n    return g(Path.cwd())\n"
+             "def g(root):\n    return root\n", True, "Path.cwd() statt root"),
+            ("def f(root):\n    return g(root)\n"
+             "def g(root):\n    return root\n", False, "korrekte Uebergabe"),
+            ("def f(root):\n    return g()\n"
+             "def g(root):\n    return root\n", True, "fehlendes Argument"),
+            ("def f(root):\n    r = root\n    return g(r)\n"
+             "def g(root):\n    return root\n", False, "Alias von root"),
+            ("def f(root):\n    r = Path.cwd()\n    return g(r)\n"
+             "def g(root):\n    return root\n", True, "Alias einer Fremdquelle"),
+        ]
+        for src, expect_bad, label in pairs:
+            got = _forwarding_violations(src)
+            if bool(got) != expect_bad:
+                failures.append(
+                    f"Pruefer {label}: {bool(got)} statt {expect_bad}")
         # Die Zeile liest den Zaehler an genau einer Stelle.
         line_c = _status_line(Checks(rep_c.checked, rep_c.skips.get("regel", 0)), 0)
         if f"{n_ok + 1} Angaben geprueft" not in line_c:
@@ -1215,8 +1322,8 @@ def _self_test_count_delta() -> list[str]:
         except AttributeError:
             pass
         # und die Funktion selbst: `repo_root()` ist der eine Weg
-        if repo_root(None) != here:
-            failures.append(f"repo_root(None) != Dateiort: {repo_root(None)}")
+        if repo_root(None) != here:  # §A-KR bewusst: Default-Zweig
+            failures.append(f"repo_root(None) != Dateiort: {repo_root(None)}")  # §A-KR
         if repo_root(root) != root.resolve():
             failures.append("repo_root(root) loest nicht auf root auf")
         # Cache: zweiter Aufruf darf keinen neuen Subprozess kosten
@@ -1584,7 +1691,7 @@ _RESET_GLOBALS = "_SNAPSHOT_SEEN _test_results _ROOT_CACHE _SNAPSHOT_CACHE"
 # den er gerade reparieren soll. Beim ersten Durchlauf faellt das nicht auf
 # (cwd ist sauber), erst beim zweiten gescheiterten `chdir`-Fall landet die
 # Referenz in `/tmp`.
-_REFERENCE_GLOBALS = "_START_CWD"
+_REFERENCE_GLOBALS = "_START_CWD _SOURCE_LINES"
 # §A-JZ: Konstruktoren ueber unveraenderlichen Typen. Ein Name hier heisst:
 # das Ergebnis ist ein Wert, kein Speicherplatz.
 _IMMUTABLE_CTORS = frozenset({
@@ -1621,6 +1728,122 @@ G = frozenset()            # frozenset: unveraenderlich
 H: list = []               # Annotation aendert die Form nicht
 I = A + [None]             # Ausdruck: Zustand (unbekannt)
 '''
+
+
+def _root_forwarding_violations() -> list[str]:
+    """Welche Funktion mit `root`-Parameter ruft eine andere ohne `root`?
+
+    §A-KK: Runde 38s Suche fragte nach `Path.cwd()` — dem **Fund** aus
+    zweier Vorrunden, nicht dem **Fehler**. Der Fehler ist: ein Aufrufer hat
+    `root` und reicht es nicht weiter. Das sind zwei Mengen, und die zweite
+    ist groesser. `_save_count_snapshot` fiel durch, weil die Suche sie
+    nie gestellt hat.
+
+    §A-KM: der erste Anlauf filterte auf `root: Path | None` — und liess
+    damit `check_line_counts(text, root: Path, rep)` aus, die wichtigste
+    Gruppe. **Der Parameter heisst `root`, sein Typ ist Nebensache.** Die
+    zweite Suche fragt nach dem Namen, nicht nach dem Fund.
+
+    Die Regel ist mechanisch pruefbar: ruft eine Funktion, die `root`
+    nimmt, eine andere, die `root` nimmt, muss `root` im Aufruf stehen —
+    ausser der Aufruf ist bewusst der Default-Zweig (`root=None`, dann
+    steht `()` da und die Funktion hat keinen `root`-Parameter).
+    """
+    return _forwarding_violations(Path(__file__).read_text(encoding="utf-8"))
+
+
+def _forwarding_violations(src: str) -> list[str]:
+    """Die Kernlogik, testbar an beliebigem Quelltext (§A-KU).
+
+    Der erste Anlauf las `__file__` **in** der Prueffunktion — und war
+    damit nur gegen die eigene Datei testbar. Ein Pruefer, den man nur
+    gegen den Baum richten kann, den er prueft, ist ein Pruefer ohne
+    Gegenprobe; die Presets laufen jetzt an Mini-Quellen.
+    """
+    import ast
+    tree = ast.parse(src)
+    # §A-KQ: `root_funcs[name]` ist die **Position** von `root` in der
+    # Signatur (0-basiert) oder -1. Der erste Anlauf speicherte
+    # `ps[0] == "root"` — und damit fiel `check_line_counts(text, root, rep)`
+    # als "root ist nicht erstes Argument" durch: dreizehn Falschmeldungen fuer
+    # einen Fehler. Ein Pruefer, der Positionsargumente nicht zaehlt,
+    # misst die Form, nicht die Uebergabe.
+    root_funcs: dict[str, int] = {}
+    for n in tree.body:
+        if isinstance(n, ast.FunctionDef):
+            ps = [a.arg for a in n.args.args]
+            if "root" in ps:
+                root_funcs[n.name] = ps.index("root")
+
+    def calls_without_root(fn: ast.FunctionDef) -> list[str]:
+        """Nur die Aufrufe **im eigenen Rumpf**, nicht in Kind-`def`s (§A-KL/KN).
+
+        §A-KO: **der Aufrufer braucht kein `root`-*Parameter* — er braucht
+        ein `root` im Scope.** Der erste Anlauf fragte `has_root` an der
+        Signatur; `_self_test_count_delta()` hat keinen Parameter, `root`
+        ist dort eine lokale Variable aus einem `TemporaryDirectory`. Ein
+        Aufruf `_snapshot_path()` dort ist derselbe Fehler. Runde 38s
+        Fehlerklasse in der Suche: nach der *Form* des Parameters fragen
+        statt nach dem *Wert* im Scope.
+
+        Ein Name ist im Scope, wenn er als Parameter, als Zuweisungsziel
+        oder als `with ... as root`/`for ... in`-Ziel vorkommt — irgendwo
+        vor dem Aufruf im selben oder einem umgebenden Rumpf.
+        """
+        found: list[str] = []
+
+        def visit(node: ast.AST) -> None:
+            for child in ast.iter_child_nodes(node):
+                if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
+                    continue          # neuer Scope
+                if isinstance(child, ast.Call) and isinstance(child.func, ast.Name):
+                    name = child.func.id
+                    if name in root_funcs and name != fn.name:
+                        has_kw = any(k.arg == "root" for k in child.keywords)
+                        pos = root_funcs[name]
+                        # §A-KS: "Argument vorhanden" ist nicht "root
+                        # uebergeben". Der Zwilling `f(Path.cwd())` fuellte
+                        # `child.args` und galt als korrekt — genau der
+                        # Fehler, den der Pruefer finden soll, nur an
+                        # anderer Stelle. Gezaehlt wird der **Name** im
+                        # AST, nicht die Anzahl der Argumente.
+                        if len(child.args) > pos:
+                            arg = child.args[pos]
+                            passed = (isinstance(arg, ast.Name)
+                                      and arg.id in _root_aliases(fn, None))
+                        else:
+                            passed = False
+                        if not has_kw and not passed:
+                            # Ein Aufruf ohne `root` ist **nur** erlaubt,
+                            # wenn der Test genau den Default-Zweig prueft
+                            # (§A-KR). Das ist keine Duldung, sondern eine
+                            # benannte Liste: `_DEFAULT_PROBE_LINES`.
+                            if "root" in _names_in_scope(fn, None) and \
+                                    child.lineno not in _DEFAULT_PROBE_LINES \
+                                    and not _marked(child.lineno):
+                                found.append(
+                                    f"{fn.name} -> {name}() @L{child.lineno}")
+                visit(child)
+
+        for stmt in fn.body:
+            visit(stmt)
+        return found
+
+    out: list[str] = []
+    for n in ast.walk(tree):
+        if not isinstance(n, ast.FunctionDef):
+            continue
+        # §A-KO: der Aufrufer muss nicht in `root_funcs` stehen — er
+        # braucht nur ein `root` im Scope. `_self_test_count_delta()` hat
+        # keinen Parameter, aber eine lokale Variable `root`.
+        # §A-KP: `at=None` heisst "irgendwo in der Funktion", nicht "vor
+        # der eigenen `def`-Zeile". Der erste Anlauf uebergab `fn` als Ort
+        # — `limit = fn.lineno` filterte damit **alles** weg und der
+        # Pruefer war stillgruen. Ein Pruefer, der immer `[]` liefert,
+        # ist von einem fehlerfreien Baum nicht zu unterscheiden.
+        if "root" in _names_in_scope(n, None):
+            out.extend(calls_without_root(n))
+    return out
 
 
 def _module_state_globals() -> list[str]:
@@ -1687,6 +1910,124 @@ _SNAPSHOT_CACHE: dict = {}
 # nicht `_RESET_GLOBALS`: der Reset darf seinen eigenen Anfang nicht
 # ueberschreiben, sonst traegt er den Fehler, den er repariert, weiter.
 _START_CWD = Path.cwd().resolve()
+
+
+_SOURCE_LINES: list[str] = []
+
+
+def _marked(lineno: int) -> bool:
+    """Steht `# §A-KR` auf dieser Zeile? (Quelltext, einmal gelesen)"""
+    if not _SOURCE_LINES:
+        _SOURCE_LINES.extend(
+            Path(__file__).read_text(encoding="utf-8").split("\n"))
+    if not (1 <= lineno <= len(_SOURCE_LINES)):
+        return False
+    return "§A-KR" in _SOURCE_LINES[lineno - 1]
+
+
+# §A-KR: die **erlaubten** Aufrufe ohne `root`. Kein Wildcard, keine
+# Mustererkennung: vier Zeilennummern, jede mit Grund daneben im Code.
+# Wird eine Zeile verschoben, aendert sich der Code — und die Pruefung
+# `_default_probe_lines_valid()` schlaegt an, weil sie den Kommentar und
+# den Aufruf an genau dieser Zeile erwartet. Eine Ausnahme ohne Wache
+# ist eine Duldung.
+_DEFAULT_PROBE_LINES: frozenset[int] = frozenset({976, 1043, 1044, 1080})
+
+
+def _default_probe_lines_valid() -> list[str]:
+    """Stehen die vier erlaubten Aufrufe noch da, wo sie hingehoeren?"""
+    src = Path(__file__).read_text(encoding="utf-8").split("\n")
+    out: list[str] = []
+    for ln in sorted(_DEFAULT_PROBE_LINES):
+        if ln - 1 >= len(src):
+            out.append(f"Zeile {ln} existiert nicht")
+            continue
+        text = src[ln - 1]
+        if "§A-KR" not in text:
+            out.append(
+                f"Zeile {ln} ist kein Default-Aufruf mehr: {text.strip()!r}")
+        # Der Marker ist die Zulassung — nicht die Naehe eines Wortes.
+        # Naehe war der erste Versuch und traf beim naechsten Edit daneben.
+    return out
+
+
+def _root_aliases(fn: object, at: object) -> set[str]:
+    """Namen, die **denselben Wert** tragen wie `root` (§A-KT).
+
+    `root_repo = root`, `case = root / ...`, `other_root = root / ...` —
+    drei verschiedene Pfade, die alle von `root` abstammen. Wer sie
+    uebergibt, reicht `root` durch. Der erste Anlauf verglich den
+    Bezeichner `root`; `check_counts(..., root_repo)` galt damit als
+    Nichtuebergabe. **Derselbe Fehler wie §3: nach dem Namen gefragt,
+    nicht nach der Herkunft.**
+
+    Aufgeloest wird transitiv: ein Name ist Alias, wenn sein Wert ein
+    Ausdruck ist, der `root` oder einen bereits erkannten Alias
+    enthaelt. Kein Interpreter — nur Zuweisungen vor `at`.
+    """
+    import ast
+    limit = 10 ** 9 if at is None else getattr(at, "lineno", 10 ** 9)
+    seeds = _names_in_scope(fn, None)
+    aliases = {"root"} if "root" in seeds else set()
+    changed = True
+    while changed:
+        changed = False
+        for n in ast.walk(fn):  # type: ignore[arg-type]
+            if getattr(n, "lineno", 10 ** 9) > limit:
+                continue
+            if not isinstance(n, (ast.Assign, ast.AnnAssign)):
+                continue
+            value = n.value
+            if value is None:
+                continue
+            used = {x.id for x in ast.walk(value) if isinstance(x, ast.Name)}
+            if not (used & aliases):
+                continue
+            tgts = n.targets if isinstance(n, ast.Assign) else [n.target]
+            for t in tgts:
+                if isinstance(t, ast.Name) and t.id not in aliases:
+                    aliases.add(t.id)
+                    changed = True
+    return aliases
+
+
+def _names_in_scope(fn: object, at: object) -> set[str]:
+    """Namen, die an `at` (innerhalb `fn`) gebunden sind (§A-KO).
+
+    Kein vollstaendiger Scope-Resolver — nur `root`: Parameter,
+    Zuweisungsziele, `with ... as`, `for ... in`, Tupel-Entpackung.
+    Frage nicht "ist es ein Parameter", sondern "gibt es den Wert".
+    """
+    import ast
+    names: set[str] = set()
+    for a in getattr(fn, "args", ast.arguments(posonlyargs=[], args=[], kwonlyargs=[], kw_defaults=[], defaults=[])).args:
+        names.add(a.arg)
+    limit = 10 ** 9 if at is None else getattr(at, "lineno", 10 ** 9)
+
+    def targets(node: ast.AST) -> None:
+        if isinstance(node, ast.Name):
+            names.add(node.id)
+        elif isinstance(node, (ast.Tuple, ast.List)):
+            for e in node.elts:
+                targets(e)
+
+    for n in ast.walk(fn):  # type: ignore[arg-type]
+        if getattr(n, "lineno", 10 ** 9) > limit:
+            continue
+        if isinstance(n, ast.Assign):
+            for t in n.targets:
+                targets(t)
+        elif isinstance(n, ast.AnnAssign) and n.target is not None:
+            targets(n.target)
+        elif isinstance(n, (ast.With, ast.AsyncWith)):
+            for item in n.items:
+                if item.optional_vars is not None:
+                    targets(item.optional_vars)
+        elif isinstance(n, (ast.For, ast.AsyncFor, ast.comprehension)):
+            targets(n.target)
+        elif isinstance(n, ast.NamedExpr):
+            targets(n.target)
+    return names
 
 
 def repo_root(root: Path | None = None) -> Path:
@@ -1852,15 +2193,24 @@ def _selection_line(skips: dict[str, int] | None = None) -> str:
     )
 
 
-def _doc_tracked() -> str:
-    """Ist die Rundentabelle im Repo, und hat sie einen Commit?
+def _doc_tracked(root: Path | None = None) -> str:
+    """Ist die Rundentabelle im Repo, und ist sie **unveraendert** committet?
 
     Gemessen mit `git ls-files --error-unmatch` + `git log -1`: eine
     Abnahme im Arbeitsbaum ist keine Doku, sie ist ein Entwurf. Der
     Unterschied ist ein Befehl, kein Satz.
+
+    §A-KV (Runde 39): der erste Stand meldete „committet <sha>" fuer die
+    Datei, **nachdem** sie in dieser Runde geaendert wurde. `git log -1`
+    fragt nur, ob je ein Commit sie enthielt — nicht, ob der Arbeitsbaum
+    ihm noch entspricht. Zwei Fragen, ein Wort (`committet`), dieselbe
+    Form wie `total` gegen `total`. Jetzt: `git status --porcelain` als
+    dritte Frage. **Und `root` wird durchgereicht** — der Aufruf lief
+    gegen `Path(__file__).parent.parent`, nicht gegen das uebergebene
+    Repo (derselbe Durchreich-Fehler wie in `main`).
     """
     rel = "order_execution_engine/ops/TAG7_ABNAHME.md"
-    base = Path(__file__).resolve().parent.parent
+    base = repo_root(root)
     try:
         r = subprocess.run(["git", "ls-files", "--error-unmatch", rel],
                            cwd=str(base), capture_output=True, text=True, timeout=5)
@@ -1868,7 +2218,12 @@ def _doc_tracked() -> str:
             return "NICHT im Repo"
         c = subprocess.run(["git", "log", "-1", "--format=%h", "--", rel],
                            cwd=str(base), capture_output=True, text=True, timeout=5)
-        return f"committet {c.stdout.strip() or '?'}"
+        sha = c.stdout.strip() or "?"
+        d = subprocess.run(["git", "status", "--porcelain", "--", rel],
+                           cwd=str(base), capture_output=True, text=True, timeout=5)
+        if d.returncode == 0 and d.stdout.strip():
+            return f"geaendert nach {sha} (nicht committet)"
+        return f"committet {sha}"
     except (OSError, subprocess.SubprocessError):
         return "Pruefung nicht moeglich"
 
@@ -1903,7 +2258,7 @@ class Checks:
     mehr luegen, weil sie nicht mehr rechnen muss.
     """
 
-    __slots__ = ("n", "excluded")
+    __slots__ = ("n", "excluded", "claims")
 
     # §A-KF: warum `__setattr__` von Hand und nicht `@dataclass(frozen=True)`?
     # `frozen=True` erzeugt genau diese Sperre (plus `__delattr__`) — die
@@ -1913,12 +2268,15 @@ class Checks:
     # werden muesste — mehr Zeilen als die zwei hier. Der Grund ist also
     # **nicht** "spart Importkosten", sondern "haelt die Klasse klein".
     #
-    # Grenze, die daraus folgt und dokumentiert gehoert: `object.__setattr__`
-    # umgeht die Sperre (das tut `frozen=True` auch), `copy`/`pickle`
-    # verhalten sich anders als bei einem Dataclass. Wer `Checks` je
-    # serialisiert, soll auf `__reduce__` oder ein Dataclass wechseln.
+    # §A-KG: die Sperre ist eine **Dunder-Liste** und damit ein Nenner.
+    # Gesperrt: `__setattr__`, `__delattr__`. Nicht gesperrt, weil strukturell
+    # anders: `object.__setattr__` (umgeht jede Fassung, auch `frozen=True`),
+    # `copy`/`pickle` (bauen ueber `__init__`, hier unkritisch, aber nicht
+    # getestet), `vars()` (leer, weil `__slots__` kein `__dict__` gibt).
+    # Wer einen weiteren Weg findet, traegt ihn hier ein — sonst ist die
+    # Liste still unvollstaendig.
 
-    def __init__(self, n: int, excluded: int = 0) -> None:
+    def __init__(self, n: int, excluded: int = 0, claims: int = 0) -> None:
         # §A-KA: `frozen` — `total` ist eine Eigenschaft des Objekts, nicht
         # des Zugriffszeitpunkts. Ohne das koennte `n` zwischen Druck und
         # Pruefung kippen. Nebenwirkung: kein In-Place-Zaehler; wer
@@ -1927,8 +2285,9 @@ class Checks:
         # fuehren und beim Druck in `Checks` uebergeben (eine Stelle).
         object.__setattr__(self, "n", int(n))
         object.__setattr__(self, "excluded", int(excluded))
-        if self.n < 0 or self.excluded < 0:
-            raise ValueError("Pruefungen und Ausschluesse sind nicht negativ")
+        object.__setattr__(self, "claims", int(claims))
+        if self.n < 0 or self.excluded < 0 or self.claims < 0:
+            raise ValueError("Pruefungen, Ausschluesse und Zusagen sind nicht negativ")
 
     def __setattr__(self, name: str, value: object) -> None:
         raise AttributeError("Checks ist ein Wert (frozen)")
@@ -1938,34 +2297,59 @@ class Checks:
 
     @property
     def total(self) -> int:
-        """`checked + excluded` — hier, einmal, nicht in der Zeile."""
+        """**Alle** Angaben: geprueft + ausgeschlossen + zugesagt.
+
+        §A-KH: bis Runde 38 hiess `total` "checked + excluded" — und die
+        Zusagen (`Report.claims`) fielen heraus, obwohl die Zeile "Angaben
+        gezaehlt" sagte. Zusagen sind keine Messung, aber sie sind Angaben
+        im Dokument; sie weglassen hiess, den Namen zu behalten und die
+        Menge zu aendern. Drei Einheiten, drei Zahlen, ein Name.
+        """
+        return self.n + self.excluded + self.claims
+
+    @property
+    def measured(self) -> int:
+        """Geprueft + ausgeschlossen — ohne Zusagen. Die alte `total`.
+
+        Wer die Messmenge braucht (Delta, Snapshot), nimmt `measured`
+        und nicht `total`: ein Delta ueber Zusagen waere keins.
+        """
         return self.n + self.excluded
 
     def __str__(self) -> str:
         return f"{self.n} Angaben geprueft"
 
     def __repr__(self) -> str:
-        return f"Checks({self.n}, {self.excluded})"
+        return f"Checks({self.n}, {self.excluded}, {self.claims})"
 
     def __eq__(self, other: object) -> bool:
         return (isinstance(other, Checks) and self.n == other.n
-                and self.excluded == other.excluded)
+                and self.excluded == other.excluded
+                and self.claims == other.claims)
 
     def __hash__(self) -> int:
-        return hash(("Checks", self.n, self.excluded))
+        return hash(("Checks", self.n, self.excluded, self.claims))
 
 
 def _status_line(checked: Checks, problems: int) -> str:
-    """Die Kopfzeile: **jede Zahl mit ihrer Einheit** (§A-NI).
+    """Die Kopfzeile: **jede Zahl mit ihrer Einheit** (§A-NI/§A-KH).
 
     `checked` kommt als `Checks` herein und bringt Wort, Zahl und die
-    Identitaet `total = checked + excluded` mit. Die Zeile rechnet nicht
-    mehr — sie liest drei Felder eines Objekts, das sie zusammen haelt.
+    Identitaet `total = checked + excluded + claims` mit. Die Zeile rechnet
+    nicht — sie liest vier Felder eines Objekts, das sie zusammen haelt.
+
+    Seit Runde 39 nennt sie die Zusagen getrennt: `gezaehlt` umfasst sie,
+    `geprueft` und `ausgeschlossen` nicht. Drei Einheiten in einer Zeile,
+    jede mit ihrem eigenen Wort — und `measured` (= geprueft + ausgeschlossen)
+    bleibt fuer das Delta verfuegbar, ohne dass jemand subtrahiert.
     """
     if not isinstance(checked, Checks):
         raise TypeError("checks muss Checks sein, int ist die alte Falle")
-    return (f"{checked.n} Angaben geprueft / {checked.total} Angaben gezaehlt "
-            f"({checked.excluded} ausgeschlossen), {problems} Abweichungen")
+    out = (f"{checked.n} Angaben geprueft / {checked.total} Angaben gezaehlt "
+           f"({checked.excluded} ausgeschlossen)")
+    if checked.claims:
+        out += f" + {checked.claims} Zusagen"
+    return out + f", {problems} Abweichungen"
 
 
 def _counting_signature() -> str:
@@ -2082,7 +2466,7 @@ def main() -> int:
     check_doc_inventories(root, rep)
     # §A-NC: --write-count schreibt den Stand mit Grund fort.
     if "--write-count" in sys.argv:
-        _save_count_snapshot(rep.checked, _count_reason(sys.argv))
+        _save_count_snapshot(rep.checked, _count_reason(sys.argv), root=root)
     if "--run-tests" in sys.argv:
         check_tests(text, root, rep)
 
@@ -2126,15 +2510,15 @@ def main() -> int:
     # §A-NI: `checked` heisst im Report "Pruefungen", in der Ausgabe
     # "Angaben" — zwei Einheiten, ein Wort. Die Einheit gehoert an die
     # Zahl; keine Zahl dieser Zeile ist mehr ambivalent.
-    status = _status_line(Checks(rep.checked, sum(rep.skips.values())),
-                              len(rep.problems))
+    status = _status_line(Checks(rep.checked, sum(rep.skips.values()),
+                                   len(rep.claims)), len(rep.problems))
     if skipped:
         status += f", {skipped} uebersprungen (Umgebung)"
     # §A-NC: die Zahl, die sich aendert, nennt den Grund. Ohne diese Zeile
     # ist dieselbe Form wie zwei Nenner mit einem Namen: zwei Zahlen,
     # ein Name, und niemand sagt, welche gilt. Vergleich gegen den letzten
     # Lauf, mit Zaehlweise und Datum — nicht gegen eine gemerkte Zahl.
-    dl = _delta_line(rep.checked)
+    dl = _delta_line(rep.checked, root)
     if dl:
         status += "\n" + dl
     print(f"\n{status}\n")
@@ -2188,7 +2572,7 @@ def main() -> int:
             # lebt in der Rundentabelle — und deren Commitzustand wird
             # genannt, nicht angenommen.
             print("Rundentabelle: order_execution_engine/ops/TAG7_ABNAHME.md "
-                  f"({_doc_tracked()})")
+                  f"({_doc_tracked(root)})")
 
     for s in rep.env_skips:
         print(f"  ⏭️  {s['script']}  — {s['note']}")
