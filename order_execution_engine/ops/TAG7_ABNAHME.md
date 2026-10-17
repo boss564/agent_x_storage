@@ -4005,3 +4005,167 @@ Selbsttests, sieben gegengeprüften Mutationen, einem Prüfer, der seinen
 Nenner, seine Auswahlgrenze, seine Zählweise und seinen Vorlauf nennt —
 **und der eine offene Stelle ist ein Bruchstrich, den er jetzt selbst
 zieht: 223 über 433.**
+
+---
+
+## 69. Runde 32 — das Wort `checked`, die geteilte Umgebung und die Zahlen, die niemand committet hat
+
+### §69.1 — Die Rundentabelle: committet, bewiesen
+
+Der Guard hat die Sitzungsgeschichte aus dem Code entfernt. Sie lebt in
+dieser Datei — und deren Zustand ist jetzt **gemessen**, nicht angenommen:
+
+```
+$ git ls-files --error-unmatch order_execution_engine/ops/TAG7_ABNAHME.md
+order_execution_engine/ops/TAG7_ABNAHME.md
+$ git log -1 --oneline -- order_execution_engine/ops/TAG7_ABNAHME.md
+94641457 feat(check_claude_md): Nenner, Reihe statt Delta, Zahlen-Guard, …
+```
+
+Und der Prüfer sagt es selbst:
+
+```
+Rundentabelle: order_execution_engine/ops/TAG7_ABNAHME.md (committet 94641457)
+```
+
+Der Preis des Guards ist benannt: **ein Guard gegen Zahlen im Code ist
+auch ein Guard gegen Geschichte im Code.** Die Geschichte musste
+umziehen, und sie ist angekommen.
+
+### §69.2 — §A-NI: ein Wort, zwei Größen
+
+```
+check_counts:  checked = 21   skips = 210   Zeilen mit beidem = 18
+223 geprueft / 433 gezaehlt (210 ausgeschlossen)
+```
+
+`checked = 21` und `223 geprueft` — dasselbe Adjektiv, Faktor 10,6. Die
+21 sind Felder, die 223 sind Angaben. Runde 23 im Kleinen, zwei Zeilen
+auseinander statt in zwei Meldungen.
+
+Die Einheit steht jetzt an jeder Zahl:
+
+```
+223 Angaben geprueft / 433 Angaben gezaehlt (210 ausgeschlossen), 0 Abweichungen
+```
+
+Und die Zeile ist eine **Funktion** (`_status_line`), kein `print` —
+weil ein Format, das nur im `print` existiert, nur beobachtet und nie
+definiert ist.
+
+### §69.3 — die geteilte Umgebung, zum vierten Mal
+
+Vier Runden hintereinander derselbe Befund, und viermal dieselbe Ursache:
+**der Test teilte den Zustand mit dem Gegenstand.**
+
+| Runde | Test grün, weil … |
+|---|---|
+| 29 | die Mutante nicht im Prüfbereich lag |
+| 30 | zwei Erwartungen dieselbe Zeile lasen |
+| 31 | der Ort-Test im Repo lief, wo immer ein Vorlauf liegt |
+| 32 | die Testfälle nacheinander im **selben** `root` schrieben |
+
+Runde 32: Fall 13 schrieb eine Snapshot-Datei in `root`, Fall 13a („ohne
+Vorlauf") fand sie vor und meldete `Snapshot ohne Datei als gesehen`.
+Erst als die Fälle einen **eigenen leeren Ordner** bekamen, war der
+Zustand definiert. Ein Testfall mit Vorbedingung ist ein Testfall; einer
+mit Vorgänger ist eine Reihenfolge.
+
+### §69.4 — `--self-test` in CI: er lief nicht
+
+```
+$ rg "self-test" .github/workflows/offgrid-test.yml
+(kein Treffer)
+```
+
+Die CI rief nur den Prüfer, nie den Selbsttest. Ein Test, der nur auf
+einer Maschine läuft, ist eine Zusage über eine Maschine. Jetzt:
+
+```yaml
+- name: F8 — CLAUDE.md Consistency
+  run: |
+    python3 scripts/check_claude_md.py
+    python3 scripts/check_claude_md.py --self-test
+```
+
+Und der Selbsttest ist ortsunabhängig gemacht — geprüft in drei
+Umgebungen:
+
+| Umgebung | Ergebnis |
+|---|---|
+| Repo mit `.git/`-Vorlauf | 22/22 |
+| Temp-Baum mit `git init`, ohne Vorlauf | 22/22 |
+| Temp-Baum **ohne `.git`** | 22/22 |
+
+### §69.5 — die stille Seite des Deltas
+
+Der Negativfall war getestet (keine Differenz bei ungleicher Zählweise).
+**Der Positivfall nicht.** Ein Prüfer, der *nie* ein Delta druckt, bestand
+damit jede Prüfung: die Zeile existierte, feuerte nie.
+
+Neuer Fall 15: gleiche Zählweise, andere Zahl → `+16 gegenueber 207`
+**muss** erscheinen, und `nicht als Delta` darf **nicht** erscheinen.
+Mutation *„Delta feuert nie"* wird rot.
+
+### §69.6 — Tests
+
+| # | Fall | erwartet | geprüft |
+|---|---|---|---|
+| 1–5 | Zählung (`total` schaltet um) | rot / nicht rot | ✓ |
+| 6–8 | Skript fehlt / vorhanden / passed>total | rot / **nicht** / rot | ✓ |
+| 9–10 | `N/N waves` / Zusage ohne Zählung | **nicht** rot / rot | ✓ |
+| 11–12 | Differenz / gleiche Zahl | Delta+SHA / nichts | ✓ |
+| 13 | kein Vorlauf | eigene Zeile, exklusiv | ✓ |
+| 14 | fehlender SHA | benannt | ✓ |
+| 15 | **gleiche Zählweise, andere Zahl** | **Delta mit Vorzeichen** | ✓ |
+| 16 | ungleiche Zählweise | Reihe, **kein** Delta | ✓ |
+| 17 | Auswahlzeile | Mengen je Regel | ✓ |
+| 18 | Zahl ohne Herkunft | rot (Klasse) | ✓ |
+| 19 | Nenner | disjunkt je Fundstelle | ✓ |
+| 20 | Ausschlussregel zählt | jede > 0 | ✓ |
+| 21 | Snapshot-Ort | **mit und ohne** Datei, im Temp-Baum | ✓ |
+| 22 | Statuszeile | Einheit an jeder Zahl | ✓ |
+
+Suite: **216 passed**. Selbsttest **22/22**, drei Mutationen gegengeprüft.
+
+### §69.7 — die Rundentabelle, Runden 23–32
+
+| Runde | falsch war | wie gefunden |
+|---|---|---|
+| 23 | zwei Nenner unter einem Wort (30/300) | Lesen |
+| 24 | zwei Nenner unter einem Wort (393/327) | Lesen |
+| 25 | zwei Gründe in einem Zähler (absent_sentiment/run_marker) | Messung |
+| 26 | ein Default, der handelt | Audit |
+| 27 | zwei Lesarten einer Gleichung (4 = 4) | Messung |
+| 28 | ein Nenner ohne Prädikat (325/827) | Regel vor Commit |
+| 29 | eine Zahl **plus** die Klammer dazu | Selbstmessung |
+| 29′ | die Rüge: Klammer gegen zwei richtige Zahlen | Nachmessung |
+| 30 | zwei Schweigen, eine Ausgabe | Einwand |
+| 31 | `+16` als Wachstum; Guard fing ein Zitat | Einwand + Guard |
+| 32 | `checked` in zwei Einheiten; Test erbte Umgebung | Einwand + Mutation |
+
+Zehn Runden, zehn Formen — und alle zehn sind **dieselbe Bewegung**: ein
+Name, zwei Bedeutungen; oder zwei Werte, ein Name.
+
+## 70. Der Satz dieser Runde
+
+Zweiunddreißig Runden, und die Akte hat ihren eigenen Fehler gefunden:
+`checked = 21` und `223 geprueft` standen zehn Zeilen auseinander, mit
+demselben Wort, für zwei verschiedene Dinge. Es war Runde 23 — nur diesmal
+hat der Prüfer es selbst gedruckt, in der Zeile, die er gerade repariert
+hatte.
+
+Und der Test, der zwei blinde Tests fand, war blind aus demselben Grund
+wie sie: **er lief im selben Repo wie der Gegenstand.** Viermal
+hintereinander. Die geteilte Umgebung, die ihn grün machte, machte ihn
+stumm — und erst als er einen leeren Ordner bekam, hatte er ein
+Verhalten statt einer Beobachtung.
+
+Die eine offene Stelle dieser Runde ist keine Rechnung mehr, sondern ein
+**Ort**: Der Selbsttest läuft jetzt in CI, und die Rundentabelle ist mit
+`git ls-files` und `git log` als committet bewiesen. **Was am 20.10. auf
+dem Tisch liegt, ist ein System mit 216 Tests, 22 Selbsttests, zehn
+gegengeprüften Mutationen über vier Runden und einem Prüfer, der sagt,
+wo seine Zahlen herkommen, wo seine Auswahl endet und wo seine Geschichte
+liegt — und der sich dabei viermal selbst ertappt hat, weil er den Fehler
+bei sich zuerst gesucht hat.**

@@ -291,6 +291,10 @@ jobs:
       - name: F8 — CLAUDE.md Consistency
         run: |
           python3 scripts/check_claude_md.py
+          # §A-J: der Selbsttest lief nie in CI. Ein Test, der nur auf
+          # einer Maschine laeuft, ist eine Zusage ueber eine Maschine.
+          # Er prueft im tmpdir, ist also ortsunabhaengig.
+          python3 scripts/check_claude_md.py --self-test
         continue-on-error: false
 
       - name: Summary

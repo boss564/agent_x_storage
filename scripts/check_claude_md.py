@@ -542,7 +542,7 @@ def self_test_check_counts() -> list[str]:
     failures.extend(_self_test_suite_claims(waves))
     if failures:
         return failures
-    _SELF_TEST_SCOPE[0] = "20/20 (5 Zaehlung + 5 Bezugsraum + 10 Differenz/Nenner/Ort)"
+    _SELF_TEST_SCOPE[0] = "22/22 (5 Zaehlung + 5 Bezugsraum + 12 Differenz/Nenner/Ort/Einheit)"
 
 
 def _self_test_suite_claims(waves: list[str]) -> list[str]:
@@ -754,21 +754,50 @@ def _self_test_count_delta() -> list[str]:
             if rep.checked and rep.claims and not rep.skips:
                 failures.append("Ausgeschlossene fehlen: skip-Zweig zaehlt nicht")
 
-        # 9. Der Ort wird genannt, wenn er greift (§A-NG) — sonst ist eine
-        #    Datei, die den Pruefer steuert, in git status unsichtbar und
-        #    ihr Loeschen nicht von einem Erstlauf zu unterscheiden.
-        #    Geprueft am **Temp-Baum**, nicht am Repo: ein Repo-Test waere
-        #    immer gruen, weil dort immer ein Vorlauf liegt (Mutation
-        #    `_SNAPSHOT_SEEN[0] = None` ueberlebte genau deshalb).
-        snap_t = root / _COUNT_SNAPSHOT
+        # 13. Der Ort: beide Faelle, beide im Temp-Baum (§A-NJ).
+        #     Der Test lief vorher gegen das Repo, wo immer ein Vorlauf
+        #     liegt — er konnte nicht fehlschlagen. Ein Test, der den
+        #     Zustand mit dem Gegenstand teilt, erbt ihn. Geprueft werden
+        #     jetzt **mit** und **ohne** Vorlauf, ortsunabhaengig.
+        case = root / "ort_test"
+        case.mkdir(exist_ok=True)
+        snap_t = case / _COUNT_SNAPSHOT
+        snap_t.unlink(missing_ok=True)          # definierter Zustand
+        _SNAPSHOT_SEEN[0] = None
+        _load_count_snapshot(case)              # ohne Vorlauf
+        if _SNAPSHOT_SEEN[0] is not None:
+            failures.append("Snapshot ohne Datei als gesehen gemeldet")
         snap_t.write_text(json.dumps({"checked": 1, "why": "x", "when": "x",
                                       "ref": "abc1234", "counting": "x",
                                       "counting_label": "v1"}), encoding="utf-8")
         _SNAPSHOT_SEEN[0] = None
-        _load_count_snapshot(root)
+        _load_count_snapshot(case)              # mit Vorlauf
         if _SNAPSHOT_SEEN[0] is None:
-            failures.append("Snapshot-Pfad wird nicht gemerkt (Ort unsichtbar)")
+            failures.append("Snapshot mit Datei nicht gemeldet")
         _SNAPSHOT_SEEN[0] = None
+
+        # 14. Die Einheit steht an der Zahl (§A-NI): `21` und `223` duerfen
+        #     nicht beide nur "geprueft" heissen. Geprueft wird die
+        #     Ausgabeform selbst — sie ist die Stelle, an der zwei
+        #     Einheiten ein Wort teilten.
+        line = _status_line(223, {"waves": 116, "agents<50": 82,
+                                  "tests_ohne_skript": 12}, 0)
+        for need in ("223 Angaben geprueft", "433 Angaben gezaehlt",
+                     "210 ausgeschlossen", "0 Abweichungen"):
+            if need not in line:
+                failures.append(f"Statuszeile ohne Einheit {need!r}: {line!r}")
+        if line.count("geprueft") != 1:
+            failures.append(f"Statuszeile nennt 'geprueft' mehrfach: {line!r}")
+
+        # 15. Das Delta bei **gleicher** Zaehlweise muss erscheinen — mit
+        #     Vorzeichen. Ohne diesen Fall besteht auch ein Pruefer, der
+        #     nie ein Delta druckt: die Zeile existierte, feuerte nie.
+        line = lines_for(prev(checked=207))
+        for need in ("+16", "gegenueber 207", "abc1234"):
+            if need not in line:
+                failures.append(f"Delta bei gleicher Zaehlweise fehlt {need!r}: {line!r}")
+        if "nicht als Delta" in line:
+            failures.append(f"gleiche Zaehlweise als Reihe gedruckt: {line!r}")
     return failures
     """Repo-Root für Testläufe (Fixtures), unabhängig vom staged checkout-index TMP.
 
@@ -1198,6 +1227,42 @@ def _selection_line(skips: dict[str, int] | None = None) -> str:
     )
 
 
+def _doc_tracked() -> str:
+    """Ist die Rundentabelle im Repo, und hat sie einen Commit?
+
+    Gemessen mit `git ls-files --error-unmatch` + `git log -1`: eine
+    Abnahme im Arbeitsbaum ist keine Doku, sie ist ein Entwurf. Der
+    Unterschied ist ein Befehl, kein Satz.
+    """
+    rel = "order_execution_engine/ops/TAG7_ABNAHME.md"
+    base = Path(__file__).resolve().parent.parent
+    try:
+        r = subprocess.run(["git", "ls-files", "--error-unmatch", rel],
+                           cwd=str(base), capture_output=True, text=True, timeout=5)
+        if r.returncode != 0:
+            return "NICHT im Repo"
+        c = subprocess.run(["git", "log", "-1", "--format=%h", "--", rel],
+                           cwd=str(base), capture_output=True, text=True, timeout=5)
+        return f"committet {c.stdout.strip() or '?'}"
+    except (OSError, subprocess.SubprocessError):
+        return "Pruefung nicht moeglich"
+
+
+def _status_line(checked: int, skips: dict[str, int],
+                 problems: int) -> str:
+    """Die Kopfzeile: **jede Zahl mit ihrer Einheit** (§A-NI).
+
+    `checked` heisst im `Report` „Pruefungen"; `223` ist „Angaben". Zwei
+    Einheiten, ein Wort — und der Leser muss raten, welche gilt. Ein
+    Test, der die Zeile nicht pruefen kann, weil sie im `print` steht,
+    ist ein Test gegen ein beobachtetes Format, nicht gegen ein
+    definiertes.
+    """
+    excluded = sum(skips.values())
+    return (f"{checked} Angaben geprueft / {checked + excluded} Angaben gezaehlt "
+            f"({excluded} ausgeschlossen), {problems} Abweichungen")
+
+
 def _counting_signature() -> str:
     """Was gezaehlt wird, in einer Zeile. Aendert sie sich, ist die Zahl
     nicht mehr mit der alten vergleichbar — und der Pruefer sagt das."""
@@ -1333,10 +1398,10 @@ def main() -> int:
     # der Unterschied ist ein Faktor im Pruefumfang. Gemessen:
     # `check_counts` erzeugt 21 Pruefungen und 210 Ausschluesse; sie sind
     # disjunkt, weil der `skip`-Zweig `continue`t. Also: Summe, nicht Bruch.
-    excluded = sum(rep.skips.values())
-    total_seen = rep.checked + excluded
-    status = (f"{rep.checked} geprueft / {total_seen} gezaehlt "
-              f"({excluded} ausgeschlossen), {len(rep.problems)} Abweichungen")
+    # §A-NI: `checked` heisst im Report "Pruefungen", in der Ausgabe
+    # "Angaben" — zwei Einheiten, ein Wort. Die Einheit gehoert an die
+    # Zahl; keine Zahl dieser Zeile ist mehr ambivalent.
+    status = _status_line(rep.checked, rep.skips, len(rep.problems))
     if skipped:
         status += f", {skipped} uebersprungen (Umgebung)"
     # §A-NC: die Zahl, die sich aendert, nennt den Grund. Ohne diese Zeile
@@ -1388,6 +1453,11 @@ def main() -> int:
             except ValueError:
                 rel = _SNAPSHOT_SEEN[0]
             print(f"Vorlauf: {rel} (nicht versioniert, git-ignoriert)")
+            # §A-J: die Zahlen-Geschichte ist aus dem Code raus (Guard). Sie
+            # lebt in der Rundentabelle — und deren Commitzustand wird
+            # genannt, nicht angenommen.
+            print("Rundentabelle: order_execution_engine/ops/TAG7_ABNAHME.md "
+                  f"({_doc_tracked()})")
 
     for s in rep.env_skips:
         print(f"  ⏭️  {s['script']}  — {s['note']}")
