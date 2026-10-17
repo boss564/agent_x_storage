@@ -1537,3 +1537,109 @@ def test_order_id_is_reported_as_the_fk_that_was_hardly_written() -> None:
     assert g.detail["fk_rows"] == 4
     assert g.detail["fk_set"] == 1
     assert g.detail["fk_paired"] == 1
+
+
+# ---------------------------------------------------------------------------
+# §5.4bk–bm — die Adresse des RED, die Achse im Namen, der Determinant
+# ---------------------------------------------------------------------------
+
+
+def test_every_red_names_its_condition() -> None:
+    """Ein RED ohne Bedingung ist ein Zustand, keine Aussage (§5.4bk).
+
+    Neunzehn Runden lang trug jede Zeile dieser Akte Grund, Dauer und
+    Adresse. Dann stand `verdict: RED` da, ohne zu sagen, welche Bedingung
+    rot ist — dieselbe Form, die in Runde 1 `BLOCKED` hieß: wahr,
+    begründet, unlesbar. Jeder der sechs RED-Zweige muß seine Nummer
+    nennen; wer `RED` liest und handeln soll, braucht sie.
+    """
+    # (0) Unterlauf
+    with tempfile.TemporaryDirectory() as td:
+        conn = sqlite3.connect(Path(td) / "t.db")
+        _schema(conn)
+        conn.execute("INSERT INTO telemetry_runs VALUES (9, ?, 'x', '{}')",
+                     (time.time(),))
+        conn.commit()
+        g = gate_telemetry_reconciliation(conn, min_run_id=9)
+        conn.close()
+    assert g.status == "RED"
+    assert g.reason.startswith("(0)"), g.reason
+
+    # (3) unattributed — der Fall der Akte: 4 Dispatches ohne Zeile.
+    conn = sqlite3.connect(":memory:")
+    _schema(conn)
+    t0 = time.time() - 3600
+    conn.execute("INSERT INTO telemetry_runs VALUES (9, ?, 'x', '{}')", (t0,))
+    for i in range(1, 3):
+        conn.execute(
+            "INSERT INTO telemetry (signal_id, latency_ms, approved,"
+            " reject_reason, run_id, decision_seq)"
+            " VALUES (?, 1.0, 0, 'X', 9, ?)", (f"s{i}", i))
+    for i in range(4):
+        conn.execute("INSERT INTO dispatched_signals VALUES (?, ?, NULL)",
+                     (f"i{i}", t0 + 1))
+    conn.commit()
+    g = gate_telemetry_reconciliation(conn, min_run_id=9)
+    conn.close()
+    assert g.status == "RED"
+    assert g.reason.startswith("(3)"), g.reason
+    assert "unattributed" in g.reason
+
+
+def test_order_id_is_a_determinant_not_a_quota() -> None:
+    """`8 / 34` ist keine Quote, sondern eine Klassifikation (§5.4bn).
+
+    Der Verdacht war: die ersten acht (Schreiber fiel weg), die letzten
+    acht (einer kam), oder gestreut (bedingt). Die Daten zeigen die vierte
+    Antwort, die keine Zeitreihe ist: order_id steht genau dann, wenn eine
+    Order entstand. STALE_SNAPSHOT 7/7 und der genehmigte 1/1 haben sie,
+    INVALID_PRICE 26/26 nicht — weil dort vor der Order abgelehnt wurde.
+    Der Fill liegt unter den acht: die korrekte Paarung ist vorhanden.
+    """
+    conn = sqlite3.connect(":memory:")
+    _schema(conn)
+    t0 = time.time() - 3600
+    conn.execute("INSERT INTO telemetry_runs VALUES (9, ?, 'x', '{}')", (t0,))
+    # 3 abgelehnt vor Order (kein order_id), 2 mit Order, 1 genehmigt.
+    seed = [("INVALID_PRICE", None), ("INVALID_PRICE", None),
+            ("STALE_SNAPSHOT", "o1"), ("STALE_SNAPSHOT", "o2"),
+            ("NONE", "o3")]
+    for i, (reason, oid) in enumerate(seed, start=1):
+        approved = 1 if reason == "NONE" else 0
+        conn.execute(
+            "INSERT INTO telemetry (signal_id, order_id, latency_ms, approved,"
+            " reject_reason, run_id, decision_seq)"
+            " VALUES (?, ?, 1.0, ?, ?, 9, ?)",
+            (f"s{i}", oid, approved, reason, i))
+    for i in range(5):
+        conn.execute("INSERT INTO dispatched_signals VALUES (?, ?, NULL)",
+                     (f"i{i}", t0 + 1))
+    conn.commit()
+
+    by_reason = dict(conn.execute(
+        "SELECT reject_reason, COUNT(order_id) || '/' || COUNT(*)"
+        " FROM telemetry GROUP BY 1").fetchall())
+    conn.close()
+
+    # Die Korrelation ist vollständig, nicht gestreut — das ist die Aussage.
+    assert by_reason["INVALID_PRICE"] == "0/2"
+    assert by_reason["STALE_SNAPSHOT"] == "2/2"
+    assert by_reason["NONE"] == "1/1"
+
+
+def test_invalid_price_carries_three_causes_not_one_label() -> None:
+    """`INVALID_PRICE` ist drei Ursachen an drei Code-Stellen (§5.4bm).
+
+    Ohne `reject_detail` sagt das Etikett nichts über den Ort — und der Ort
+    ist die Reparatur: Strategie (NEUTRAL_SIGNAL), Zuführung
+    (NO_SNAPSHOT), Liquidität (EMPTY_SIDE). `no_book` aus news_bridge ist
+    derselbe Fall wie NO_SNAPSHOT, nur früher erkannt; EMPTY_SIDE deckt es
+    nicht ab.
+    """
+    from order_execution_engine.models import RejectDetail
+
+    assert {d.value for d in RejectDetail} == {
+        "NEUTRAL_SIGNAL", "NO_SNAPSHOT", "EMPTY_SIDE"}
+    # Optional, weil 26 Zeilen der Akte das Feld nicht kennen.
+    from order_execution_engine.shadow_execution_engine import TelemetryRecord
+    assert TelemetryRecord.model_fields["reject_detail"].default is None

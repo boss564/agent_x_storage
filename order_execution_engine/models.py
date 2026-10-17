@@ -193,6 +193,30 @@ class RejectReason(str, Enum):
     """
 
 
+class RejectDetail(str, Enum):
+    """Warum genau `INVALID_PRICE` — drei Ursachen, ein Etikett (§5.4bm).
+
+    Der Code lehnt an drei Stellen mit demselben Grund ab; nur die Stelle
+    unterscheidet sie. Ohne dieses Feld sagt `INVALID_PRICE` nichts über
+    den Ort, und der Ort ist die Reparatur:
+
+    - ``NEUTRAL_SIGNAL``: `resolved_side()` war `None` — die Richtung war
+      NEUTRAL. Kein Buch nötig, es gab keine Seite. Reparatur: Strategie.
+    - ``NO_SNAPSHOT``: es gab kein Buch für den Token, oder das Buch gehörte
+      zu einem anderen Token. Reparatur: Zuführung/Cache, nicht der Preis.
+    - ``EMPTY_SIDE``: das Buch existierte, aber `best_ask()`/`best_bid()` war
+      `None` — die Seite war leer. Reparatur: Liquidität, nicht der Cache.
+
+    Wichtig für die Akte: ``no_book`` aus `news_bridge` ist *derselbe* Fall
+    wie ``NO_SNAPSHOT`` (Snapshot-Objekt fehlt), nur eine Stufe früher
+    erkannt. `EMPTY_SIDE` ist der Fall, den `no_book` **nicht** abdeckt.
+    """
+
+    NEUTRAL_SIGNAL = "NEUTRAL_SIGNAL"
+    NO_SNAPSHOT = "NO_SNAPSHOT"
+    EMPTY_SIDE = "EMPTY_SIDE"
+
+
 # ---------------------------------------------------------------------------
 # 2. Order & Signal Payloads
 # ---------------------------------------------------------------------------

@@ -189,6 +189,11 @@ class GateResult:
     name: str
     status: str  # GREEN | RED
     detail: Any = None
+    # Adresse des Urteils (§5.4bk): ein `RED` ohne genannte Bedingung ist
+    # ein Zustand, keine Aussage. Wer `RED` liest und handeln soll, braucht
+    # die Nummer der Bedingung, nicht das Etikett — sonst ist es die Form,
+    # die in Runde 1 `BLOCKED` hieß: wahr, begründet, unlesbar.
+    reason: str = ""
 
 
 def _ok(msg: str) -> None:
@@ -232,6 +237,8 @@ def gate_telemetry_reconciliation(
         return GateResult(
             name="TELEMETRY_RECONCILIATION",
             status="RED",
+            reason="kein Lauf im Fenster — telemetry_runs lieferte "
+                   "keine started_at",
             detail={"note": f"no telemetry_runs.run_id={min_run_id}",
                     "underrun": True},
         )
@@ -382,6 +389,7 @@ def gate_telemetry_reconciliation(
     # im Vergleich, obwohl seither 11 Tage vergangen sind. Der Maßstab ist
     # der Abstand zum letzten Erfolg, nicht zum ersten (§5.4bg).
     _fresh_fill = False
+    stalled_for_h = None
     if _fs is not None:
         try:
             _ts = float(_fs)
@@ -396,6 +404,12 @@ def gate_telemetry_reconciliation(
         # rest. Danach ist der jüngste Fill ein Beleg, kein Betrieb.
         _fresh_fill = (_ts is not None
                        and (time.time() - _ts) <= FRESH_FILL_S)
+        # Zwei Dauern, zwei Achsen (§5.4bl). `open_for` läuft gegen
+        # `started_at` (der Lauf), `stalled_for` gegen jetzt (der Dienst).
+        # Beide sind richtig — solange die Achse im Feldnamen steht. Ein
+        # Feld `alter` ohne Achse war in dieser Akte zweimal falsch.
+        stalled_for_h = (round((time.time() - _ts) / 3600.0, 1)
+                         if _ts is not None else None)
 
     if delivered > 0 and _fresh_fill:
         delivery_label = "DELIVERING"
@@ -455,6 +469,8 @@ def gate_telemetry_reconciliation(
         "fills_full": fills_full,
         "fills_partial": fills_partial,
         "fill_ratio": fill_ratio,
+        # Achse im Namen: gegen jetzt, nicht gegen started_at.
+        "stalled_for_h": stalled_for_h,
         "last_fill": last_fill,
         "fk_rows": fk_rows,
         "fk_set": fk_set,
@@ -478,17 +494,26 @@ def gate_telemetry_reconciliation(
         return GateResult(
             name="TELEMETRY_RECONCILIATION",
             status="RED",
+            reason="(0) underrun: kein Verkehr im Fenster — "
+                   "dispatched == 0 und telemetry_rows == 0",
             detail={**detail, "underrun": True, "empty_traffic": True},
         )
     # Kardinalität: jede Telemetriezeile braucht ihren Schlüssel, und der
     # Schlüssel darf sich weder je Lauf noch über Läufe wiederholen.
     if telemetry_rows != keyed:
         return GateResult(
-            name="TELEMETRY_RECONCILIATION", status="RED", detail=detail,
+            name="TELEMETRY_RECONCILIATION", status="RED",
+            reason=f"(1) schreibseite: telemetry_rows={telemetry_rows} != "
+                   f"decision_seq-keyed={keyed} — Zeile ohne Schlüssel",
+            detail=detail,
         )
     if keyed != distinct_pair or not pairs_ok:
         return GateResult(
-            name="TELEMETRY_RECONCILIATION", status="RED", detail=detail,
+            name="TELEMETRY_RECONCILIATION", status="RED",
+            reason=f"(2) schluessel: keyed={keyed}, distinct(run_id,"
+                   f"decision_seq)={distinct_pair}, je Run eindeutig="
+                   f"{pairs_ok}",
+            detail=detail,
         )
     # Vollständigkeit: ein Dispatch ohne Telemetriezeile ist nicht
     # "unbedenklich" — er ist eine unklassifizierte Terminalentscheidung.
@@ -497,6 +522,8 @@ def gate_telemetry_reconciliation(
         return GateResult(
             name="TELEMETRY_RECONCILIATION",
             status="RED",
+            reason=f"(3) unattributed: {unattributed} Dispatch(es) ohne "
+                   f"Telemetriezeile — Erfolg ohne Beleg",
             detail=detail,
         )
     # Die Gegenrichtung (§5.4ac). Bis hierher war nur Erfolg-ohne-Zeile
@@ -507,12 +534,16 @@ def gate_telemetry_reconciliation(
         return GateResult(
             name="TELEMETRY_RECONCILIATION",
             status="RED",
+            reason=f"(3b) orphan: {orphan_rows} Zeile(n) ohne Erfolg — "
+                   f"Überbehauptung",
             detail={**detail, "overclaim": True},
         )
     if dispatched != sum(reasons.values()):
         return GateResult(
             name="TELEMETRY_RECONCILIATION",
             status="RED",
+            reason=f"(4) bilanz: dispatched={dispatched} != "
+                   f"sum(reasons)={sum(reasons.values())}",
             detail=detail,
         )
     return GateResult(
@@ -1381,6 +1412,10 @@ def gate_snapshot(
             f"({d.get('telemetry_rows')} Zeilen, "
             f"{d.get('delivered')} Auslieferungen)"
         )
+        # Die Adresse des Urteils (§5.4bk): ein RED ohne genannte Bedingung
+        # ist ein Zustand, keine Aussage.
+        if recon.status != "GREEN" and recon.reason:
+            print(f"  reason:             {recon.reason}")
         print(f"  open_for:           {d.get('open_for_hours')} h"
               f" ({d.get('open_for_hours', 0) / 24:.1f} d) — der Lauf, "
               "nicht die Stille")
@@ -1418,6 +1453,10 @@ def gate_snapshot(
             + (f", letzter {d.get('last_fill')}" if d.get("last_fill") else "")
             + ")"
         )
+        if d.get("stalled_for_h") is not None:
+            _sf = d["stalled_for_h"]
+            print(f"  stalled_for:        {_sf} h ({round(_sf / 24.0, 1)} d)"
+                  " — gegen jetzt, nicht gegen den Laufanfang")
         # Der Fremdschlüssel, den es gibt und den kaum jemand schreibt.
         print(
             f"  fk order_id:        {d.get('fk_set')}/{d.get('fk_rows')} "

@@ -2252,3 +2252,175 @@ Was am 20.10. abgenommen wird, ist ein Urteil über 9,4 % des Verkehrs, mit
 einem benannten Positivfall und einer widerlegten Annahme. Und der FK,
 der die Fundstelle schließen würde, existiert: `order_id`, gesetzt in 8
 von 34 Zeilen. Es fehlt kein Feld — es fehlt, daß es gefüllt wird.
+
+## 38. Runde 20 — das RED bekommt eine Adresse, und der Gegenstand wechselt
+
+### §5.4bk — `verdict: RED` ohne Bedingung war die letzte leseunfähige Zeile
+
+Neunzehn Runden lang trug jede Zeile dieser Akte Grund, Dauer und Adresse.
+Dann stand da:
+
+```
+verdict:  RED (34 Zeilen, 1 Auslieferungen)
+```
+
+Wahr, begründet, unlesbar — die Form, die in Runde 1 `BLOCKED` hieß. Jetzt
+trägt jedes RED seine Bedingung:
+
+```
+reason:   (3) unattributed: 4 Dispatch(es) ohne Telemetriezeile — Erfolg ohne Beleg
+```
+
+**Und der Grund ist nicht der Ledger.** Er ist die Grenze zwischen
+Dispatcher und Ledger: vier Erfolge aus run 8, die nie eine Zeile bekamen.
+Der Ledger stimmt (34 = 34); rot ist der Übergang dorthin. Das ist die
+erste Stelle der Akte, an der ein rotes Urteil über etwas anderes spricht
+als über den Ledger — und sie ist ehrlich beschriftet.
+
+Sechs RED-Zweige, sechs Namen: `(0) underrun`, `(1) schreibseite`,
+`(2) schluessel`, `(3) unattributed`, `(3b) orphan`, `(4) bilanz`.
+
+### §5.4bl — Zwei Achsen, und die Achse steht im Feldnamen
+
+Der Fehler aus §5.4be war kein Rechenfehler, sondern ein Achsenfehler:
+`started_at` ist der Nullpunkt des Laufs, nicht der Maßstab für Aktualität.
+Zweimal in dieser Akte war ein Feld `alter` ohne Achse falsch. Jetzt stehen
+beide nebeneinander, beide richtig:
+
+```
+open_for:     323.3 h (13.5 d) — der Lauf, nicht die Stille
+stalled_for:  264.5 h (11.0 d) — gegen jetzt, nicht gegen den Laufanfang
+```
+
+59 Stunden Unterschied. Beide Zahlen sind wahr; sie beantworten
+verschiedene Fragen. Im Code heißt das Feld `stalled_for_h` — die Achse
+ist Teil des Namens, nicht seiner Dokumentation.
+
+### §5.4bm — `INVALID_PRICE` ist drei Ursachen an drei Code-Stellen
+
+Die Frage war: *kommt das Preisfeld leer an, oder fehlt es im Schema?*
+Antwort: **weder noch.** Der Code lehnt an drei Stellen mit demselben
+Etikett ab, und nur die Stelle unterscheidet sie:
+
+| Code | Fall | `reject_detail` | Reparatur |
+|---|---|---|---|
+| `1160` | `resolved_side()` → None | `NEUTRAL_SIGNAL` | Strategie (Richtung) |
+| `1174` | kein Buch / falscher Token | `NO_SNAPSHOT` | Zuführung / Cache |
+| `1185` | Buch da, Seite leer | `EMPTY_SIDE` | Liquidität |
+
+Neu: `RejectDetail`-Enum, `TelemetryRecord.reject_detail` (Optional —
+26 Zeilen der Akte kennen das Feld nicht; NULL heißt „nicht erfaßt", nicht
+„keine Ursache"). Die 26 sind damit **nicht** nachträglich klassifizierbar:
+der Grund ist verloren, nicht ungenau.
+
+### §5.4bn — `8 / 34` ist keine Quote und keine Grenze, sondern ein Determinant
+
+Die Frage war gestellt als Zeitreihe: die ersten acht, die letzten acht,
+oder gestreut? Die Daten geben eine vierte Antwort, die keine Zeitreihe ist:
+
+```
+INVALID_PRICE   26   mit order_id  0   → KEINE
+STALE_SNAPSHOT   7   mit order_id  7   → ALLE
+NONE             1   mit order_id  1   → ALLE
+```
+
+**`order_id` steht genau dann, wenn eine Order entstand.** Kein Schreiber
+fiel weg, keiner kam hinzu: die Spalte ist korrekt gefüllt — sie markiert
+bloß keinen Entscheidungsschritt, sondern einen Order-Schritt. Damit ist
+`order_id` kein Beleg für Vollständigkeit, sondern ein **Klassifikator**.
+
+Und der Fill liegt unter den acht (run 8, seq 12): die korrekte Paarung
+ist vorhanden, die Position war nur der falsche Weg dorthin.
+
+Zeitreihen-Hypothese widerlegt: `first_with = 1`, `last_with = 24`, aber
+nicht durchgehend — die acht liegen bei seq 1, 2, 3, 10, 12, 14, 17, 24.
+
+### §5.4bo — Zwei Filter, nicht einer
+
+```
+Mapping:  361 → 34    (9,4 % passieren; 327 Discards, drei Namen)
+Preis:     34 →  1    (3,0 % total; 26 INVALID_PRICE = 76,5 % der Reste)
+```
+
+Die Akte hat den Engpass 18 Runden lang im Mapping verortet. Er liegt
+dahinter: von den 34, die den Mapping-Filter passieren, scheitern 26 an
+der Preisverfügbarkeit. **Der Mapping-Filter ist der größere, aber er ist
+benannt; der Preis-Filter ist der schärfere und war es nicht.**
+
+Wichtig für die Zuordnung: `no_book` (124, 31,6 %) aus `news_bridge` ist
+derselbe Fall wie `NO_SNAPSHOT` — nur eine Stufe früher erkannt, vor der
+Signal-Erzeugung. `EMPTY_SIDE` ist der Fall, den `no_book` **nicht**
+abdeckt: Buch vorhanden, Seite leer. Diese Unterscheidung war im Schema
+nicht vorgesehen; sie entsteht erst durch `reject_detail`.
+
+### §5.4bp — `no_book` bewußt ununterteilt
+
+`empty_list` und `mapping_miss` tragen Untertypen, `no_book` nicht — bei
+124 von 393 Zeilen. Das ist keine Lücke, sondern korrekt: die Ursache
+liegt **im Buch selbst** (es fehlt), nicht im Mapping. Untertypen würden
+eine Unterscheidung vortäuschen, die an dieser Stelle nicht existiert.
+Wo sie existiert (`EMPTY_SIDE`), wird sie ab `reject_detail` erfaßt.
+
+Und anders als die Approval-Stufe hat `no_book` keinen Validator, der
+eine Lücke erzwingt — deshalb steht die Begründung hier und nicht im Code.
+
+### §5.4bq — Der Snapshot lebt nur im Speicher: der Preis ist nicht rekonstruierbar
+
+Die Frage aus §5.4bm war, ob der Preis *leer ankommt* oder *im Schema
+fehlt*. Er kommt an und verschwindet wieder — noch vor der Frage:
+
+```python
+# shadow_execution_engine.py:965
+def _store_snapshot(self, snapshot: MarketSnapshot) -> None:
+    self._market_snapshots[snapshot.token_id] = snapshot   # dict, kein INSERT
+```
+
+`persistence.py` legt acht Tabellen an — `telemetry_runs`, `telemetry`,
+`fills`, `portfolio_snapshots`, `peak_events`, `telemetry_fill_metrics`,
+`dispatched_signals`, `bridge_discards`. **Keine Snapshot-Tabelle.**
+
+Damit ist die 26 nicht nachträglich erklärbar: welches Buch zu welchem
+Signal gehörte, welcher Ask fehlte, ob die Seite leer oder das Buch alt
+war — alles war im RAM und ist mit dem Prozess gegangen. `reject_detail`
+rettet nur die Zukunft (ab dem nächsten Lauf), nicht die Akte.
+
+**Das ist die eigentliche Fundstelle dieser Runde.** Nicht der fehlende
+Name der Ablehnung, sondern der fehlende Zeuge: der Engpass der
+Produktionsseite ist ein Wert, und der Wert hatte keinen Ort, an dem er
+überlebt. `NO_SNAPSHOT`/`EMPTY_SIDE` unterscheiden zu können setzt voraus,
+daß der nächste Lauf es *schreibt* — deshalb ist `reject_detail` kein
+Komfortfeld, sondern die einzige Spur, die bleibt.
+
+Damit stehen vier fehlende Felder an vier Stellen, alle dieselbe Form:
+`closed_at` (Laufende), `telemetry.ts` (Zeitpunkt), `telemetry_seq`
+(Fremdschlüssel), `reject_detail` (Ursache) — und ein fünfter Kandidat
+`orderbook_snapshot` (der Wert selbst), der nicht Feld, sondern **Tabelle**
+ist.
+
+## 39. Tests dieser Runde
+
+| Zeuge | Aussage |
+|---|---|
+| `test_every_red_names_its_condition` | (0) und (3) tragen ihre Nummer — der Fall der Akte |
+| `test_order_id_is_a_determinant_not_a_quota` | 0/2 · 2/2 · 1/1 — korreliert, nicht gestreut |
+| `test_invalid_price_carries_three_causes_not_one_label` | drei Ursachen, drei Namen; Feld Optional |
+
+Suite: **190 passed**.
+
+## 40. Der Satz dieser Runde
+
+`RED` ist die erste ehrliche Zeile dieser Akte — und sie brauchte einen
+Grund, der nicht mehr im Ledger liegt. Er liegt an seiner Grenze:
+vier Erfolge, die nie eine Zeile bekamen.
+
+Der Positivfall hat sich als etwas anderes herausgestellt als erwartet:
+kein Mapping-Erfolg, sondern der einzige Fall mit einem Preis. Und `8/34`
+war nie eine Quote — es ist eine Klassifikation: `order_id` steht, wenn
+eine Order entstand, und in 26 von 34 entstand keine, weil an drei
+verschiedenen Stellen mit demselben Etikett abgelehnt wurde.
+
+**Die Akte hat den Gegenstand gewechselt: sie spricht nicht mehr über den
+Ledger, sondern über die Produktionsseite.** Und dort ist der Engpass
+nicht der Name, sondern der Wert — ein Snapshot, der nicht persistiert
+wird, ein Preis, der nur im Speicher lebte, und ein Feld `reject_detail`,
+das es ab heute gibt und das die 26 alten Zeilen nicht mehr rettet.

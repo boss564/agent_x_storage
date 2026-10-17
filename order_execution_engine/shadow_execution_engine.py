@@ -48,6 +48,7 @@ from order_execution_engine.models import (
     PaperOrder,
     PeakEvent,
     PortfolioSnapshot,
+    RejectDetail,
     RejectReason,
     RiskConfig,
     SafetyGuard,
@@ -664,6 +665,14 @@ class TelemetryRecord(BaseModel):
     approved: bool
     status: Optional[OrderStatus]
     reject_reason: RejectReason = RejectReason.NONE
+    # `INVALID_PRICE` trägt drei Ursachen unter einem Etikett (§5.4bm):
+    # fehlende Orderseite (NEUTRAL_SIGNAL), fehlender Snapshot (NO_SNAPSHOT),
+    # leere Buchseite (EMPTY_SIDE). Sie zu trennen ist der Unterschied
+    # zwischen "der Markt hatte keinen Preis" und "wir hatten kein Buch" —
+    # zwei verschiedene Reparaturen an zwei verschiedenen Bauteilen.
+    # Optional, weil 26 Zeilen der Akte vor diesem Feld geschrieben wurden;
+    # NULL heißt dort "nicht erfaßt", nicht "keine Ursache".
+    reject_detail: Optional[RejectDetail] = None
     requested_size: Optional[Decimal] = None
     decision_seq: int = 0
     fill_metrics: Optional[FillMetrics] = None
@@ -1162,6 +1171,7 @@ class ShadowExecutionEngine:
                 signal_id=signal.signal_id, order_id=None,
                 latency_ms=self._elapsed_ms(t0), approved=False,
                 reject_reason=RejectReason.INVALID_PRICE, status=None,
+                reject_detail="NEUTRAL_SIGNAL",
                 decision_seq=self.telemetry.next_decision_seq(),
             )
             self.telemetry.log(record)
@@ -1175,6 +1185,7 @@ class ShadowExecutionEngine:
                 signal_id=signal.signal_id, order_id=None,
                 latency_ms=self._elapsed_ms(t0), approved=False,
                 reject_reason=RejectReason.INVALID_PRICE, status=None,
+                reject_detail="NO_SNAPSHOT",
                 decision_seq=self.telemetry.next_decision_seq(),
             )
             self.telemetry.log(record)
@@ -1187,6 +1198,7 @@ class ShadowExecutionEngine:
                 signal_id=signal.signal_id, order_id=None,
                 latency_ms=self._elapsed_ms(t0), approved=False,
                 reject_reason=RejectReason.INVALID_PRICE, status=None,
+                reject_detail="EMPTY_SIDE",
                 decision_seq=self.telemetry.next_decision_seq(),
             )
             self.telemetry.log(record)
