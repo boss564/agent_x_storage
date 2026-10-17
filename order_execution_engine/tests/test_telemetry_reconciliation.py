@@ -106,7 +106,7 @@ def test_gate_green_when_telemetry_matches() -> None:
         # Eine Zeile, ein passender Erfolgs-Dispatch: Identität erfüllt.
         # Keine Untergrenze mehr (§5.4v) — dieser Zeuge prüft die
         # Gleichheitslogik, und die gilt bei jeder Zeilenzahl.
-        assert g.status == "PROVISIONAL_LEDGER_CONSISTENT"
+        assert g.status.startswith("PROVISIONAL_LEDGER_CONSISTENT")
         assert not g.detail.get("underrun")
         conn.close()
 
@@ -130,7 +130,7 @@ def test_gate_green_when_telemetry_matches() -> None:
             )
         conn.commit()
         g = gate_telemetry_reconciliation(conn, min_run_id=7)
-        assert g.status == "PROVISIONAL_LEDGER_CONSISTENT"
+        assert g.status.startswith("PROVISIONAL_LEDGER_CONSISTENT")
         assert g.detail["dispatched_success"] == FIXTURE_ROWS
         assert g.detail["telemetry_rows"] == FIXTURE_ROWS
         conn.close()
@@ -561,7 +561,8 @@ def test_historical_red_does_not_block_current_green() -> None:
             snap = gate_snapshot(db, errors, min_run_id=8)
         assert snap is not None
         assert snap["reconciliation"].status == "RED"
-        assert snap["verdicts"]["current"] == "PROVISIONAL_LEDGER_CONSISTENT"
+        assert snap["verdicts"]["current"].startswith(
+            "PROVISIONAL_LEDGER_CONSISTENT")
         assert "RED (run 8" in snap["verdicts"]["historical"]
         # Nicht blockierend: der historische Befund landet nicht in errors.
         assert errors == [], errors
@@ -925,6 +926,112 @@ def test_fixture_size_is_the_pinned_value() -> None:
     )
 
 
+def test_no_rule_constant_lives_as_literal_copy_in_production() -> None:
+    """Eine Form, drei Instanzen — der Zeuge fängt die Klasse (§5.4ap).
+
+    ``MIN_TELEMETRY_ROWS`` (Wert), das Jahr in ``--since`` (Wert),
+    ``!= "LEDGER_CONSISTENT"`` (Literal): das Kriterium lebte als Kopie in
+    einer zweiten Datei und wanderte dort nicht mit. Kein struktureller
+    Zeuge konnte das fangen — ``test_non_blocking_conditions_have_no_red_branch``
+    zählt Zweige, und ein Literalvergleich ist kein Zweig.
+
+    Geprüft wird nicht der Text, sondern die Richtung: jeder
+    Regel-Konstante darf in Produktionscode **nur** als Definition, als
+    Parameter oder als Teil der Set-/Listen-Deklaration vorkommen — nicht
+    in einem Vergleich.
+
+    Verglichen wird gegen einen Vergleichsoperator in derselben Zeile.
+    Das ist die Form, die alle drei Instanzen hatten:
+    ``rows >= 4``, ``year == 2025``, ``!== "LEDGER_CONSISTENT"``.
+    """
+    import re
+
+    root = Path(__file__).resolve().parent.parent
+    # Die Etiketten und Schwellen, die das Gate vergibt. Quelle ist
+    # _gate_criterion()/GateResult, nicht eine zweite Liste — deshalb
+    # werden sie hier aus dem Gate-Modul gelesen, nicht getippt.
+    from order_execution_engine.ops import preflight_check
+    labels = {
+        "LEDGER_CONSISTENT",
+        "PROVISIONAL_LEDGER_CONSISTENT",
+        "RED",
+    }
+    # Schwellen, die als benannte Konstante in einem Modul standen und dort
+    # ein Kriterium wiederholt haben. Sie dürfen **nirgends** mehr
+    # definiert sein — auch nicht im Gate selbst, denn dort gehört eine
+    # Schwelle in _gate_criterion(), nicht in eine Variable, die jemand
+    # später an einer zweiten Stelle liest.
+    banned_names = {
+        "MIN_TELEMETRY_ROWS",   # war 4, kalibriert auf Run 9 (§5.4v)
+        "PINNED_MIN_TELEMETRY_ROWS",
+    }
+    allowed_files = {"preflight_check.py"}
+    offenders = []
+    for py in root.rglob("*.py"):
+        if py.parent.name == "tests" or "__pycache__" in py.parts:
+            continue
+        if py.name in allowed_files and py.parent.name != "tests":
+            pass  # die Quelle darf ihre Etiketten prägen, aber keine Schwellen
+        for n, line in enumerate(py.read_text(encoding="utf-8",
+                                             errors="ignore").splitlines(), 1):
+            code = line.split("#", 1)[0]
+            # Gestalt 1: Schwellen-Konstante, benannt.
+            for name in banned_names:
+                if re.search(rf"\b{name}\b", code):
+                    offenders.append(
+                        f"{py.relative_to(root)}:{n}  {name} in {code.strip()}"
+                    )
+            # Gestalt 2: Etikett als Literal in einem Vergleich.
+            if py.name in allowed_files:
+                continue
+            if not re.search(r"[=!<>]=", code):
+                continue
+            for lab in labels:
+                if f'"{lab}"' in code or f"'{lab}'" in code:
+                    offenders.append(
+                        f"{py.relative_to(root)}:{n}  {lab} in {code.strip()}"
+                    )
+            # Gestalt 3: Kalenderjahr in einem Vergleich. Die Sweep-Schwelle
+            # stand als `== 2025` im Code und war im Folgejahr falsch — sie
+            # ist weder Konstante noch Etikett, sondern ein Datum im
+            # Ausdruck. Geprüft wird nur gegen das Jahr, das das Gate selbst
+            # als Messjahr führt; ein Jahr im Kommentar oder als default eines
+            # kwarg ist erlaubt.
+            for y in re.findall(r"[=!<>]=\s*(20\d\d)\b", code):
+                offenders.append(
+                    f"{py.relative_to(root)}:{n}  Jahr {y} im Vergleich in "
+                    f"{code.strip()}"
+                )
+    assert offenders == [], (
+        "Regel-Konstante als Literal-Kopie in einem Vergleich:\n  "
+        + "\n  ".join(offenders)
+        + "\nDas Kriterium lebt dann in zwei Dateien und wandert nicht mit. "
+        "Vergleiche gegen die Gate-Funktion, nicht gegen ihren Text."
+    )
+
+
+def test_derived_observes_the_whole_criterion_set() -> None:
+    """Der Marker beobachtet den Kriteriumssatz, nicht eine Datei (§5.4aq).
+
+    Das Kriterium lebt in drei Dateien: Code, START.md, Akte. Ein
+    Blob-Vergleich über eine davon läßt die anderen zwei unüberwacht —
+    und START.md war genau die Datei, die 14 Runden lang nicht diffed
+    wurde. Der Zeuge prüft, daß alle drei im Satz stehen; fehlt eine,
+    ist sie wieder unsichtbar.
+    """
+    from order_execution_engine.ops import preflight_check
+
+    files = preflight_check.CRITERION_FILES
+    assert len(files) == 3, files
+    names = {Path(f).name for f in files}
+    assert names == {
+        "preflight_check.py", "START.md", "TAG7_ABNAHME.md",
+    }, names
+    root = Path(preflight_check.__file__).resolve().parents[2]
+    for f in files:
+        assert (root / f).exists(), f"{f} fehlt — dann ist es nicht im Satz"
+
+
 def test_fixture_rows_never_reaches_production() -> None:
     """``FIXTURE_ROWS`` ist Aufbau, keine Regel — strukturell geprüft (§5.4ag).
 
@@ -991,32 +1098,40 @@ def test_orphan_row_without_dispatch_is_red() -> None:
     )
 
 
-def test_closed_run_would_be_judged_ledger_consistent() -> None:
-    """Ein geschlossener Lauf trägt das volle Etikett (§5.4ad).
+def test_closed_at_schema_is_the_reason() -> None:
+    """Der Grund ist das Schema, nicht der Boolean (§5.4ao).
 
-    ``telemetry_runs`` hat kein ``closed_at``. Ein Lauf ist offen, solange
-    kein späterer ihn ablöst — deshalb ist jedes Urteil heute
-    PROVISIONAL. Dieser Zeuge hält den Unterschied fest, damit das Etikett
-    nicht als Kosmetik gelesen wird: er prüft die Bedingung, nicht ihre
-    heutige Ausprägung.
+    Ein Zeuge gegen ``latest_run_is_closed() is False`` prüft einen
+    konstanten Wert — der dritte dieser Art nach
+    ``PINNED_MIN_TELEMETRY_ROWS``. Die Ursache ist die Tabelle:
+    ``telemetry_runs`` hat kein ``closed_at``. Solange das so ist, *kann*
+    kein Lauf geschlossen sein.
+
+    Wandert ``closed_at`` ins Schema, bricht **die erste Zeile** — und das
+    ist dann die richtige Nachricht: die Folge (PROVISIONAL) darf nicht
+    weiterleben, wenn ihr Grund verschwunden ist.
     """
     from order_execution_engine.ops import preflight_check
 
-    assert preflight_check.latest_run_is_closed(None) is False, (
-        "latest_run_is_closed muß ohne Ende-Spalte False sein — ein "
-        "Bruchstück trägt kein Urteil"
-    )
-    cols = [c[1] for c in sqlite3.connect(":memory:").execute(
-        "PRAGMA table_info(telemetry_runs)"
-    )]
     conn = sqlite3.connect(":memory:")
     _schema(conn)
-    cols = [c[1] for c in conn.execute("PRAGMA table_info(telemetry_runs)")]
+    schema = preflight_check.run_end_schema(conn)
+    _seed_run(conn, rows=FIXTURE_ROWS, keyed=FIXTURE_ROWS,
+              dispatched=FIXTURE_ROWS, reasons=FIXTURE_ROWS)
+    verdict = gate_telemetry_reconciliation(conn, min_run_id=9)
     conn.close()
-    assert "closed_at" not in cols and "status" not in cols, (
-        f"telemetry_runs hat jetzt ein Ende ({cols}) — dann muß "
-        "latest_run_is_closed() es lesen statt konstant False zu sein."
+
+    # Der Grund.
+    assert schema["has_closed_at"] is False, (
+        f"telemetry_runs hat jetzt closed_at ({schema['columns']}) — "
+        "latest_run_is_closed() muß es lesen und PROVISIONAL endlich werden"
     )
+    # Die Folge.
+    assert verdict.status.startswith("PROVISIONAL_"), (
+        f"ohne closed_at darf das Urteil nicht vollständig sein: {verdict.status}"
+    )
+    # Und die Folge darf nicht blockieren, solange sie gilt (§5.4an).
+    assert verdict.status != "RED", verdict.status
 
 
 def test_three_rows_all_delivered_is_ledger_consistent() -> None:
@@ -1028,7 +1143,7 @@ def test_three_rows_all_delivered_is_ledger_consistent() -> None:
     Untergrenze war nicht "zu leicht", sie war in beide Richtungen falsch.
     """
     status, detail = _status_at(3)
-    assert status == "PROVISIONAL_LEDGER_CONSISTENT", detail
+    assert status.startswith("PROVISIONAL_LEDGER_CONSISTENT"), detail
     assert detail["telemetry_rows"] == 3
     assert detail["unattributed"] == 0
 
@@ -1057,7 +1172,7 @@ def test_observed_window_and_rate_are_reported() -> None:
     erfüllt und damit keine Prüfung.
     """
     status, detail = _status_at(PINNED_FIXTURE_ROWS)
-    assert status == "PROVISIONAL_LEDGER_CONSISTENT", detail
+    assert status.startswith("PROVISIONAL_LEDGER_CONSISTENT"), detail
     assert detail["observed_hours"] > 0
     expected = detail["telemetry_rows"] / detail["observed_hours"]
     assert abs(detail["rows_per_hour"] - expected) < 1e-9
@@ -1075,7 +1190,7 @@ def test_coverage_against_traffic_is_reported() -> None:
     Ledger.
     """
     status, detail = _status_at(PINNED_FIXTURE_ROWS)
-    assert status == "PROVISIONAL_LEDGER_CONSISTENT", detail
+    assert status.startswith("PROVISIONAL_LEDGER_CONSISTENT"), detail
     assert detail["dispatched_in_scope"] >= detail["telemetry_rows"]
     assert 0 < detail["coverage_pct"] <= 100.0
 
@@ -1089,7 +1204,7 @@ def test_rate_is_a_report_value_not_a_gate() -> None:
     — sie ist datiert, nicht erraten.
     """
     status, detail = _status_at(PINNED_FIXTURE_ROWS)
-    assert status == "PROVISIONAL_LEDGER_CONSISTENT"
+    assert status.startswith("PROVISIONAL_LEDGER_CONSISTENT")
     assert detail["rows_per_hour"] is not None
     assert detail["observed_hours"] > 0
 
@@ -1161,5 +1276,6 @@ def test_latest_run_failure_blocks_even_when_called_with_old_min_run_id() -> Non
         snap = gate_snapshot(
             build(PINNED_FIXTURE_ROWS), errors, min_run_id=8
         )
-    assert snap["verdicts"]["current"] == "PROVISIONAL_LEDGER_CONSISTENT"
+    assert snap["verdicts"]["current"].startswith(
+            "PROVISIONAL_LEDGER_CONSISTENT")
     assert errors == [], errors

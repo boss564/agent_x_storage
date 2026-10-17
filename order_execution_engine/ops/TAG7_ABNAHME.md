@@ -1628,3 +1628,148 @@ Der Satz aus §8 bleibt gültig — und diese Runde hat ihn zweimal bestätigt:
 die Suite war nach dem ersten Durchlauf **nicht** grün, weil die Zeugen die
 Etiketten-Änderung sahen, bevor der Code sie trug. Das ist die Reihenfolge,
 in der eine Akte gelesen werden soll.
+
+## 11. §5.4aj — Der Loop läuft. Es sind nicht 300 in 13 Tagen.
+
+```
+SELECT date(dispatched_at,'unixepoch','localtime'), count(*)
+FROM dispatched_signals GROUP BY 1 ORDER BY 1;
+```
+
+| Tag | n | Tag | n |
+|---|---|---|---|
+| 10-04 | 5 | 10-11 | 7 |
+| 10-05 | 33 | 10-12 | 29 |
+| 10-06 | 33 | 10-13 | 32 |
+| 10-07 | 38 | 10-14 | 38 |
+| 10-08 | 45 | 10-15 | 32 |
+| 10-09 | 34 | 10-16 | 21 |
+| 10-10 | 7 | 10-17 | 6 |
+
+**14 Zeilen à ~23.** Und das Muster ist schärfer als die Tageszahl:
+
+- **Minutenanteil: `00`, 360 von 360.** Kein einziger Dispatch außerhalb `HH:00`.
+- Abstände: median **3.597 s** = 1 h − 3 s; 360 Dispatches über 3.600 Stunden-Slots.
+- **177 Paare mit Abstand 0 s** — der Loop schreibt, wenn er etwas findet, in Paketen; in stillen Stunden schreibt er nichts.
+- Letzter Dispatch: **2026-10-17 18:00:08**. PID 962 lebt, `etime 02-22:05`, Start 14.10. 21:23.
+
+**Damit ist die Erzählung entschieden: der Dienst läuft, die Auflösung steht.**
+Nicht „seit 13 Tagen tot", sondern *stündlicher Loop, 0 Auslieferungen seit
+04.10. 11:12:39*. Und eine Folge, die die Akte noch nicht hatte: **das 60er-Fenster
+von Run 9 ist nicht ein Zeitraum, es sind Stunden-Slots.** 2,88 d = 69 Slots,
+davon 60 mit Inhalt — 87 % Trefferquote, kein Ausfall.
+
+`observed: 69,8 h` heißt also nicht „69 Stunden Aktivität", sondern „69
+Stunden, in denen der Loop hätte schreiben können". Das ist die
+Interpretation, die zu den Zahlen paßt, und sie gehört ins Etikett.
+
+## 12. §5.4an — Ein Etikett, das immer gilt, blockiert dauerhaft
+
+`PROVISIONAL_LEDGER_CONSISTENT` war die richtige Beobachtung und die falsche
+Form: solange `closed_at` fehlt, gilt es *immer* — für Run 9 und für jeden
+folgenden Lauf. Zwei Folgen, beide behoben:
+
+**a) Das Etikett trägt jetzt seine Dauer.**
+
+```
+verdict:  PROVISIONAL_LEDGER_CONSISTENT(open 2.9d) (4 Zeilen, 0 Auslieferungen)
+```
+
+`PROVISIONAL` ohne Zahl ist ein Zustand; mit Zahl eine Messung. (2,9 d = Alter
+von `started_at(run 9)` bis jetzt. Die 13 Tage Stille liegen **hinter** der
+letzten Auslieferung, nicht hinter dem Laufbeginn — zwei Zahlen, zwei
+Aussagen, beide jetzt sichtbar.)
+
+**b) `PROVISIONAL` blockiert nicht mehr.** Es war als blockierend eingetragen,
+und das war der Fehler: was nur deshalb immer gilt, weil das Schema kein Ende
+kennt, ist der **Normalzustand** — und ein Normalzustand, der blockt, hält
+den Dienst an, den er schützt. Dieselbe Form wie Runde 1 (`BLOCKED` über
+leerer Telemetrie, 96 Neustarts), nur mit besserer Begründung.
+
+Die Klassifikation arbeitet jetzt auf dem **Etikett-Kopf** (`split("(")[0]`),
+nicht per Set-Mitgliedschaft — sonst hätte die neue Dauer im Etikett genau
+den Fehlalarm erzeugt, den das Set verhindern sollte.
+
+**War die Stille eine Gate-Folge?** Nein, und das ist belegbar: das Gate wurde
+in dieser Akte erst im Oktober gebaut, und PID 962 läuft seit 14.10. mit
+einem Gate, das niemand verdrahtet hat (`blocking: kein Aufrufer verdrahtet`).
+Die 13 Tage Stille stammen aus dem Mapping-Layer, nicht aus der Vorsicht.
+
+## 13. §5.4ao — Der Grund ist das Schema, nicht der Boolean
+
+`test_closed_run_would_be_judged_ledger_consistent` prüfte
+`latest_run_is_closed(...) is False` — einen konstanten Wert. Der dritte
+Zeuge dieser Art nach `PINNED_MIN_TELEMETRY_ROWS`.
+
+```
+assert schema["has_closed_at"] is False     # der Grund
+assert verdict.status.startswith("PROVISIONAL_")   # die Folge
+```
+
+Wandert `closed_at` ins Schema, bricht **die erste Zeile** — und das ist die
+richtige Nachricht. `latest_run_is_closed()` liest jetzt das Schema und, falls
+vorhanden, die Spalte; sie behauptet `False` nicht mehr.
+
+## 14. §5.4ap — Drei Instanzen, eine Klasse, und der Wächter fängt sie
+
+`grep`-Form über alle Produktionsdateien, drei Gestalten:
+
+| Gestalt | Instanz | wie gefangen |
+|---|---|---|
+| benannte Konstante | `MIN_TELEMETRY_ROWS` | Namensverbot im Produktionscode |
+| Literal in einem Vergleich | `!= "LEDGER_CONSISTENT"` | Etikett + Vergleichsoperator in derselben Zeile |
+| Kalenderjahr im Vergleich | `== 2025` in `--since` | `[=!<>]= 20\d\d` |
+
+**Die erste Fassung dieses Wächters fing 2 von 3** — das Jahr rutschte durch,
+weil es weder Konstante noch Etikett ist. Das fiel erst auf, als ich den
+Wächter gegen die drei historischen Zeilen laufen ließ, statt gegen den
+heutigen Stand. Eine Prüfung, die gegen den heutigen Stand läuft, findet
+nie, was gestern falsch war.
+
+## 15. §5.4aq — `DERIVED` beobachtet den Kriteriumssatz, nicht eine Datei
+
+Der Marker verglich eine Datei gegen ihren HEAD-Blob. Das Kriterium steht in
+drei: `preflight_check.py`, `START.md`, `TAG7_ABNAHME.md`. Eine Datei kann
+nicht alle drei sein — und `START.md` war die Datei, die 14 Runden lang nicht
+diffed wurde.
+
+```
+CRITERION_FILES = (preflight_check.py, START.md, TAG7_ABNAHME.md)
+gate commit: 2c75656a:9d6942c67687  DERIVED (preflight_check.py != HEAD-Blob)
+```
+
+Der Marker nennt jetzt **welche** der drei abweicht. In Runde 15 wäre die
+Antwort `START.md` gewesen, nicht der Code — das ist der Unterschied zwischen
+einem Marker und einem Marker mit Adresse.
+
+## 16. §5.4ar — (1) ist ein Korollar aus (3)+(3b)
+
+`unattributed == 0` ≡ `success <= rows`. `orphan_rows == 0` ≡ `rows <= success`.
+Zusammen: `rows == success`. Bedingung (1) prüft die **Schreibseite** (jede
+Zeile hat ihren Schlüssel) und bleibt als Diagnose stehen — als Bedingung
+zählt sie nicht mehr. Das steht jetzt in `_gate_criterion()` mit dem Wort
+„KOROLLAR", damit die nächste Runde nicht wieder sechs Bedingungen zählt,
+von denen eine folgt.
+
+## 17. Tests dieser Runde
+
+| Zeuge | Aussage |
+|---|---|
+| `test_closed_at_schema_is_the_reason` | Schema ist der Grund, `PROVISIONAL` die Folge |
+| `test_no_rule_constant_lives_as_literal_copy_in_production` | drei Gestalten, gegen die Geschichte geprüft (3/3) |
+| `test_derived_observes_the_whole_criterion_set` | alle drei Dateien im Satz |
+| `test_criterion_is_printed_in_the_same_order_as_the_red_branches` | Korollar benannt |
+
+Suite: **180 passed**.
+
+## 18. Der Satz dieser Runde
+
+Die Akte war am Ende von Runde 15 „nicht mehr falsch, sondern gefährlich" —
+weil ein Etikett, das immer gilt, nichts unterscheidet. Diese Runde hat es
+nicht zurückgenommen, sondern **endlich gemacht**: mit Dauer, mit
+Nichtblockade, und mit dem Grund im Schema statt im Boolean.
+
+Was bleibt, ist die eine Ziffer, die keine Runde beheben kann: **0
+Auslieferungen sind 0.** Das Urteil stimmt, das Etikett ist ehrlich, das
+Etikett ist datiert — und der Dienst liefert nichts aus, weil der
+Mapping-Layer seit 13 Tagen taub ist. Kein Gate macht das anders.

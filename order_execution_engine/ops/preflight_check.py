@@ -17,6 +17,15 @@ from pathlib import Path
 from typing import Any, Optional
 
 REPO = Path(__file__).resolve().parents[2]
+
+# Die Dateien, in denen das Kriterium lebt (§5.4aq). Der Marker beobachtet
+# den Satz, nicht eine Datei: eine Regel, die in drei Dateien steht und nur
+# in einer überwacht wird, ist in den anderen zwei unsichtbar.
+CRITERION_FILES = (
+    "order_execution_engine/ops/preflight_check.py",
+    "order_execution_engine/ops/START.md",
+    "order_execution_engine/ops/TAG7_ABNAHME.md",
+)
 OPS = Path(__file__).resolve().parent
 if str(REPO) not in sys.path:
     sys.path.insert(0, str(REPO))
@@ -105,7 +114,23 @@ def _gate_commit_ref(this: Path) -> dict[str, str]:
     # (deshalb die 0 in §5.4d), und mit `--ignored` feuert es immer —
     # ignoriert Artefakte im Tree liegen ignoriert daneben. Die Frage hier ist
     # nicht "ist der Baum sauber", sondern "ist genau dieser Text committet".
-    suffix = "" if work == committed else "  DERIVED (Datei != HEAD-Blob)"
+    #
+    # Seit §5.4aq ist der Definitionsbereich nicht mehr diese eine Datei,
+    # sondern der KRITERIUMSSATZ: das Kriterium lebt in preflight_check.py,
+    # in START.md und in der Akte. Eine Datei kann nicht alle drei sein —
+    # deshalb prüft der Marker alle drei und nennt sie einzeln.
+    parts = {}
+    for rel_part in CRITERION_FILES:
+        try:
+            work_p = _git("hash-object", str((REPO / rel_part)))
+            head_p = _git("rev-parse", f"HEAD:{rel_part}")
+        except Exception:  # noqa: BLE001 — untracked/neu: dann ist es DERIVED
+            work_p, head_p = "?", "?"
+        parts[rel_part] = "ok" if work_p == head_p else "DERIVED"
+    drifted = [k for k, v in parts.items() if v == "DERIVED"]
+    suffix = "" if not drifted else (
+        f"  DERIVED ({', '.join(Path(x).name for x in drifted)} != HEAD-Blob)"
+    )
     return {
         "commit": head[:8],
         "committed_blob": committed[:12] + suffix,
@@ -234,6 +259,9 @@ def gate_telemetry_reconciliation(
         conn, min_run_id=min_run_id, started_at=started_at,
     )
     run_closed = latest_run_is_closed(conn)
+    # Alter des offenen Laufs — die zweite Hälfte der Aussage. Der Block
+    # ohne Zahl ist ein Zustand, der Block mit Zahl eine Beobachtung.
+    open_hours = max(0.0, (time.time() - started_at) / 3600.0)
     # Geliefert = genehmigte Entscheidungen. Nicht zu verwechseln mit
     # dispatched (Angebote an die Bridge) und nicht mit classifiable
     # (Terminalentscheidungen, Ablehnungen eingeschlossen).
@@ -348,8 +376,14 @@ def gate_telemetry_reconciliation(
         # keine Beobachtung, sondern ein Bruchstück. „PROVISIONAL" sagt, daß
         # die Zahl ein Stand ist und keine Tatsache — sie kann sich ändern,
         # ohne daß der Ledger sich verschlechtert hat.
-        status="PROVISIONAL_LEDGER_CONSISTENT" if not run_closed
-        else "LEDGER_CONSISTENT",
+        # Ein offener Lauf trägt jetzt seine Dauer im Etikett (§5.4an):
+        # PROVISIONAL_LEDGER_CONSISTENT(open 13.0d). Ein Etikett, das immer
+        # gilt, unterscheidet nichts mehr — die Zahl macht aus dem Zustand
+        # eine Beobachtung.
+        status=(
+            "LEDGER_CONSISTENT" if run_closed
+            else f"PROVISIONAL_LEDGER_CONSISTENT(open {open_hours / 24:.1f}d)"
+        ),
         detail=detail,
     )
 
@@ -393,16 +427,44 @@ def telemetry_without_dispatch(
     )
 
 
+def run_end_schema(conn: sqlite3.Connection) -> dict:
+    """Der Grund, nicht der Boolean (§5.4ao).
+
+    Ein Zeuge gegen einen konstanten Wert prüft den Wert. Der Grund ist das
+    Schema: ``telemetry_runs`` hat kein ``closed_at``. Solange das so ist,
+    *kann* kein Lauf geschlossen sein — und das ist die Aussage, die man
+    prüfen muß. Wandert ``closed_at`` ins Schema, ändert sich hier etwas,
+    bevor sich das Etikett ändert.
+    """
+    cols = [c[1] for c in conn.execute("PRAGMA table_info(telemetry_runs)")]
+    return {
+        "has_closed_at": "closed_at" in cols,
+        "has_status": "status" in cols,
+        "columns": cols,
+    }
+
+
 def latest_run_is_closed(conn: sqlite3.Connection) -> bool:
     """Ist der jüngste Lauf geschlossen?
 
-    ``telemetry_runs`` hat **keine** Spalte für ein Ende (nur ``started_at``).
-    Ein Lauf ist damit per Definition offen, solange kein späterer ihn
-    ablöst. Das ist keine Lücke der Abfrage, sondern der Architektur: ein
-    offener Lauf ist keine Beobachtung, sondern ein Bruchstück — und ein
-    Bruchstück sollte kein Urteil tragen (§5.4ad).
+    ``telemetry_runs`` hat **keine** Spalte für ein Ende. Ein Lauf ist damit
+    per Definition offen, solange kein späterer ihn ablöst. Das ist keine
+    Lücke der Abfrage, sondern des Schemas: ein offener Lauf ist keine
+    Beobachtung, sondern ein Bruchstück — und ein Bruchstück sollte kein
+    Urteil tragen (§5.4ad).
+
+    Die Funktion liest das Schema, statt ``False`` zu behaupten: kommt
+    ``closed_at`` dazu, liest sie es (heute nicht vorhanden) und der
+    Zeuge ``test_closed_at_schema_is_the_reason`` bricht an der Stelle,
+    an der die Nachricht hingehört.
     """
-    return False
+    schema = run_end_schema(conn)
+    if not schema["has_closed_at"]:
+        return False
+    row = conn.execute(
+        "SELECT closed_at FROM telemetry_runs ORDER BY run_id DESC LIMIT 1"
+    ).fetchone()
+    return bool(row and row[0] is not None)
 
 
 def dispatches_without_telemetry(
@@ -907,7 +969,10 @@ def _gate_criterion(min_run_id: int) -> str:
         "LEDGER_CONSISTENT nur wenn "
         "(0) dispatched_success > 0 oder telemetry_rows > 0 "
         "(kein leerer Dienst; 0 == 0 wäre sonst vierfach erfüllt) "
-        "(1) telemetry_rows == decision_seq-keyed "
+        "(1) telemetry_rows == decision_seq-keyed — KOROLLAR aus (3)+(3b), "
+        "kein eigener Befund: (3) ist success <= rows, (3b) ist rows <= success, "
+        "zusammen rows == success; (1) prüft die Schreibseite (jede Zeile hat "
+        "ihren Schlüssel) und bleibt als Diagnose, nicht als Bedingung " 
         "(2) keyed == distinct(run_id, decision_seq) und je run eindeutig "
         "(3) unattributed == 0 (Erfolg ohne Zeile) "
         "(3b) orphan_rows == 0 (Zeile ohne Erfolg — die Überbehauptung) "
@@ -1216,11 +1281,18 @@ def gate_snapshot(
             _warn(f"historical (dokumentiert, kein Abbruch): {msg}")
         else:
             _fail(msg, errors)
-        # Konsistente Etiketten — beide zeigen denselben Ledger, eines über
-        # einem offenen Lauf. Ein Literal-Vergleich hier verwandelt jedes
-        # neue Etikett in einen Fehlalarm; deshalb ein Set, und deshalb
-        # diese Begründung: wer ein Etikett hinzufügt, ohne es hier
-        # einzutragen, bricht test_blocking_calls_new_label() (§5.4ad).
+        # Konsistent ist, was auf LEDGER_CONSISTENT endet — PROVISIONAL
+        # eingeschlossen, denn beide behaupten dasselbe über den Ledger und
+        # nichts über den Lauf. Die Klassifikation arbeitet auf dem
+        # Etikett-Kopf, nicht auf dem ganzen String: seit §5.4an trägt das
+        # Etikett seine Dauer ("(open 13.0d)"), und ein Set-Vergleich hätte
+        # daran genau den Fehlalarm erzeugt, den er verhindern soll.
+        #
+        # BLOCKIEREND ist PROVISIONAL ausdrücklich NICHT (§5.4an): ein
+        # offener Lauf ist der Normalzustand dieses Dienstes, weil das
+        # Schema kein Ende kennt. Was immer gilt, darf nicht blocken —
+        # sonst hält die Vorsicht den Dienst an, den sie schützt.
+        label = str(snapshot["verdicts"]["current"]).split("(")[0].strip()
         consistent_labels = {
             "LEDGER_CONSISTENT",
             "PROVISIONAL_LEDGER_CONSISTENT",
@@ -1228,7 +1300,7 @@ def gate_snapshot(
         if (
             latest_run is not None
             and recon_is_historical
-            and snapshot["verdicts"]["current"] not in consistent_labels
+            and label not in consistent_labels
         ):
             _fail(
                 f"latest run {latest_run}: "
