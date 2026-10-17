@@ -4915,10 +4915,24 @@ anderer Hash (`69159540db89` → `8537812f6ab8`).
 | Befehl zeigt ins Leere | 53 |
 | Suite zugesagt, Skript fehlt | 16 |
 | Datei fehlt | 10 |
+| **Inventar-Dokument fehlt** | **1** |
+| **Summe** | **151** |
 
-Das ist ein **Artefakt des Klons**, kein Befund über das Repo — und
-deshalb steht der Klonlauf hier mit eigenem `root` und eigener Zahl,
-statt als Differenz zweier Läufe in einer Zeile.
+`71 + 53 + 16 + 10 = 150` — die Tabelle der Runde 42 schloß auf 150 und
+ließ die einzige Klasse weg, die keine der vier war. Sie existiert:
+`check_doc_inventories` meldet sie. **Eine Zerlegung, die auf 150
+schließt und 151 zählt, erklärt nichts; sie sieht nur so aus.** Und die
+fehlende Zeile ist genau die, in der eine echte Abweichung stehen
+könnte — die ohne Kategorie. In dieser Akte wurde `223 + 210 + 28 = 461`
+als geschlossen vorgeführt; hier war sie offen, und niemand hatte
+addiert.
+
+**151 ist ein Kalibrierlauf, keine Zahl.** Ein Lauf gegen einen Klon ohne
+`scripts/` mißt die Abwesenheit von `scripts/`, nicht die
+Übereinstimmung von Code und Doku. Der Klon taugt als `root`-Beleg — er
+zeigt, *daß* `root` wirkt — und nicht als Abweichungsquelle. Die Trennung
+steht jetzt hier, damit in Runde 45 niemand 151 als Befund über das Repo
+liest.
 
 **Das Instrument im Meßbereich, dreimal in drei Runden:**
 
@@ -4941,32 +4955,138 @@ Instrument nicht blind ist (`git ohne cwd` in einer Mini-Quelle → Fund).
 
 **`24` war keine Halbierung.** Die erste Gegenprobe schnitt ins Leere:
 27 von 28 Claims standen vor der Schnittzeile. Jetzt liefert
-`claim(field, count, line, text)` die **Position**, und der Test schneidet
-an einer benannten Zeile (`Render-Pipeline`, L1493) und prüft, daß **kein**
-Fund dahinter liegt. Die Aussage ist damit: der Extraktor misst, wo er
-zählt — nicht nur, wie oft.
+`claim(field, count, line, text)` die **Position**. ~~Der Test schneidet
+an einer benannten Zeile und prüft, daß kein Fund dahinter liegt.~~
+**Runde 43 hat ihn verschärft (§71.39):** der Schnitt lag bei der letzten
+Zusage, und ein Extraktor mit irgendeiner kleineren Zeilennummer bestand.
+Jetzt liegt er am **Median**, beide Hälften werden einzeln gezählt, und
+die Grenze ist absolut — der erste Versuch mit `positions[-1]` war grün,
+weil die Erwartung aus dem Prüfling kam.
 
 **Der Preis, benannt:** der Extraktor erkennt `N/N tests passed` und
 `N/N Tests`. Ein umformulierter Satz ohne Bedeutungswechsel fällt aus der
-Zählung und macht den Test rot, ohne daß etwas verloren ist. Das ist
-dieselbe Formabhängigkeit wie bei den Ankern (§A-MC) — und sie steht
-jetzt an der Konstante, damit in Runde 45 niemand einen Fehler sucht,
-der eine Redaktion ist.
+Zählung und macht den Test rot, ohne daß etwas verloren ist. Dieselbe
+Formabhängigkeit wie bei den Ankern (§A-MC) — sie steht an der Konstante
+**und in der Meldung** (`REDAKTION? … dann Zahl anpassen, nicht Text`),
+damit in Runde 45 niemand einen Fehler sucht, der eine Redaktion ist.
 
-**Ausnahmen: 8/13 → 8 Produktion + 9 Prüfstand.** `_status_line` bekam
-einen optionalen `root`; die Aufrufe im `--self-test` prüfen die Form,
-nicht einen Baum. Sie sind kein geduldeter Fall im Produktionspfad — sie
-liegen an einem anderen Ort. Getrennt gezählt, weil eine Zahl, die beide
-summiert, in Runde 43 `17` sagt und niemand weiß, warum.
+**Ausnahmen: ~~8 Produktion + 9 Prüfstand~~ → 18, alle Produktion.**
+~~Die Aufrufe im `--self-test` prüfen die Form, nicht einen Baum.~~
+**Runde 43 nahm das zurück (§71.37):** sie stehen in `main`s Pfad. Ein
+`--self-test`-Aufruf ist Produktionscode, der den Prüfstand aufruft; eine
+dritte Kategorie gibt es nicht. Der Aufruf ohne `root` steht jetzt als
+**Paar** neben seinem Partner mit `root`.
 
 **Was am 20.10. auf dem Tisch liegt: 216 Tests, 24/24 Selbsttests plus
-drei neue Wächter (Instrument im Meßbereich, `git`-Zwilling,
-Bezugszeile), eine Kopfzahl, die ihren `root` und ihre `sha256` nennt,
-Zusagen mit Positionen, acht Produktions-Ausnahmen mit Größen-Guard —
-und eine Akte, in der die 151 des Klons einen eigenen Lauf mit eigenem
-`root` hat, statt eine Differenz ohne Bezug zu sein.**
+drei neue Wächter, eine Kopfzahl mit `root` und `sha256`, Zusagen mit
+Positionen, achtzehn Produktions-Ausnahmen mit Größen-Guard — und eine
+Akte, in der die 151 des Klons einen eigenen Lauf mit eigenem `root`
+hat.**
 
 
+
+### §71.36 — Runde 43: die Tabelle schloß auf 150, gezählt waren 151
+
+`71 + 53 + 16 + 10 = 150`. Die Runde-42-Zerlegung ließ **eine** Klasse
+weg — und gerade die ohne Kategorie ist die, in der eine echte
+Abweichung stehen könnte. Sie existiert (`check_doc_inventories`):
+
+| Art | n |
+|---|---|
+| tote Referenz | 71 |
+| Befehl zeigt ins Leere | 53 |
+| Suite zugesagt, Skript fehlt | 16 |
+| Datei fehlt | 10 |
+| Inventar-Dokument fehlt | 1 |
+
+**Die Zerlegung wurde nie addiert.** Derselbe Fehler wie eine Zahl ohne
+Nenner, nur mit vertauschten Vorzeichen: eine Tabelle, die aussieht, als
+erklärte sie die Zahl, und es nicht tut.
+
+**Und `151` ist keine Zahl, sondern ein Kalibrierlauf.** Ein Klon ohne
+`scripts/` mißt die Abwesenheit von `scripts/`. Der Lauf belegt, daß
+`root` wirkt — nicht, daß Code und Doku übereinstimmen.
+
+### §71.37 — Runde 43: die neun stehen in `main`, nicht im Prüfstand
+
+Runde 42 buchte neun `_status_line`-Aufrufe als „Prüfstand, kein
+geduldeter Fall". **Sie stehen in `self_test_check_counts`, das `main`
+aufruft.** Für die Frage „braucht er `root`?" gibt es genau zwei Fälle:
+
+| Fall | Konsequenz |
+|---|---|
+| er braucht `root` | Verstoß, keine Ausnahme |
+| er braucht es nicht, weil er gegen den Default laufen soll | `cwd`-Verhalten — und K1 zählt genau das als Verstoß |
+
+Eine dritte Kategorie gibt es nicht. Die Begründung der Runde 42 war die,
+die Runde 41 selbst ausgeschlossen hatte: *eine Ausnahme, die eine
+Funktion im Produktionscode mit Default-Verhalten ist.*
+
+**Der Ausweg ist der Zwilling.** Ein Aufruf ohne `root` braucht seinen
+Partner daneben — erst das Paar ist ein Beweis:
+
+```
+line      = _status_line(Checks(223, 210, 0), 0)                 # kein Bezug
+line_pair = _status_line(Checks(223, 210, 0), 0, Path("/tmp"))   # Bezug
+```
+
+Geprüft wird das **Paar**: die erste Zeile nennt keinen `Bezug:`, die
+zweite nennt ihn, und die **Zahl bleibt gleich** — sonst änderte `root`
+die Zählung statt den Bezug. Neun ohne Partner waren neun Hälften.
+
+**Ausnahmen: 8 + 9 → 18, alle Produktion.**
+`_PROBE_ANCHOR_SELFTEST_EXPECTED` gelöscht; der Größen-Guard prüft
+wieder **eine** Menge. Die Zahl kam aus einer Messung, nicht aus einer
+Entscheidung.
+
+### §71.38 — Runde 43: ein Marker, der zwei Dinge bedeutete
+
+Der Rot-Beleg der Runde 42 (19 statt 8) war erst der Beleg. Zweitens
+hieß er: **elf weitere Zeilen trugen `§A-KR`** — Prosa, Erklärungen,
+Zitate. Ein Wort an 19 Stellen, das 8 Mal einen Anker bezeichnet, ist ein
+Wort mit zwei Bedeutungen. Runde 23, diesmal am Marker selbst.
+
+Der Diskriminator war die **Zeilenform**. Das hält nur, solange niemand
+umbricht: eine mehrzeilige Erklärung über einem Anker hat dieselbe Form
+wie der Anker.
+
+| | vorher | jetzt |
+|---|---|---|
+| Anker | `§A-KR` + nicht-Kommentarzeile | `§A-KR-ANCHOR` **und** nicht-Kommentarzeile |
+| Erklärung | `§A-KR` in Kommentarzeile | `§A-KR` (beliebig) |
+
+**Beide Bedingungen bleiben nötig — gemessen.** Nur der eindeutige Marker
+zählte `"# §A-KR-ANCHOR nur im Kommentar"` als Anker: eine
+Kommentarzeile, die den Marker *nennt*, ist kein Anker. Nur die Form
+zählte die Prosa mit. Erst beide zusammen sind eindeutig — ein Wort
+allein nicht, eine Form allein nicht.
+
+### §71.39 — Runde 43: der Schnitt prüfte die Grenze, nicht die Verteilung
+
+Der Halbier-Test schnitt bei `L1493` — der **letzten** Zusage. Ein
+Extraktor, der irgendeine Zeilennummer davor lieferte, bestand ihn:
+geprüft wurde „die Position existiert und ist plausibel", nicht „sie ist
+richtig".
+
+**Jetzt: Schnitt am Median, beide Hälften einzeln.**
+
+```
+Positionen: 116, 317 … 1393, 1428, 1462, 1493   (Median 704)
+vor dem Schnitt  : 18 von 28
+hinter dem Schnitt: 10 von 28
+```
+
+**Und der erste Versuch mit `positions[-1]` war grün** — weil die
+Erwartung aus derselben Zahl berechnet wurde. Eine Probe, die ihre
+Erwartung aus dem Prüfling ableitet, ist blind; dieselbe Form wie §A-KZ,
+eine Ebene höher. Die Grenze ist jetzt **absolut** (Anteil in der Mitte
+der Verteilung); mit `positions[-1]` meldet sie
+`Schnitt nicht in der Verteilungsmitte: 27 von 28 davor (96%)`.
+
+**§A-MC im Testnamen:** die Meldung endet mit
+`REDAKTION? … dann Zahl anpassen, nicht Text`. Ein umformulierter Satz in
+`CLAUDE.md` fällt aus der Zählung — ohne Verlust, aber nur, wenn der rote
+Test als Redaktion erkannt wird und nicht als Befund.
 
 **Einundvierzig.** Der Prüfer, der dreizehn Stellen fand, sah Glieder und
 keine Ketten — und die Kette war echt: `_resolve_test_root(doc_root)` rief

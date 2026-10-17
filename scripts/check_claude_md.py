@@ -646,7 +646,9 @@ def _self_test_claim_count(doc_text: str | None = None) -> list[str]:
     if len(rep.claims) != _CLAIM_COUNT_EXPECTED:
         out.append(
             f"{len(rep.claims)} Zusagen live, erwartet {_CLAIM_COUNT_EXPECTED} "
-            f"— Herkunft: {_CLAIM_COUNT_ORIGIN}")
+            f"— Herkunft: {_CLAIM_COUNT_ORIGIN} — REDAKTION? Ein "
+            f"umformulierter Satz ohne Bedeutungswechsel faellt hier raus "
+            f"(§A-MC); dann Zahl anpassen, nicht Text")
     bare = [c for c in rep.claims if not c[0]]
     if bare:
         out.append(f"{len(bare)} Zusagen ohne Feld")
@@ -654,10 +656,20 @@ def _self_test_claim_count(doc_text: str | None = None) -> list[str]:
     if no_pos:
         out.append(f"{len(no_pos)} Zusagen ohne Position")
 
-    # §A-MB: Schnitt an einer **bekannten** Zeile, dann Position pruefen.
+    # §A-MH: der Schnitt gehoert in die **Mitte der Verteilung**, nicht in
+    # den Auslaeufer. Der erste Test schnitt bei L1493 — der letzten
+    # Zusage. Ein Extraktor, der irgendeine Zeilennummer davor lieferte,
+    # bestand ihn. Geprueft wird jetzt an der Medianzeile: die eine Haelfte
+    # muss davor, die andere dahinter liegen, **beide Zahlen einzeln**.
+    positions = sorted(c[2] for c in rep.claims if c[2])
+    if not positions:
+        out.append("keine Positionen — Halbierung nicht pruefbar")
+        return out
     lines = text.splitlines(keepends=True)
-    cut = next((i for i, ln in enumerate(lines, 1) if "Render-Pipeline" in ln),
-               None)
+    median = positions[len(positions) // 2]
+    before_expect = sum(1 for p in positions if p < median)
+    after_expect = sum(1 for p in positions if p >= median)
+    cut = median
     if cut is None:
         out.append("Schnittzeile nicht gefunden — Gegenprobe blind")
         return out
@@ -668,8 +680,15 @@ def _self_test_claim_count(doc_text: str | None = None) -> list[str]:
     late = [c for c in rep_h.claims if c[2] and c[2] >= cut]
     if late:
         out.append(f"{len(late)} Zusagen hinter dem Schnitt: {late[:2]!r}")
-    if not rep_h.claims:
-        out.append("Halbierung lieferte null Zusagen — Extraktor misst nicht")
+    # Beide Haelften einzeln: die Zahl vor dem Schnitt ist die erwartete,
+    # und sie ist **nicht** null (sonst schneidet der Test am Anfang).
+    if len(rep_h.claims) != before_expect:
+        out.append(
+            f"vor dem Schnitt {len(rep_h.claims)} statt {before_expect}")
+    if after_expect < 1 or before_expect < 1:
+        out.append(
+            f"Schnitt am Rand statt in der Mitte: {before_expect} davor, "
+            f"{after_expect} dahinter")
     return out
 
 
@@ -945,7 +964,7 @@ def _self_test_count_delta() -> list[str]:
             text_doc = doc.read_text(encoding="utf-8")
             w_doc, p_doc = parse_waves(text_doc)
             rep = Report()
-            check_counts(text_doc, w_doc, p_doc, rep, root_repo)  # §A-KR bewusst: Doku-Ort
+            check_counts(text_doc, w_doc, p_doc, rep, root_repo)  # §A-KR-ANCHOR bewusst: Doku-Ort
             # disjunkt heisst: **je Fundstelle** entweder geprueft oder
             # ausgeschlossen, nie beides. Eine Zeile darf beides enthalten
             # (`27 Waves x 9 Agents`: Architekturzahl geprueft, ein Bruch
@@ -955,7 +974,7 @@ def _self_test_count_delta() -> list[str]:
             per_line_checked = per_line_skips = 0
             for raw in text_doc.splitlines():
                 one = Report()
-                check_counts(raw, w_doc, p_doc, one, root_repo)  # §A-KR bewusst: Doku-Ort
+                check_counts(raw, w_doc, p_doc, one, root_repo)  # §A-KR-ANCHOR bewusst: Doku-Ort
                 per_line_checked += one.checked
                 per_line_skips += sum(one.skips.values())
             if per_line_checked != rep.checked:
@@ -1001,7 +1020,19 @@ def _self_test_count_delta() -> list[str]:
         #     nicht beide nur "geprueft" heissen. Geprueft wird die
         #     Ausgabeform selbst — sie ist die Stelle, an der zwei
         #     Einheiten ein Wort teilten.
-        line = _status_line(Checks(223, 210, 0), 0)  # §A-KR bewusst: Formprobe
+        line = _status_line(Checks(223, 210, 0), 0)  # §A-KR-ANCHOR bewusst: Formprobe
+        # §A-MF (Runde 43): die Formprobe braucht ihren **Partner**. Der
+        # Beweis, dass `root` wirkt, ist das Paar, nicht die Haelfte: ohne
+        # `root` steht kein Bezug in der Zeile, mit `root` steht er da.
+        # Der Grund ist damit nicht mehr die Buchung "Pruefstand", sondern
+        # eine Aussage ueber das Verhalten der Funktion.
+        line_pair = _status_line(Checks(223, 210, 0), 0, Path("/tmp/_paar"))  # §A-KR-ANCHOR Formprobe-Partner
+        if "Bezug: root=" in line:
+            failures.append("Kopfzeile ohne root nennt einen Bezug")
+        if "Bezug: root=/tmp/_paar" not in line_pair:
+            failures.append("Kopfzeile mit root nennt ihn nicht")
+        if "223 Angaben geprueft" not in line_pair:
+            failures.append("Partner aendert die Zahl statt den Bezug")
         for need in ("223 Angaben geprueft", "433 Angaben gezaehlt",
                      "210 ausgeschlossen", "0 Abweichungen"):
             if need not in line:
@@ -1077,7 +1108,7 @@ def _self_test_count_delta() -> list[str]:
                     f"reset_all() hat die Referenz verschoben: {_START_CWD}")
         try:
             os.chdir(other)                    # cwd != Repo
-            got = _snapshot_path()             # §A-KR root=None
+            got = _snapshot_path()             # §A-KR-ANCHOR root=None
         finally:
             os.chdir(prev_cwd)
         if got.parent.resolve() != (here / "sub" / ".git").resolve() and \
@@ -1144,8 +1175,8 @@ def _self_test_count_delta() -> list[str]:
             "_save_count_snapshot": None,
         }
         no_root = {
-            "_snapshot_path": _snapshot_path(),   # §A-KR bewusst: Default-Zweig
-            "_delta_line": _delta_line(1),        # §A-KR bewusst: Vorlauf-sha
+            "_snapshot_path": _snapshot_path(),   # §A-KR-ANCHOR bewusst: Default-Zweig
+            "_delta_line": _delta_line(1),        # §A-KR-ANCHOR bewusst: Vorlauf-sha
         }
         # ohne root zeigt der Ort auf **dieses** Repo, nicht auf `root`
         here = Path(__file__).resolve().parent.parent
@@ -1181,7 +1212,7 @@ def _self_test_count_delta() -> list[str]:
         #     zweiter Fall denselben Wert liefert, sieht keinen Unterschied
         #     — die vierte Annahme. Gegenprobe an der Stelle, an der sie
         #     sich schon einmal geraeumt hat: `root` gegen `root=None`.
-        if _snapshot_path(root) == _snapshot_path():  # §A-KR Zwillingspfad
+        if _snapshot_path(root) == _snapshot_path():  # §A-KR-ANCHOR Zwillingspfad
             failures.append("Gegenprobe fehlt: root und root=None gleich")
         if Checks(21).n == Checks(22).n:
             failures.append("Checks traegt die Zahl nicht")
@@ -1303,7 +1334,7 @@ def _self_test_count_delta() -> list[str]:
                 f"claim() veraendert total nicht: {c_no.total} vs {c_all.total}")
         if c_no.measured != c_all.measured:
             failures.append("claim() veraendert measured — falscher Eimer")
-        line_all = _status_line(c_all, 0)  # §A-KR root=None
+        line_all = _status_line(c_all, 0)  # §A-KR-ANCHOR root=None
         for need in ("2 Angaben geprueft", "6 Angaben gezaehlt",
                      "5 gemessen", "1 Zusagen"):
             if need not in line_all:
@@ -1311,7 +1342,7 @@ def _self_test_count_delta() -> list[str]:
         # Ohne Zusagen: die Klammer nennt `0 Zusagen` — das ist eine Zahl,
         # keine Behauptung. Verboten ist nur der Zusatz **ausserhalb** der
         # Klammer, der eine vierte Einheit vortaeuscht (§A-KX).
-        line_no = _status_line(c_no, 0)  # §A-KR root=None
+        line_no = _status_line(c_no, 0)  # §A-KR-ANCHOR root=None
         if "0 Zusagen" not in line_no or line_no.count("Zusagen") != 1:
             failures.append(f"Zeile verschweigt null Zusagen: {line_no!r}")
 
@@ -1391,11 +1422,17 @@ def _self_test_count_delta() -> list[str]:
         #     Der gemeinsame Nenner: ein Messinstrument, das seine eigene
         #     Quelle liest, findet sich selbst. Ein Preset, vier Instrumente.
         #     Marker **ausschliesslich** im Kommentar -> null Anker.
-        if _probe_anchors(mark + " nur im Kommentar, kein Anker\n"):
+        anch = "\u00a7A" + "-KR-ANCHOR"
+        if _probe_anchors("# " + anch + " nur im Kommentar\n"):
             failures.append(
                 "_probe_anchors zaehlt einen Kommentar als Anker")
-        if _probe_anchors("x = g()" + mark + " bewusst\n") != (
-                "x = g()" + mark + " bewusst",):
+        #     §A-MG: die Prosa-Marke allein ist **kein** Anker — sonst
+        #     bedeutet ein Wort zwei Dinge (Runde 23, am Marker selbst).
+        if _probe_anchors("x = g()  # \u00a7A-KR Erklaerung\n"):
+            failures.append(
+                "_probe_anchors zaehlt den Prosa-Marker als Anker")
+        if _probe_anchors("x = g()  # " + anch + " bewusst\n") != (
+                "x = g()  # " + anch + " bewusst",):
             failures.append("_probe_anchors findet echten Anker nicht")
         #     _git_callers_without_cwd gegen sich selbst: die eigene Datei
         #     enthaelt keinen offenen git-Aufruf — und eine Probedatei, die
@@ -1409,10 +1446,10 @@ def _self_test_count_delta() -> list[str]:
                 "import subprocess\nsubprocess.run(['git','x'])\n") == []:
             failures.append("_git_callers_without_cwd findet den Zwilling nicht")
         #     Und der Report: zwei roots, zwei Bezugszeilen (§A-MA).
-        line_own = _status_line(Checks(1), 0, Path("/tmp/a"))  # §A-KR root=fremd
+        line_own = _status_line(Checks(1), 0, Path("/tmp/a"))  # §A-KR-ANCHOR root=fremd
         #                          ^ Zwillingsprobe: zaehlt den Bezug
         #                          nicht als Ausnahme (siehe unten)
-        line_two = _status_line(Checks(1), 0, Path("/tmp/b"))  # §A-KR root=fremd
+        line_two = _status_line(Checks(1), 0, Path("/tmp/b"))  # §A-KR-ANCHOR root=fremd
         if "/tmp/a" not in line_own or "/tmp/b" not in line_two:
             failures.append(f"Kopfzeile nennt den Bezug nicht: {line_own!r}")
         if line_own == line_two:
@@ -1504,7 +1541,7 @@ def _self_test_count_delta() -> list[str]:
         elif not _forwarding_violations(broken):
             failures.append("Pruefer findet eingebauten Fehler nicht in Produktion")
         # Die Zeile liest den Zaehler an genau einer Stelle.
-        line_c = _status_line(Checks(rep_c.checked, rep_c.skips.get("regel", 0)), 0)  # §A-KR root=None
+        line_c = _status_line(Checks(rep_c.checked, rep_c.skips.get("regel", 0)), 0)  # §A-KR-ANCHOR root=None
         if f"{n_ok + 1} Angaben geprueft" not in line_c:
             failures.append(f"Zeile liest den Zaehler nicht: {line_c!r}")
 
@@ -1523,12 +1560,12 @@ def _self_test_count_delta() -> list[str]:
             failures.append("Aufteilung nicht im Objekt: gleiche Summe, gleicher Wert")
         if Checks(5, 1) == Checks(5, 2):
             failures.append("__eq__ ignoriert excluded")
-        line_ident = _status_line(c1, 0)  # §A-KR root=None
+        line_ident = _status_line(c1, 0)  # §A-KR-ANCHOR root=None
         if "21 Angaben geprueft" not in line_ident or \
                 "231 Angaben gezaehlt" not in line_ident or \
                 "210 ausgeschlossen" not in line_ident:
             failures.append(f"Zeile rechnet nicht aus dem Typ: {line_ident!r}")
-        line_ident3 = _status_line(c3, 0)  # §A-KR root=None
+        line_ident3 = _status_line(c3, 0)  # §A-KR-ANCHOR root=None
         if "11 Angaben gezaehlt" not in line_ident3:
             failures.append(f"Zeile rechnet nicht (zweites Paar): {line_ident3!r}")
         try:
@@ -1554,8 +1591,8 @@ def _self_test_count_delta() -> list[str]:
         except AttributeError:
             pass
         # und die Funktion selbst: `repo_root()` ist der eine Weg
-        if repo_root(None) != here:  # §A-KR bewusst: Default-Zweig
-            failures.append(f"repo_root(None) != Dateiort: {repo_root(None)}")  # §A-KR bewusst: Default-Zweig
+        if repo_root(None) != here:  # §A-KR-ANCHOR bewusst: Default-Zweig
+            failures.append(f"repo_root(None) != Dateiort: {repo_root(None)}")  # §A-KR-ANCHOR bewusst: Default-Zweig
         if repo_root(root) != root.resolve():
             failures.append("repo_root(root) loest nicht auf root auf")
         # Cache: zweiter Aufruf darf keinen neuen Subprozess kosten
@@ -1602,7 +1639,7 @@ def _self_test_count_delta() -> list[str]:
         if "21 Angaben" not in str(demo):
             failures.append(f"Checks bringt die Zahl nicht mit: {demo!r}")
         try:
-            _status_line(21, 0)  # §A-KR root=None  # type: ignore[arg-type]
+            _status_line(21, 0)  # §A-KR-ANCHOR root=None  # type: ignore[arg-type]
             failures.append("_status_line akzeptiert int — die Einheit fehlt")
         except TypeError:
             pass
@@ -2202,31 +2239,47 @@ _DEFAULT_PROBE_LINES: frozenset[int] = frozenset()
 # spurlos — abgeleitete Mengen sind zirkulaer, wenn die Quelle dieselbe
 # ist, die sie prueft. Deshalb steht daneben ein **Groessen-Guard** mit
 # einer dokumentierten Zahl und ihrer Herkunft (§A-LA).
-_PROBE_ANCHOR_EXPECTED = 8
-_PROBE_ANCHOR_SELFTEST_EXPECTED = 9
+_PROBE_ANCHOR_EXPECTED = 18
+_PROBE_ANCHOR_SELFTEST_EXPECTED = 0
 _PROBE_ANCHOR_ORIGIN = (
-    "Runde 40, Marker §A-KR (Ableitung zaehlt nur Code vor dem Markerblock): "
-    "vier Default-Zweig-Aufrufe (check_counts x2, _snapshot_path, "
-    "_snapshot_path im --json-report) und vier Aufrufe mit absichtlich "
-    "fremdem Ort (_delta_line(1), _snapshot_path(root) gegen "
-    "_snapshot_path(), repo_root(None) zweimal). Nachgezaehlt im "
-    "Code-Abschnitt: `grep -n 'A-KR' scripts/check_claude_md.py | head -8`.")
-# §A-ME (Runde 42): `_status_line` bekam einen optionalen `root`, um den
-# Bezugsraum zu nennen. Damit fallen die **Pruefstand**-Aufrufe darunter
-# — Aufrufe im `--self-test`, die die Form pruefen, nicht einen Baum. Sie
-# sind keine Ausnahme im Produktionspfad: der Pruefstand ist ein anderer
-# Ort, kein geduldeter. Getrennt gezaehlt, weil eine Zahl, die beide
-# Mengen summiert, in Runde 43 `17` sagt und niemand weiss, warum.
+    "Runde 40, Marker §A-KR: vier Default-Zweig-Aufrufe (check_counts x2, "
+    "_snapshot_path, _snapshot_path im --json-report) und vier Aufrufe mit "
+    "absichtlich fremdem Ort (_delta_line(1), _snapshot_path(root) gegen "
+    "_snapshot_path(), repo_root(None) zweimal). §A-MF (Runde 43): die "
+    "neun _status_line-Aufrufe im --self-test plus ihr Formprobe-Partner: "
+    "**18**, alle in `main`s Pfad, alle Produktion. Die 9 sind nicht "
+    "'Pruefstand' — das war die falsche Buchung aus Runde 42. "
+    "Nachgezaehlt: `grep -c 'A-KR-ANCHOR' scripts/check_claude_md.py`.")
+# §A-MF (Runde 43): **eine dritte Kategorie gibt es nicht.** Runde 42
+# buchte neun Aufrufe als "Pruefstand" — sie stehen aber in
+# `self_test_check_counts`, das `main` aufruft. Ein `--self-test`-Aufruf
+# ist Produktionscode, der den Pruefstand aufruft. Ob er `root` braucht,
+# haengt an der **Aufrufstelle**. Der hier gegebene Grund ("Formprobe,
+# kein Baum") ist ein Grund, keine Ausnahme — und die Formprobe steht
+# als **Paar** da: derselbe Aufruf mit Baum in `_status_line`-Zwillingsprobe.
 
 
 def _probe_anchors(src: str | None = None) -> tuple[str, ...]:
-    """Leitet die erlaubten Aufrufe aus dem Quelltext ab.
+    """Leitet die erlaubten Aufrufe aus dem Quelltext ab (§A-MG).
+
+    **Zwei Marker, zwei Bedeutungen.** Runde 42 unterschied Anker und
+    Erklaerung an der Zeilenform (`# §A-KR` allein = Prosa, Code + Marker
+    = Anker). Das hielt nur, solange niemand umbrach: eine mehrzeilige
+    Erklaerung ueber einem Anker hat dieselbe Form wie der Anker. Jetzt
+    ist die Suche ein eindeutiges Wort statt einer Zeilenform:
+
+        §A-KR-ANCHOR   die Sache (eine erlaubte Zeile)
+        §A-KR          die Erklaerung
+
+    Der Rot-Beleg aus Runde 42 zeigte den Preis: mit dem alten
+    Diskriminator zaehlte dieselbe Datei mehr Zeilen als Anker — die
+    Prosa trug den Marker mit.
 
     Gezaehlt wird nur Code **vor** diesem Block: weder die Ableitung selbst
-    noch ihre Beschreibung. Eine Ableitung, die ihren eigenen Kommentar
-    mitliest, zaehlt ihre Beschreibung als Beweis.
+    noch ihre Beschreibung.
     """
     text = src if src is not None else Path(__file__).read_text(encoding="utf-8")
+    marker = "§A" + "-KR-ANCHOR"     # zur Laufzeit gebaut (siehe unten)
     lines = text.split("\n")
     try:
         cut = next(i for i, ln in enumerate(lines)
@@ -2235,10 +2288,8 @@ def _probe_anchors(src: str | None = None) -> tuple[str, ...]:
         cut = len(lines)
     # §A-LA: zwei weitere Schnitte, beide benannt. Der Markerblock (§A-KZ)
     # und der Herkunftstext des Groessen-Guards nennen den Marker als
-    # Prosa — sie beschreiben die Ausnahmen, sie sind keine. Eine
-    # Ableitung, die ihren Beschreibungstext mitliest, zaehlt ihre
-    # Beschreibung als Beweis.
-    for start in ("# §A-KZ:", "_PROBE_ANCHOR_ORIGIN"):
+    # Prosa — sie beschreiben die Ausnahmen, sie sind keine.
+    for start in ("# §A-KR:", "_PROBE_ANCHOR_ORIGIN"):
         try:
             cut = min(cut, next(i for i, ln in enumerate(lines)
                                 if ln.lstrip().startswith(start)))
@@ -2246,7 +2297,13 @@ def _probe_anchors(src: str | None = None) -> tuple[str, ...]:
             pass
     out: list[str] = []
     for ln in lines[:cut]:
-        if "§A-KR" in ln and not ln.lstrip().startswith("#"):
+        # §A-MG: zwei Bedingungen, und die zweite ist der Grund, warum die
+        # erste allein nicht reicht. Der **eindeutige** Marker trennt
+        # Anker von Erklaerung; die **Code-Zeile** trennt den Anker von
+        # einer Kommentarzeile, die ihn bloss nennt (etwa in einem Test,
+        # der prueft, dass Kommentare nicht zaehlen). Nur beide zusammen
+        # sind eindeutig — ein Wort allein nicht, eine Form allein nicht.
+        if marker in ln and not ln.lstrip().startswith("#"):
             anchor = ln.strip()
             if anchor:
                 out.append(anchor)
@@ -2257,13 +2314,16 @@ _SOURCE_LINES: list[str] = []
 
 
 def _marked(lineno: int) -> bool:
-    """Steht `# §A-KR` auf dieser Zeile? (Quelltext, einmal gelesen)"""
+    """Steht `§A-KR-ANCHOR` auf dieser Zeile? (Quelltext, einmal gelesen)
+
+    §A-MG: der Anker ist der eindeutige Marker, nicht die Prosa-Marke.
+    """
     if not _SOURCE_LINES:
         _SOURCE_LINES.extend(
             Path(__file__).read_text(encoding="utf-8").split("\n"))
     if not (1 <= lineno <= len(_SOURCE_LINES)):
         return False
-    return "§A-KR" in _SOURCE_LINES[lineno - 1]
+    return ("§A" + "-KR-ANCHOR") in _SOURCE_LINES[lineno - 1]
 
 
 def _default_probe_lines_valid() -> list[str]:
@@ -2297,10 +2357,11 @@ def _default_probe_lines_valid() -> list[str]:
     if len(set(anchors)) != len(anchors):
         out.append(f"{len(anchors) - len(set(anchors))} doppelte Ausnahme(n)")
     # Jede Markierung muss einen Grund tragen: mehr als das blosse
-    # `§A-KR`. Ein Marker allein sagt *dass* es erlaubt ist, nicht *warum*.
+    # `§A-KR-ANCHOR`. Ein Marker allein sagt *dass* es erlaubt ist,
+    # nicht *warum*.
     for ln in lines:
-        if "§A-KR" in ln and not ln.lstrip().startswith("#"):
-            tail = ln.split("§A-KR", 1)[1].strip(" #\t")
+        if ("§A" + "-KR-ANCHOR") in ln:
+            tail = ln.split("§A" + "-KR-ANCHOR", 1)[1].strip(" #\t")
             if not tail and "root=None" not in ln:
                 out.append(f"Ausnahme ohne Grund: {ln.strip()!r}")
     return out
