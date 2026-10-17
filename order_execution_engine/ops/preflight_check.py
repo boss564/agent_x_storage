@@ -606,11 +606,16 @@ def gate_telemetry_reconciliation(
             name="TELEMETRY_RECONCILIATION",
             status="RED",
             blocking="ledger",
-            reason=f"(3) unattributed: {unattributed} Dispatch(es) ohne "
-                   f"Telemetriezeile — Erfolg ohne Beleg "
-                   f"(von N={detail['dispatched_in_scope']}; "
+            # §5.4cm: das Urteil nennt die Zahl, auf der es steht. `unattributed`
+            # trägt zwei Lesarten — 300 (frühere Runs + offener Run) und 30
+            # (nur der offene Run). Welche das RED trägt, steht hier, nicht
+            # in einer WARN-Zeile daneben.
+            reason=f"(3) unattributed: {unattributed} "
+                   f"(offener Run: {detail['origin_split']['unattributed']}; "
+                   f"{unattributed} inkl. früherer Runs) — "
+                   f"von N={detail['dispatched_in_scope']}; "
                    f"discarded={detail['origin_split']['discarded']}, "
-                   f"attributed={detail['origin_split']['attributed']})",
+                   f"attributed={detail['origin_split']['attributed']}",
             detail=detail,
         )
     # Die Gegenrichtung (§5.4ac). Bis hierher war nur Erfolg-ohne-Zeile
@@ -901,8 +906,6 @@ def dispatch_origin_split(
     ).fetchall()
     n = len(rows)
     boundary = run_started_at if run_started_at is not None else float("inf")
-    open_rows = sorted(
-        [r for r in rows if r[1] >= boundary], key=lambda r: (r[1], r[0]))
     hits = {
         int(seq) for (seq,) in conn.execute(
             "SELECT decision_seq FROM telemetry"
@@ -913,50 +916,43 @@ def dispatch_origin_split(
         )
     }
     attributed = 0
-    open_claims = 0
     unclaimed_open = 0
-    # `i` ist die Position unter den **Claims** des offenen Runs, nicht
-    # unter allen Zeilen: `decision_seq` zählt Entscheidungen, nicht
-    # Dispatches. Eine verworfene Zeile belegt keinen Zählerwert — sie
-    # weiterzuzählen verschiebt jede folgende Zuordnung um eins (§5.4ci).
+    # §5.4cn: **ein** Topf je Zeile, in **einem** Durchlauf, ohne Rangfolge
+    # und ohne nachträgliche Subtraktion. Die frühere Fassung baute die
+    # Töpfe aus getrennten Summen und korrigierte die Überlappung danach —
+    # das ist Disjunktheit **per Sortierung**, und Sortierungen ändern sich
+    # (Runde 23). Hier kann sich keine Zeile in zwei Töpfen wiederfinden,
+    # weil sie genau einmal zugewiesen wird.
+    buckets = {"attributed": 0, "discarded": 0, "unattributed": 0,
+               "traffic_only": 0}
     i = 0
-    for _item, _ts, disc in open_rows:
+    for _item, _ts, disc in rows:
         if disc:
+            buckets["discarded"] += 1
             continue
+        if _ts < boundary:
+            buckets["unattributed"] += 1       # früherer Run: Claim ohne Zuordnung
+            continue
+        # Offener Run: `decision_seq` zählt **Entscheidungen**, nicht
+        # Dispatches — die Position läuft nur über Claims. Verworfenen
+        # Zeilen belegen keinen Zählerwert (§5.4ci).
         i += 1
-        open_claims += 1
         if i in hits:
+            buckets["attributed"] += 1
             attributed += 1
         else:
+            buckets["unattributed"] += 1
             unclaimed_open += 1
-    # Töpfe müssen **disjunkt** sein (§5.4ci). Die erste Fassung legte
-    # `unattributed_earlier` (alle Zeilen vor der Grenze) neben `discarded`
-    # (alle verworfenen Zeilen) — beide enthalten dieselben 24 Zeilen, und
-    # die Summe war 631 über einer Grundgesamtheit von 361. Dieselbe Form
-    # wie `-266 + 300 = 34`: zwei Mengen mit Überlappung, als Zahl addiert.
-    #
-    # Rangfolge, weil ein Dispatch mehrere Eigenschaften zugleich hat:
-    #   1. attributed      — Claim im offenen Run UND Zeile im Ledger
-    #   2. discarded       — verworfen (auch wenn der Claim eine Zeile hatte)
-    #   3. unattributed    — Claim ohne Zeile, nicht verworfen
-    #   4. traffic_only    — ohne Claim und ohne Discard
-    # Jede Zeile fällt in genau einen Topf; Summe == N per Konstruktion.
-    discarded_all = sum(1 for r in rows if r[2])
-    # Claims = Zeilen ohne Discard. `open_claims` zählt sie im offenen Run.
-    earlier_claims = sum(1 for r in rows if r[1] < boundary and not r[2])
-    buckets = {
-        "attributed": attributed,
-        "discarded": discarded_all,
-        "unattributed": unclaimed_open + earlier_claims,
-        "traffic_only": n - attributed - discarded_all
-                        - unclaimed_open - earlier_claims,
-    }
+    earlier_claims = buckets["unattributed"] - unclaimed_open
+    # Rest ohne Claim und ohne Discard — reiner Verkehr. Per Konstruktion
+    # genau die Menge, die in keinem der drei Zweige oben landete.
+    buckets["traffic_only"] = n - sum(
+        buckets[k] for k in ("discarded", "unattributed", "attributed"))
     buckets["earlier_claims"] = earlier_claims
     buckets["N"] = n
-    buckets["sum"] = sum(
-        buckets[k] for k in
-        ("attributed", "discarded", "unattributed", "traffic_only")
-    )
+    buckets["sum"] = sum(buckets[k] for k in
+                         ("attributed", "discarded", "unattributed",
+                          "traffic_only"))
     return buckets
 
 
@@ -1857,6 +1853,13 @@ def gate_snapshot(
         _n = _ds.get("N")
         _sum = _ds.get("sum")
         _ok = "✓" if _sum == _n else f"✗ Σ={_sum} ≠ N={_n}"
+        # §5.4co: `source_unknown` neben `unattributed` — ein Zähler für
+        # einen Fall, der nie passieren sollte, ist entweder 0 oder ein
+        # Befund. 0 ⇒ der alte `"book"`-Default hat nie gehandelt;
+        # n>0 ⇒ n Fälle wurden als „nicht handeln" verbucht (§5.4cl).
+        _su = classes["outcome"].get("SIDE_UNKNOWN_SOURCE", 0)
+        _su_note = "Versicherung: Default nie aktiv" if _su == 0 else \
+            "BEFUND: Default hätte gehandelt"
         print(
             f"  dispatches (Σ=N={_n}):            "
             f"attributed={_ds.get('attributed')} · "
@@ -1864,6 +1867,9 @@ def gate_snapshot(
             f"(frühere Runs: {_ds.get('earlier_claims')}) · "
             f"discarded={_ds.get('discarded')} · "
             f"traffic_only={_ds.get('traffic_only')}  {_ok}"
+        )
+        print(
+            f"  source_unknown:     {_su} ({_su_note})"
         )
     verdicts = snapshot["verdicts"]
     # Der Richter datiert sich selbst: ein Verdikt ohne Prüfer-Hash nennt den
@@ -1900,13 +1906,19 @@ def gate_snapshot(
     )
     if recon.detail.get("unattributed"):
         _sp = recon.detail.get("origin_split") or {}
-        print(
-            f"  WARN unattributed dispatches (kein Claim, keine Zeile): "
-            f"{recon.detail['unattributed']} — Achtung, dieselbe Zahl "
-            f"steht in `dispatches` als {_sp.get('unattributed')}: die 300 "
-            "zählen frühere Runs **und** den offenen Run, enthalten also "
-            "die 30 aus Run 8, die dort attributiert sind"
-        )
+        _open = _sp.get("unattributed")
+        if _open is not None and _open != recon.detail["unattributed"]:
+            # §5.4cm: **eine** Grundgesamtheit (N=361) und zwei Fenster.
+            # Früher stand hier „dieselbe Zahl" — sie ist es nicht mehr:
+            # das Urteil trägt die offene Run-Zahl, `dispatches` zeigt beide.
+            print(
+                f"  WARN unattributed: Urteil rechnet mit "
+                f"{recon.detail['unattributed']} (alle Runs im Fenster), "
+                f"`dispatches` trennt {_open} im offenen Run von "
+                f"{_sp.get('earlier_claims')} aus früheren Runs — "
+                "dieselbe Grundgesamtheit, zwei Fenster; "
+                "die 30 aus Run 8 sind dort als attributiert gebucht"
+            )
     if recon.detail.get("dispatched_success"):
         print(f"  invalid_price_by_asset: {invalid_prices}")
     historical = snapshot["verdicts"]["latest_run_id"] != recon.detail.get(

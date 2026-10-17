@@ -2996,3 +2996,134 @@ bezeugt — und dessen nächste Disziplin nicht die Herkunft ist, sondern
 der Nenner: eine Zahl, eine Grundgesamtheit, ein Vorzeichen. Die
 billigste Reparatur dieser Runde war kein Feld, sondern eine Zeile im
 Test, die nicht `== 34` sagt, sondern `== 361`.**
+
+## 53. Runde 24 — welche 4, welche 300, und woher `success` kommt
+
+### §5.4cm — `attributed = 4` ist Lesart (a), und (a) war die bessere
+
+Die Prüfung, die §1 verlangte, ist entschieden — per Abfrage auf die
+vier Zeilen selbst:
+
+| rn | item | dispatched_at | run | decision_seq | reject_reason |
+|----|------|---------------|-----|--------------|---------------|
+| 1 | 34474850 | 2026-10-15 05:00:07 | 9 | 1 | INVALID_PRICE |
+| 2 | d168bee0 | 2026-10-15 05:00:07 | 9 | 2 | INVALID_PRICE |
+| 3 | 64ab91fc | 2026-10-15 11:00:08 | 9 | 3 | INVALID_PRICE |
+| 4 | 5ab88740 | 2026-10-16 09:00:06 | 9 | 4 | INVALID_PRICE |
+
+**Vier verschiedene Items, vier verschiedene Zeitstempel, vier eigene
+Zeilen — nicht die Breite eines Fensters.** Run 9 hatte 4 Claims und 4
+Zeilen: `open_unmatched = 0`. Der offene Run ist **vollständig**
+attribuiert.
+
+Die Warnung aus §1 bleibt trotzdem nützlich: die Zuordnung läuft über
+`rn` gegen `decision_seq` (Position gegen Position), weil
+`telemetry_seq` 0/361 ist. Sie läuft **korrekt**, weil sie innerhalb
+eines Runs läuft und verworfene Zeilen nicht mitzählen (§5.4ci) — aber
+sie läuft über eine Position, nicht über eine ID. Das ist der
+verbleibende strukturelle Punkt, und er ist jetzt scharf benannt:
+**solange der Ledger kein `item_id` in `telemetry` schreibt, kann
+`attributed` höchstens so gut sein wie die Dispatch-Reihenfolge.** Ein
+`telemetry_seq = 0/361` ist kein Schönheitsfehler, sondern der Grund,
+warum `attributed = 4` begründbar statt beweisbar ist.
+
+### §5.4cn — Disjunktheit per Konstruktion, nicht per Sortierung
+
+`dispatch_origin_split` vergibt die Töpfe in **einem** Durchlauf: jede
+Zeile wird genau einmal zugewiesen, in der Reihenfolge
+`discarded → earlier_claim → open_claim → rest`. Kein `sorted()`, keine
+Rangfolge, keine Subtraktion danach.
+
+Der Prädikatsbeweis ohne `ORDER BY`, ohne `DISTINCT`, ohne Rangfolge:
+
+```
+N=361 · discarded=327 · earlier_claims=30 · open_claims=4
+      · Σ(Prädikate)=361
+```
+
+Die Abfrage, die §3 vorschlug — `attributed` als **Prädikat** über der
+Zeile wie `disc=1` — **scheitert an Parse-Zeit**:
+`no such column: dispatched_at_claimed`. Das ist der ehrlichste Befund
+dieser Runde: **Attribution existiert nicht als Eigenschaft der Zeile,
+nur als Positionsrechnung.** Zwei der drei Töpfe sind per Prädikat
+disjunkt, der dritte ist es per Konstruktion im Durchlauf. Disjunktheit
+ist damit hergestellt, nicht definiert — der Unterschied bleibt sichtbar,
+bis der Ledger die `item_id` mitschreibt.
+
+### §5.4cm (Ausgabe) — das Urteil nennt seine Zahl
+
+```
+reason: (3) unattributed: 300 (offener Run: 30; 300 inkl. früherer Runs)
+        — von N=361; discarded=327, attributed=4
+```
+
+Das RED bleibt `unattributed == 0` als Kriterium — die Zahl darauf ist
+300 (alle Runs im Fenster), und das steht jetzt **in der Urteilszeile
+selbst**. Die WARN darunter widerspricht ihr nicht mehr (sie sagte
+vorher „dieselbe Zahl steht als 30 da" — das war nach §5.4ci falsch).
+
+### §5.4co — `source_unknown: 0`
+
+```
+source_unknown:     0 (Versicherung: Default nie aktiv)
+```
+
+Der alte `getattr(active, "source", "book")`-Default hat **null** Fälle
+als „nicht handeln" verbucht. Die Reparatur ist damit belegbar statt
+behauptet. `n > 0` wäre ein Befund, nicht ein Messwert; er steht in
+derselben Zeilengruppe wie `dispatches`.
+
+### §5.4cp — Herkunft von `success`
+
+`outcome -> success` kommt **nicht** aus `outcome`:
+
+| Zahl | Quelle |
+|------|--------|
+| `dispatched_success` | `COUNT(*) FROM dispatched_signals` **minus** `bridge_discards` |
+| `outcome` | `COUNT(*) FROM telemetry` gruppiert nach `reject_reason` |
+
+Zwei Tabellen, zwei Achsen (`dispatches` vs. `telemetry`). Die
+Invariante `Σ(outcome) == success` prüft deshalb **nicht sich selbst**,
+sondern den Seam zwischen Schreib- und Entscheidungsseite: eine
+Dispatch-Zeile ohne Telemetrie lässt die Summe zusammenbrechen. Das ist
+die stärkste der drei Prüfungen und muss bleiben.
+
+### §5.4cq — Policy-Overrides in Tests: null Befunde
+
+`rg "theta|max_news_age_s|BridgePolicy\(" tests/` ergibt 11 Treffer,
+**keiner** setzt einen Wert, der in Produktion nicht läuft:
+
+| Datei:Zeile | Wert | Produktion? |
+|---|---|---|
+| test_news_bridge.py:54 | `theta=0.1` | ja (gepinnt) |
+| test_news_bridge.py:115 | `{}` | → Default `0.1` |
+| test_news_bridge.py:207 | `theta=0.1`, `size_by_impact` | ja |
+| test_news_bridge.py:215 | `theta=0.09` | **erwartet `ValueError`** |
+| test_ops_preflight.py:79/93/109 | `max_news_age_s=3900` | ja (`run_policy.json`) |
+| test_telemetry_reconciliation.py:1939/1944 | `theta=0.1` assert | ja |
+
+Und der Produktionspfad ist **einer**: `shadow_runner.py:187` ruft
+`BridgePolicy.from_config(policy_cfg)` — es gibt keinen zweiten Weg,
+`theta` zu setzen. Die Sorge aus §4 („eine Config, die gewählt werden
+kann") ist damit geschlossen: `0.09` ist wählbar **und scheitert am
+Lesepfad**.
+
+## 54. Der Satz dieser Runde
+
+Vierundzwanzig Runden, und die Zahlen dieser Runde sind die erste
+Antwort, die sich selbst tragen kann: `attributed = 4` sind vier Items,
+`unattributed = 30` ist ein Fenster mit Namen, `Σ = N = 361` geht auf
+ohne Sortierung, `source_unknown = 0` ist belegt statt versprochen, und
+`success` kommt aus einer anderen Tabelle als `outcome` — die drei
+Prüfungen des Urteils prüfen jetzt drei Dinge.
+
+**Was am 20.10. abgenommen wird, ist ein System, dessen Urteil seine
+eigene Zahl nennt und dessen Töpfe sich nicht mehr überlappen können.
+Die verbleibende Gefahr ist eine einzige, und sie ist jetzt benannt:
+`attributed` ist begründet, nicht bewiesen — weil der Ledger das Item
+nicht schreibt. Die Zuordnung über Position ist richtig, solange die
+Reihenfolge richtig ist. `telemetry_seq = 0/361` ist der Preis dafür,
+und er steht in der Akte.**
+
+Suite: **206 passed** (203 + 3 neue: `test_split_partitions_in_one_pass_not_by_sorting`,
+`test_discarded_rows_do_not_consume_decision_seq`, `test_verdict_names_the_number_it_uses`).

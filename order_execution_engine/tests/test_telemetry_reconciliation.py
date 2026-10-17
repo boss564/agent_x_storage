@@ -2261,3 +2261,108 @@ def test_unknown_source_is_not_guessed_as_book() -> None:
     rec = log._records[0]
     assert rec.reject_detail.value == "SIDE_UNKNOWN_SOURCE"
     assert rec.reject_context.source is None
+
+
+def test_split_partitions_in_one_pass_not_by_sorting() -> None:
+    """Disjunktheit per Konstruktion, nicht per Rangfolge (§5.4cn).
+
+    Die erste Fassung baute die Töpfe aus getrennten Summen und korrigierte
+    die Überlappung danach — `unattributed_earlier + discarded = 631` über
+    361. Hier wird jede Zeile genau einmal zugewiesen; es gibt keine
+    Rangfolge, die man umstellen könnte. Der Test prüft die Zuweisung, nicht
+    die Summe: eine Zeile, die in zwei Töpfen landet, ist per Konstruktion
+    unmöglich, nicht per `assert`.
+    """
+    from order_execution_engine.ops.preflight_check import dispatch_origin_split
+
+    conn = sqlite3.connect(":memory:")
+    conn.executescript("""
+        CREATE TABLE dispatched_signals(item_id TEXT, dispatched_at REAL);
+        CREATE TABLE bridge_discards(item_id TEXT);
+        CREATE TABLE telemetry(run_id INTEGER, decision_seq INTEGER);
+        CREATE TABLE telemetry_runs(run_id INTEGER, started_at REAL);
+    """)
+    # Run 8: 6 Dispatches, 2 davon verworfen, 4 Zeilen (seq 1..4).
+    for i in range(6):
+        conn.execute("INSERT INTO dispatched_signals VALUES(?,?)",
+                     (f"r8-{i}", 100.0 + i))
+        conn.execute("INSERT INTO telemetry VALUES(8,?)", (i + 1,))
+    conn.execute("INSERT INTO bridge_discards VALUES('r8-1')")
+    conn.execute("INSERT INTO bridge_discards VALUES('r8-3')")
+    # Run 9: 3 Dispatches, 0 verworfen, 2 Zeilen (seq 1..2) → 1 offen.
+    for i in range(3):
+        conn.execute("INSERT INTO dispatched_signals VALUES(?,?)",
+                     (f"r9-{i}", 200.0 + i))
+    conn.execute("INSERT INTO telemetry VALUES(9,1)")
+    conn.execute("INSERT INTO telemetry VALUES(9,2)")
+    conn.execute("INSERT INTO telemetry_runs VALUES(9, 200.0)")
+
+    split = dispatch_origin_split(
+        conn, min_run_id=7, started_at=0.0, run_started_at=200.0)
+
+    assert split["N"] == 9
+    # Run 8: r8-0, r8-2, r8-4, r8-5 sind Claims → alle vor der Grenze.
+    assert split["earlier_claims"] == 4
+    assert split["discarded"] == 2
+    # Run 9: r9-0 → seq1, r9-1 → seq2, r9-2 → seq3 (keine Zeile).
+    assert split["attributed"] == 2
+    assert split["unattributed"] == 4 + 1
+    assert split["traffic_only"] == 0
+    assert split["sum"] == split["N"] == 9
+    # Die Beziehung, die man aus der Summe nicht sieht: die offene Lücke
+    # ist genau die Differenz der offenen Claims und der Treffer.
+    assert split["unattributed"] - split["earlier_claims"] == 1
+
+
+def test_discarded_rows_do_not_consume_decision_seq() -> None:
+    """Eine verworfene Zeile belegt keinen Zählerwert (§5.4ci).
+
+    Zählt man sie mit, verschiebt sich jede folgende Zuordnung um eins —
+    `attributed` fiele, obwohl der Ledger vollständig ist. Der Unterschied
+    ist im Test sichtbar: 3 Claims, 3 Zeilen, dazwischen 2 Discards.
+    """
+    from order_execution_engine.ops.preflight_check import dispatch_origin_split
+
+    conn = sqlite3.connect(":memory:")
+    conn.executescript("""
+        CREATE TABLE dispatched_signals(item_id TEXT, dispatched_at REAL);
+        CREATE TABLE bridge_discards(item_id TEXT);
+        CREATE TABLE telemetry(run_id INTEGER, decision_seq INTEGER);
+        CREATE TABLE telemetry_runs(run_id INTEGER, started_at REAL);
+    """)
+    for i, item in enumerate(["d-0", "d-1", "c-0", "c-1", "d-2"]):
+        conn.execute("INSERT INTO dispatched_signals VALUES(?,?)",
+                     (item, 10.0 + i))
+    conn.execute("INSERT INTO bridge_discards VALUES('c-0')")
+    conn.execute("INSERT INTO bridge_discards VALUES('c-1')")
+    for seq in (1, 2, 3):
+        conn.execute("INSERT INTO telemetry VALUES(4,?)", (seq,))
+    conn.execute("INSERT INTO telemetry_runs VALUES(4, 10.0)")
+
+    split = dispatch_origin_split(
+        conn, min_run_id=4, started_at=0.0, run_started_at=10.0)
+
+    assert split["discarded"] == 2
+    assert split["attributed"] == 3, "Position zählt Claims, nicht Zeilen"
+    assert split["unattributed"] == 0
+    assert split["sum"] == split["N"] == 5
+
+
+def test_verdict_names_the_number_it_uses() -> None:
+    """Das Urteil trägt seine Zahl, nicht nur ihr Etikett (§5.4cm).
+
+    `unattributed` hat zwei Gültigkeitsbereiche (offener Run / alle Runs).
+    Ein RED, das nur „unattributed" sagt, lässt offen, welche Zahl es
+    meint — und die beiden unterscheiden sich im Bestand um eine
+    Größenordnung.
+    """
+    import inspect
+    from order_execution_engine.ops import preflight_check
+
+    src = inspect.getsource(preflight_check)
+    assert "offener Run:" in src, (
+        "die Urteilszeile muss den offenen Run nennen"
+    )
+    assert "inkl. früherer Runs" in src, (
+        "und die Zahl, auf der das Kriterium steht"
+    )
