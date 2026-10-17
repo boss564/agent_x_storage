@@ -3756,13 +3756,8 @@ falsch: die beiden Zahlen gehörten nie zusammen.
 **vergleichbare** Bäume verbindet. Die Rüge hat sie nicht behauptet —
 sie hat eine Beziehung unterstellt, die es nicht gab. Das ist der erste
 Befund dieser Akte, in dem **beide Zahlen stimmten und nur der Satz
-dazwischen falsch war**: Rundentabelle ab hier:
-
-| Runde | falsch war |
-|---|---|
-| 23–28 | eine Zahl oder ein Nenner |
-| 29 | eine Zahl **plus** die Klammer dazu |
-| 29 (Rüge) | die Klammer allein, gegen zwei richtige Zahlen |
+dazwischen falsch war**. Die vollständige Rundentabelle steht in
+**§71** — eine Tabelle, ein Ort, mit Spalte *Bandage / Architektur*.
 
 ### §65.2 — §A-ND: zwei Schweigen sind nicht dasselbe Schweigen
 
@@ -4128,24 +4123,10 @@ Mutation *„Delta feuert nie"* wird rot.
 
 Suite: **216 passed**. Selbsttest **22/22**, drei Mutationen gegengeprüft.
 
-### §69.7 — die Rundentabelle, Runden 23–32
+### §69.7 — Verweis
 
-| Runde | falsch war | wie gefunden |
-|---|---|---|
-| 23 | zwei Nenner unter einem Wort (30/300) | Lesen |
-| 24 | zwei Nenner unter einem Wort (393/327) | Lesen |
-| 25 | zwei Gründe in einem Zähler (absent_sentiment/run_marker) | Messung |
-| 26 | ein Default, der handelt | Audit |
-| 27 | zwei Lesarten einer Gleichung (4 = 4) | Messung |
-| 28 | ein Nenner ohne Prädikat (325/827) | Regel vor Commit |
-| 29 | eine Zahl **plus** die Klammer dazu | Selbstmessung |
-| 29′ | die Rüge: Klammer gegen zwei richtige Zahlen | Nachmessung |
-| 30 | zwei Schweigen, eine Ausgabe | Einwand |
-| 31 | `+16` als Wachstum; Guard fing ein Zitat | Einwand + Guard |
-| 32 | `checked` in zwei Einheiten; Test erbte Umgebung | Einwand + Mutation |
-
-Zehn Runden, zehn Formen — und alle zehn sind **dieselbe Bewegung**: ein
-Name, zwei Bedeutungen; oder zwei Werte, ein Name.
+Die Rundentabelle steht in **§71** (ein Ort, nicht zwei). Sie war hier
+und in §65.1 dupliziert — zwei Abschnitte, die ab jetzt auseinanderlaufen.
 
 ## 70. Der Satz dieser Runde
 
@@ -4169,3 +4150,92 @@ gegengeprüften Mutationen über vier Runden und einem Prüfer, der sagt,
 wo seine Zahlen herkommen, wo seine Auswahl endet und wo seine Geschichte
 liegt — und der sich dabei viermal selbst ertappt hat, weil er den Fehler
 bei sich zuerst gesucht hat.**
+
+---
+
+## 71. Die Rundentabelle — ein Ort, Runden 23–33
+
+Diese Tabelle stand bis Runde 32 zweimal (§65.1 und §69.7). Zwei Orte für
+einen Wert sind derselbe Fehler wie zwei Namen für einen Wert, eine Ebene
+höher: sie laufen ab jetzt auseinander. Ab Runde 33 gibt es **eine**
+Tabelle, hier, und alle Verweise zeigen hierher.
+
+Die Spalte *Fix* ist die eigentliche Aussage: neun Runden lang war jeder
+Befund ein Einzelfall, und jeder Fix war eine Bandage. Erst Runde 33
+behebt die **Klasse** — und auch das nur an einer Stelle.
+
+| Runde | falsch war | gefunden durch | Fix |
+|---|---|---|---|
+| 23 | zwei Nenner unter einem Wort (30/300) | Lesen | Bandage: Nenner benannt |
+| 24 | zwei Nenner unter einem Wort (393/327) | Lesen | Bandage: Bezugsraum getrennt |
+| 25 | zwei Gründe in einem Zähler | Messung | Bandage: Prädikat |
+| 26 | ein Default, der handelt | Audit | Bandage: explizit |
+| 27 | zwei Lesarten einer Gleichung (4 = 4) | Messung | Bandage: Disjunktheit |
+| 28 | ein Nenner ohne Prädikat (325/827) | Regel vor Commit | Bandage: Prädikat |
+| 29 | eine Zahl **plus** die Klammer dazu | Selbstmessung | Bandage: Nachmessung |
+| 29′ | die Rüge: Klammer gegen zwei richtige Zahlen | Nachmessung | — (Rüge nachgetragen) |
+| 30 | zwei Schweigen, eine Ausgabe | Einwand | Bandage: eigene Zeile |
+| 31 | `+16` als Wachstum; Guard fing ein Zitat | Einwand + Guard | Bandage: Reihe; Guard auf Klasse |
+| 32 | `checked` in zwei Einheiten | Einwand | Bandage: Einheit an der Zahl |
+| 32′ | Test erbte Umgebung (viermal) | Mutation | **Bandage** (ein Fall) |
+| 33 | ohne `.git/` ist die Differenzmessung tot, Meldung grün | Einwand | Bandage: eigene Zeile |
+| 33′ | vier Einzelfixes, keine Vorbedingung | Einwand | **Architektur**: Harness-Reset + Kreuztest |
+
+### §71.1 — was Runde 33 wirklich geändert hat
+
+**Ohne `.git/`** gab es keinen Ort. Der Prüfer sagte `kein Vorlauf` — als
+hätte er einen Ort und keinen Inhalt — und schrieb nirgendwo. Gemessen in
+einem Tarball-Export:
+
+| Umgebung | Ausgabe vorher | Ausgabe jetzt |
+|---|---|---|
+| Repo, Vorlauf da | Delta oder nichts | unverändert |
+| Repo, Vorlauf fehlt | `kein Vorlauf` | `kein Vorlauf` |
+| **kein `.git/`** | **`kein Vorlauf`** | **`kein .git/ — Vorlauf nicht schreibbar, keine Differenzmessung`** |
+
+`kein Vorlauf` und `kein Ort` sind zwei Zustände, und nur einer davon
+verschwindet beim nächsten Lauf. Dazu fiel ein echter Fehler auf: der
+relative `--git-common-dir` wurde gegen `Path.cwd()` aufgelöst statt gegen
+das Repo — für den Arbeitsbaum harmlos, für jeden anderen Root falsch.
+
+### §71.2 — die Vorbedingung statt der Reihenfolge
+
+Der Kreuztest läuft **zuerst** in der Suite und braucht keinen Fix:
+
+```
+Schreiber legt Vorlauf ab   → Leser darf ihn nicht sehen
+```
+
+Wird `reset()` entfernt, ist die Suite rot. Damit gilt: ein neuer Fall
+kann den Zustand eines alten nicht erben, weil er ihn nicht bekommt —
+nicht, weil er sorgfältig ist.
+
+### §71.3 — `checked = 21`: weder gedruckt noch gelöscht
+
+`rg "checked = "` findet den Felde `Report.checked` und Testdaten. Die
+Größe **existiert** weiter — sie ist die Zählvariable des Reports — aber
+**gedruckt wird sie nicht mehr**. Das ist der dritte Zustand, den die
+Frage offen ließ: weder „gedruckt" noch „entfernt", sondern *intern*.
+Der Name bleibt mehrdeutig, aber er erscheint nicht mehr in einer Zeile,
+die `geprueft` sagt.
+
+## 72. Der Satz dieser Runde
+
+Dreiunddreißig Runden, und der Selbsttest läuft in CI, ist in drei
+Umgebungen gemessen — und in der dritten stand `kein Vorlauf`, während
+es dort **keinen Ort** gab. Eine Zusage über einen Pfad, der nicht
+existiert, ist in derselben Familie wie eine Zahl ohne Nenner.
+
+Der vierte Befund derselben Klasse in vier Runden wurde als Einzelfall
+behoben, und der nächste Fall konnte erben — weil niemand das Harness
+zurücksetzte. **Vier Mutationsfunde, vier Fixes an einem Fall: das ist
+keine Serie von Zufällen, das ist eine fehlende Zeile.** Sie steht jetzt
+zuoberst, mit einem Kreuztest, der sie beweist.
+
+Und die zehn Runden 23–32, beschrieben als *dieselbe Bewegung*, waren in
+ihren Fixes zehnmal dieselbe Bandage. Die Tabelle in §71 sagt das jetzt
+in einer eigenen Spalte — und sie steht an **einem** Ort.
+
+**Was am 20.10. auf dem Tisch liegt: 216 Tests, 24 Selbsttests, ein
+Kreuztest gegen Zustandsvererbung, drei benannte Umgebungen, ein Nenner
+von 433 und eine Rundentabelle, die ihre eigenen Bandagen zählt.**

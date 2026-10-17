@@ -542,7 +542,7 @@ def self_test_check_counts() -> list[str]:
     failures.extend(_self_test_suite_claims(waves))
     if failures:
         return failures
-    _SELF_TEST_SCOPE[0] = "22/22 (5 Zaehlung + 5 Bezugsraum + 12 Differenz/Nenner/Ort/Einheit)"
+    _SELF_TEST_SCOPE[0] = "24/24 (5 Zaehlung + 5 Bezugsraum + 14 Differenz/Nenner/Ort/Einheit)"
 
 
 def _self_test_suite_claims(waves: list[str]) -> list[str]:
@@ -615,6 +615,26 @@ def _self_test_count_delta() -> list[str]:
         root = Path(td)
         (root / "CLAUDE.md").write_text("", encoding="utf-8")
 
+        # §A-JL: Vorbedingung statt Reihenfolge. Vier Runden lang war
+        # jeder Befund ein Einzelfall — Fall 13a las seinen Snapshot
+        # selbst, der naechste konnte den vorigen erben. Der Harness setzt
+        # vor **jedem** Fall zurueck und beweist es mit einem Kreuztest.
+        def reset() -> None:
+            for p in (root / _COUNT_SNAPSHOT,
+                      root / "ort_test" / _COUNT_SNAPSHOT):
+                p.unlink(missing_ok=True)
+            _SNAPSHOT_SEEN[0] = None
+
+        reset()
+        (root / _COUNT_SNAPSHOT).write_text(json.dumps(
+            {"checked": 1, "why": "x", "when": "x", "ref": "abc1234",
+             "counting": "x", "counting_label": "v1"}), encoding="utf-8")
+        if _load_count_snapshot(root) is None:
+            failures.append("Kreuztest: Schreiber legt nichts ab")
+        reset()
+        if _load_count_snapshot(root) is not None:
+            failures.append("Kreuztest: Leser erbt den Vorlauf des Vorgaengers")
+
         def lines_for(prev: dict | None) -> str:
             snap = root / _COUNT_SNAPSHOT
             snap.unlink(missing_ok=True)
@@ -648,11 +668,30 @@ def _self_test_count_delta() -> list[str]:
         #    Sonst besteht der Test, weil ein anderer Grund druckt — der
         #    Fall 3 hat genau das einmal getan (Runde 30, Mutation
         #    „Test+Funktion blind" blieb gruen).
+        # Fall 3a: Ort existiert, Inhalt fehlt -> `kein Vorlauf`.
+        # Ein *echtes* Repo, nicht nur ein leeres `.git/`: `git rev-parse`
+        # erkennt ein Verzeichnis ohne HEAD nicht als Repo, und der Test
+        # wuerde den falschen Zustand messen.
+        subprocess.run(["git", "init", "-q", str(root)],
+                       capture_output=True, timeout=10)
         line = lines_for(None)
         if "kein Vorlauf" not in line:
             failures.append(f"kein Vorlauf nicht als eigene Zeile: {line!r}")
         elif "Zaehlweise" in line or "gegenueber" in line:
             failures.append(f"kein Vorlauf nennt fremden Grund: {line!r}")
+
+        # Fall 3b: es gibt keinen Ort (kein .git/) -> **eigene Zeile**.
+        # Ein Tarball-Export, ein Docker-COPY, ein Checkout ohne Repo.
+        # Dort ist die Differenzmessung nicht "noch leer", sie ist nicht
+        # moeglich — und `Vorlauf: .git/...` waere eine falsche Zusage.
+        import shutil as _sh
+        _sh.rmtree(root / ".git", ignore_errors=True)
+        line = lines_for(None)
+        if "kein .git/" not in line:
+            failures.append(f"kein .git/ nicht als eigener Zustand: {line!r}")
+        if "Vorlauf:" in line or "kein Vorlauf" in line:
+            failures.append(f"kein .git/ nennt einen Ort: {line!r}")
+        (root / ".git").mkdir(exist_ok=True)
 
         # 4. fehlender Baum im Vorlauf -> benannt, nicht verschwiegen
         line = lines_for(prev(ref=None))
@@ -759,6 +798,7 @@ def _self_test_count_delta() -> list[str]:
         #     liegt — er konnte nicht fehlschlagen. Ein Test, der den
         #     Zustand mit dem Gegenstand teilt, erbt ihn. Geprueft werden
         #     jetzt **mit** und **ohne** Vorlauf, ortsunabhaengig.
+        reset()                                 # §A-JL Vorbedingung
         case = root / "ort_test"
         case.mkdir(exist_ok=True)
         snap_t = case / _COUNT_SNAPSHOT
@@ -1127,18 +1167,21 @@ def _snapshot_path(root: Path | None = None) -> Path:
 
     Entscheidung: die dritte. Der Vorlauf beschreibt **diesen Baum**, also
     wohnt er beim Baum (`.git/`), nicht bei der Datei, die exportiert wird.
-    Ohne Repo (Text-Fixture, CI-Artefakt) faellt er daneben — und dann
-    steht `kein Vorlauf` da, mit Grund.
+    Ohne Repo gibt es **keinen** Ort — dann sagt der Pruefer `kein .git/`,
+    nicht `kein Vorlauf`. „Noch leer" und „nicht messbar" sind zwei
+    Zustaende, und nur einer davon verschwindet beim naechsten Lauf.
     """
     try:
+        base = (root or Path(__file__).resolve().parent.parent).resolve()
         r = subprocess.run(
             ["git", "rev-parse", "--git-common-dir"],
-            cwd=str(root or Path(__file__).resolve().parent.parent),
+            cwd=str(base),
             capture_output=True, text=True, timeout=5)
         if r.returncode == 0 and r.stdout.strip():
             gd = Path(r.stdout.strip())
             if not gd.is_absolute():
-                gd = (root or Path.cwd()) / gd
+                # relativ zum Repo, nicht zur Shell: `git` lief in `base`
+                gd = base / gd
             return gd / "check_claude_md.last.json"
     except (OSError, subprocess.SubprocessError):
         pass
@@ -1181,6 +1224,13 @@ def _delta_line(checked: int, root: Path | None = None) -> str | None:
     """
     prev = _load_count_snapshot(root)
     if prev is None:
+        # §A-JK: `kein Vorlauf` (Ort da, Inhalt fehlt) und `kein Ort`
+        # (kein .git/, nie messbar) sind zwei Zustaende. Vorher sahen
+        # beide gleich aus — und im Tarball-Export stand die Zeile
+        # `Vorlauf: .git/...`, die dort nicht gilt.
+        if not _snapshot_writable(root):
+            return ("  (kein .git/ — Vorlauf nicht schreibbar, "
+                    "keine Differenzmessung)")
         return "  (kein Vorlauf — Erstwert, nicht vergleichbar)"
     if prev.get("checked") == checked:
         return None
@@ -1246,6 +1296,21 @@ def _doc_tracked() -> str:
         return f"committet {c.stdout.strip() or '?'}"
     except (OSError, subprocess.SubprocessError):
         return "Pruefung nicht moeglich"
+
+
+def _snapshot_writable(root: Path | None = None) -> bool:
+    """Kann der Ort den Vorlauf ueberhaupt halten? (§A-JK)
+
+    Ohne `.git/` gibt es keinen Ort — ein Tarball-Export, ein Docker-
+    COPY, ein CI-Checkout ohne Repo. Dort ist die Differenzmessung nicht
+    „noch leer", sie ist **nicht moeglich**. Der Unterschied ist der
+    Unterschied zwischen `kein Vorlauf` und `kein Ort`.
+    """
+    p = _snapshot_path(root)
+    # Ein Ort ist nur dann ein Ort, wenn er den **Baum** beschreibt. Der
+    # Fallback (kein Repo) schreibt neben den Pruefer — dorthin, wo
+    # Docker-COPY und Tarball-Export nichts lesen. Also: .git/ muss da sein.
+    return p.parent.name == ".git" and p.parent.is_dir()
 
 
 def _status_line(checked: int, skips: dict[str, int],
