@@ -138,7 +138,7 @@ Freifahrtschein für die einzige Zeile, die den Termin selbst trägt.
 | 6 | §5.1 + §5.4, dieses Dokument | Zeitstempel, Sweep- und Import-Graph-Ausgabe vorhanden | **NICHT ENTSCHEIDBAR** |
 | 7 | §5.4d, pyc-Inhalt gegen `5c5bc364` | 9/9 Module `OK`; `flags = 0x00000000` dokumentiert | **NICHT BESTANDEN** |
 | 8 | `gate_snapshot` | Etikett `LEDGER_CONSISTENT`, (0)–(4) == RED-Zweige, (5) Warnung | **NICHT BESTANDEN** |
-| 9 | §5.4f–§5.4u | eine `pyc`, Schwelle beidseitig, `etime`, Blob↔Commit, `delivered` datiert, `DERIVED` definiert, `INVALID_PRICE` aufgelöst | **NICHT BESTANDEN** |
+| 9 | §5.4f–§5.4ab | eine `pyc`, Schwelle beidseitig, `etime`, Blob↔Commit, `delivered` datiert, `DERIVED` definiert, `INVALID_PRICE` aufgelöst | **NICHT BESTANDEN** |
 
 **Regel gegen den Haken-Fehler:** Ein Haken bedeutete bisher „ausgeführt",
 nicht „getroffen". Deshalb steht in jeder Zeile die erwartete **Ausgabe**;
@@ -1074,6 +1074,141 @@ $ python3 .../preflight_check.py --min-run-id 9
 verdict:    LEDGER_CONSISTENT (4 Zeilen, 0 Auslieferungen)
 observed:   69.4 h (2.89 d) — eine alle 17.4 h; erwartet: unbekannt
 delivered:  0 — unverändert seit ≤ 2026-10-04 11:12:39 (außerhalb des Fensters)
+```
+
+### 5.4v Die Untergrenze ist gestrichen — sie war in beide Richtungen falsch
+
+`MIN_TELEMETRY_ROWS = 4` ist weg. Nicht angepaßt — **gestrichen**, mit Grund:
+
+| Richtung | Verhalten der Untergrenze |
+|---|---|
+| 1.000 Zeilen, 1 Dispatch | besteht (und sagt nichts) |
+| 3 Dispatches, alle ausgeliefert, alle korrekt | **RED** bei erfüllter Identität |
+
+Eine Schwelle, die den oberen Fall durchläßt und den unteren bricht, ist
+keine Schwelle. Sie war der Wert von Run 9 — 100 % einer gefilterten Menge.
+
+**Was sie eigentlich tragen sollte, bleibt richtig und ist jetzt eine andere
+Bedingung:**
+
+```
+rows == dispatched_success   gilt perfekt, wenn beide 0 sind.
+```
+
+Ein leerer Dienst hat einen vollständig konsistenten Ledger. Die Antwort
+darauf ist keine Zahl, sondern die Frage „hat der Dienst seit seinem Start
+überhaupt etwas erzeugt":
+
+```
+(0) dispatched_success > 0 oder telemetry_rows > 0
+```
+
+das fängt `0 == 0`, erfindet keine Rate und macht den gefrorenen Wert
+streichbar. **Der Brichtest ist derselbe, nur ohne Gegenstand**: drei
+Bestandstests hingen an der Konstante und wurden zu dem, was sie prüfen
+sollten —
+
+| vorher | jetzt |
+|---|---|
+| `test_threshold_constant_is_the_pinned_value` | `test_fixture_size_is_the_pinned_value` (Aufbau, keine Regel) |
+| `test_threshold_exact_boundary_is_green` | `test_three_rows_all_delivered_is_ledger_consistent` — **die Gegenrichtung** |
+| `test_threshold_one_below_is_red_underrun` | `test_empty_traffic_is_red_not_ledger_consistent` |
+
+`FIXTURE_ROWS` heißt jetzt, was es ist: wieviele Zeilen die Fixtures bauen.
+Ein Name, der nach einer Regel klingt, wird irgendwann als Regel gelesen.
+
+### 5.4w Der Ledger spricht über 6,7 % — und das steht in der Zeile
+
+```
+coverage:  4/60 Dispatches = 6.7 % — der Ledger spricht über diesen Ausschnitt
+```
+
+Über die ganze Tabelle: `telemetry 34` gegen `dispatched 360` = **9,4 %**.
+Die 56 von 60 sind nicht „abgelehnt" — sie haben den Ledger **nie
+erreicht**. Damit ist `LEDGER_CONSISTENT` wahr und der Gegenstand der
+Abnahme ein Ausschnitt. Das gehört in dieselbe Zeile, nicht in eine Fußnote.
+
+### 5.4x `START.md` gegen den Code — zum ersten Mal gehalten
+
+`START.md` sagte seit 04.10.:
+
+> `TELEMETRY_RECONCILIATION` | GREEN: erfolgreiche Dispatches ≥1 ⇒
+> `telemetry_rows >= dispatched_success`
+
+Der Code sagt seit `162a89e7` `LEDGER_CONSISTENT` und seit heute fünf
+Bedingungen. **Das Dokument war vor der Sache da und wurde nie diffed.**
+Zwölf Runden lang wurde jeder Zeuge gegen seinen Gegenstand gehalten —
+Commit, Blob, `etime`, `pyc`, Schwelle — die Spezifikation gegen die
+Implementierung nie.
+
+Behoben und bewacht: `test_start_md_gate_line_matches_criterion` liest die
+Zeile **aus der Datei** (kein Duplikat im Test) und vergleicht Label und
+Bedingungsnummern mit `_gate_criterion()`. Die Tabelle in `START.md` ist
+korrigiert. Die Divergenz ist damit nicht „aufgeräumt", sondern prüfbar.
+
+### 5.4y `no_book` 101 → 23 ist ein Verkehrseffekt, kein Fortschritt
+
+| | Dispatches | `no_book` | Anteil |
+|---|---|---|---|
+| Run 8 | 299 | 101 | **33,8 %** |
+| Run 9 | 60 | 23 | **38,3 %** |
+
+Absolut −77 %, anteilig **+4,5 Punkte**. Der Rückgang ist Stillstand: weniger
+Verkehr, gleicher Anteil. Der Tag-1-Gate „`no_book` nahe 0" ist an der ersten
+Messung gescheitert und danach nicht mehr gemessen worden — **aber er ist
+nicht gescheitert, weil er unerreichbar war, sondern weil er kein Prädikat
+war.** „nahe" hat keinen Nenner und keine Schwelle. Ein Gate, der nicht in
+Zahlen ausgedrückt ist, kann nur durch Nichtlesen bestehen.
+
+### 5.4z Getrennt geschrieben — (1) ist eine echte Prüfung
+
+Die Frage: entstehen `dispatched_signals` und `telemetry` im selben
+Schreibvorgang? 30 Zeilen in derselben Sekunde wie `RUN 8 START` legten das
+nahe. Dann verglich (1) zwei Variablen aus einer Transaktion und wäre eine
+Zusicherung an sich selbst.
+
+`persistence.py`, `SQLiteShadowStorage`:
+
+> „Transaktionsgrenze: ein COMMIT pro geschriebenem Datensatz (Autocommit)."
+
+`write_telemetry` committet **pro Zeile** (`self._conn.commit()` nach dem
+INSERT, `telemetry_seq = cur.lastrowid`), `open_run` separat. `log()` in der
+Engine schreibt nur in eine In-Memory-Liste; die DB-Zeile entsteht im
+Storage-Layer.
+
+**Also: getrennt geschrieben — (1) und (4) sind echte Prüfungen.** Die 30
+Zeilen in derselben Sekunde sind kein gemeinsamer Schreibvorgang, sondern 30
+Entscheidungen in einem Burst; sie gehen einzeln durch dieselbe Funktion.
+
+### 5.4aa Drei Fehlerbilder, eine Richtung
+
+```
+10:00:08  unresolved_asset        Token nicht auflösbar
+12:00:10  no_book                 Token aufgelöst, Buch leer
+16:00–21:00  unresolved_asset:mapping_miss   Mapping fehlt ganz
+```
+
+Das sind keine drei Vorfälle, sondern **eine Richtung**: jede Stufe löst
+weniger auf als die vorige. 93 % aller Fehlschläge liegen im
+Mapping-Layer (`mapping_miss` 33, `empty_list` 17, `no_book` 23 von 73).
+Die 3 848 Sekunden sind nicht ermittelbar — **die Richtung ist es.**
+
+### 5.4ab Zählliste dieser Runde — aus dem Lauf abgeschrieben
+
+```
+$ python3 order_execution_engine/run_tests.py            # aus /tmp
+175 passed in 1.22s                                       # 0 __pycache__
+
+$ python3 -m pytest .../tests -q -k hygiene              # direkt, ohne -B
+2 failed, 173 deselected
+E  AssertionError: direkt gestartet (pytest statt run_tests.py):
+   PYTHONDONTWRITEBYTECODE ist nicht gesetzt ...
+
+$ python3 .../preflight_check.py --min-run-id 9
+verdict:   LEDGER_CONSISTENT (4 Zeilen, 0 Auslieferungen)
+coverage:  4/60 Dispatches = 6.7 % — der Ledger spricht über diesen Ausschnitt
+observed:  69.5 h (2.90 d) — eine alle 17.4 h; erwartet: unbekannt
+delivered: 0 — unverändert seit ≤ 2026-10-04 11:12:39 (außerhalb des Fensters)
 ```
 
 ### 5.4f Eine Kopie, nicht zwei

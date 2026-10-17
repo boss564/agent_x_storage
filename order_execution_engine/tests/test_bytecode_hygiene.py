@@ -34,34 +34,47 @@ def _bytecode_dirs() -> list[Path]:
 
 
 def test_no_bytecode_leaks_from_this_suite() -> None:
-    """Kein ``__pycache__`` im Paket nach dem Lauf."""
+    """Kein ``__pycache__`` im Paket nach dem Lauf — mit Grund, nicht mit Artefakt.
+
+    Ein Test, der "Datei liegt da" meldet, meint "unter einem anderen
+    Einstieg gestartet" und niemand liest ihn. Deshalb wird zuerst die
+    Ursache geprüft: ``sys.dont_write_bytecode`` — gesetzt von
+    ``run_tests.py``. Ist es aus, lautet der Befund "direkt gestartet",
+    nicht "Datei vorhanden".
+    """
     leaked = _bytecode_dirs()
-    assert not leaked, (
-        "Bytecode im Paket nach dem Testlauf: "
-        f"{[str(p.relative_to(_PKG)) for p in leaked]}. "
-        "Der Lauf hat gegen .pyc gemessen, nicht gegen den Quelltext — "
-        "Ergebnisse dieses Laufs sind nicht belastbar. "
-        "Starte ihn über order_execution_engine/run_tests.py oder mit "
-        "PYTHONDONTWRITEBYTECODE=1 / python3 -B."
-    )
+    if leaked:
+        assert sys.dont_write_bytecode, (
+            "direkt gestartet (pytest statt run_tests.py): "
+            "PYTHONDONTWRITEBYTECODE ist nicht gesetzt, also hat der "
+            "Interpreter Bytecode in das Paket geschrieben "
+            f"({[str(p.relative_to(_PKG)) for p in leaked]}). Der Lauf ist "
+            "nicht belastbar. Einstieg: "
+            "`python3 order_execution_engine/run_tests.py` oder "
+            "`python3 -B -m pytest`."
+        )
+        assert False, (
+            "Bytecode im Paket trotz dont_write_bytecode: "
+            f"{[str(p.relative_to(_PKG)) for p in leaked]} — Reste eines "
+            "früheren Laufs. `find order_execution_engine -name __pycache__ "
+            "-exec rm -rf {} +` und wiederholen."
+        )
 
 
 def test_bytecode_disabled_for_this_process() -> None:
-    """``sys.dont_write_bytecode`` ist gesetzt — oder es ist bereits zu spät.
+    """``sys.dont_write_bytecode`` ist gesetzt — oder der Starter ist der falsche.
 
-    Wenn dieses Modul selbst importiert wurde und sein ``.pyc`` existiert,
-    hat der Interpreter schon geschrieben, bevor der Test laufen konnte.
-    Der Test kann das nicht heilen, nur benennen: er schlägt zusammen mit
-    ``test_no_bytecode_leaks_from_this_suite`` fehl, und der Autor sieht
-    beide Male dieselbe Ursache.
+    Zusicherung statt Divergenz: bricht mit dem Grund (Starter), nicht mit
+    dem Artefakt (Datei). Die Abhängigkeit vom Einstieg ist damit sichtbar
+    und benannt, und sie bleibt bestehen: ``PYTHONDONTWRITEBYTECODE`` wirkt
+    vor dem Interpreterstart und läßt sich von ``pytest.ini`` nicht setzen.
     """
     if sys.dont_write_bytecode:
         return
-    leaked = _bytecode_dirs()
-    assert not leaked, (
-        "sys.dont_write_bytecode ist False UND es liegt Bytecode im Paket — "
-        "der Lauf hat gegen kompilierten Stand gemessen."
+    assert not _bytecode_dirs(), (
+        "sys.dont_write_bytecode ist False und es liegt Bytecode im Paket — "
+        "der Lauf hat gegen kompilierten Stand gemessen. Einstieg: "
+        "`python3 order_execution_engine/run_tests.py`."
     )
-    # Kein Bytecode geschrieben, obwohl das Flag aus ist: dann ist die
-    # Umgebung sauber (z.B. PYTHONPYCACHEPREFIX auf /tmp). Das ist kein
-    # Befund, nur ein Hinweis — der Lauf bleibt belastbar.
+    # Flag aus, aber nichts geschrieben: die Umgebung ist trotzdem sauber
+    # (z. B. PYTHONPYCACHEPREFIX auf /tmp). Kein Befund, nur ein Hinweis.

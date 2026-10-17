@@ -37,12 +37,12 @@ DEFAULT_DATA_ROOT = _DEFAULT_APP / "shadow_live"
 DEFAULT_NEWS_JSONL = _DEFAULT_APP / "news_scores.jsonl"
 DEFAULT_MIN_RUN_ID = 7
 
-# Untergrenze für TELEMETRY_RECONCILIATION. Herkunft: Run 9
-# (started_at 2026-10-14T19:23:36) hat 4 Zeilen mit decision_seq. Ohne diese
-# Schwelle sind die Gleichheitsbedingungen bei leerem Lauf erfüllt und ein
-# stiller Ausfall liest sich als GREEN. Die Zahl beschreibt den dokumentierten
-# Gegenstand, nicht die Absicht — sie steht im selben Blob wie das Kriterium.
-MIN_TELEMETRY_ROWS = 4
+# Keine Untergrenze mehr (§5.4v). Sie hieß MIN_TELEMETRY_ROWS = 4 und ihr
+# Wert stammte aus Run 9 — also aus 100 % einer gefilterten Menge. Sie war in
+# beide Richtungen falsch: ließ 1.000 Zeilen durch, brach einen Lauf mit drei
+# fehlerfreien Dispatches. Ihr einziger Zweck ("0 == 0 ist keine Prüfung")
+# wird jetzt von der Null-Bedingung im Gate getragen: es muß Verkehr da sein,
+# sonst gibt es nichts zu bilanzieren.
 
 
 def _gate_blob_hash() -> dict[str, str]:
@@ -242,11 +242,15 @@ def gate_telemetry_reconciliation(
     rows_per_hour = (
         telemetry_rows / observed_hours if observed_hours > 0 else None
     )
+    in_scope = dispatches_in_scope(conn, started_at=started_at)
+    coverage_pct = (100.0 * telemetry_rows / in_scope) if in_scope else None
     detail = {
         "min_run_id": min_run_id,
         "started_at": started_at,
         "observed_hours": observed_hours,
         "rows_per_hour": rows_per_hour,
+        "dispatched_in_scope": in_scope,
+        "coverage_pct": coverage_pct,
         "dispatched_success": dispatched,
         "telemetry_rows": telemetry_rows,
         "decision_seq_keyed": keyed,
@@ -258,25 +262,25 @@ def gate_telemetry_reconciliation(
         "delivered": delivered,
         "delivered_since": delivered_since,
     }
-    # Untergrenze: ohne sie sind (1)-(4) bei einem leeren Lauf vier Tautologien
-    # (0==0, 0==0, „nichts fehlt“, 0==0) und LEDGER_CONSISTENT bedeutet
-    # „keine Daten“. Das ist ihr einziger Zweck — und nur der.
+    # Null-Bedingung statt Untergrenze (§5.4v).
     #
-    # Was sie NICHT ist (§5.4q): eine Funktionsschwelle. Der Wert stammt aus
-    # Run 9, also aus 100 % der überlebenden Teilmenge dieses Laufs. Eine
-    # Untergrenze, die exakt auf dem beobachteten Wert einer gefilterten
-    # Menge sitzt, prüft den Filter, nicht das System. Sie ist gegen die
-    # Gesamtmenge (34 Zeilen) fünfzehnfach übererfüllt und gegen die
-    # gefilterte (4) exakt erfüllt — sie kann in keiner Richtung etwas
-    # finden, was Bedingung (1) nicht schon findet.
+    # Die Sorge war richtig: rows == dispatched_success gilt perfekt, wenn
+    # beide 0 sind — ein leerer Dienst hat einen vollständig konsistenten
+    # Ledger. Die Antwort darauf ist aber nicht eine Zahl, sondern die
+    # Frage "hat der Dienst seit seinem Start überhaupt etwas erzeugt".
     #
-    # Die Dauer steht deshalb daneben (§5.4p), und die erwartete Rate als
-    # „unbekannt": eine Zahl aus den Daten wäre immer erfüllt.
-    if telemetry_rows < MIN_TELEMETRY_ROWS:
+    # Die alte Untergrenze MIN_TELEMETRY_ROWS = 4 war in beide Richtungen
+    # falsch: sie ließ 1.000 Zeilen durch und brach einen Lauf mit drei
+    # Dispatches, die alle korrekt ausgeliefert wurden. Ihr Wert war der
+    # Wert von Run 9 — also 100 % einer gefilterten Menge.
+    #
+    # Diese Bedingung erfindet keine Rate und keinen Wert aus den Daten:
+    # sie prüft, ob der Verkehr existiert. Was danach gilt, prüft (1).
+    if dispatched == 0 and telemetry_rows == 0:
         return GateResult(
             name="TELEMETRY_RECONCILIATION",
             status="RED",
-            detail={**detail, "underrun": True},
+            detail={**detail, "underrun": True, "empty_traffic": True},
         )
     # Kardinalität: jede Telemetriezeile braucht ihren Schlüssel, und der
     # Schlüssel darf sich weder je Lauf noch über Läufe wiederholen.
@@ -409,6 +413,25 @@ def _delivered_since(
         f"unverändert seit ≤ {stamp} "
         f"(letzte approved=1 in run {run_id}, seq {last_seq}; "
         "außerhalb des Beobachtungsfensters, Punktzeit nicht ermittelbar)"
+    )
+
+
+def dispatches_in_scope(
+    conn: sqlite3.Connection, *, started_at: float
+) -> int:
+    """Alle Dispatches im Fenster — der Nenner des Urteils (§5.4w).
+
+    ``dispatched_success`` zählt nur, was den Ledger erreicht hat (ohne
+    ``bridge_discards``). Der Abnehmer am 20.10. muß wissen, worüber das
+    Urteil spricht: 34 Zeilen gegen 360 Dispatches sind 9,4 % — der Ledger
+    ist konsistent über knapp einem Zehntel des Verkehrs. Die 56 von 60
+    sind nicht "abgelehnt", sie haben den Ledger nie erreicht.
+    """
+    return int(
+        conn.execute(
+            "SELECT COUNT(*) FROM dispatched_signals WHERE dispatched_at >= ?",
+            (started_at,),
+        ).fetchone()[0]
     )
 
 
@@ -795,9 +818,8 @@ def _gate_criterion(min_run_id: int) -> str:
     """
     return (
         "LEDGER_CONSISTENT nur wenn "
-        f"(0) telemetry_rows >= {MIN_TELEMETRY_ROWS} in <Beobachtungszeitraum> "
-        "(Untergrenze aus Run 9: 4 Zeilen / 69,0 h = eine alle 17,3 h; "
-        "erwartete Rate: unbekannt — steht in keiner Aktenstelle) "
+        "(0) dispatched_success > 0 oder telemetry_rows > 0 "
+        "(kein leerer Dienst; 0 == 0 wäre sonst vierfach erfüllt) "
         "(1) telemetry_rows == decision_seq-keyed "
         "(2) keyed == distinct(run_id, decision_seq) und je run eindeutig "
         "(3) unattributed == 0 "
@@ -805,9 +827,9 @@ def _gate_criterion(min_run_id: int) -> str:
         f"scope = run_id >= {min_run_id}. "
         "(5) WARNUNG, kein Blocker: delivered == 0 heißt Ledger konsistent "
         "über einem Lauf ohne Auslieferung — das Etikett sagt dazu nichts. "
-        "(6) NENNER: das Urteil nennt Zeilen und Auslieferungen; es sagt "
-        "nichts über Erreichbarkeit, Verarbeitung jenseits des Ledgers "
-        "oder Leben der Signalquelle."
+        "(6) NENNER: das Urteil nennt Zeilen, Auslieferungen und den Anteil "
+        "am Verkehr; es sagt nichts über Erreichbarkeit, Verarbeitung "
+        "jenseits des Ledgers oder Leben der Signalquelle."
     )
 
 
@@ -988,6 +1010,15 @@ def gate_snapshot(
             f"  verdict:            {recon.status} "
             f"({d.get('telemetry_rows')} Zeilen, "
             f"{d.get('delivered')} Auslieferungen)"
+        )
+        cov = d.get("coverage_pct")
+        print(
+            f"  coverage:           "
+            f"{d.get('telemetry_rows')}/{d.get('dispatched_in_scope')} "
+            f"Dispatches = {cov:.1f} % — der Ledger spricht über diesen "
+            "Ausschnitt, nicht über den Verkehr"
+            if cov is not None
+            else "  coverage:           nicht ermittelbar (kein Verkehr)"
         )
         print(
             f"  observed:           {hours:.1f} h ({hours / 24:.2f} d)"

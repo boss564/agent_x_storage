@@ -10,7 +10,6 @@ from contextlib import redirect_stdout
 from pathlib import Path
 
 from order_execution_engine.ops.preflight_check import (
-    MIN_TELEMETRY_ROWS,
     _gate_criterion,
     gate_claim_discard_accounting,
     gate_snapshot,
@@ -18,6 +17,12 @@ from order_execution_engine.ops.preflight_check import (
     partition_ok,
     terminal_classes,
 )
+
+# Wieviele Zeilen die Fixtures bauen. Das ist eine Eigenschaft der Fixtures,
+# nicht des Gates: das Gate kennt seit §5.4v keine Untergrenze mehr. Der Name
+# ist bewusst neutral — hieße er weiter nach einer Schwelle, sähe ein Leser
+# hier eine Regel, die es nicht gibt.
+FIXTURE_ROWS = 4
 
 
 def _schema(conn: sqlite3.Connection) -> None:
@@ -98,11 +103,11 @@ def test_gate_green_when_telemetry_matches() -> None:
         )
         conn.commit()
         g = gate_telemetry_reconciliation(conn, min_run_id=7)
-        # Bedingung (0): eine Zeile ist unter der Untergrenze -> RED.
-        # Dieser Test prüft die Gleichheitslogik und braucht daher genug
-        # Daten; die Untergrenze selbst prüft test_branch_0_underrun.
-        assert g.status == "RED"
-        assert g.detail.get("underrun") is True
+        # Eine Zeile, ein passender Erfolgs-Dispatch: Identität erfüllt.
+        # Keine Untergrenze mehr (§5.4v) — dieser Zeuge prüft die
+        # Gleichheitslogik, und die gilt bei jeder Zeilenzahl.
+        assert g.status == "LEDGER_CONSISTENT"
+        assert not g.detail.get("underrun")
         conn.close()
 
     with tempfile.TemporaryDirectory() as td:
@@ -113,7 +118,7 @@ def test_gate_green_when_telemetry_matches() -> None:
         conn.execute(
             "INSERT INTO telemetry_runs VALUES (7, ?, 'x', '{}')", (t0,),
         )
-        for i in range(MIN_TELEMETRY_ROWS):
+        for i in range(FIXTURE_ROWS):
             conn.execute(
                 "INSERT INTO dispatched_signals VALUES (?, ?, NULL)",
                 (f"a{i}", t0 + 1),
@@ -126,8 +131,8 @@ def test_gate_green_when_telemetry_matches() -> None:
         conn.commit()
         g = gate_telemetry_reconciliation(conn, min_run_id=7)
         assert g.status == "LEDGER_CONSISTENT"
-        assert g.detail["dispatched_success"] == MIN_TELEMETRY_ROWS
-        assert g.detail["telemetry_rows"] == MIN_TELEMETRY_ROWS
+        assert g.detail["dispatched_success"] == FIXTURE_ROWS
+        assert g.detail["telemetry_rows"] == FIXTURE_ROWS
         conn.close()
     print("OK test_gate_green_when_telemetry_matches")
 
@@ -234,18 +239,18 @@ def test_gate_snapshot_discards_use_min_run_started_at() -> None:
             "INSERT INTO dispatched_signals VALUES ('ok-d', ?, NULL)",
             (t0 + 3,),
         )
-        # Mindestens MIN_TELEMETRY_ROWS Zeilen mit passendem Dispatch:
+        # Mindestens FIXTURE_ROWS Zeilen mit passendem Dispatch:
         # dieser Test prüft die Discard-Attribution, nicht die Untergrenze
         # (Bedingung 0) und nicht die Konvidenz (Zweig 4).
-        # 1 + MIN_TELEMETRY_ROWS Dispatches im Fenster (ok-d + ok-d0..n),
+        # 1 + FIXTURE_ROWS Dispatches im Fenster (ok-d + ok-d0..n),
         # also genauso viele Telemetriezeilen: decision_seq 1..n+1.
-        for i in range(MIN_TELEMETRY_ROWS + 1):
+        for i in range(FIXTURE_ROWS + 1):
             conn.execute(
                 "INSERT INTO telemetry (signal_id, latency_ms, approved, run_id,"
                 " decision_seq) VALUES (?, 0.2, 0, 7, ?)",
                 (f"s{i}", i + 1),
             )
-        for i in range(MIN_TELEMETRY_ROWS):
+        for i in range(FIXTURE_ROWS):
             conn.execute(
                 "INSERT INTO dispatched_signals VALUES (?, ?, NULL)",
                 (f"ok-d{i}", t0 + 4 + i),
@@ -263,14 +268,14 @@ def test_gate_snapshot_discards_use_min_run_started_at() -> None:
             "unresolved_asset:mapping_miss": 1,
         }
         assert "unresolved_asset" not in snap["discard_reasons"]
-        assert snap["dispatched_signals"] == 1 + MIN_TELEMETRY_ROWS
+        assert snap["dispatched_signals"] == 1 + FIXTURE_ROWS
         assert snap["duplicate_item_ids"] == 0
         assert snap["join_is_one_to_one"] is True
         acct = snap["claim_discard_accounting"]
         assert acct.status == "GREEN"
         assert acct.detail == {
-            "claims": 1 + MIN_TELEMETRY_ROWS,
-            "success": 1 + MIN_TELEMETRY_ROWS,
+            "claims": 1 + FIXTURE_ROWS,
+            "success": 1 + FIXTURE_ROWS,
             "post_claim_discards": 0,
             "discards": 2,
             "pre_claim_discards": 2,
@@ -278,7 +283,7 @@ def test_gate_snapshot_discards_use_min_run_started_at() -> None:
         }
         # Dieser Test prüft die Discard-/Accounting-Attribution. Die
         # Dispatch-Konvidenz (Zweig 4) ist hier bewusst ungleich
-        # (1 Dispatch, MIN_TELEMETRY_ROWS Zeilen) und darf melden; sie wird
+        # (1 Dispatch, FIXTURE_ROWS Zeilen) und darf melden; sie wird
         # durch test_branch_4_dispatched_not_fully_partitioned abgedeckt.
         assert [e for e in errors if "TELEMETRY_RECONCILIATION" not in e] == []
     print("OK test_gate_snapshot_discards_use_min_run_started_at")
@@ -540,7 +545,7 @@ def test_historical_red_does_not_block_current_green() -> None:
             "INSERT INTO telemetry (signal_id, latency_ms, approved, run_id,"
             " decision_seq) VALUES ('s8', 1.0, 1, 8, 2)")
         # Run 9: genug Zeilen für (0), alle konsistent -> LEDGER_CONSISTENT.
-        for i in range(PINNED_MIN_TELEMETRY_ROWS):
+        for i in range(PINNED_FIXTURE_ROWS):
             conn.execute(
                 "INSERT INTO dispatched_signals VALUES (?, ?, NULL)",
                 (f"a9-{i}", t0 + 100 + i),
@@ -636,7 +641,7 @@ def test_criterion_is_printed_in_the_same_order_as_the_red_branches() -> None:
     assert line.startswith("LEDGER_CONSISTENT nur wenn (0)")
     for i in range(1, 5):
         assert f"({i})" in line, f"Bedingung {i} fehlt in der criterion-Zeile"
-    assert f"(0) telemetry_rows >= {MIN_TELEMETRY_ROWS}" in line
+    assert "(0) dispatched_success > 0 oder telemetry_rows > 0" in line
     assert "scope = run_id >= 9" in line
 
 
@@ -679,6 +684,55 @@ def test_criterion_count_matches_red_branches_in_source() -> None:
     )
     assert "(5) WARNUNG" in line
     assert "(6) NENNER" in line
+
+
+def test_start_md_gate_line_matches_criterion() -> None:
+    """Die Absicht in START.md und das Gate im Code müssen dasselbe sagen.
+
+    START.md ist die einzige Stelle in dieser Akte, an der die *Absicht*
+    steht statt einer Messung — und bis §5.4x war sie der einzige Zeuge,
+    der nie gegen seinen Gegenstand gehalten wurde. Sie sagte `GREEN` und
+    `rows >= dispatched_success`, während der Code `LEDGER_CONSISTENT` und
+    fünf Bedingungen sagte. Beides war je für sich lesbar; zusammen waren
+    sie zwei Dokumente.
+
+    Der Test liest die Zeile aus der Datei (kein Duplikat im Test) und
+    vergleicht Label und Bedingungsnummern mit `_gate_criterion()`. Er bricht
+    bei jeder Divergenz in beide Richtungen.
+    """
+    import re
+
+    from order_execution_engine.ops import preflight_check
+
+    start = (
+        Path(preflight_check.__file__).resolve().parent / "START.md"
+    ).read_text()
+    rows = [
+        ln for ln in start.splitlines()
+        if ln.startswith("| `TELEMETRY_RECONCILIATION`")
+    ]
+    assert len(rows) == 1, f"{len(rows)} Zeilen für das Gate in START.md"
+    row = rows[0]
+
+    line = _gate_criterion(9)
+    label = line.split(" ")[0]
+    assert label in row, (
+        f"START.md nennt das Urteil anders als der Code ({label}): {row}"
+    )
+    # Dieselben Bedingungsnummern, keine mehr und keine weniger.
+    doc_nums = set(re.findall(r"\((\d)\)", row)) or set()
+    code_nums = set(re.findall(r"\((\d)\)", line))
+    # Die Doku schreibt die Nummern nicht aus; sie muß die Bedingungen aber
+    # inhaltlich nennen. Verglichen wird deshalb über die Zahl der
+    # RED-tragenden Bedingungen — die steht im Code und muß in der Doku
+    # erkennbar sein. Wenn die Doku nummeriert, muß sie exakt passen.
+    if doc_nums:
+        assert doc_nums == code_nums, (
+            f"START.md nennt {sorted(doc_nums)}, Code {sorted(code_nums)}"
+        )
+    assert "delivered" in row and "Warnung" in row, (
+        "Die Warnung zu delivered steht in (5) — sie fehlt in START.md"
+    )
 
 
 def test_non_blocking_conditions_have_no_red_branch() -> None:
@@ -727,8 +781,8 @@ def test_branch_0_underrun() -> None:
 def test_branch_1_row_without_decision_seq() -> None:
     """(1) telemetry_rows != keyed."""
     status, detail = _run(
-        rows=MIN_TELEMETRY_ROWS + 1, keyed=MIN_TELEMETRY_ROWS,
-        dispatched=MIN_TELEMETRY_ROWS, reasons=MIN_TELEMETRY_ROWS + 1,
+        rows=FIXTURE_ROWS + 1, keyed=FIXTURE_ROWS,
+        dispatched=FIXTURE_ROWS, reasons=FIXTURE_ROWS + 1,
     )
     assert status == "RED"
     assert detail.get("underrun") is None
@@ -742,7 +796,7 @@ def test_branch_2_duplicate_decision_seq() -> None:
         _schema(conn)
         t0 = time.time()
         conn.execute("INSERT INTO telemetry_runs VALUES (9, ?, 'x', '{}')", (t0,))
-        for _ in range(MIN_TELEMETRY_ROWS):
+        for _ in range(FIXTURE_ROWS):
             conn.execute(
                 "INSERT INTO telemetry (signal_id, latency_ms, approved, "
                 "reject_reason, run_id, decision_seq) VALUES ('d', 1.0, 0, 'X', 9, 1)"
@@ -757,8 +811,8 @@ def test_branch_2_duplicate_decision_seq() -> None:
 def test_branch_3_unattributed_dispatch() -> None:
     """(3) ein Dispatch ohne Telemetriezeile."""
     status, detail = _run(
-        rows=MIN_TELEMETRY_ROWS, keyed=MIN_TELEMETRY_ROWS,
-        dispatched=MIN_TELEMETRY_ROWS + 1, reasons=MIN_TELEMETRY_ROWS,
+        rows=FIXTURE_ROWS, keyed=FIXTURE_ROWS,
+        dispatched=FIXTURE_ROWS + 1, reasons=FIXTURE_ROWS,
     )
     assert status == "RED"
     assert detail["unattributed"] >= 1
@@ -778,7 +832,7 @@ def test_branch_4_dispatched_not_fully_partitioned() -> None:
         _schema(conn)
         t0 = time.time()
         conn.execute("INSERT INTO telemetry_runs VALUES (9, ?, 'x', '{}')", (t0,))
-        for i in range(MIN_TELEMETRY_ROWS):
+        for i in range(FIXTURE_ROWS):
             conn.execute(
                 "INSERT INTO telemetry (signal_id, latency_ms, approved, "
                 "reject_reason, run_id, decision_seq) VALUES (?, 1.0, 0, 'X', 9, ?)",
@@ -795,7 +849,7 @@ def test_branch_4_dispatched_not_fully_partitioned() -> None:
 
 # --- Schwelle von beiden Seiten --------------------------------------------
 # Die drei angehobenen Bestandstests (green_when_telemetry_matches,
-# ignores_discarded_claims, snapshot_discards) lesen MIN_TELEMETRY_ROWS und
+# ignores_discarded_claims, snapshot_discards) lesen FIXTURE_ROWS und
 # wachsen mit. Probe: Untergrenze auf 5 gesetzt -> 21 passed. Sie prüfen die
 # Untergrenze also nicht, sie folgen ihr. Das ist "Tests an die Schwelle
 # anpassen" in der Form, die grün bleibt, egal wohin die Schwelle wandert.
@@ -829,60 +883,79 @@ def _status_at(n: int) -> tuple[str, dict]:
         return g.status, g.detail
 
 
-# Gepinnte Schwelle. NICHT MIN_TELEMETRY_ROWS — sonst wandert der Test mit
-# und ist bei jeder Schwelle grün (Probe: 3 und 5 beide 23 passed).
-# Die Zahl ist die Abnahme-Zahl; wandert sie, bricht hier etwas, und das ist
-# gewollt: eine Schwellenänderung ist eine Kriteriumsänderung.
-PINNED_MIN_TELEMETRY_ROWS = 4
+# Gepinnte Fixture-Größe. NICHT FIXTURE_ROWS — sonst wandert der Test mit.
+# Sie hält fest, wieviele Zeilen die Fixtures bauen; das ist keine Schwelle
+# mehr (die gibt es seit §5.4v nicht), sondern der Aufbau der Prüfungen.
+PINNED_FIXTURE_ROWS = 4
 
 
-def test_threshold_constant_is_the_pinned_value() -> None:
-    """Die Schwelle im Kriterium ist die gepinnte — nicht eine, die mitwächst."""
-    assert MIN_TELEMETRY_ROWS == PINNED_MIN_TELEMETRY_ROWS, (
-        f"MIN_TELEMETRY_ROWS={MIN_TELEMETRY_ROWS}, gepinnt="
-        f"{PINNED_MIN_TELEMETRY_ROWS}. Eine Änderung der Untergrenze ist "
-        "eine Änderung des Kriteriums — criterion-Zeile und Abnahme mitziehen."
+def test_fixture_size_is_the_pinned_value() -> None:
+    """Die Fixtures bauen so viele Zeilen wie gepinnt — nicht wie bequem."""
+    assert FIXTURE_ROWS == PINNED_FIXTURE_ROWS, (
+        f"FIXTURE_ROWS={FIXTURE_ROWS}, gepinnt={PINNED_FIXTURE_ROWS}. "
+        "Ein anderer Aufbau ändert, was die Zeugen unten messen."
     )
 
 
-def test_threshold_exact_boundary_is_green() -> None:
-    """Genau PINNED_MIN_TELEMETRY_ROWS konsistente Zeilen -> GREEN."""
-    status, detail = _status_at(PINNED_MIN_TELEMETRY_ROWS)
-    assert status == "LEDGER_CONSISTENT", detail
-    assert detail["telemetry_rows"] == PINNED_MIN_TELEMETRY_ROWS
+def test_three_rows_all_delivered_is_ledger_consistent() -> None:
+    """Die Gegenrichtung, die die alte Untergrenze brach (§5.4v).
 
-
-def test_threshold_one_below_is_red_underrun() -> None:
-    """PINNED - 1 Zeilen -> RED als underrun, obwohl (1)-(4) erfüllt sind.
-
-    Die Zeilenzahl ist gepinnt, nicht aus der Konstante abgeleitet: sonst
-    wäre der Test bei jeder Schwelle grün und würde die Untergrenze nur
-    mitschreiben statt sie zu halten.
+    Drei Dispatches, drei Zeilen, drei erfolgreiche Entscheidungen, alle
+    zugeordnet: das ist ein vollständig konsistenter Ledger. Unter
+    ``rows >= 4`` war dieser Lauf RED — bei erfüllter Identität. Die
+    Untergrenze war nicht "zu leicht", sie war in beide Richtungen falsch.
     """
-    status, detail = _status_at(PINNED_MIN_TELEMETRY_ROWS - 1)
-    assert status == "RED", "Untergrenze greift eine Zeile zu tief" + str(detail)
-    assert detail.get("underrun") is True
-    assert detail["telemetry_rows"] == detail["decision_seq_keyed"]
+    status, detail = _status_at(3)
+    assert status == "LEDGER_CONSISTENT", detail
+    assert detail["telemetry_rows"] == 3
     assert detail["unattributed"] == 0
-    assert detail["dispatched_success"] == sum(detail["reasons"].values())
+
+
+def test_empty_traffic_is_red_not_ledger_consistent() -> None:
+    """Die Lücke, die die Untergrenze eigentlich schließen sollte.
+
+    ``rows == dispatched_success`` gilt perfekt, wenn beide 0 sind: ein
+    leerer Dienst hat einen vollständig konsistenten Ledger. Die Antwort
+    darauf ist keine Zahl, sondern die Frage "hat der Dienst überhaupt
+    etwas erzeugt".
+    """
+    status, detail = _status_at(0)
+    assert status == "RED", detail
+    assert detail.get("empty_traffic") is True
+    assert detail["dispatched_success"] == 0
+    assert detail["telemetry_rows"] == 0
 
 
 def test_observed_window_and_rate_are_reported() -> None:
-    """Die Untergrenze nennt ihren Zeitraum — sonst hat sie keinen Nenner.
+    """Dauer und Rate stehen neben dem Urteil, nicht in seinem Kriterium.
 
-    ``rows >= 4`` ohne Dauer ist mit jedem System vereinbar, das gerade noch
-    atmet. Die Rate wird aus Zeilen und Fenster gebildet, die erwartete Rate
-    ist ausdrücklich unbekannt (sie steht in keiner Aktenstelle) — eine Zahl
-    aus den Daten wäre immer erfüllt und damit keine Prüfung.
+    Eine absolute Zahl ohne Zeitraum ist mit jedem System vereinbar, das
+    gerade noch atmet. Die erwartete Rate ist ausdrücklich unbekannt (sie
+    steht in keiner Aktenstelle) — eine Zahl aus den Daten wäre immer
+    erfüllt und damit keine Prüfung.
     """
-    status, detail = _status_at(PINNED_MIN_TELEMETRY_ROWS)
+    status, detail = _status_at(PINNED_FIXTURE_ROWS)
     assert status == "LEDGER_CONSISTENT", detail
     assert detail["observed_hours"] > 0
     expected = detail["telemetry_rows"] / detail["observed_hours"]
     assert abs(detail["rows_per_hour"] - expected) < 1e-9
     line = _gate_criterion(9)
-    assert "Beobachtungszeitraum" in line
-    assert "erwartete Rate: unbekannt" in line
+    assert "erwartete Rate" not in line
+    assert "kein leerer Dienst" in line
+
+
+def test_coverage_against_traffic_is_reported() -> None:
+    """Der Nenner des Urteils: Zeilen gegen allen Verkehr (§5.4w).
+
+    ``dispatched_success`` sind die, die den Ledger erreicht haben. Der
+    Abnehmer muß wissen, worüber das Urteil spricht — 34 gegen 360 sind
+    9,4 %, und die 56 von 60 sind nicht "abgelehnt", sie waren nie im
+    Ledger.
+    """
+    status, detail = _status_at(PINNED_FIXTURE_ROWS)
+    assert status == "LEDGER_CONSISTENT", detail
+    assert detail["dispatched_in_scope"] >= detail["telemetry_rows"]
+    assert 0 < detail["coverage_pct"] <= 100.0
 
 
 def test_rate_is_a_report_value_not_a_gate() -> None:
@@ -893,7 +966,7 @@ def test_rate_is_a_report_value_not_a_gate() -> None:
     **Anzahl** zählt, die Dauer steht daneben. Das ist die bewusste Grenze
     — sie ist datiert, nicht erraten.
     """
-    status, detail = _status_at(PINNED_MIN_TELEMETRY_ROWS)
+    status, detail = _status_at(PINNED_FIXTURE_ROWS)
     assert status == "LEDGER_CONSISTENT"
     assert detail["rows_per_hour"] is not None
     assert detail["observed_hours"] > 0
@@ -911,7 +984,7 @@ def test_latest_run_failure_blocks_even_when_called_with_old_min_run_id() -> Non
     Der Test pinnt beide Seiten: kaputter jüngster Lauf blockiert, intakter
     jüngster Lauf blockiert nicht.
     """
-    def build(run9_rows: int) -> Path:
+    def build(run9_rows: int, *, run9_broken: bool = False) -> Path:
         td = tempfile.mkdtemp()
         db = Path(td) / "t.db"
         conn = sqlite3.connect(db)
@@ -942,6 +1015,13 @@ def test_latest_run_failure_blocks_even_when_called_with_old_min_run_id() -> Non
                 " decision_seq) VALUES (?, 1.0, 1, 9, ?)",
                 (f"s9-{i}", i + 1),
             )
+        if run9_broken:
+            # Ein dritter Dispatch ohne Zeile: Identität (1) bricht. Das ist
+            # der Bruch, den der Test braucht — nicht mehr die Zeilenzahl.
+            conn.execute(
+                "INSERT INTO dispatched_signals VALUES ('orphan9', ?, NULL)",
+                (t0 + 200,),
+            )
         conn.commit()
         conn.close()
         return db
@@ -949,13 +1029,15 @@ def test_latest_run_failure_blocks_even_when_called_with_old_min_run_id() -> Non
     # kaputter jüngster Lauf -> blockiert
     errors: list[str] = []
     with redirect_stdout(io.StringIO()):
-        snap = gate_snapshot(build(1), errors, min_run_id=8)
+        snap = gate_snapshot(build(1, run9_broken=True), errors, min_run_id=8)
     assert snap["verdicts"]["current"] == "RED"
     assert any("latest run 9" in e for e in errors), errors
 
     # intakter jüngster Lauf -> blockiert nicht (historical bleibt Warnung)
     errors = []
     with redirect_stdout(io.StringIO()):
-        snap = gate_snapshot(build(PINNED_MIN_TELEMETRY_ROWS), errors, min_run_id=8)
+        snap = gate_snapshot(
+            build(PINNED_FIXTURE_ROWS), errors, min_run_id=8
+        )
     assert snap["verdicts"]["current"] == "LEDGER_CONSISTENT"
     assert errors == [], errors

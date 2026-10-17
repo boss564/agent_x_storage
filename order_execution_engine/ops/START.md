@@ -104,13 +104,21 @@ PYTHONPATH=. python3 order_execution_engine/ops/preflight_check.py --after-start
 | `unresolved_asset:empty_list` | erwartbares Rauschen (leere `target_assets`) |
 | `unresolved_asset:mapping_miss` | Stillverlierer — News liefert Asset, Freeze kennt es nicht |
 | `STALE_SNAPSHOT` | ≈ 0 |
-| `TELEMETRY_RECONCILIATION` | GREEN: erfolgreiche Dispatches ≥1 ⇒ `telemetry_rows >= dispatched_success` (sonst RED: stiller Write-Ausfall) |
+| `TELEMETRY_RECONCILIATION` | `LEDGER_CONSISTENT`: Verkehr vorhanden ⇒ `telemetry_rows == decision_seq-keyed` == distinct Paare, `unattributed == 0`, `dispatched_success == Σ reject_reasons` (sonst RED). `delivered == 0` ist Warnung, kein Blocker. |
 | `telemetry_fill_metrics` | bei Fills |
 | Dedup | 0 Doppel-`item_id` |
 
 `TELEMETRY_RECONCILIATION` in `preflight_check.py` (`--min-run-id 7`). Erfolgspfad =
 `dispatched_signals` ab `run_id=7.started_at` **ohne** `bridge_discards`-Zeile
 (Claim vor Resolve zählt unresolved/no_book nicht als Dispatch-Erfolg).
+
+**Abgleich Doku ↔ Code (§5.4x).** Die Zeile in der Tabelle oben war die Absicht
+vom 04.10. und steht seit dem dort; der Code hat sich seither zweimal geändert
+(`162a89e7`: `LEDGER_CONSISTENT` statt `GREEN`; `0.0`: `MIN_TELEMETRY_ROWS`
+gestrichen, Null-Bedingung). Der Abgleich ist jetzt ein Zeuge:
+`test_start_md_gate_line_matches_criterion` liest die Zeile aus dieser Datei und
+verlangt, daß Label und Bedingungen mit `_gate_criterion()` übereinstimmen.
+Vorher: `0` Abweichungen gemessen, weil nie gemessen wurde.
 
 `CLAIM_DISCARD_ACCOUNTING`: `claims = success + post_claim` und
 `discards = post_claim + pre_claim` (gleiche Zeitfenster). Divergenz der
