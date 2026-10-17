@@ -99,7 +99,13 @@ def _gate_commit_ref(this: Path) -> dict[str, str]:
     except (subprocess.SubprocessError, OSError, ValueError):
         return {"commit": "unknown", "committed_blob": "unknown"}
     work = _git("hash-object", str(this))
-    suffix = "" if work == committed else "  DERIVED (nicht im HEAD-Commit)"
+    # DERIVED := der Blob auf der Platte ist NICHT der Blob im HEAD-Commit.
+    # Definitionsbereich bewusst der Blob-Vergleich, nicht `git status`:
+    # `--porcelain` ohne `--ignored` hätte den __pycache__ nie gezeigt
+    # (deshalb die 0 in §5.4d), und mit `--ignored` feuert es immer —
+    # ignoriert Artefakte im Tree liegen ignoriert daneben. Die Frage hier ist
+    # nicht "ist der Baum sauber", sondern "ist genau dieser Text committet".
+    suffix = "" if work == committed else "  DERIVED (Datei != HEAD-Blob)"
     return {
         "commit": head[:8],
         "committed_blob": committed[:12] + suffix,

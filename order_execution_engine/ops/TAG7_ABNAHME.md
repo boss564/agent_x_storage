@@ -138,7 +138,7 @@ Freifahrtschein für die einzige Zeile, die den Termin selbst trägt.
 | 6 | §5.1 + §5.4, dieses Dokument | Zeitstempel, Sweep- und Import-Graph-Ausgabe vorhanden | **NICHT ENTSCHEIDBAR** |
 | 7 | §5.4d, pyc-Inhalt gegen `5c5bc364` | 9/9 Module `OK`; `flags = 0x00000000` dokumentiert | **NICHT BESTANDEN** |
 | 8 | `gate_snapshot` | Etikett `LEDGER_CONSISTENT`, (0)–(4) == RED-Zweige, (5) Warnung | **NICHT BESTANDEN** |
-| 9 | §5.4f–§5.4j | eine `pyc`, Modul-Ebene `OK`, Schwelle beidseitig, `etime`, Blob↔Commit | **NICHT BESTANDEN** |
+| 9 | §5.4f–§5.4n | eine `pyc`, Schwelle beidseitig, `etime`, Blob↔Commit, `delivered` datiert, `DERIVED` definiert | **NICHT BESTANDEN** |
 
 **Regel gegen den Haken-Fehler:** Ein Haken bedeutete bisher „ausgeführt",
 nicht „getroffen". Deshalb steht in jeder Zeile die erwartete **Ausgabe**;
@@ -346,6 +346,33 @@ protokolliert. **Die Trennung schluckt nichts:** ist der *jüngste* Lauf rot,
 ist `current: RED` — Zeuge `test_current_red_still_blocks`. Der zweite Zeuge
 (`test_historical_red_does_not_block_current_green`) hält fest, dass Run 8
 dokumentiert erscheint.
+
+> **Korrektur 17.10. 18:22 — dieser Absatz stimmte erst seit 18:20.**
+> Bis `146b4be4` (17.10., 17:21) gab es **kein** `current`: der Prüfer schrieb
+> jeden RED-Befund unbedingt via `_fail` in `errors` (Zeuge:
+> `9556b1d7:preflight_check.py`, 04.10.). `146b4be4` führte `current` ein —
+> und setzte es auf das **Literal** `"GREEN"`:
+>
+> ```python
+> return {"current": "GREEN", "historical": historical}   # 146b4be4
+> ```
+>
+> Von 17:21 bis 18:20 konnte das Gate deshalb **nicht rot werden**: jeder
+> rote Befund wurde über `historical = current == "GREEN"` zur Warnung
+> degradiert. Der Satz oben („schluckt nichts") war in diesem Fenster falsch.
+> Seit `162a89e7` wird `current` gemessen.
+>
+> **Der Vorfall, mit dem diese Akte beginnt, wurde also nicht von diesem
+> Code geschrieben** — jedenfalls nicht von der Fassung mit dem Literal.
+> Die Ursprungsfassung (04.10.) schrieb ihn korrekt; ein zweiter Schreiber
+> in `errors` hat nie existiert. Die Frage „wer schrieb `current: RED`"
+> beantwortet sich damit: **niemand schrieb das Etikett — geschrieben wurde
+> der Befund, und das Etikett kam erst später und hat ihn dann verschluckt.**
+
+> **Abnahme-Folge:** es gibt **kein archiviertes Urteil** dieses Werkzeugs.
+> Alle `GREEN`, die zwischen 17:21 und 18:20 gedruckt wurden, waren eine
+> Konstante. Das erste echte Verdikt ist das über Run 9, gefällt seit
+> `162a89e7` — datiert in §5.4m.
 
 > **Korrektur: „blockierend" ist keine Eigenschaft des Verdikts, sondern des
 > Aufrufers.** Der Prüfer ist ein Werkzeug — er setzt seinen Exit-Code, wenn
@@ -726,6 +753,121 @@ einer alten `min_run_id` sah den jüngsten Lauf nie als blockierend. Ergänzt
 ist ein eigener Zweig für den jüngsten Lauf; Zeugen:
 `test_latest_run_failure_blocks_even_when_called_with_old_min_run_id`
 (beide Seiten: kaputt → blockiert, intakt → nicht).
+
+### 5.4k `delivered` braucht einen Referenten — sonst ist die Warnung keine
+
+`delivered = 0` neben einem Urteil ist die Ursprungsform dieser Akte: eine
+Zahl ohne Bezugszeit. Der Unterschied, der alles entscheidet, ist die
+**Dauer** — `0` in der letzten Minute ist ein Nicht-Ereignis, `0` seit
+Tagen ist der Befund.
+
+`telemetry` hat **keine Zeitspalte**, und `dispatched_signals.telemetry_seq`
+ist NULL in allen 360 Zeilen (offener Punkt §6). Eine Punktzeit ist also
+nicht ermittelbar. Deshalb druckt die Ausgabe die Herkunft statt einer
+erfundenen Zeit:
+
+```
+delivered:          0 — unverändert seit ≤ 2026-10-04 11:12:39
+                    (letzte approved=1 in run 8, seq 12;
+                     Punktzeit nicht ermittelbar — telemetry_seq ist NULL)
+```
+
+Die Zeit ist eine **Obergrenze**: `telemetry_runs.started_at` des Laufs, der
+die letzte genehmigte Zeile trägt. Das `≤` ist Absicht — eine Lieferung lag
+irgendwann in diesem Lauf, nicht zu seinem Beginn. Geglättet wird nichts.
+
+**Der Befund hinter der Zahl:** es gibt **genau eine** `approved = 1`-Zeile
+in der ganzen Datenbank — Run 8, `seq 12`, `PARTIALLY_FILLED`. Die letzte
+Auslieferung war am **04.10. um 11:12**. Seit 13 Tagen: nichts. Die nackte
+Null neben `LEDGER_CONSISTENT` hat das nicht gesagt; jetzt sagt sie es.
+
+Ist gar keine Lieferung vorhanden, lautet die Ausgabe
+`kein Zeitstempel — nicht ermittelbar (nie delivered > 0)`. Auch das ist
+eine Auskunft und eine bessere als eine nackte Null.
+
+### 5.4l `-B` beim Testlauf kostet nichts — und deshalb steht es da
+
+`PYTHONDONTWRITEBYTECODE` beim *Dienst* verlangt einen Neustart aus falschem
+Anlaß und ist nach der Abnahme gebucht. Beim *Testlauf* verlangt es nichts:
+dort läuft kein Prozeß, dessen Bytecode sich ändern könnte. Solange es nicht
+in der Invokation steht, fälscht jeder zweite Lauf seine eigene Probe — und
+zwar **grün**, die einzige Richtung, die niemandem auffällt.
+
+`order_execution_engine/run_tests.py` trägt die Regel:
+
+```python
+os.environ["PYTHONDONTWRITEBYTECODE"] = "1"
+sys.dont_write_bytecode = True      # wirkt auch im laufenden Interpreter
+pytest.main([tests, "-q", "-p", "no:cacheprovider"])
+```
+
+`-p no:cacheprovider` zusätzlich: `lastfailed` überlebt sonst eine
+Schwellenänderung und ändert, welche Tests laufen.
+
+**Die 168 — vor oder nach dem Leeren von `__pycache__`?** Beides:
+
+| Lauf | Ergebnis |
+|---|---|
+| mit vorhandenem Cache (der Commit-Lauf) | 168 passed |
+| `PYTHONDONTWRITEBYTECODE=1`, Cache vorhanden | 168 passed |
+| Cache geleert, `PYTHONDONTWRITEBYTECODE=1` | 168 passed |
+
+Die Zahl ist cache-unabhängig. **Aber das war Glück, kein Verfahren** —
+der Schwellen-Probe-Lauf davor war bei 3 und 5 grün, bis der Cache weg war.
+Mit `run_tests.py` ist die Frage nicht mehr zu stellen: es schreibt keinen.
+
+### 5.4m Das erste echte Verdikt — Run 9, datiert
+
+Es gibt kein archiviertes Urteil dieses Werkzeugs: im Fenster 17:21–18:20
+war `current` eine Konstante. Das erste Urteil, das eine Messung trägt, ist
+das über **Run 9** seit `162a89e7`.
+
+```
+Gate:       162a89e7 (LEDGER_CONSISTENT eingeführt, current gemessen)
+Run 9:      started_at 2026-10-14 21:23:36  commit 5c5bc364
+Runner:     PID 962, lstart Wed Oct 14 21:23:32 2026
+Konfig:     diagnostic_only=true, live_execution=false
+Fenster:    2 d 21 h (bis 17.10. 18:22)
+```
+
+**Was das Gate mißt:**
+
+```
+dispatched_signals im Fenster      60
+  davon verworfen (bridge_discards) 56   (no_book / unresolved_asset)
+  dispatched_success                 4
+telemetry_rows                       4
+unattributed                         0
+reasons            {INVALID_PRICE: 4}
+delivered                            0   seit ≤ 04.10. 11:12
+→ LEDGER_CONSISTENT
+```
+
+**Was das Gate nicht mißt, und was daneben steht:**
+
+- **4 Terminalentscheidungen in 2 d 21 h.** Vier Zeilen, alle
+  `INVALID_PRICE`, alle `approved = 0`.
+- **0 Auslieferungen** seit dem 04.10.
+- **56 von 60 Dispatches** endeten in `bridge_discards` — kein Buch
+  (`no_book`) oder unauflösbares Asset. Das ist die Aktivität des
+  Dienstes: er sieht Märkte und verwirft sie.
+
+> **Das ist der Lauf, auf den sich „Run 9 = kalibrierender Lauf" bezieht —
+> und er ist nie beurteilt worden, bis jetzt.** Das Urteil lautet:
+> **der Ledger ist konsistent; der Dienst liefert nichts.** Beides ist wahr,
+> und nur das erste ist ein Verdikt des Gates.
+
+### 5.4n `DERIVED` — Definition in einer Zeile
+
+```
+DERIVED := git hash-object <datei>  !=  git rev-parse HEAD:<datei>
+```
+
+Nicht `git status`. Begründung aus §5.4d: `--porcelain` **ohne** `--ignored`
+hätte den `__pycache__` nie gezeigt (die 0 war keine Antwort), und **mit**
+`--ignored` feuert es immer, solange ignorierte Artefakte im Tree liegen
+(heute: 8). Die Frage ist nicht „ist der Baum sauber", sondern „ist genau
+dieser Text committet".
 
 ### 5.4f Eine Kopie, nicht zwei
 
