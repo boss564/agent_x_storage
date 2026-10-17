@@ -4182,10 +4182,13 @@ zehn Runden:
 
 **Die vierte Annahme ist die einzige, die keine Vorbedingung schließt.** Sie
 braucht zwei Werte, die **verschieden** sein müssen — sonst sieht der Test
-nichts. Als Regel (§A-JW): *jeder Test braucht einen zweiten Fall, in dem der
-Wert anders ist.* Die Gegenprobe steht seit Runde 35 in Fall 19
-(`root` ≠ `root=None`) und seit Runde 36 in Fall 22 (zwei `Checks`-Paare,
-`(21,210)` und `(7,4)`).
+nichts.
+
+> **Regel (§A-JW): jeder Test braucht einen zweiten Fall, in dem der Wert
+> anders ist.** Gegenproben: Fall 19 (`root` ≠ `root=None`), Fall 22 (zwei
+> `Checks`-Paare `(21,210)` und `(7,4)`), Fall 16c (zwei `chdir`-Zyklen).
+> Die Regel steht hier, an der Tabelle — nicht in einer eigenen §-Nummer.
+> Wer in Runde 50 die Annahmen sucht, findet sie mit der Regel daneben.
 
 Runde 34 ist damit **kein neuer Fehler**, sondern Runde 31 eine Schicht
 tiefer: die Annahme hat die Testgrenze überschritten. Und sie wurde beim
@@ -4220,6 +4223,7 @@ den Fehler ab. Drei Annahmen, elf Runden.
 | 34 | relativer `--git-common-dir` gegen `Path.cwd()`; `_SNAPSHOT_SEEN` ohne Reset | Lesen (`rg "cwd"`) | **Architektur**: Test 16/17/18, `reset()` vollständig, Docstring Einheit |
 | 35 | Tests übergaben `root` und übersprangen den Produktionspfad; `_status_line` zählte 21 als „Angaben"; Fall 17 kannte Namen statt Menge | Einwand + `rg` | **Architektur**: Fall 19 (Zwillings ohne `root`), `Checks`-Typ, Fall 17 gegen Globals-Menge, `repo_root()` mit Cache |
 | 36 | `reset()` und Cache-Reset waren zwei Vorbedingungen; `chdir` ohne Wiederherstellung; Filter ohne eigenen Test; `223` dreimal getippt | Einwand + Mutation | **Architektur**: `reset_all()` inkl. cwd, Fall 16b, Filter-Fixture, `Checks(n, excluded)` mit `total` |
+| 37 | `_START_CWD` wäre als Zustand klassifiziert und vom Reset auf den Fehler gesetzt (`Path.cwd()`); `Path`/`Decimal`/`Fraction` falsch-positiv; `Checks` mutierbar | Einwand + Messung | **Architektur**: dritte Kategorie *Referenz*, `_IMMUTABLE_CTORS`, Fall 16c (zwei Zyklen), `frozen` |
 
 ### §71.1 — was Runde 33 wirklich geändert hat
 
@@ -4396,6 +4400,61 @@ Property, und die Zeile rechnet nicht mehr:
 `Checks(223, 210)` → die Zeile liest drei Felder eines Objekts. Mutation
 `total` gibt `self.n` zurück → 6 FAIL, mit zweitem Paar `(7,4)` als
 Gegenprobe.
+
+### §71.13 — Runde 37: der Reset braucht eine Erinnerung, die er nicht zurücksetzt
+
+`_START_CWD` ist der sechste Global — und der erste, der **nicht** in
+`_RESET_GLOBALS` gehört. Drei Kategorien statt zwei:
+
+| Kategorie | Namen | vom Reset |
+|---|---|---|
+| resetbar | `_SNAPSHOT_SEEN`, `_test_results`, `_ROOT_CACHE`, `_SNAPSHOT_CACHE` | **gesetzt** |
+| zustandslos | Skalare, Tuple, `frozenset`, `_IMMUTABLE_CTORS` | — |
+| **Referenz** | **`_START_CWD`** | **ausgenommen** |
+
+Warum die dritte nötig ist: `Path.cwd()` ist ein *Ausdruck*, also las der
+Filter `_START_CWD` als Zustand. Ein Global in `_RESET_GLOBALS` setzt
+`reset_all()` auf `Path.cwd()` — auf den Zustand, den es reparieren soll.
+Nach einem **erfolgreichen** Fall fällt das nicht auf (cwd ist sauber); erst
+beim zweiten gescheiterten `chdir` landet die Referenz in `/tmp`.
+
+| Fall | deckt ab |
+|---|---|
+| 16b | ein Zyklus |
+| **16c** | **zwei Zyklen, und `_START_CWD` bewegt sich nicht** |
+
+Mutationen: `reset_all()` setzt `_START_CWD = Path.cwd()` → 3 FAIL;
+`_START_CWD` zusätzlich in `_RESET_GLOBALS` → 1 FAIL (Disjunktheit).
+
+**Dazu der falsch-positive Filter:** `Path`, `Decimal`, `Fraction`, `bytes`
+sind Konstruktoraufrufe über unveränderlichen Typen, keine Speicherplätze.
+Ohne `_IMMUTABLE_CTORS` hätte jeder solche Global als Reset-Kandidat
+gegolten — und `_START_CWD` beim ersten Lauf überschrieben.
+
+### §71.14 — Runde 37: einer von zwei Änderungen wirkte
+
+Runde 35 änderte zwei Dinge gleichzeitig: entfernte `ast.List`/`ast.Dict`
+aus der Literal-Tupel **und** führte den `mutable`-Merker ein. Die Akte
+sagte „gefixt". Nachgemessen an `352d9fd9`: `literal` war dort bereits
+`(ast.Tuple, ast.Constant)` — die Entfernung war der Fix, der Merker
+Dekoration. Er blieb bis Runde 36 liegen und fiel nur auf, weil die
+Fixture **unter dem Originalfehler grün war**.
+
+> **Regel (§A-KB): ein Fix mit mehr als einer Zeile wird zeilenweise
+> zurückgenommen.** Bleibt es grün, war die Zeile Dekoration. Ein grüner
+> Test für einen Fix ist erst dann eine Aussage, wenn bekannt ist, welcher
+> Teil des Fixes ihn grün macht.
+
+### §71.15 — Runde 37: `Checks` ist ein Wert, kein Behälter
+
+`total` als Property heißt *berechnet bei jedem Zugriff*. Solange `n` nach
+dem Bau änderbar ist, ist die Identität `checked + excluded == total` eine
+Eigenschaft des Zugriffszeitpunkts. Mit `__setattr__`-Sperre (frozen) gilt
+sie per Konstruktion.
+
+Nebenwirkung, benannt: kein In-Place-Zähler. `Report.checked` bleibt ein
+`int` und wird **einmal** beim Druck in `Checks` übergeben — eine Stelle,
+an der Zahl und Wort zusammenkommen.
 
 ## 72. Der Satz dieser Runde
 

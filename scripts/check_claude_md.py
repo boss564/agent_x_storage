@@ -645,9 +645,9 @@ def _self_test_count_delta() -> list[str]:
             _reset_root_cache()            # §A-JQ: sonst merkt sich der
                                            # Test das root des Vorgaengers
 
-        # Der Prozess-cwd beim Start der Suite. `reset_all()` kehrt hierher
-        # zurueck, egal was ein Fall hinterlaesst.
-        suite_cwd = Path.cwd()
+        # Der Prozess-cwd beim Start der Suite: `_START_CWD`, die Referenz
+        # (§A-JY). Lokal aufgenommen waere die Vorbedingung wieder im Test.
+        suite_cwd = _START_CWD
 
         def reset_all() -> None:
             """Vorbedingung fuer **jeden** Fall: Dateien, Globals, Cache, cwd.
@@ -922,6 +922,29 @@ def _self_test_count_delta() -> list[str]:
         if Path.cwd() != suite_cwd:
             failures.append(
                 f"reset_all() stellt cwd nicht her: {Path.cwd()} statt {suite_cwd}")
+
+        # 16c. Der zweite Zyklus (§A-JY). Fall 16b deckte **einen** ab; ein
+        #      Reset, der seine Referenz auf `Path.cwd()` setzt, ist nach
+        #      dem ersten Durchlauf noch korrekt (cwd war sauber) und
+        #      kippt erst beim zweiten gescheiterten `chdir`. Also zweimal
+        #      hintereinander — und `_START_CWD` darf sich nicht bewegt haben.
+        start_before = _START_CWD
+        for zyklus in (1, 2):
+            try:
+                os.chdir(other)
+                try:
+                    raise RuntimeError(f"Zyklus {zyklus} gescheitert")
+                finally:
+                    pass
+            except RuntimeError:
+                pass
+            reset_all()
+            if Path.cwd() != suite_cwd:
+                failures.append(
+                    f"reset_all() verliert cwd im Zyklus {zyklus}: {Path.cwd()}")
+            if _START_CWD != start_before:
+                failures.append(
+                    f"reset_all() hat die Referenz verschoben: {_START_CWD}")
         try:
             os.chdir(other)                    # cwd != Repo
             got = _snapshot_path()             # root=None
@@ -951,9 +974,14 @@ def _self_test_count_delta() -> list[str]:
             failures.append("reset() raeumt _ROOT_CACHE nicht")
 
         # Die Menge, nicht die Namen. Neue Globals muessen entschieden sein.
+        # Drei Kategorien (§A-JX/§A-JY): resetbar, zustandslos, Referenz.
+        # Eine Referenz ist deklariert und geprueft, aber vom Reset
+        # ausgenommen — sonst setzt der Reset sie auf den Zustand, den er
+        # gerade repariert.
         guarded = set(re.split(r"[\s,]+", _RESET_GLOBALS)) - {""}
         state_free = set(re.split(r"[\s,]+", _STATE_FREE)) - {""}
-        declared = guarded | state_free
+        reference = set(re.split(r"[\s,]+", _REFERENCE_GLOBALS)) - {""}
+        declared = guarded | state_free | reference
         lost = [n for n in _module_state_globals() if n not in declared]
         if lost:
             failures.append(
@@ -961,6 +989,17 @@ def _self_test_count_delta() -> list[str]:
         both = guarded & state_free
         if both:
             failures.append(f"Global gleichzeitig Reset und zustandslos: {both}")
+        # §A-JY: die drei Kategorien muessen disjunkt sein. Ein Name in
+        # `_RESET_GLOBALS` **und** `_REFERENCE_GLOBALS` ist genau der Fehler,
+        # bei dem der Reset seinen eigenen Anfang ueberschreibt.
+        misplaced = reference & (guarded | state_free)
+        if misplaced:
+            failures.append(
+                f"Referenz zugleich Reset/zustandslos: {misplaced}")
+        # Die Referenz muss beim Import stehen, nicht beim ersten Reset:
+        # danach ist `Path.cwd()` nicht mehr der Startwert.
+        if not isinstance(_START_CWD, Path) or not _START_CWD.is_absolute():
+            failures.append(f"_START_CWD ist kein absoluter Path: {_START_CWD!r}")
 
         # 19. Der Zweig, den jede echte Invocation nimmt (§A-JT):
         #     `root=None`. Bis Runde 34 war er ungetestet, weil Tests ihre
@@ -1046,6 +1085,18 @@ def _self_test_count_delta() -> list[str]:
             failures.append("negativer Wert akzeptiert")
         except ValueError:
             pass
+        # §A-KA: `Checks` ist ein Wert. Aendert sich ein Feld nach dem Bau,
+        # ist `total` eine Eigenschaft des Zugriffszeitpunkts, nicht des
+        # Objekts — die Zeile koennte zwischen Druck und Pruefung kippen.
+        c_mut = Checks(3, 4)
+        for feld in ("n", "excluded"):
+            try:
+                setattr(c_mut, feld, 99)
+                failures.append(f"Checks ist mutierbar ({feld}) — kein Wert")
+            except AttributeError:
+                pass
+        if c_mut.total != 7:
+            failures.append(f"total hat sich nach dem Bau geaendert: {c_mut.total}")
         # und die Funktion selbst: `repo_root()` ist der eine Weg
         if repo_root(None) != here:
             failures.append(f"repo_root(None) != Dateiort: {repo_root(None)}")
@@ -1408,6 +1459,22 @@ _COUNT_SNAPSHOT = ".check_claude_md.last.json"
 #   _STATE_FREE:    unveraenderlich (Skalar, Tuple, frozenset, kompiliert)
 # Wer ein fuenftes Global mit Zustand hinzufuegt, muss es hier entscheiden.
 _RESET_GLOBALS = "_SNAPSHOT_SEEN _test_results _ROOT_CACHE _SNAPSHOT_CACHE"
+# §A-JY: die dritte Kategorie. Ein Global, das **nie** zurueckgesetzt werden
+# darf, weil es der Reset selbst braucht, um zu wissen, wohin er zurueckgeht.
+# Eine Referenz ist deklariert und geprueft — aber vom Reset ausgenommen.
+# Ohne diese Kategorie muesste `_START_CWD` in `_RESET_GLOBALS` stehen, und
+# `reset_all()` wuerde ihn auf `Path.cwd()` setzen — also auf den Zustand,
+# den er gerade reparieren soll. Beim ersten Durchlauf faellt das nicht auf
+# (cwd ist sauber), erst beim zweiten gescheiterten `chdir`-Fall landet die
+# Referenz in `/tmp`.
+_REFERENCE_GLOBALS = "_START_CWD"
+# §A-JZ: Konstruktoren ueber unveraenderlichen Typen. Ein Name hier heisst:
+# das Ergebnis ist ein Wert, kein Speicherplatz.
+_IMMUTABLE_CTORS = frozenset({
+    "Path", "PurePath", "PosixPath", "PurePosixPath",
+    "Decimal", "Fraction", "bytes", "complex",
+    "frozenset", "tuple", "re",
+})
 _STATE_FREE = ("AGENTS_PER_WAVE SCRIPT_SCOPE MIN_AGENT_CLAIM _COUNTING_LABEL "
                "COMPLIANCE_AGENTS _COUNT_CONTEXT_CHARS _TOTAL_MARK "
                "_SELF_TEST_SCOPE INVENTORY_RUNTIME_MAX_AGE_H _COUNT_SNAPSHOT "
@@ -1475,6 +1542,17 @@ def _module_state_globals_in(src: str) -> list[str]:
             if isinstance(val, ast.Call) and isinstance(val.func, ast.Attribute) \
                     and val.func.attr == "compile":
                 literal = True
+            # §A-JZ: Konstruktoraufrufe ueber unveraenderlichen Typen sind
+            # Werte, keine Speicherplaetze. `Path("/x")`, `Decimal(1)`,
+            # `Fraction(1,2)`, `bytes(1)` sind unveraenderlich — sie als
+            # "Ausdruck -> Zustand" zu lesen war ein falsch-positiv, das
+            # jede Referenz zu einem Reset-Kandidaten gemacht haette.
+            if isinstance(val, ast.Call) and isinstance(val.func, ast.Name) \
+                    and val.func.id in _IMMUTABLE_CTORS:
+                literal = True
+            if isinstance(val, ast.Call) and isinstance(val.func, ast.Attribute) \
+                    and val.func.attr in ("resolve", "absolute"):
+                literal = True          # Path(...).resolve(): Wert
             if not literal:
                 out.append(n)
     return out
@@ -1487,6 +1565,11 @@ def _count_reason(argv: list[str]) -> str:
 
 _ROOT_CACHE: dict = {}
 _SNAPSHOT_CACHE: dict = {}
+# §A-JY: die Referenz. Beim Import einmal genommen, danach nie wieder —
+# `reset_all()` liest sie, schreibt sie nicht. Deshalb `_REFERENCE_GLOBALS`,
+# nicht `_RESET_GLOBALS`: der Reset darf seinen eigenen Anfang nicht
+# ueberschreiben, sonst traegt er den Fehler, den er repariert, weiter.
+_START_CWD = Path.cwd().resolve()
 
 
 def repo_root(root: Path | None = None) -> Path:
@@ -1706,10 +1789,19 @@ class Checks:
     __slots__ = ("n", "excluded")
 
     def __init__(self, n: int, excluded: int = 0) -> None:
-        self.n = int(n)
-        self.excluded = int(excluded)
+        # §A-KA: `frozen` — `total` ist eine Eigenschaft des Objekts, nicht
+        # des Zugriffszeitpunkts. Ohne das koennte `n` zwischen Druck und
+        # Pruefung kippen. Nebenwirkung: kein In-Place-Zaehler; wer
+        # `checked += 1` braucht, baut `Checks(n+1, excluded)`. Zaehlort
+        # ist `Report.ok()`/`Report.fail()`, die `Report.checked` als int
+        # fuehren und beim Druck in `Checks` uebergeben (eine Stelle).
+        object.__setattr__(self, "n", int(n))
+        object.__setattr__(self, "excluded", int(excluded))
         if self.n < 0 or self.excluded < 0:
             raise ValueError("Pruefungen und Ausschluesse sind nicht negativ")
+
+    def __setattr__(self, name: str, value: object) -> None:
+        raise AttributeError("Checks ist ein Wert (frozen)")
 
     @property
     def total(self) -> int:
