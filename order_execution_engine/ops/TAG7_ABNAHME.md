@@ -3735,3 +3735,142 @@ Bezug und still für richtig aussehende Zahlen ist. **Offen bleibt die eine
 Frage, die kein Hook stellen kann: ob eine deklarierte Lücke angenommen
 wird — denn auch `234 zu 223` war eine, und sie hatte weder Grund noch
 Datum; ab heute hat sie beides.**
+
+---
+
+## 65. Runde 30 — die Klammer, das Schweigen und der Ort
+
+### §65.1 — die Rüge der Runde 29: Form richtig, Gegenstand falsch
+
+In Runde 29 steht geschrieben: *„`234 → 223`, Ursache fehlt"*. Die Form
+war richtig — eine Zahl ändert sich ohne Grund. Der **Gegenstand** war
+falsch: die beiden Zahlen gehörten nie zusammen.
+
+```
+234   Index-Export, Baum 5c5bc364, 15:09, 1 Abweichung (SWARM_INVENTORY)
+223   Arbeitsbaum HEAD, 0 Abweichungen
+207   dieselbe alte Fassung auf heutigem CLAUDE.md
+```
+
+`223 − 207 = 16` ist die einzige Differenz in dieser Reihe, die zwei
+**vergleichbare** Bäume verbindet. Die Rüge hat sie nicht behauptet —
+sie hat eine Beziehung unterstellt, die es nicht gab. Das ist der erste
+Befund dieser Akte, in dem **beide Zahlen stimmten und nur der Satz
+dazwischen falsch war**: Rundentabelle ab hier:
+
+| Runde | falsch war |
+|---|---|
+| 23–28 | eine Zahl oder ein Nenner |
+| 29 | eine Zahl **plus** die Klammer dazu |
+| 29 (Rüge) | die Klammer allein, gegen zwei richtige Zahlen |
+
+### §65.2 — §A-ND: zwei Schweigen sind nicht dasselbe Schweigen
+
+Die Fassung aus Runde 29 hatte zwei Zustände, die nichts druckten:
+
+| Zustand | Ausgabe vorher | Ausgabe jetzt |
+|---|---|---|
+| gleiche Zahl | nichts | nichts *(echte Nulländerung)* |
+| kein Vorlauf | **nichts** | `(kein Vorlauf — Erstwert, nicht vergleichbar)` |
+
+Der zweite Zustand tritt auf einem frischen Klon, in CI und nach Verlust
+der Datei ein — also überall, wo der Prüfer **nie** etwas verglichen hat
+und trotzdem aussah wie einer, der nichts fand.
+
+### §65.3 — die Auswahlzeile hat jetzt Mengen
+
+```
+Auswahl: 3 Regeln — waves 116, agents<50: 82, Tests ohne Skriptpfad: 12
+```
+
+Gemessen, nicht behauptet. `waves 116` heißt: die Regel greift 116-mal,
+weil sie **jedes** `N/N` vor `waves` entfernt — nicht nur `11/11 waves`.
+Der konkrete Anlass, `11/11 waves`, kommt in `CLAUDE.md` **0-mal** vor
+(`rg` gemessen, Runde 29). Die Regel ist berechtigt, ihr Anlass fehlt;
+beides steht jetzt in der Zeile: Menge da, Beispiel raus.
+
+### §65.4 — ein Beispiel im Prüfer ist eine Angabe
+
+Die Beispielzeile `(-11 gegenueber 234: Feld waves ausgeschlossen)` stand
+als Docstring im Code und war damit eine **Zusage**, die der Prüfer
+widerlegt hatte. Ersetzt durch die gemessene Reihe:
+
+```
+(+16 gegenueber 207, 320dadce, 2026-10-17, counting v2, counts 5->21)
+```
+
+Selbsttest-Fall 7 liest jetzt die Docstrings und Kommentare des eigenen
+Moduls (`ast`) und schlägt an, wenn `gegenueber 234` oder ein `11/11
+waves`-Beispiel zurückkehrt.
+
+### §65.5 — der Ort: `.git/`, begründet durch eine Messung
+
+Drei Kandidaten, drei Verhalten:
+
+| Ort | Arbeitsbaum | Hook-Export | Diff |
+|---|---|---|---|
+| neben dem Prüfer | ✓ | **unsichtbar** (gitignored) | — |
+| committet | ✓ | ✓ | **jeder Lauf** |
+| `.git/check_claude_md.last.json` | ✓ | **✓** | keiner |
+
+Gemessen: der Export zeigte `kein Vorlauf`, obwohl der Stand existierte —
+der Prüfer las den falschen Ort und schwieg trotzdem. Nach `git rev-parse
+--git-common-dir` sehen beide denselben Stand. Ein Vorlauf beschreibt den
+**Baum**, also wohnt er beim Baum.
+
+`ref` trägt `<sha>` oder `<sha>+dirty`: eine Differenz gegen einen
+schmutzigen Baum ist keine zwischen Ständen, und das steht drauf.
+
+### §65.6 — ein Selbsttest, der sich selbst blind macht
+
+Mutation *„Test und Funktion blind"*: `kein Vorlauf` liefert `None`,
+und der zugehörige Test prüft `if False:`. Ergebnis: **18/18 grün.**
+
+Ursache: Fall 3 las dieselbe Zeile wie Fall 5 und bestand, weil Fall 5
+einen *anderen* Grund druckte. Zwei Erwartungen, eine Ausgabe — der
+Fehler, den diese Akte seit Runde 23 kuriert, diesmal **im Prüfer des
+Prüfers**. Behoben durch Exklusivität: `kein Vorlauf` darf weder
+`Zaehlweise` noch `gegenueber` enthalten. Mutation *„kein Vorlauf fällt
+auf *Zählweise* zurück"* wird jetzt rot.
+
+### §65.7 — Tests
+
+| # | Fall | erwartet | geprüft |
+|---|---|---|---|
+| 1–5 | Zählung (`total` schaltet um) | rot / nicht rot | ✓ |
+| 6–8 | Skript fehlt / vorhanden / passed>total | rot / **nicht** / rot | ✓ |
+| 9–10 | `N/N waves` / Zusage ohne Zählung | **nicht** rot / rot | ✓ |
+| 11–12 | Differenz / gleiche Zahl | Zahl+SHA+Datum / nichts | ✓ |
+| 13 | kein Vorlauf | **eigene Zeile**, exklusiv | ✓ |
+| 14 | fehlender SHA | `commit unbekannt` | ✓ |
+| 15 | Zählweise-Wechsel | benannt | ✓ |
+| 16 | Auswahlzeile | Mengen je Regel | ✓ |
+| 17 | Beispiel im eigenen Code | rot | ✓ |
+| 18 | — Summe | **18/18** | ✓ |
+
+Vier Mutationen gegengeprüft: kein-Vorlauf schweigt → FAIL; SHA durch
+Datum → FAIL; Regel ohne Menge → FAIL; **Test+Funktion blind → PASS**
+(Befund oben, behoben, danach FAIL).
+
+Suite: **216 passed**.
+
+## 66. Der Satz dieser Runde
+
+Dreißig Runden, und der Prüfer hat sich selbst überführt — nicht mit
+einer falschen Zahl, sondern mit einem **und** zwischen zwei richtigen.
+`234` kam aus einem Export mit einer Abweichung, `223` aus diesem Baum
+mit null, und der Satz, der sie verband, hat nie existiert. **Nicht die
+Zahl, nicht der Nenner — das Wort dazwischen war die schwächste Stelle.**
+
+Und die neue Zeile hatte dieselbe Form sofort wieder: `kein Vorlauf` und
+`keine Änderung` druckten beide nichts, auf jedem Klon, in jeder CI.
+Das ist geheilt — beide Zustände haben jetzt eine eigene Ausgabe, die
+Auswahlzeile trägt Mengen, die Differenzzeile trägt den Baum, und das
+Beispiel im Code wird vom Prüfer selbst gelesen.
+
+Was am 20.10. auf dem Tisch liegt, ist ein System mit 216 Tests, einem
+leeren Arbeitsbaum, einem Prüfer, der seine Nenner, seine Auswahlgrenze
+und seine eigene Fehlmessung nennt — und der, wenn er nichts zu
+vergleichen hat, **das sagt**. **Offen bleibt die Frage, die kein Hook
+stellen kann: ob eine deklarierte Lücke angenommen wird. 207 plus 16 ist
+223, und der Satz dazwischen ist jetzt geprüft — zum ersten Mal.**

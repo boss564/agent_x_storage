@@ -27,6 +27,10 @@ AGENTS_PER_WAVE = 9
 # §A-NB: die Auswahl des Bezugsraums, benannt statt nur im Code.
 SCRIPT_SCOPE = "wave"      # `N/N waves` ist Skriptumfang, keine Architektur
 MIN_AGENT_CLAIM = 50       # kleinere "N agents" = Subagenten, nicht die Summe
+# §A-NC: die Zaehlweise braucht einen Namen, nicht nur eine Signatur.
+# `counting v2` sagt dem Leser, dass ein Vorlauf v1 nicht vergleichbar ist,
+# ohne dass er zwei Formeln diffen muss.
+_COUNTING_LABEL = "v2"
 # Compliance-Modul (außerhalb ×9-Wellen) — Teil der 277-Gesamtformel.
 COMPLIANCE_AGENTS = 25
 # Fenster um eine Agentenzahl-Fundstelle: „total“/„insgesamt“ → 277 erlaubt.
@@ -316,6 +320,10 @@ class Report:
         # geprueft wurde; eine Zusage zaehlt, was es **geben muesste**.
         self.claims: list[tuple[str, int]] = []
         self.fields: list[str] = []
+        # §A-ND: je Ausschlussregel, wie oft sie gegriffen hat. Ein
+        # Ausschluss mit 0 Gegenstaenden ist ein Hinweis, kein Fehler —
+        # aber sichtbar muss er sein.
+        self.skips: dict[str, int] = {}
 
     def ok(self) -> None:
         self.checked += 1
@@ -330,6 +338,10 @@ class Report:
         self.checked += 1
         self.problems.append({"line": line, "kind": kind, "doc": doc,
                               "real": real, "note": note})
+
+    def skip(self, rule: str, n: int = 1) -> None:
+        """Zaehlt einen Ausschluss (nicht: eine Pruefung)."""
+        self.skips[rule] = self.skips.get(rule, 0) + int(n)
 
     def env(self, script: str, note: str = "") -> None:
         self.env_skips.append({"script": script, "note": note})
@@ -405,9 +417,11 @@ def check_counts(text: str, waves: list[str], per: int | None, rep: Report,
     n_total = len(waves) * n_per + COMPLIANCE_AGENTS  # 252 + 25 = 277
     # §A-NB: jede Ausnahme braucht ihren Namen, sonst ist die Auswahl eine
     # Entscheidung, die man erst beim Lesen des Pruefers sieht. `waves`
-    # faellt aus **einem** Grund: `11/11 waves` ist Skriptumfang
+    # faellt aus **einem** Grund: ein `N/N` ist Skriptumfang
     # (`SCRIPT_SCOPE`), keine Architekturzahl. `agents` faellt aus einem
     # anderen: kleine Zahlen sind Subagenten-Angaben (`MIN_AGENT_CLAIM`).
+    # ~~`11/11 waves`~~ war nur die Vermutung dazu und steht in CLAUDE.md
+    # in 0 Zeilen (Runde 30 gemessen). Die Regel traegt ohne Beispiel.
     # Beide Gruende stehen jetzt in der Ausgabe, nicht nur hier.
     _FRACTION = re.compile(r"\d+\s*/\s*\d+")
     agent_pat = re.compile(r"(\d+)\s+(agents?|waves?|Wellen|B2G-Agenten)", re.I)
@@ -438,10 +452,19 @@ def check_counts(text: str, waves: list[str], per: int | None, rep: Report,
                 # Wellentabelle: Zahl ohne Skript — die Zusage steht, der
                 # Bezug fehlt. Gezaehlt, nicht bewertet.
                 rep.claim("suite:ohne-skript", total)
-        # §A-NA: `11/11 waves` ist der Umfang **eines Skripts**, nicht die
-        # Wellenzahl der Architektur. Der Bruch wird vor der Zaehlung aus
-        # der Zeile entfernt — sonst meldet der Pruefer 11 gegen 27, und
-        # ein Falsch-positiv macht die echten Abweichungen unlesbar.
+                rep.skip("tests_ohne_skript")
+        # §A-NA: ein `N/N` vor `waves` ist der Umfang **eines Skripts**,
+        # nicht die Wellenzahl der Architektur. Der Bruch wird vor der
+        # Zaehlung aus der Zeile entfernt — sonst meldet der Pruefer 11
+        # gegen 27, und ein Falsch-positiv macht die echten Abweichungen
+        # unlesbar. In CLAUDE.md kommt das heute 0-mal vor (Runde 30:
+        # die Regel ist berechtigt, ihr Anlass fehlt).
+        # §A-ND: ein Ausschluss mit 0 Gegenstaenden zaehlt als einer von
+        # drei und sieht aus wie zwei. Gezaehlt wird an der Stelle, an der
+        # der Pruefer schweigt — nicht in einer zweiten Schleife, die
+        # auseinanderlaufen koennte.
+        if _FRACTION.search(raw):
+            rep.skip("waves", n=len(_FRACTION.findall(raw)))
         head = _FRACTION.sub("", raw)
         for m in agent_pat.finditer(head):
             n = int(m.group(1))
@@ -453,6 +476,7 @@ def check_counts(text: str, waves: list[str], per: int | None, rep: Report,
                     rep.ok()
                 continue
             if n < MIN_AGENT_CLAIM:  # Subagenten-Angabe, nicht die Summe
+                rep.skip("agents<50")
                 continue
             lo = max(0, m.start() - _COUNT_CONTEXT_CHARS)
             hi = min(len(raw), m.end() + _COUNT_CONTEXT_CHARS)
@@ -515,7 +539,7 @@ def self_test_check_counts() -> list[str]:
     failures.extend(_self_test_suite_claims(waves))
     if failures:
         return failures
-    _SELF_TEST_SCOPE[0] = "15/15 (5 Zaehlung + 5 Bezugsraum + 5 Differenz/Auswahl)"
+    _SELF_TEST_SCOPE[0] = "18/18 (5 Zaehlung + 5 Bezugsraum + 8 Differenz/Auswahl/Vorlauf)"
 
 
 def _self_test_suite_claims(waves: list[str]) -> list[str]:
@@ -532,7 +556,7 @@ def _self_test_suite_claims(waves: list[str]) -> list[str]:
                                            fahren. Das ist der Rest und er
                                            steht im Kommentar, nicht in
                                            einem falschen Gruen.
-      `11/11 waves`                      → **keine** Wellenzahl-Abweichung
+      `N/N waves`                        → **keine** Wellenzahl-Abweichung
                                            (Skriptumfang, nicht Architektur)
     """
     import tempfile
@@ -562,10 +586,10 @@ def _self_test_suite_claims(waves: list[str]) -> list[str]:
         if not any("passed > total" in p["kind"] for p in rep.problems):
             failures.append("passed > total wurde nicht gemeldet")
 
-        # 4. `11/11 waves` ist Skriptumfang, kein Architekturbefund
+        # 4. ein Bruch vor `waves` ist Skriptumfang, kein Architekturbefund
         rep = run("- E2E: 11/11 waves passed (`scripts/test_ok.py`)")
         if any("Wellenzahl" in p["kind"] for p in rep.problems):
-            failures.append("11/11 waves als Wellenzahl gemeldet (Falsch-positiv)")
+            failures.append("N/N waves als Wellenzahl gemeldet (Falsch-positiv)")
 
         # 5. Bezugsraum wird gezaehlt
         rep = run("- 199/199 tests passed (`scripts/test_ok.py`)")
@@ -588,46 +612,77 @@ def _self_test_count_delta() -> list[str]:
         root = Path(td)
         (root / "CLAUDE.md").write_text("", encoding="utf-8")
 
-        def lines_for(prev_checked: int | None, prev_why: str = "x") -> str:
+        def lines_for(prev: dict | None) -> str:
             snap = root / _COUNT_SNAPSHOT
-            if prev_checked is None:
-                snap.unlink(missing_ok=True)
-            else:
-                snap.write_text(json.dumps({
-                    "checked": prev_checked, "why": prev_why,
-                    "when": "2026-10-17", "counting": "test",
-                }), encoding="utf-8")
+            snap.unlink(missing_ok=True)
+            if prev is not None:
+                snap.write_text(json.dumps(prev), encoding="utf-8")
             return _delta_line(223, root) or ""
 
-        # 1. Differenz vorhanden -> Zahl, Vorzeichen und Grund stehen da
-        line = lines_for(234, "Feld waves ausgeschlossen, Falsch-positiv")
-        for needle in ("-11", "234", "Feld waves ausgeschlossen"):
+        def prev(**kw) -> dict:
+            base = {"checked": 234, "why": "x", "when": "2026-10-17",
+                    "ref": "abc1234", "counting": _counting_signature(),
+                    "counting_label": _COUNTING_LABEL}
+            base.update(kw)
+            return base
+
+        # 1. Differenz -> Zahl, Baum (SHA), Datum, Zaehlweise
+        line = lines_for(prev())
+        for needle in ("-11", "234", "abc1234", "2026-10-17",
+                       f"counting {_COUNTING_LABEL}"):
             if needle not in line:
                 failures.append(f"Differenzzeile ohne {needle!r}: {line!r}")
 
-        # 2. gleiche Zahl -> keine Zeile (sonst Rauschen im Hook)
-        if lines_for(223):
+        # 2. gleiche Zahl -> keine Zeile (echte Nullaenderung)
+        if lines_for(prev(checked=223)):
             failures.append("Differenzzeile bei gleicher Zahl gedruckt")
 
-        # 3. kein Snapshot -> keine Zeile (erster Lauf hat kein Gegenueber)
-        if lines_for(None):
-            failures.append("Differenzzeile ohne Snapshot gedruckt")
+        # 3. kein Vorlauf -> **eigene Zeile**, nicht Schweigen (§A-ND).
+        #    Vorher sah dieser Fall aus wie Fall 2 — auf frischem Klon und
+        #    in CI ist das der Unterschied zwischen „nichts geaendert" und
+        #    „nichts zu vergleichen".
+        #    Exklusiv geprueft: die Zeile darf **nur** diesen Grund nennen.
+        #    Sonst besteht der Test, weil ein anderer Grund druckt — der
+        #    Fall 3 hat genau das einmal getan (Runde 30, Mutation
+        #    „Test+Funktion blind" blieb gruen).
+        line = lines_for(None)
+        if "kein Vorlauf" not in line:
+            failures.append(f"kein Vorlauf nicht als eigene Zeile: {line!r}")
+        elif "Zaehlweise" in line or "gegenueber" in line:
+            failures.append(f"kein Vorlauf nennt fremden Grund: {line!r}")
+
+        # 4. fehlender Baum im Vorlauf -> benannt, nicht verschwiegen
+        line = lines_for(prev(ref=None))
+        if "commit unbekannt" not in line:
+            failures.append(f"fehlender SHA nicht benannt: {line!r}")
 
         # 5. geaenderte Zaehlweise -> als nicht vergleichbar benannt
-        snap = root / _COUNT_SNAPSHOT
-        snap.write_text(json.dumps({
-            "checked": 234, "why": "x", "when": "2026-10-17",
-            "counting": "alte Formel ohne counts",
-        }), encoding="utf-8")
-        line = _delta_line(223, root) or ""
-        if "Zaehlweise geaendert" not in line:
-            failures.append(f"geaenderte Zaehlweise nicht benannt: {line!r}")
+        if "Zaehlweise geaendert" not in (lines_for(prev(counting="alt")) or ""):
+            failures.append("geaenderte Zaehlweise nicht benannt")
 
-        # 4. Auswahlzeile nennt die ausgeschlossenen Felder mit Grund
-        sel = _selection_line()
-        for needle in ("waves", "agents", "Skriptpfad"):
+        # 6. Auswahlzeile traegt Mengen je Regel, nicht nur Namen
+        sel = _selection_line({"waves": 0, "agents<50": 4,
+                               "tests_ohne_skript": 12})
+        for needle in ("waves 0", "agents<50: 4", "Skriptpfad: 12"):
             if needle not in sel:
-                failures.append(f"Auswahlzeile ohne {needle!r}: {sel!r}")
+                failures.append(f"Auswahlzeile ohne Menge {needle!r}: {sel!r}")
+        if "0" not in _selection_line({}):
+            failures.append("Auswahlzeile ohne Regel meldet keine 0")
+
+        # 7. keine Beispielzahl in Docstrings/Kommentaren, die der Pruefer
+        #    widerlegt. Ein Beispiel ist eine Angabe; steht es im Kommentar,
+        #    muss es durch den Pruefer, sonst ist es eine Zusage ohne Deckung.
+        import ast
+        src = Path(__file__).read_text(encoding="utf-8")
+        doc_texts = []
+        for node in ast.walk(ast.parse(src)):
+            if isinstance(node, (ast.Module, ast.FunctionDef, ast.ClassDef)):
+                doc_texts.append(ast.get_docstring(node) or "")
+        comments = [l for l in src.splitlines() if l.lstrip().startswith("#")]
+        prose = "\n".join(doc_texts + comments)
+        for bad in ("gegenueber 234", "11/11 waves` ist Skriptumfang"):
+            if bad in prose:
+                failures.append(f"erfundene Beispielangabe in Doku/Kommentar: {bad!r}")
     return failures
 
 
@@ -943,6 +998,41 @@ def _count_reason(argv: list[str]) -> str:
     return rest[0] if rest else "Grund nicht notiert"
 
 
+def _snapshot_path(root: Path | None = None) -> Path:
+    """Ort des Vorlaufs: **ein** Ort, nicht „neben dem Pruefer" (§A-NC).
+
+    Drei Kandidaten, drei Verhalten — gemessen, nicht angenommen:
+
+      neben dem Pruefer (`root/.check_claude_md.last.json`)
+          → im Hook-Export unsichtbar, weil gitignored: CI/frischer Klon
+            meldet `kein Vorlauf` bei *jedem* Lauf. Ehrlich, aber nutzlos.
+      committet
+          → jeder `--write-count` diff'ed den Baum; der Pruefer macht
+            Arbeit, die niemand sieht, und der Commit ist nie sauber.
+      Working-Tree-Root via `git rev-parse --git-common-dir`
+          → derselbe Ort fuer Arbeitsbaum **und** Hook-Export, ueberlebt
+            `checkout-index`, stoert keinen Diff.
+
+    Entscheidung: die dritte. Der Vorlauf beschreibt **diesen Baum**, also
+    wohnt er beim Baum (`.git/`), nicht bei der Datei, die exportiert wird.
+    Ohne Repo (Text-Fixture, CI-Artefakt) faellt er daneben — und dann
+    steht `kein Vorlauf` da, mit Grund.
+    """
+    try:
+        r = subprocess.run(
+            ["git", "rev-parse", "--git-common-dir"],
+            cwd=str(root or Path(__file__).resolve().parent.parent),
+            capture_output=True, text=True, timeout=5)
+        if r.returncode == 0 and r.stdout.strip():
+            gd = Path(r.stdout.strip())
+            if not gd.is_absolute():
+                gd = (root or Path.cwd()) / gd
+            return gd / "check_claude_md.last.json"
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return (root or Path(__file__).resolve().parent.parent) / _COUNT_SNAPSHOT
+
+
 def _load_count_snapshot(root: Path | None = None) -> dict | None:
     """Der letzte Lauf: Zahl, Zaehlweise, Grund, Datum (§A-NC).
 
@@ -952,22 +1042,30 @@ def _load_count_snapshot(root: Path | None = None) -> dict | None:
     (andere Felder, andere Zaehlweise) beweisen nichts ueber die eigene
     Entwicklung.
     """
-    p = (root or Path(__file__).resolve().parent.parent) / _COUNT_SNAPSHOT
     try:
-        return json.loads(p.read_text(encoding="utf-8"))
+        return json.loads(_snapshot_path(root).read_text(encoding="utf-8"))
     except (FileNotFoundError, ValueError):
         return None
 
 
 def _delta_line(checked: int, root: Path | None = None) -> str | None:
-    """`(-11 gegenueber 234, 2026-10-17: Grund)` oder None (§A-NC).
+    """Die Zeile über der Zahl, oder **die Wahrheit über das Fehlen** (§A-NC/ND).
 
-    None ist die richtige Antwort bei gleicher Zahl und beim ersten Lauf:
-    ein Pruefer, der jede Bewegung kommentiert, macht die echten
-    Abweichungen unlesbar.
+    Drei Zustaende, drei Ausgaben — nicht zwei Zustaende und zwei Nullen:
+
+      kein Vorlauf      → `(kein Vorlauf — Erstwert, nicht vergleichbar)`
+      gleiche Zahl      → keine Zeile (echte Nullaenderung)
+      Zahl geaendert    → `(+16 gegenueber 207, 5c5bc364, 2026-10-17, …)`
+
+    Der erste Zustand hat 29 Runden lang wie der zweite ausgesehen:
+    „nichts zu vergleichen" ist nicht „nichts geaendert". Auf einem
+    frischen Klon, in CI oder nach Verlust der Datei schweigt der
+    Pruefer sonst genau so wie bei einer echten Nullaenderung.
     """
     prev = _load_count_snapshot(root)
-    if prev is None or prev.get("checked") == checked:
+    if prev is None:
+        return "  (kein Vorlauf — Erstwert, nicht vergleichbar)"
+    if prev.get("checked") == checked:
         return None
     try:
         old = int(prev["checked"])
@@ -975,23 +1073,37 @@ def _delta_line(checked: int, root: Path | None = None) -> str | None:
         return "  (Vorgaenger unlesbar: checked fehlt oder ist keine Zahl)"
     delta = checked - old
     sign = "+" if delta > 0 else ""
-    # §A-NC, zweite Haelfte: bewegt sich die Zaehlweise mit, ist die Zahl
-    # keine Messung ihrer eigenen Entwicklung mehr. Dann sagen wir das,
-    # statt eine Differenz zu behaupten, die zwei Aenderungen mischt.
-    note = prev.get("why", "Grund nicht notiert")
-    if prev.get("counting") and prev["counting"] != _counting_signature():
-        note += "; Zaehlweise geaendert, Zahl nicht vergleichbar"
-    return (f"  ({sign}{delta} gegenueber {old}, "
-            f"{prev.get('when', 'undatiert')}: {note})")
+    # §A-NC: Datum identifiziert einen Tag, SHA identifiziert einen Baum.
+    # Verglichen werden Baeume — die 234 stammte aus einem Export, dessen
+    # Baum im Zitat fehlte. Genau die Ursache des Fehlers.
+    where = prev.get("ref") or "commit unbekannt"
+    changed = prev.get("counting") and prev["counting"] != _counting_signature()
+    parts = [
+        f"{sign}{delta} gegenueber {old}",
+        where,
+        prev.get("when", "undatiert"),
+        f"counting {prev.get('counting_label', 'v?')}",
+        prev.get("detail") or prev.get("why", "Grund nicht notiert"),
+    ]
+    if changed:
+        parts.append("Zaehlweise geaendert, Zahl nicht vergleichbar")
+    return "  (" + ", ".join(parts) + ")"
 
 
-def _selection_line() -> str:
-    """Die zweite Grenze: was der Pruefer nicht ansieht (§A-NB)."""
+def _selection_line(skips: dict[str, int] | None = None) -> str:
+    """Die zweite Grenze: was der Pruefer nicht ansieht — **und wieviel** (§A-ND).
+
+    Drei Regeln, drei Mengen. Eine Regel mit `0` Gegenstaenden ist kein
+    Fehler, aber sie zaehlt nicht stillschweigend als einer von drei:
+    `waves 0` heisst, dass dieser Ausschluss heute nichts deckt und
+    deshalb morgen nicht mehr traegt, ohne dass jemand es merkt.
+    """
+    s = skips or {}
     return (
-        "Auswahl: 3 Ausschluesse — "
-        "`N/N waves` ist Skriptumfang (nicht Architektur), "
-        f"`N agents` < {MIN_AGENT_CLAIM} sind Subagenten-Angaben, "
-        "`N/N Tests` ohne Skriptpfad werden gezaehlt, nicht geprueft"
+        "Auswahl: 3 Regeln — "
+        f"waves {s.get('waves', 0)}, "
+        f"agents<{MIN_AGENT_CLAIM}: {s.get('agents<50', 0)}, "
+        f"Tests ohne Skriptpfad: {s.get('tests_ohne_skript', 0)}"
     )
 
 
@@ -1002,14 +1114,49 @@ def _counting_signature() -> str:
             f"waves={SCRIPT_SCOPE}, min_agents={MIN_AGENT_CLAIM}")
 
 
-def _save_count_snapshot(checked: int, why: str) -> None:
-    p = Path(__file__).resolve().parent.parent / _COUNT_SNAPSHOT
-    p.write_text(json.dumps({
+def _save_count_snapshot(checked: int, why: str,
+                         detail: dict[str, int] | None = None) -> None:
+    """Schreibt Stand + Baum + Zaehlweise fort (§A-NC).
+
+    `ref` ist der **Ball**, nicht das Datum: `git rev-parse --short HEAD`
+    plus ein `dirty`-Merker. Eine Differenz gegen einen schmutzigen Baum
+    ist keine Differenz zwischen Staenden, und das muss draufstehen.
+    """
+    p = _snapshot_path()
+    p.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
         "checked": checked,
         "why": why,
         "when": datetime.date.today().isoformat(),
+        "ref": _tree_ref(),
         "counting": _counting_signature(),
-    }, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        "counting_label": _COUNTING_LABEL,
+    }
+    if detail:
+        payload["detail"] = _format_detail(detail)
+    p.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n",
+                 encoding="utf-8")
+
+
+def _tree_ref(root: Path | None = None) -> str:
+    """`<sha>` oder `<sha>+dirty` — der Baum, gegen den verglichen wird."""
+    try:
+        r = subprocess.run(["git", "rev-parse", "--short", "HEAD"],
+                           cwd=str(root or Path(__file__).resolve().parent.parent),
+                           capture_output=True, text=True, timeout=5)
+        sha = r.stdout.strip() or "ohne-repo"
+        d = subprocess.run(["git", "status", "--porcelain", "--untracked-files=no"],
+                           cwd=str(root or Path(__file__).resolve().parent.parent),
+                           capture_output=True, text=True, timeout=5)
+        return sha + ("+dirty" if d.stdout.strip() else "")
+    except (OSError, subprocess.SubprocessError):
+        return "ohne-repo"
+
+
+def _format_detail(detail: dict[str, int]) -> str:
+    """`counts 5->21` statt einer Zahl ohne Herkunft."""
+    return ", ".join(f"{k} {old}->{new}" for k, (old, new) in
+                     sorted(detail.items()) if old != new) or "keine Verschiebung"
 
 
 def main() -> int:
@@ -1130,7 +1277,7 @@ def main() -> int:
         # Pruefers sieht, und beim naechsten Feld wird sie wieder
         # getroffen, ohne dass jemand weiss, welche schon ausgeschlossen
         # sind. Drei Felder, drei Gruende, benannt.
-        print(_selection_line())
+        print(_selection_line(rep.skips))
 
     for s in rep.env_skips:
         print(f"  ⏭️  {s['script']}  — {s['note']}")
