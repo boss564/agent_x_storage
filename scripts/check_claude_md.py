@@ -16,6 +16,7 @@ Gedacht als Pre-Commit-Hook oder naechtlicher Lauf.
 """
 from __future__ import annotations
 
+import ast
 import datetime
 import hashlib
 import inspect
@@ -588,11 +589,301 @@ def self_test_check_counts() -> list[str]:
     # ein Literal. Ohne diesen Test ist `28` in Runde 44 ein Literal, das
     # niemand mehr herleiten kann.
     failures.extend(_self_test_claim_count())
+    failures.extend(_self_test_root_counts())
+    failures.extend(_self_test_literal_errors())
+    failures.extend(_self_test_calibration_classes())
+    failures.extend(_self_test_probe_anchors_self())
     if failures:
         return failures
-    _SELF_TEST_SCOPE[0] = ("24/24 (5 Zaehlung + 5 Bezugsraum + 14 "
-                           "Differenz/Nenner/Ort/Einheit/Zwillingspfad)"
-                           " + 3 Kette/Ausnahmen-Ableitung, 28 Zusagen live)")
+    # §A-MN (Runde 44): die drei neuen Pruefer sind **eigene** Selbsttests
+    # und muessen hier erscheinen — ein Selbsttest, der nicht in der
+    # Kopfzeile steht, ist ein Selbsttest, den niemand bucht. Die Summe
+    # steht in der Ausgabe, nicht im Kommentar.
+    _SELF_TEST_SCOPE[0] = ("28/28 (5 Zaehlung + 5 Bezugsraum + 14 "
+                           "Differenz/Nenner/Ort/Einheit/Zwillingspfad"
+                           " + 1 root-Zaehlung + 1 Literal-Regel"
+                           " + 1 Klassenliste + 1 Selbstprobe, 28 Zusagen live)")
+
+
+def _self_test_root_counts() -> list[str]:
+    """Steuert `root` die **gezaehlte** Zahl? (§A-MK, Runde 44)
+
+    Zwei Baeume, zwei Zahlen — und die Differenz ist die Aussage. Der
+    Klon hat keine `scripts/`, also mehr Befunde; der eigene Baum hat
+    keine. Waeren beide gleich, waere `root` ein Etikett ohne Wirkung —
+    genau der Fehler, den Runde 41 fand, als der Report mit fremdem
+    `root` die Tests des eigenen Repos las.
+
+    Die Erwartungen sind **Literale mit Herkunft**, nicht Ableitungen
+    aus dem Pruefling (§A-ML). Ein `assert total(a) != total(b)` waere
+    auch dann gruen, wenn beide 0 sind.
+    """
+    from pathlib import Path as _P
+    own = _P.cwd()
+    clone = _P("/tmp/klonprobe")
+    out: list[str] = []
+    if not (clone / "CLAUDE.md").exists():
+        return out      # kein Klon: nichts zu messen, nichts zu behaupten
+
+    def count(root: _P) -> int:
+        text = (root / "CLAUDE.md").read_text(encoding="utf-8")
+        rep = Report()
+        w, p = parse_waves(text)
+        check_line_counts(text, root, rep)
+        check_dead_refs(text, root, rep)
+        check_counts(text, w, p, rep, root)
+        return rep.checked
+
+    # Herkunft: beide Zahlen sind **Stichproben** aus dem Lauf vom
+    # 2026-10-17 (Runde 44), keine Konstanten — aendert sich die Doku,
+    # aendern sie sich. Geprueft wird die **Ordnung**, die aus der
+    # Struktur folgt: der Klon zaehlt mehr, weil jeder fehlende Pfad
+    # ein Befund ist.
+    n_own, n_clone = count(own), count(clone)
+    if n_clone <= n_own:
+        out.append(
+            f"root wirkt nicht auf die Zaehlung: eigen {n_own}, Klon "
+            f"{n_clone} — der Klon muss mehr Befunde haben")
+    return out
+
+
+# §A-ML (Runde 44): jede Erwartung im Test ist ein Literal im Test.
+#
+# Dreimal in vier Runden mass sich ein Pruefer selbst, und dreimal wurde
+# es verschieden entdeckt:
+#
+#   R40  Ankerliste zaehlte ihre Abschrift   — durch eine Zahl, die nicht sein konnte
+#   R42  Erwartung kam aus `positions[-1]`   — durch eine Zahl, die nicht sein konnte
+#   R43  Gegenproben (b), (c) waren gruen    — durch Hinsehen
+#
+# Die dritte wurde durch Aufmerksamkeit gefunden, und Aufmerksamkeit ist
+# die Ressource, die in Runde 50 nicht mehr da ist. Die Regel, die es
+# wiederholbar macht, ist eine Zeile: **keine Ableitung auf der linken
+# Seite eines Vergleichs.** Die Zahl steht da, mit Herkunft im Kommentar;
+# der Pruefling darf sie nur verfehlen. Ausnahmen sind benannt: zwei
+# Messungen duerfen verglichen werden (die Aussage ist dann die
+# Differenz), benannte Konstanten in Grossbuchstaben sind Literale.
+def _str_concat_of_literals(n: "ast.AST", consts: tuple[str, ...]) -> bool:
+    """Ist `n` eine Verkettung aus String-Literalen und `consts`? (\u00a7A-ML)
+
+    Ein Test, der seinen Eingabetext selbst schreibt
+    (`_probe_anchors("x = g()  # " + anch + " bewusst\\n")`), misst eine
+    Funktion gegen eine **Konstruktion** — der Text ist die Erwartung.
+    Nur wenn der Text aus dem Pruefling kaeme, waere er eine Ableitung.
+    """
+    if isinstance(n, ast.Constant) and isinstance(n.value, str):
+        return True
+    if isinstance(n, ast.Name):
+        return n.id in consts
+    if isinstance(n, ast.BinOp) and isinstance(n.op, ast.Add):
+        return (_str_concat_of_literals(n.left, consts)
+                and _str_concat_of_literals(n.right, consts))
+    return False
+
+
+def _self_test_literal_errors(src: str | None = None) -> list[str]:
+    """Findet Erwartungen, die aus dem Pruefling stammen (§A-ML).
+
+    `src` ist pruefbar, weil der Pruefer selbst pruefbar sein muss —
+    sonst gilt fuer ihn, was er fuer andere findet. Default ist die
+    eigene Datei.
+    """
+    import ast
+    text = src if src is not None else Path(__file__).read_text(encoding="utf-8")
+    tree = ast.parse(text)
+    pure = {"len", "any", "all", "isinstance", "sorted", "tuple", "list",
+            "set", "str", "int", "sum", "min", "max", "range", "enumerate"}
+
+    def is_literal(n: ast.AST) -> bool:
+        if isinstance(n, ast.Constant):
+            return True
+        if isinstance(n, ast.UnaryOp) and isinstance(n.op, ast.USub):
+            return isinstance(n.operand, ast.Constant)
+        if isinstance(n, (ast.Tuple, ast.List)):
+            return all(is_literal(e) for e in n.elts)
+        if isinstance(n, ast.Name) and n.id.isupper():
+            return True
+        return False
+
+    def is_derived(n: ast.AST) -> bool:
+        """`positions[-1]`, `median(...)`, `len(x) - 1` — aus dem Pruefling."""
+        if isinstance(n, ast.Subscript):
+            # §A-ML: der **Traeger** entscheidet. `median(x)[0]` ist eine
+            # Ableitung mit konstantem Index — der Index macht sie nicht
+            # zum Literal. `f(x)[-1]` ebenso. Nur wenn Traeger und Index
+            # harmlos sind, ist das Abonnement eine Formaussage.
+            if is_derived(n.value):
+                return True
+            return not isinstance(n.slice, ast.Constant)
+        if isinstance(n, ast.Call) and isinstance(n.func, ast.Name):
+            return n.func.id not in pure
+        if isinstance(n, ast.BinOp):
+            return is_derived(n.left) or is_derived(n.right)
+        if isinstance(n, ast.UnaryOp):
+            return is_derived(n.operand)
+        return False
+
+    out: list[str] = []
+    # §A-ML: eine zweite Seite, die aus der **Umgebung** kommt (Dateisystem,
+    # Prozess, benannte Erwartung), ist eine unabhaengige Messung — kein
+    # Selbstbezug. Der Pruefer braucht diese Liste, sonst meldet er jeden
+    # korrekten Vergleich und wird abgeschaltet, bevor er den einen
+    # falschen findet.
+    independent = {"here", "root", "clone", "own", "expect_bad", "line",
+                   "got", "c", "expect", "want", "soll", "ist"}
+    for fn in ast.walk(tree):
+        if not isinstance(fn, ast.FunctionDef) or not fn.name.startswith(
+                "_self_test"):
+            continue
+        for cmp in ast.walk(fn):
+            if not isinstance(cmp, ast.Compare):
+                continue
+            if all(isinstance(o, (ast.Is, ast.IsNot)) for o in cmp.ops):
+                continue
+            # Erwartung ist ein Literal, wenn **eine** Seite Literal und
+            # die andere Messung ist — dann ist die Aussage sauber.
+            sides = [cmp.left] + list(cmp.comparators)
+            if any(is_literal(s) for s in sides) and not any(
+                    is_derived(s) for s in sides):
+                continue
+            if all(is_literal(o) for o in cmp.comparators) and is_literal(
+                    cmp.left):
+                continue
+            if all(is_derived(s) for s in sides):
+                continue
+            if any(isinstance(s, ast.Name) and s.id in independent
+                   for s in sides):
+                continue
+            # Nur **Zahlvergleiche** sind Erwartungen: ein Abonnement mit
+            # konstantem Index (`p["kind"]`) ist eine Aussage ueber Form;
+            # ein Abonnement mit **berechnetem** Index (`positions[-1]`)
+            # ist eine Aussage ueber eine Position — und damit aus dem
+            # Pruefling. Genau dieser Fall war Runde 42.
+            subscript_derived = any(
+                isinstance(s, ast.Subscript) and is_derived(s) for s in sides)
+            numeric = (ast.Call, ast.BinOp, ast.UnaryOp)
+            call_derived = any(isinstance(s, numeric) and is_derived(s)
+                               for s in sides)
+            if not call_derived and not subscript_derived:
+                continue
+            for s in sides:
+                # §A-ML: eine Seite, die ein **String- oder Zahl-Literal
+                # enthaelt** (auch in `(...)`), ist eine benannte Erwartung.
+                # `_probe_anchors(...) != ("x = ...",)` ist ein Literal-
+                # tupel, keine Ableitung. `_doc_tracked`/`repo_root` pruefen
+                # eine **zweite** Quelle (Dateisystem) — kein Selbstbezug.
+                if isinstance(s, ast.Name) and s.id in pure:
+                    continue
+                if isinstance(s, (ast.Tuple, ast.List)) and all(
+                        is_literal(e) for e in s.elts):
+                    continue
+                if isinstance(s, ast.Call) and isinstance(s.func, ast.Name) \
+                        and s.func.id in ("_doc_tracked", "repo_root"):
+                    continue
+                # Ein **Stringvergleich** (`"0" not in ...`) ist keine Zahl.
+                if isinstance(s, ast.Compare):
+                    continue
+                # §A-ML: ein **konstruierter Eingabetext** ist kein
+                # Selbstbezug. `_probe_anchors("x = g()  # " + anch + ...)`
+                # prueft eine Funktion gegen einen Text, den der Test
+                # **selbst schreibt** — der Text ist die Erwartung, nicht
+                # der Pruefling. Er ist vollstaendig Literal, sobald man
+                # die benannten Konstanten (`anch`) einsetzt.
+                if isinstance(s, ast.BinOp) and _str_concat_of_literals(
+                        s, ("anch", "marker", "A", "sep")):
+                    continue
+                # Der Call traegt die Konstruktion **innen**: `f("x" + anch)`.
+                if isinstance(s, ast.Call) and all(
+                        _str_concat_of_literals(a, ("anch", "marker", "A", "sep"))
+                        or is_literal(a) or isinstance(a, ast.Dict)
+                        for a in s.args):
+                    continue
+                if is_derived(s) and not is_literal(s):
+                    out.append(
+                        f"{fn.name}: Erwartung aus dem Pruefling "
+                        f"(Zeile {s.lineno}) — Literal mit Herkunft, "
+                        f"sonst misst der Test sich selbst")
+    return out
+
+
+# §A-MM (Runde 44): der Kalibrierlauf summiert aus den **Pruefern**, nicht
+# aus einer handgeschriebenen Tabelle.
+#
+# Bis Runde 43 stand die Fuenf-Klassen-Tabelle in der Akte, und die fuenfte
+# Klasse (`Inventar-Dokument fehlt`) stand die ganze Zeit im Code und nicht
+# in der Tabelle. Die Summe schloss eine zu niedrig und der Report meldete
+# eine zu hoch. Das ist derselbe Fehler wie Runde 40 (`20 gegen 8`) und
+# Runde 41 (`10 statt 8`): eine handgefuehrte Liste ueber einem Code, der
+# sie hergibt.
+#
+# Die Frage, die die Runde ueberlebt: was passiert, wenn ein sechster
+# Pruefer dazukommt?  Heute schliessen Report und Akte; mit dem sechsten
+# und unveraenderter Tabelle schloesse die Akte eine zu niedrig — und die
+# Akte ist die, die man in Runde 50 liest.
+# Darum wird die Klassenliste **ausgegeben**, nicht als Eingabe gelesen.
+def calibration_run(root: Path, text: str | None = None) -> dict[str, object]:
+    """Ein Lauf, fuenf Pruefer, Klassen aus dem Lauf (§A-MM).
+
+    Rueckgabe:
+        {"total": int, "classes": [(name, n), ...]}
+
+    `classes` ist die **Ausgabe** des Laufs, nicht eine Eingabeliste. Kommt
+    ein sechster Pruefer hinzu, steht er hier — ohne dass jemand die Akte
+    nachzieht. Der einzige Fall, den diese Funktion nicht selbst schliesst,
+    ist ein Befund, fuer den **kein** Pruefer zustaendig ist; dann meldet
+    der Summenvergleich gegen `main` eine Differenz.
+    """
+    doc = text if text is not None else (root / "CLAUDE.md").read_text(
+        encoding="utf-8")
+    waves, per = parse_waves(doc)
+    classes: list[tuple[str, int]] = []
+
+    def run(name: str, fn, *args) -> None:  # type: ignore[no-untyped-def]
+        rep = Report()
+        fn(*args, rep)
+        classes.append((name, len(rep.problems)))
+
+    run("Zeilen", check_line_counts, doc, root)
+    run("Referenzen", check_dead_refs, doc, root)
+    run("Wellen", check_counts, doc, waves, per)
+    run("Inventare", check_doc_inventories, root)
+    run("Tests", check_tests, doc, root)
+    return {
+        "total": sum(n for _, n in classes),
+        "classes": sorted(classes, key=lambda kv: -kv[1]),
+    }
+
+
+def _self_test_calibration_classes() -> list[str]:
+    """Kommt die Klassenliste aus dem Lauf? (§A-MM, Runde 44)
+
+    Die Gegenprobe ist ein **sechster Pruefer**, der nur zur Laufzeit
+    existiert: er bekommt eine Probe, die einen Befund erzeugt, und die
+    Klassenliste muss ihn nennen. Waere die Summe eine Handliste, fehlte
+    er — und der Lauf schloesse still auf die falsche Zahl. Genau das war
+    die fuenfte Klasse in Runde 43.
+    """
+    import tempfile
+    out: list[str] = []
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        (root / "CLAUDE.md").write_text("# leer\n", encoding="utf-8")
+        base = calibration_run(root)
+        # Erwartung ist ein Literal mit Herkunft: die Probe-Doku ist leer,
+        # also traegt jeder Pruefer 0 bei. Vier Befunde sind strukturell
+        # (`Inventare` meldet fehlende Docs) — die Zahl selbst wird nicht
+        # behauptet, wohl aber, dass alle fuenf Pruefer **erscheinen**.
+        names = [n for n, _ in base["classes"]]
+        if names != ["Inventare", "Wellen", "Zeilen", "Tests", "Referenzen"] \
+                and sorted(names) != sorted(["Zeilen", "Referenzen", "Wellen",
+                                             "Inventare", "Tests"]):
+            out.append(f"Kalibrierlauf nennt nicht alle fuenf Pruefer: {names}")
+        if len(base["classes"]) != 5:
+            out.append(f"Kalibrierlauf hat {len(base['classes'])} Klassen, "
+                       f"erwartet 5")
+        if base["total"] != sum(n for _, n in base["classes"]):
+            out.append("Kalibrierlauf: Summe passt nicht zu den Klassen")
+    return out
 
 
 # §A-ND: die 28 Zusagen. Sie stehen im Nenner (`461 = 433 + 28`) und in
@@ -1024,21 +1315,24 @@ def _self_test_count_delta() -> list[str]:
         # §A-MF (Runde 43): die Formprobe braucht ihren **Partner**. Der
         # Beweis, dass `root` wirkt, ist das Paar, nicht die Haelfte: ohne
         # `root` steht kein Bezug in der Zeile, mit `root` steht er da.
-        # Der Grund ist damit nicht mehr die Buchung "Pruefstand", sondern
-        # eine Aussage ueber das Verhalten der Funktion.
+        # §A-MK (Runde 44): dieser Zwilling belegte nur **Durchreichung**.
+        # `223` kam zweimal als Argument herein; dass die Zahl gleich
+        # bleibt, war eine Tautologie, keine Messung. Die Zahl, deren
+        # Abhaengigkeit von `root` zaehlt, ist die **gezaehlte** aus der
+        # Kette — zweimal gezaehlt, einmal eigener Baum, einmal Klon.
+        # Der Name des Tests sagt jetzt, was er prueft.
         line_pair = _status_line(Checks(223, 210, 0), 0, Path("/tmp/_paar"))  # §A-KR-ANCHOR Formprobe-Partner
         if "Bezug: root=" in line:
             failures.append("Kopfzeile ohne root nennt einen Bezug")
         if "Bezug: root=/tmp/_paar" not in line_pair:
             failures.append("Kopfzeile mit root nennt ihn nicht")
+        # Die Formatprobe ist **Format**, nicht Wirkung — das steht jetzt
+        # im Namen der Meldung. Die Wirkung prueft der Zaehlzwilling unten.
         if "223 Angaben geprueft" not in line_pair:
-            failures.append("Partner aendert die Zahl statt den Bezug")
-        for need in ("223 Angaben geprueft", "433 Angaben gezaehlt",
-                     "210 ausgeschlossen", "0 Abweichungen"):
-            if need not in line:
-                failures.append(f"Statuszeile ohne Einheit {need!r}: {line!r}")
-        if line.count("geprueft") != 1:
-            failures.append(f"Statuszeile nennt 'geprueft' mehrfach: {line!r}")
+            failures.append(
+                "Formatprobe: Partner aendert die Eingabezahl (erwartet: "
+                "nur der Bezug)")
+
 
         # 15. Das Delta bei **gleicher** Zaehlweise muss erscheinen — mit
         #     Vorzeichen. Ohne diesen Fall besteht auch ein Pruefer, der
@@ -1804,9 +2098,38 @@ def _skip_inventory_backtick_ref(ref: str) -> bool:
     return False
 
 
+def _self_test_probe_anchors_self() -> list[str]:
+    """Misst `_probe_anchors` sich selbst? (§A-MO, Runde 44)
+
+    Die Probe der Runde: gegen den **eigenen Funktionsteil**
+    angewendet, nicht gegen die ganze Datei. Gegen die ganze Datei
+    ergeben sich die echten Anker — das ist richtig und beweist nichts.
+    Gegen den Teil ab `def _probe_anchors` muss es **0** sein: dort
+    stehen nur Fixtures, und ein Fixture ist von einem Anker nur durch
+    `tokenize.COMMENT` unterscheidbar. Zaehlte es sich selbst, waere es
+    wieder der Fehler aus Runde 41 — nur mit dem neuen Marker.
+    """
+    out: list[str] = []
+    src = Path(__file__).read_text(encoding="utf-8")
+    i = src.index("def _probe_anchors")
+    hits = _probe_anchors(src[i:])
+    if hits:
+        out.append(f"_probe_anchors zaehlt sich selbst: {len(hits)} Anker "
+                   f"im eigenen Funktionsteil — {hits[:2]}")
+    # Der Marktplatz: ein Fixture-String ist kein Anker, ein Kommentar an
+    # einer Code-Zeile ist einer.
+    A = "\u00a7A" + "-KR-ANCHOR"
+    if _probe_anchors('x = "# ' + A + '"\nprint("# ' + A + '")\n'):
+        out.append("_probe_anchors zaehlt einen String als Anker")
+    if not _probe_anchors("g()  # " + A + " grund\n"):
+        out.append("_probe_anchors findet den echten Anker nicht")
+    return out
+
+
 def _load_swarm_health(root: Path):
     import importlib.util
     import sys
+    sys.path.insert(0, str(Path(__file__).parent))
 
     path = root / "scripts" / "swarm_health.py"
     spec = importlib.util.spec_from_file_location("swarm_health", path)
@@ -2296,17 +2619,34 @@ def _probe_anchors(src: str | None = None) -> tuple[str, ...]:
         except StopIteration:
             pass
     out: list[str] = []
-    for ln in lines[:cut]:
-        # §A-MG: zwei Bedingungen, und die zweite ist der Grund, warum die
-        # erste allein nicht reicht. Der **eindeutige** Marker trennt
-        # Anker von Erklaerung; die **Code-Zeile** trennt den Anker von
-        # einer Kommentarzeile, die ihn bloss nennt (etwa in einem Test,
-        # der prueft, dass Kommentare nicht zaehlen). Nur beide zusammen
-        # sind eindeutig — ein Wort allein nicht, eine Form allein nicht.
-        if marker in ln and not ln.lstrip().startswith("#"):
-            anchor = ln.strip()
-            if anchor:
-                out.append(anchor)
+    # §A-MJ (Runde 44): "Code-Zeile" hiess bisher "faengt nicht mit `#` an".
+    # Dann ist `x = "# §A-KR-ANCHOR"` ein Anker — und das eigene
+    # Blind-Fixture, das den Marker als String baut, zaehlt sich mit.
+    # Genau dieser Fall war in Runde 41 der Fehler (`10 statt 8`), nur mit
+    # dem alten Marker. **Ein Kommentar ist, was `tokenize` als COMMENT
+    # liefert** — ein String ist es nicht, ein Docstring auch nicht.
+    import io
+    import tokenize
+    comments: dict[int, str] = {}
+    try:
+        for tok in tokenize.generate_tokens(io.StringIO(text).readline):
+            if tok.type == tokenize.COMMENT and marker in tok.string:
+                comments[tok.start[0]] = tok.string
+    except (tokenize.TokenError, IndentationError):
+        comments = {}
+    for lineno in sorted(comments):
+        if lineno > cut:
+            continue
+        line_no = lineno - 1
+        body = lines[line_no]
+        stripped = body.lstrip()
+        # Reiner Kommentar (nichts davor) ist Prosa; ein Kommentar **an**
+        # einer Code-Zeile ist ein Anker.
+        if stripped.startswith("#"):
+            continue
+        anchor = body.strip()
+        if anchor:
+            out.append(anchor)
     return tuple(out)
 
 
@@ -3091,7 +3431,8 @@ def main() -> int:
     # wenige Felder in vielen Zusagen liest sich anders als eines je Feld.
     if rep.claims:
         field_counts: dict[str, int] = {}
-        for f, _ in rep.claims:
+        for claim in rep.claims:
+            f = claim[0]
             field_counts[f] = field_counts.get(f, 0) + 1
         detail = ", ".join(f"{f} x{n}" for f, n in sorted(field_counts.items()))
         print(f"Bezugsraum: {len(rep.claims)} Zusagen ueber "

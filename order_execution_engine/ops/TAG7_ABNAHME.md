@@ -5126,6 +5126,176 @@ Größen-Guard, und ein Nenner von `461 gezaehlt (433 gemessen + 28
 Zusagen)` — dessen einer Teil weiter ungemessen ist, jetzt aber nicht
 mehr still driften kann.**
 
+### §71.40 — Runde 44: die Probe für die Probe war blind
+
+Der wertvollste Satz der Runde war nicht über den Prüfling, sondern über
+das **Verfahren**: von drei Gegenproben waren zwei zuerst grün. Es war
+das dritte Mal dieselbe Form, und das erstemal, daß sie durch **Hinsehen**
+gefunden wurde statt durch eine Zahl, die nicht sein konnte.
+
+| Runde | was sich selbst maß | gefunden durch |
+|---|---|---|
+| 40 | Ankerliste zählte ihre Abschrift mit | 20 gegen 8 |
+| 42 | Erwartung kam aus `positions[-1]` | 96 % davor |
+| 43 | Gegenproben (b), (c) grün | Hinsehen |
+
+Hinsehen ist die Ressource, die in Runde 50 nicht mehr da ist. Die
+Antwort ist keine vierte Probe, sondern eine Zeile — und ein Prüfer, der
+sie durchsetzt. **§A-ML.**
+
+### §71.41 — Runde 44: jede Erwartung ist ein Literal, und der Prüfer sieht es
+
+Die Regel:
+
+> Jede Erwartung im Test ist ein Literal im Test. Kein `positions[-1]`,
+> kein `len(x)`, kein `median(...)` auf der linken Seite eines
+> Vergleichs. Die Zahl steht da, mit Herkunft im Kommentar, und der
+> Prüfling darf sie nur verfehlen.
+
+`_self_test_literal_errors` ist derselbe Prüfer wie
+`_git_callers_without_cwd`, nur gegen Tests: er parst jede
+`_self_test*`-Funktion und meldet jeden Vergleich, dessen Seite
+**berechnet** ist. Kalibrierung an acht Proben, Erwartungen als Literale:
+
+| Probe | erwartet | gefunden |
+|---|---|---|
+| `positions[-1] < 0.25` (R42-Form) | 1 | 1 |
+| `median(xs) > 3` | 1 | 1 |
+| `len(xs) != 3` | 0 | 0 |
+| `total(own) != total(clone)` (zwei Messungen) | 0 | 0 |
+| `p["kind"]` (konstanter Index) | 0 | 0 |
+| `"0" not in sel` (String) | 0 | 0 |
+| `f("a" + anch + "b")` (Konstruktion) | 0 | 0 |
+| `f(xs)[-1] > 3` | 1 | 1 |
+| **eigene Datei** | 0 | **0** |
+
+**Die Ausnahmen sind benannt, nicht geduldet:** zwei Messungen dürfen
+verglichen werden (die Aussage ist die Differenz), ein konstanter Index
+ist eine Formaussage, ein selbstgeschriebener Eingabetext ist eine
+Konstruktion. Was bleibt, ist die eine Klasse, die dreimal zugeschlagen
+hat.
+
+**Und der Prüfer prüft sich.** `_self_test_literal_errors(src)` nimmt
+Quelltext, damit ich ihn gegen die R42-Form laufen lassen kann — er hätte
+den Fehler aus Runde 42 gefunden, bevor er passierte.
+
+**Und er hatte selbst ein Loch.** `median(x)[0]` ging durch: der Index
+`[0]` ist konstant, also „Formaussage" — aber der **Träger** `median(x)`
+ist eine Ableitung. Die Angriffsprobe fand es, nicht das Hinsehen:
+
+```
+positions[-1]     gefunden
+f(x)[-1]          gefunden
+median(x)[0]      gefunden     <- vorher offen
+f("a"+x+"b")      gefunden
+f("a"+anch+"b")   sauber       (Konstruktion)
+p["kind"]         sauber       (Formaussage)
+rows[0]           sauber       (Konstante)
+len(xs) != 3      sauber       (Literal)
+```
+
+Der Index entscheidet nicht; der Träger entscheidet. Das ist dieselbe
+Lehre wie §71.42 eine Ebene tiefer: die Zahl, die zählt, ist die
+gezählte, nicht die durchgereichte.
+
+### §71.42 — Runde 44: der Zwilling belegte Durchreichung, nicht Bezug
+
+Der alte Zwilling rief `_status_line(Checks(223, 210, 0), 0)` und
+`_status_line(Checks(223, 210, 0), 0, Path("/tmp"))`. Die 223 war
+**beide Male Eingabe**. Daß die Zahl gleich bleibt, war eine Tautologie.
+
+Die Zahl, deren Abhängigkeit von `root` zählt, ist die **gezählte** aus
+der Kette `_resolve_test_root → Datei lesen → zählen` — genau der Fall,
+der in Runde 41 siebenundsiebzig Doctests aus dem falschen Repo las.
+Jetzt:
+
+```
+count(own)   = 102
+count(clone) = 155        # Klon ohne scripts/, mehr Befunde
+```
+
+**Zwei Bäume, zwei Zahlen — die Differenz ist die Aussage.** Geprüft wird
+die Ordnung, die aus der Struktur folgt (jeder fehlende Pfad ist ein
+Befund), nicht die Zahl: ein `assert total(a) != total(b)` wäre auch dann
+grün, wenn beide 0 sind.
+
+**Der Testname sagt jetzt, was er prüft.** Der Formattest heißt in seiner
+Meldung `Formatprobe: Partner aendert die Eingabezahl (erwartet: nur der
+Bezug)` — `Path("/tmp")` ist kein Repo, und das ist als Formatprüfung in
+Ordnung, solange sie nicht mehr behauptet.
+
+### §71.43 — Runde 44: die Klassenliste kommt aus dem Lauf
+
+Die Fünf-Klassen-Tabelle der Akte war eine Abschrift. Die fünfte
+(`check_doc_inventories` → `Inventar-Dokument fehlt`) stand die ganze
+Zeit im Code und nicht in der Tabelle; die Summe schloß eine zu niedrig.
+
+`calibration_run(root)` ruft die fünf Prüfer einzeln und **gibt die
+Klassenliste aus**:
+
+```
+Zeilen       0
+Referenzen   0
+Wellen       0
+Inventare    0
+Tests        0
+total        0          # eigener Baum, Doku sauber
+```
+
+Kommt ein sechster Prüfer, steht er in der Ausgabe — ohne daß jemand die
+Akte nachzieht. Die Gegenprobe ist strukturell: `_self_test_calibration_classes`
+prüft, daß **alle fünf** erscheinen und die Summe zu den Klassen paßt.
+Was diese Funktion nicht selbst schließt, ist ein Befund, für den kein
+Prüfer zuständig ist; dann meldet der Summenvergleich eine Differenz.
+
+### §71.44 — Runde 44: `_probe_anchors` gegen den eigenen Funktionsteil → 0
+
+§4 der Runde war die schärfste: „Code-Zeile" hieß bisher „fängt nicht mit
+`#` an". Dann ist `x = "# §A-KR-ANCHOR"` ein Anker — und das Blind-Fixture,
+das den Marker als String baut, zählt sich mit. **Das ist Runde 41 mit dem
+neuen Marker.**
+
+Gemessen: `_probe_anchors('x = "# §A-KR-ANCHOR"')` gab die Zeile zurück.
+Jetzt entscheidet `tokenize.COMMENT`: ein Kommentar **an** einer
+Code-Zeile ist ein Anker, ein String in einer Code-Zeile nicht, ein
+reiner Kommentar nicht.
+
+```
+Fixture-String   -> ()
+echter Anker     -> ('g()  # §A-KR-ANCHOR grund',)
+reiner Kommentar -> ()
+ganze Datei      -> 18 Anker
+ab def _probe_anchors -> 0
+```
+
+Die letzte Zeile ist die Probe: gegen die **ganze** Datei sind 18 richtig,
+gegen den **eigenen Funktionsteil** müssen es 0 sein. `_self_test_probe_anchors_self`
+prüft es — und greift, wie die Gegenprobe zeigt: mit ausgebautem
+`tokenize`-Filter meldet sie zwei Fehler
+(`zaehlt einen String als Anker`, `findet den echten Anker nicht`).
+
+**Nebenbei aufgeräumt:** die neun `_status_line`-Aufrufe im `--self-test`
+stehen jetzt in **einer** Menge mit ihren Partnern, `_PROBE_ANCHOR_SELFTEST_EXPECTED`
+ist gelöscht. 18 gemessen statt entschieden — Produktion und Prüfstand in
+einer Zahl, also prüft der Zirkularitätstest alle achtzehn.
+
+### §71.45 — Runde 44: was der Prüfer am Prüfer fand
+
+Zwei eigene Fehler sind während der Runde **durch den Wächter** gefallen,
+nicht durch Hinsehen:
+
+1. `# 24 + 1 (root …) + 1 … = 27` in einem Kommentar → `Zahl 24 ohne
+   Herkunft in Prosa`. Der Guard aus §7 greift auch gegen die Buchung
+   selbst; die Summe gehört in die Ausgabe, nicht in den Kommentar.
+2. `# Herkunft: … eigen 102, Klon 155` → zwei Zahlen ohne Herkunft.
+   Ersetzt durch die Aussage ohne Zahl; die Zahl ist eine Stichprobe,
+   die Ordnung ist die Behauptung.
+
+**Das ist die Bewegung, die die Runde verlangt:** die dritte Art der
+Selbstmessung wurde in Runde 43 durch Hinsehen gefunden; in Runde 44
+fanden zwei Fälle der vierten Art den Wächter, und der Prüfer für die
+dritte Art (`_self_test_literal_errors`) läuft in `main`.
+
 
 
 Vierzig Runden, und der Prüfer, der dreizehn Stellen fand, fand sie erst
