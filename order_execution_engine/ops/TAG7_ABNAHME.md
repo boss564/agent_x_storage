@@ -4697,7 +4697,142 @@ markierte Zeilen gegen 8 Anker. Das erste Zählverfahren zählte die
 Ankerliste selbst mit (20 gegen 8) — die Abschrift der Ausnahmen ist
 keine Ausnahme.
 
+### §71.29 — Runde 41: der Parameter heißt nicht `root`
+
+Die Kette war echt und wurde gemessen:
+
+```
+main /tmp/klon
+  -> check_tests(text, root)          hat root ✓
+  -> _resolve_test_root(root)         hat doc_root, reicht es nicht
+  -> git rev-parse (ohne cwd)         liest das Prozess-Verzeichnis
+```
+
+**Ergebnis:** `check_claude_md.py /tmp/klon` prüfte die Tests des
+**eigenen** Repos — 223 Angaben, 0 Abweichungen im fremden Baum, der
+151 hat. `_resolve_test_root(Path('/tmp/klonprobe'))` lieferte
+`/Volumes/…/agent_x_storage`. Der Glieder-Prüfer konnte das nicht
+sehen: er sucht Funktionen mit dem **Namen** `root`, die ihn nicht
+weitergeben. Hier hieß der Parameter `doc_root` — ein Name, zwei Mengen,
+zum zweiten Mal in dieser Akte (Runde 23), diesmal beim Parameter.
+
+| Was | vorher | jetzt |
+|---|---|---|
+| `_resolve_test_root` | `git rev-parse` ohne `cwd` | `cwd=str(repo_root(doc_root))` |
+| Prüfung | nur Glieder (`root`-Name) | `_git_callers_without_cwd`: Wirkung |
+| Test | keiner | Klon mit eigenem Commit, zwei roots, zwei shas |
+
+**Der Zwillingsbeweis:** mit entfernter `cwd`-Zeile meldet der Selbsttest
+`Kette offen: _resolve_test_root ignoriert root (… == …)` — zwei FAIL.
+`touch`-Immunität und Identität sind seither für **beide** Repos
+gemessen: Klon `dc8be1e`, eigen `d33258b9`.
+
+**`version_line` ist keine Ausnahme.** Eine Ausnahme, die eine Funktion
+ohne `root` ist, wäre die Duldung genau des Falls, der in Runde 39
+dreizehn Stellen erzeugte. `_git_callers_without_cwd` prüft die
+**Wirkung**, nicht die Zugehörigkeit zu einer Liste: jede Funktion, die
+`git` ohne `cwd` und ohne Pfadargument ruft, ist ein Fund — auch eine,
+die keinen Parameter hat, auch eine, die keinen braucht.
+
+### §71.30 — Runde 41: Ableiten ist zirkulär, wenn die Quelle prüft
+
+Die Acht-Literale-Liste (`_DEFAULT_PROBE_ANCHORS`) war die Abschrift der
+`§A-KR`-Marker im Code — derselbe Fehler, den §2b dieser Runde am
+Zahlen-Guard abschaffte. Jetzt:
+
+| | vorher | jetzt |
+|---|---|---|
+| Quelle | Tuple aus 8 Literalen | `_probe_anchors(src)` liest den Code |
+| Zählung | Anker gegen Liste | Anker gegen Fließtext, Marker als Cut |
+| Wache | Anwesenheit | Anwesenheit + **Größe** + **Grund** |
+| Drift | still (Liste nachziehen) | rot (`_PROBE_ANCHOR_EXPECTED`) |
+
+**Die Zirkularität, benannt:** wer Anker **und** Marker löscht,
+verschwindet aus der Menge, und eine kleinere Menge ist für sich kein
+Fehler. Deshalb `_PROBE_ANCHOR_EXPECTED = 8` mit Herkunft daneben
+(Runde 40, vier Default-Zweig + vier fremder Ort) und ein Test, der alle
+Marker entfernt und prüft, daß der Guard **rot** wird. Er wird es:
+7 statt 8.
+
+**Der erste Ableitungsversuch zählte 10 — und beide Extras waren meine
+eigenen Kommentare.** Eine Ableitung, die ihren Beschreibungstext
+mitliest, zählt ihre Beschreibung als Beweis. Zwei Schnitte: `§A-KZ`
+(Markerblock) und `_PROBE_ANCHOR_ORIGIN` (Herkunftstext). Dieselbe Form
+traf danach den Größen-Guard im Selbsttest selbst — die Zeile
+`quiet = prod.replace("  # §A-KR", "")` ist ein Marker. Der Marker wird
+jetzt zur Laufzeit gebaut (`"  # " + "\u00a7A-KR"`), sonst zählt die
+Wache sich selbst und ist blind.
+
+**`8/13` bleibt `8/13`, und das ist begründet:**
+
+| Gruppe | n | warum keine Ausnahme im schlechten Sinn |
+|---|---|---|
+| Default-Zweig-Proben | 4 | prüfen den Default — ihn zu übergeben hieße, den Gegenstand zu entfernen |
+| fremder Ort absichtlich | 4 | `_snapshot_path(root) == _snapshot_path()` ist der **Beweis**, daß `root` wirkt |
+
+Jede der acht trägt ihren Grund **in der Zeile** (`# §A-KR bewusst: …`),
+und die Wache prüft ihn: ein Marker ohne Grund ist rot.
+
+### §71.31 — Runde 41: achtundzwanzig ist jetzt eine Messung
+
+`>>>` kommt in `CLAUDE.md` **null Mal** vor. Die 28 Zusagen standen im
+Nenner und in keiner Prüfung. Drei Wege, einer gewählt — der dritte,
+weil er den Zustand korrekt beschreibt:
+
+| Weg | Ergebnis | Nebenwirkung |
+|---|---|---|
+| in `>>>` ziehen | gemessen | Prosa wird Code, zwei Orte pflegen |
+| aus der Zahl nehmen | `433` | Aussagen verschwinden still, bestehen weiter |
+| an `claim()` binden | ungemessen, **nicht driftfähig** | — |
+
+`_self_test_claim_count()` liest `len(rep.claims)` aus einem echten Lauf
+gegen `CLAUDE.md` und vergleicht gegen `_CLAIM_COUNT_EXPECTED = 28`.
+Herkunft im Kommentar: Runde 40 (`_status_line`), nachgezählt Runde 41
+aus `--json-report`. **Gegenprobe:** halbierter Text → 24 Zusagen → rot.
+Die Zahl ist damit keine Konstante mehr, die jemand pflegen muß, sondern
+das Ergebnis einer Messung an der Doku, die sie behauptet.
+
 ## 72. Der Satz dieser Runde
+
+**Einundvierzig.** Der Prüfer, der dreizehn Stellen fand, sah Glieder und
+keine Ketten — und die Kette war echt: `_resolve_test_root(doc_root)` rief
+`git rev-parse --show-toplevel` ohne `cwd`. `check_claude_md.py
+/tmp/klon` las die Tests des **eigenen** Repos, 151 Abweichungen im
+fremden Baum waren 223 im eigenen. Zwei Glieder ohne Parameter, jedes für
+sich unsichtbar; der Glieder-Prüfer konnte es nicht finden, weil er nach
+dem **Namen** `root` fragt und der Fehler an der **Wirkung** hing.
+
+**Der Prüfer fragt jetzt nach der Wirkung:** `_git_callers_without_cwd`
+sucht jeden `subprocess.run(["git", …])` ohne `cwd=` und ohne genannten
+Pfad — egal wie die Funktion heißt, in der er steht.
+
+**Und die Ausnahmen sind abgeleitet.** Die Acht-Literale-Liste war genau
+die Abschrift, die §2b der Runde abgeschafft hat. Jetzt liest
+`_probe_anchors` den Quelltext: `§A-KR` ist die Markierung, die Zeile der
+Anker, die Zahl entsteht. Preis benannt: wer Anker **und** Marker
+löscht, verschwindet — deshalb `_PROBE_ANCHOR_EXPECTED = 8` mit Herkunft
+daneben und einer Probe, die gelöschte Marker entfernt und prüft, daß der
+Guard rot wird. **Die 8/13 bleibt 8/13** — begründet, nicht geduldet: vier
+Default-Zweig-Aufrufe (die Prüfung eines Defaults *braucht* den Default)
+und vier Aufrufe mit absichtlich fremdem Ort (der Zwillingspfad-Test ist
+genau der Beweis, daß `root` wirkt). Keine davon ist `version_line`:
+Funktionen ohne `root` sind in dieser Klasse keine Ausnahme, sondern
+außerhalb — und brauchen eine eigene Wache, die jetzt existiert.
+
+**Die 28 sind an `claim()` gebunden.** `_self_test_claim_count` zählt
+live gegen `CLAUDE.md` und vergleicht gegen `_CLAIM_COUNT_EXPECTED = 28`
+mit Herkunft. Halbierter Text → 24 Zusagen → rot. Ein Literal wäre in
+Runde 44 nicht mehr herleitbar; diese Zahl ist eine Messung.
+
+**Was am 20.10. auf dem Tisch liegt: 216 Tests, 24/24 Selbsttests plus
+drei neue Wachen (Kette, Ausnahmen-Ableitung, Zusagen), eine
+Herkunftszeile, die im fremden Repo den fremden `sha` nennt
+(`dc8be1e` gegen `d33258b9`), acht abgeleitete Ausnahmen mit
+Größen-Guard, und ein Nenner von `461 gezaehlt (433 gemessen + 28
+Zusagen)` — dessen einer Teil weiter ungemessen ist, jetzt aber nicht
+mehr still driften kann.**
+
+
 
 Vierzig Runden, und der Prüfer, der dreizehn Stellen fand, fand sie erst
 im fünften Versuch — und im sechsten fand ein Preset, dass er beim

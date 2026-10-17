@@ -577,9 +577,59 @@ def self_test_check_counts() -> list[str]:
                     f"{text!r}: expected real={expected_real!r} got={got!r}"
                 )
     failures.extend(_self_test_suite_claims(waves))
+    # §A-ND: die 28 Zusagen gegen die live gezaehlte Menge, nicht gegen
+    # ein Literal. Ohne diesen Test ist `28` in Runde 44 ein Literal, das
+    # niemand mehr herleiten kann.
+    failures.extend(_self_test_claim_count())
     if failures:
         return failures
-    _SELF_TEST_SCOPE[0] = "24/24 (5 Zaehlung + 5 Bezugsraum + 14 Differenz/Nenner/Ort/Einheit/Zwillingspfad)"
+    _SELF_TEST_SCOPE[0] = ("24/24 (5 Zaehlung + 5 Bezugsraum + 14 "
+                           "Differenz/Nenner/Ort/Einheit/Zwillingspfad)"
+                           " + 3 Kette/Ausnahmen-Ableitung, 28 Zusagen live)")
+
+
+# §A-ND: die 28 Zusagen. Sie stehen im Nenner (`461 = 433 + 28`) und in
+# keiner Pruefung: `>>>` kommt in `CLAUDE.md` null Mal vor. Drei Wege
+# standen zur Wahl — in `>>>` ziehen (Prosa wird Code, zwei Orte zu
+# pflegen), aus der Zahl nehmen (Nenner schrumpft um die Zusagen, aber sie verschwinden
+# still weiter), oder **an `claim()` binden**. Der dritte beschreibt den
+# Zustand korrekt: ungemessen, aber nicht driftfaehig.
+#
+# Die Zahl 28 wird **nicht** hier gepflegt. Sie entsteht aus einem Lauf
+# von `check_counts` gegen `CLAUDE.md` — dieselbe Quelle, die den Bericht
+# speist. Der Guard steht in `_self_test_claim_count()` und vergleicht die
+# live gezaehlte Menge gegen die Zahl, die der letzte echte Lauf gedruckt
+# hat. Herkunft der Sollzahl: siehe `_CLAIM_COUNT_ORIGIN`.
+_CLAIM_COUNT_EXPECTED = 28
+_CLAIM_COUNT_ORIGIN = (
+    "Runde 40, §A-NC: `_status_line` zerlegte 461 in 433 gemessen + 28 "
+    "Zusagen. Nachgezaehlt in Runde 41 aus `len(rep.claims)` eines Laufs "
+    "ueber CLAUDE.md (Feld `claims` in --json-report). Die Zahl ist eine "
+    "Messung, kein Beschluss — aendert sich die Doku, aendert sie sich.")
+
+
+def _self_test_claim_count(doc_text: str | None = None) -> list[str]:
+    """Sind es noch 28 — gemessen, nicht behauptet? (§A-ND)
+
+    Zwei Fragen: die live gezaehlte Menge stimmt mit der Sollzahl, **und**
+    jede Zusage traegt ihr Feld. Eine Zusage ohne Feld ist eine Zahl ohne
+    Herkunft in der Ausgabe `fields`.
+    """
+    from pathlib import Path as _P
+    text = doc_text if doc_text is not None else _P("CLAUDE.md").read_text(
+        encoding="utf-8")
+    rep = Report()
+    waves, per = parse_waves(text)
+    check_counts(text, waves, per, rep, _P.cwd())
+    out: list[str] = []
+    if len(rep.claims) != _CLAIM_COUNT_EXPECTED:
+        out.append(
+            f"{len(rep.claims)} Zusagen live, erwartet {_CLAIM_COUNT_EXPECTED} "
+            f"— Herkunft: {_CLAIM_COUNT_ORIGIN}")
+    bare = [c for c in rep.claims if not c[0]]
+    if bare:
+        out.append(f"{len(bare)} Zusagen ohne Feld")
+    return out
 
 
 def _self_test_suite_claims(waves: list[str]) -> list[str]:
@@ -1053,8 +1103,8 @@ def _self_test_count_delta() -> list[str]:
             "_save_count_snapshot": None,
         }
         no_root = {
-            "_snapshot_path": _snapshot_path(),   # §A-KR
-            "_delta_line": _delta_line(1),        # §A-KR
+            "_snapshot_path": _snapshot_path(),   # §A-KR bewusst: Default-Zweig
+            "_delta_line": _delta_line(1),        # §A-KR bewusst: Vorlauf-sha
         }
         # ohne root zeigt der Ort auf **dieses** Repo, nicht auf `root`
         here = Path(__file__).resolve().parent.parent
@@ -1090,7 +1140,7 @@ def _self_test_count_delta() -> list[str]:
         #     zweiter Fall denselben Wert liefert, sieht keinen Unterschied
         #     — die vierte Annahme. Gegenprobe an der Stelle, an der sie
         #     sich schon einmal geraeumt hat: `root` gegen `root=None`.
-        if _snapshot_path(root) == _snapshot_path():  # §A-KR
+        if _snapshot_path(root) == _snapshot_path():  # §A-KR Zwillingspfad
             failures.append("Gegenprobe fehlt: root und root=None gleich")
         if Checks(21).n == Checks(22).n:
             failures.append("Checks traegt die Zahl nicht")
@@ -1268,6 +1318,29 @@ def _self_test_count_delta() -> list[str]:
         bad_probes = _default_probe_lines_valid()
         if bad_probes:
             failures.append(f"Default-Ausnahmen ungueltig: {bad_probes}")
+        # 28b. Die Kette (§A-LJ/§A-LK). Der Glieder-Pruefer oben sieht nur
+        #      Funktionen mit `root`. `_resolve_test_root` hiess `doc_root`
+        #      und rief `git rev-parse` ohne `cwd` — `check_claude_md.py
+        #      /tmp/klon` las die Tests des eigenen Repos. Gemessen wird die
+        #      Wirkung, nicht der Name: kein `git`-Aufruf ohne `cwd` oder
+        #      genannten Pfad in dieser Datei.
+        prod = Path(__file__).read_text(encoding="utf-8")
+        open_git = _git_callers_without_cwd(prod)
+        if open_git:
+            failures.append(f"git ohne cwd: {open_git[:3]}")
+        # 28c. Der Groessen-Guard der Ausnahmen (§A-KZ). Die Ableitung ist
+        #      zirkulaer per Konstruktion: wer Anker **und** Marker loescht,
+        #      verschwindet. Der Guard faengt genau das — und nur, weil
+        #      `_PROBE_ANCHOR_EXPECTED` nicht aus dem Code kommt.
+        # Der Marker wird zur Laufzeit gebaut: stünde er hier als Literal,
+        # zählte diese Zeile sich selbst und die Probe wäre blind.
+        mark = "  # " + "\u00a7A-KR"
+        quiet = prod.replace(mark + " bewusst: Default-Zweig", "")
+        quiet = quiet.replace(mark, "")
+        if len(_probe_anchors(quiet)) == _PROBE_ANCHOR_EXPECTED:
+            failures.append(
+                "Groessen-Guard blind: geloeschte Marker bleiben bei "
+                f"{_PROBE_ANCHOR_EXPECTED}")
         # Die Presets der Prueflogik, an Mini-Quellen statt an der
         # Produktionsdatei — so ist der Zwilling reproduzierbar. **Ein
         # Preset je Fehlerklasse**, nicht fuenf insgesamt (§A-LB): die
@@ -1303,8 +1376,40 @@ def _self_test_count_delta() -> list[str]:
             if bool(got) != expect_bad:
                 failures.append(
                     f"Pruefer {label}: {bool(got)} statt {expect_bad}")
-        # §A-LC: die Wache gegen die **stille** Sorte. Versuch 3 in Runde 39
-        # lieferte `[]` und meldete Erfolg.
+        # 29. Die Kette (§A-LJ). Der Glieder-Pruefer sieht nur Funktionen
+        #     mit `root`, die es nicht weitergeben. `_resolve_test_root`
+        #     hiess `doc_root` und rief `git rev-parse` ohne `cwd` — zwei
+        #     Glieder ohne Parameter, beide unsichtbar. Gemessen: der
+        #     Report mit fremdem `root` las die Tests des eigenen Repos.
+        clone = root / "klon"
+        (clone / "order_execution_engine" / "ops").mkdir(parents=True, exist_ok=True)
+        (clone / "CLAUDE.md").write_text("# Klon\n", encoding="utf-8")
+        (clone / "order_execution_engine" / "ops" / "TAG7_ABNAHME.md").write_text(
+            "Klon\n", encoding="utf-8")
+        subprocess.run(["git", "init", "-q", str(clone)], check=False,
+                       capture_output=True)
+        subprocess.run(["git", "-C", str(clone), "-c", "user.email=t@t",
+                        "-c", "user.name=t", "add", "-A"], check=False,
+                       capture_output=True)
+        subprocess.run(["git", "-C", str(clone), "-c", "user.email=t@t",
+                        "-c", "user.name=t", "commit", "-qm", "k"], check=False,
+                       capture_output=True)
+        # Gegenprobe (§A-JW): zwei roots, zwei Ergebnisse.
+        got_clone = _resolve_test_root(clone)
+        got_self = _resolve_test_root(root)
+        if got_clone.resolve() == got_self.resolve():
+            failures.append(
+                f"Kette offen: _resolve_test_root ignoriert root "
+                f"({got_clone} == {got_self})")
+        if got_clone.resolve() != clone.resolve():
+            failures.append(
+                f"_resolve_test_root(clone) != clone: {got_clone}")
+        # und der Dokumentationsort: fremder Klon, fremder sha.
+        doc_clone = _doc_tracked(clone)
+        if not doc_clone.startswith("committet"):
+            failures.append(f"_doc_tracked(clone) nicht committet: {doc_clone}")
+        if doc_clone == _doc_tracked(root) and _doc_tracked(root).startswith("committet"):
+            failures.append("_doc_tracked nennt fuer beide Repos denselben sha")
         blind_probe = ("def f(root):\n    return g()\n"
                        "def g(root):\n    return root\n")
         if not _forwarding_violations(blind_probe):
@@ -1374,7 +1479,7 @@ def _self_test_count_delta() -> list[str]:
             pass
         # und die Funktion selbst: `repo_root()` ist der eine Weg
         if repo_root(None) != here:  # §A-KR bewusst: Default-Zweig
-            failures.append(f"repo_root(None) != Dateiort: {repo_root(None)}")  # §A-KR
+            failures.append(f"repo_root(None) != Dateiort: {repo_root(None)}")  # §A-KR bewusst: Default-Zweig
         if repo_root(root) != root.resolve():
             failures.append("repo_root(root) loest nicht auf root auf")
         # Cache: zweiter Aufruf darf keinen neuen Subprozess kosten
@@ -1428,7 +1533,25 @@ def _self_test_count_delta() -> list[str]:
     return failures
 
 
-def _resolve_test_root(doc_root: Path) -> Path:
+def _resolve_test_root(doc_root: Path | None = None) -> Path:
+    """Wo liegen die Testskripte — `doc_root`, oder wo `git` sie findet?
+
+    §A-LJ (Runde 41): **die Kette.** Der Glieder-Pruefer aus Runde 39
+    findet nur Funktionen, die `root` haben und es nicht weitergeben. Hier
+    gab es kein `root`: `_resolve_test_root(doc_root)` nahm den Ort des
+    Dokuments, rief aber `git rev-parse --show-toplevel` **ohne `cwd`** —
+    also im Prozess-Arbeitsverzeichnis. `check_claude_md.py /tmp/klon`
+    prueft dann die Tests des **eigenen** Repos. Zwei Glieder ohne
+    Parameter, jedes fuer sich unsichtbar:
+
+        check_tests(text, root)             hat root
+        -> _resolve_test_root(root)         hat root, reicht es nicht
+        -> git rev-parse (ohne cwd)         liest das Default-Repo
+
+    Das erste Glied haette der Pruefer gesehen, wenn `_resolve_test_root`
+    einen Parameter `root` traege — es traegt aber `doc_root`. Ein Name,
+    zwei Mengen: der Sonderfall aus Runde 23, diesmal beim Parameter.
+    """
     import os
     env = os.environ.get("AGENT_X_TEST_ROOT")
     if env:
@@ -1436,13 +1559,14 @@ def _resolve_test_root(doc_root: Path) -> Path:
     try:
         r = subprocess.run(
             ["git", "rev-parse", "--show-toplevel"],
+            cwd=str(repo_root(doc_root)),      # §A-LJ: das gefragte Repo
             capture_output=True, text=True, timeout=5,
         )
         if r.returncode == 0 and r.stdout.strip():
             return Path(r.stdout.strip()).resolve()
     except (OSError, subprocess.SubprocessError):
         pass
-    return doc_root
+    return repo_root(doc_root)
 
 
 def check_tests(text: str, root: Path, rep: Report) -> None:
@@ -1991,20 +2115,59 @@ _START_CWD = Path.cwd().resolve()
 # Position statt auf einen Inhalt.
 _DEFAULT_PROBE_LINES: frozenset[int] = frozenset()
 
-# Anker als **Teilstrings** ohne fuehrende Einrueckung: die Einrueckung
-# aendert sich mit jedem `if` darueber, der Aufruf nicht. Alle acht sind
-# bewusst: vier pruefen den Default-Zweig, vier uebergeben absichtlich
-# einen anderen Ort (`root_repo`, doku, None).
-_DEFAULT_PROBE_ANCHORS: tuple[str, ...] = (
-    "check_counts(text_doc, w_doc, p_doc, rep, root_repo)  # §A-KR",
-    "check_counts(raw, w_doc, p_doc, one, root_repo)  # §A-KR",
-    "got = _snapshot_path()             # §A-KR root=None",
-    '"_snapshot_path": _snapshot_path(),   # §A-KR',
-    '"_delta_line": _delta_line(1),        # §A-KR',
-    "if _snapshot_path(root) == _snapshot_path():  # §A-KR",
-    "if repo_root(None) != here:  # §A-KR",
-    'failures.append(f"repo_root(None) != Dateiort: {repo_root(None)}")  # §A-KR',
-)
+# §A-KZ: die Ankerliste **war** die Abschrift, die §2b gerade abschaffte.
+# Acht Literale, von Hand gepflegt, und die Wache pruefte ihre eigene
+# Abschrift: die Liste zaehlte sich selbst mit, weil sie ihre Marker als
+# Literale trug.
+# Jetzt wird **abgeleitet**: der Quelltext ist die Quelle, `§A-KR` die
+# Markierung, der Zeileninhalt der Anker. Die Zahl entsteht aus dem Code.
+#
+# Der Preis, benannt: wer Anker **und** Marker loescht, verschwindet
+# spurlos — abgeleitete Mengen sind zirkulaer, wenn die Quelle dieselbe
+# ist, die sie prueft. Deshalb steht daneben ein **Groessen-Guard** mit
+# einer dokumentierten Zahl und ihrer Herkunft (§A-LA).
+_PROBE_ANCHOR_EXPECTED = 8
+_PROBE_ANCHOR_ORIGIN = (
+    "Runde 40, Marker §A-KR (Ableitung zaehlt nur Code vor dem Markerblock): "
+    "vier Default-Zweig-Aufrufe (check_counts x2, _snapshot_path, "
+    "_snapshot_path im --json-report) und vier Aufrufe mit absichtlich "
+    "fremdem Ort (_delta_line(1), _snapshot_path(root) gegen "
+    "_snapshot_path(), repo_root(None) zweimal). Nachgezaehlt im "
+    "Code-Abschnitt: `grep -n 'A-KR' scripts/check_claude_md.py | head -8`.")
+
+
+def _probe_anchors(src: str | None = None) -> tuple[str, ...]:
+    """Leitet die erlaubten Aufrufe aus dem Quelltext ab.
+
+    Gezaehlt wird nur Code **vor** diesem Block: weder die Ableitung selbst
+    noch ihre Beschreibung. Eine Ableitung, die ihren eigenen Kommentar
+    mitliest, zaehlt ihre Beschreibung als Beweis.
+    """
+    text = src if src is not None else Path(__file__).read_text(encoding="utf-8")
+    lines = text.split("\n")
+    try:
+        cut = next(i for i, ln in enumerate(lines)
+                   if ln.startswith("def _probe_anchors"))
+    except StopIteration:
+        cut = len(lines)
+    # §A-LA: zwei weitere Schnitte, beide benannt. Der Markerblock (§A-KZ)
+    # und der Herkunftstext des Groessen-Guards nennen den Marker als
+    # Prosa — sie beschreiben die Ausnahmen, sie sind keine. Eine
+    # Ableitung, die ihren Beschreibungstext mitliest, zaehlt ihre
+    # Beschreibung als Beweis.
+    for start in ("# §A-KZ:", "_PROBE_ANCHOR_ORIGIN"):
+        try:
+            cut = min(cut, next(i for i, ln in enumerate(lines)
+                                if ln.lstrip().startswith(start)))
+        except StopIteration:
+            pass
+    out: list[str] = []
+    for ln in lines[:cut]:
+        if "§A-KR" in ln and not ln.lstrip().startswith("#"):
+            anchor = ln.strip()
+            if anchor:
+                out.append(anchor)
+    return tuple(out)
 
 
 _SOURCE_LINES: list[str] = []
@@ -2021,35 +2184,97 @@ def _marked(lineno: int) -> bool:
 
 
 def _default_probe_lines_valid() -> list[str]:
-    """Stehen die erlaubten Aufrufe noch da — **und kein weiterer**?
+    """Sind die erlaubten Aufrufe **abgeleitet** — und ihre Zahl belegt?
 
-    Zwei Fragen, zwei Antworten:
-    1. Jeder Anker muss wortgleich im Quelltext stehen (Ausnahme existiert).
-    2. Die Zahl der markierten Zeilen (`§A-KR`) muss **gleich** der Zahl
-       der Anker sein. Sonst hat jemand eine Ausnahme davongetragen, ohne
-       sie in die Liste zu schreiben — oder umgekehrt.
+    Drei Fragen, drei Antworten (§A-KZ):
+    1. **Anwesenheit:** jeder abgeleitete Anker steht wortgleich im Code.
+    2. **Groesse:** die abgeleitete Menge hat `_PROBE_ANCHOR_EXPECTED`
+       Elemente. Ohne diese Zahl ist die Ableitung zirkulaer: wer Anker
+       **und** Marker loescht, verschwindet aus der Menge, und eine
+       kleinere Menge ist fuer sich kein Fehler. Die Herkunft der Zahl
+       steht daneben, nicht hier.
+    3. **Rechtfertigung:** jede Ausnahme nennt ihren Grund. Ein Anker
+       ohne Grund ist eine Erlaubnis ohne Ablaufdatum — genau der Zustand,
+       den §A-KZ abschafft.
     """
     src = Path(__file__).read_text(encoding="utf-8")
     lines = src.split("\n")
     out: list[str] = []
+    anchors = _probe_anchors(src)
     joined = "\n".join(ln.strip() for ln in lines)
-    for anchor in _DEFAULT_PROBE_ANCHORS:
+    for anchor in anchors:
         if anchor not in joined:
             out.append(f"Anker fehlt: {anchor!r}")
-    # Die Ankerliste selbst enthaelt die Marker als Literale. Gezaehlt
-    # wird deshalb nur, was **vor** der Liste steht: der Code, den sie
-    # beschreibt, nicht ihre eigene Abschrift (§A-KZ).
-    try:
-        cut = next(i for i, ln in enumerate(lines)
-                   if ln.startswith("_DEFAULT_PROBE_ANCHORS"))
-    except StopIteration:
-        return ["Ankerliste nicht gefunden"]
-    marked = sum(1 for ln in lines[:cut]
-                 if "§A-KR" in ln and not ln.lstrip().startswith("#"))
-    if marked != len(_DEFAULT_PROBE_ANCHORS):
+    if len(anchors) != _PROBE_ANCHOR_EXPECTED:
         out.append(
-            f"{marked} markierte Zeilen, aber {len(_DEFAULT_PROBE_ANCHORS)} "
-            f"Anker — Ausnahme ausserhalb der Liste?")
+            f"{len(anchors)} abgeleitete Ausnahmen, erwartet "
+            f"{_PROBE_ANCHOR_EXPECTED} — Herkunft: {_PROBE_ANCHOR_ORIGIN}")
+    if len(set(anchors)) != len(anchors):
+        out.append(f"{len(anchors) - len(set(anchors))} doppelte Ausnahme(n)")
+    # Jede Markierung muss einen Grund tragen: mehr als das blosse
+    # `§A-KR`. Ein Marker allein sagt *dass* es erlaubt ist, nicht *warum*.
+    for ln in lines:
+        if "§A-KR" in ln and not ln.lstrip().startswith("#"):
+            tail = ln.split("§A-KR", 1)[1].strip(" #\t")
+            if not tail and "root=None" not in ln:
+                out.append(f"Ausnahme ohne Grund: {ln.strip()!r}")
+    return out
+
+
+def _git_callers_without_cwd(src: str) -> list[str]:
+    """Welche Funktion ruft `git` ohne `cwd=`? (§A-LK)
+
+    §A-LJ war das Glied. Der Glieder-Pruefer (`_forwarding_violations`)
+    fand es nicht, weil `_resolve_test_root` keinen Parameter `root`
+    hatte — nur `doc_root`. **Der Pruefer fragt nach dem Namen, der
+    Fehler haengt an der Wirkung.** Diese Pruefung fragt nach der
+    Wirkung: ein `subprocess.run(["git", ...])` ohne `cwd` liest immer
+    das Prozess-Arbeitsverzeichnis, egal wie die Funktion heisst.
+
+    Erlaubt sind Aufrufe, deren Repo **explizit** genannt wird
+    (`-C <pfad>` im Argumentvektor) — das ist ein Repo ohne `cwd`.
+    """
+    import ast
+    tree = ast.parse(src)
+    out: list[str] = []
+
+    def walk(node: ast.AST, owner: str) -> None:
+        for child in ast.iter_child_nodes(node):
+            name = owner
+            if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                name = f"{owner}.{child.name}" if owner else child.name
+                # Der Rumpf gehoert dem Kind — mit dessen Namen weiterlaufen,
+                # sonst steht die Fundstelle ohne Owner (§A-LM).
+                for sub in ast.iter_child_nodes(child):
+                    walk(sub, name)
+                continue
+            if isinstance(child, ast.Call) and isinstance(child.func, ast.Attribute):
+                f = child.func
+                if (isinstance(f.value, ast.Name) and f.value.id == "subprocess"
+                        and f.attr == "run" and child.args):
+                    first = child.args[0]
+                    if isinstance(first, (ast.List, ast.Tuple)):
+                        words = [e.value for e in first.elts
+                                 if isinstance(e, ast.Constant)
+                                 and isinstance(e.value, str)]
+                        # Ein Nicht-Literal hinter dem Subkommando ist ein
+                        # Pfad-Ausdruck (`str(root)`) — das Repo ist damit
+                        # genannt, auch ohne `cwd=` (§A-LL).
+                        expr_arg = any(
+                            not isinstance(e, ast.Constant) for e in first.elts)
+                    else:
+                        words = []
+                        expr_arg = False
+                    if words[:1] == ["git"]:
+                        has_cwd = any(k.arg == "cwd" for k in child.keywords)
+                        has_dash_c = "-C" in words
+                        sub_cmd = words[1] if len(words) > 1 else ""
+                        if not has_cwd and not has_dash_c and not expr_arg:
+                            out.append(f"{name} -> git {sub_cmd} @L{child.lineno}")
+            walk(child, name)
+
+    for node in tree.body:
+        walk(node, "")
     return out
 
 
