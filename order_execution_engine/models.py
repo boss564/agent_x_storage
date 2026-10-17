@@ -217,6 +217,40 @@ class RejectDetail(str, Enum):
     EMPTY_SIDE = "EMPTY_SIDE"
 
 
+class RejectContext(BaseModel):
+    """200 Bytes, die den Ablehnungsmoment bezeugen (§5.4bt).
+
+    Warum nicht eine Snapshot-Tabelle: `_market_snapshots` ist ein dict der
+    Größe 1 pro Token — der Preis war im Ablehnungsmoment da und beim
+    nächsten Tick weg. Es fehlt nicht die Tabelle, es fehlt die *Version*.
+    Eine Tabelle schriebe n_Token × 60/h ≈ 5,6 Mio Zeilen über 13 Tage, um
+    eine Frage zu beantworten, die nur die Fehlerfälle betrifft: 26/Tag à
+    ~200 B ≈ 5 KB/Tag. Faktor 10⁵ billiger, und der einzige Punkt, an dem
+    der Wert noch existiert, ist der Moment der Ablehnung selbst.
+
+    `branch` ist der wichtigste Teil: `INVALID_PRICE` trägt drei Ursachen
+    an drei Code-Stellen, und ohne die Zeilennummer ist das Etikett blind.
+    Ein Feld mit drei Werten, das niemand zählt, ist ein Etikett mit
+    Selbstbewußtsein — deshalb ist `branch` hier Pflicht, nicht Kommentar.
+
+    Write-only auf diesem Pfad: der Kontext wird bei Ablehnung erfaßt, nicht
+    bei Erfolg. Er beantwortet „warum wurde abgelehnt", nicht „wie sah der
+    Markt aus" — das wäre die Tabelle.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    token_id: Optional[str] = None
+    side: Optional[str] = None
+    best_bid: Optional[Decimal] = None
+    best_ask: Optional[Decimal] = None
+    snapshot_age_s: Optional[float] = None
+    # 1160 / 1174 / 1185 — die Code-Stelle, nicht die Kategorie. Die
+    # Kategorie steht in `reject_detail`; beide zusammen sagen erst, ob
+    # der Zähler stimmt *und* wo er herkommt.
+    branch: int
+
+
 # ---------------------------------------------------------------------------
 # 2. Order & Signal Payloads
 # ---------------------------------------------------------------------------

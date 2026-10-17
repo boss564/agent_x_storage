@@ -48,6 +48,7 @@ from order_execution_engine.models import (
     PaperOrder,
     PeakEvent,
     PortfolioSnapshot,
+    RejectContext,
     RejectDetail,
     RejectReason,
     RiskConfig,
@@ -673,6 +674,10 @@ class TelemetryRecord(BaseModel):
     # Optional, weil 26 Zeilen der Akte vor diesem Feld geschrieben wurden;
     # NULL heißt dort "nicht erfaßt", nicht "keine Ursache".
     reject_detail: Optional[RejectDetail] = None
+    # Der Zeuge des Ablehnungsmoments (§5.4bt) — 200 Bytes statt 5,6 Mio
+    # Zeilen Snapshot-Tabelle. Optional, wie `reject_detail`: NULL heißt
+    # "vor dem Feld geschrieben", nicht "kein Kontext vorhanden".
+    reject_context: Optional["RejectContext"] = None
     requested_size: Optional[Decimal] = None
     decision_seq: int = 0
     fill_metrics: Optional[FillMetrics] = None
@@ -1172,6 +1177,8 @@ class ShadowExecutionEngine:
                 latency_ms=self._elapsed_ms(t0), approved=False,
                 reject_reason=RejectReason.INVALID_PRICE, status=None,
                 reject_detail="NEUTRAL_SIGNAL",
+                reject_context=RejectContext(
+                    token_id=signal.target_token_id, branch=1160),
                 decision_seq=self.telemetry.next_decision_seq(),
             )
             self.telemetry.log(record)
@@ -1186,6 +1193,9 @@ class ShadowExecutionEngine:
                 latency_ms=self._elapsed_ms(t0), approved=False,
                 reject_reason=RejectReason.INVALID_PRICE, status=None,
                 reject_detail="NO_SNAPSHOT",
+                reject_context=RejectContext(
+                    token_id=signal.target_token_id, side=side.value,
+                    branch=1174),
                 decision_seq=self.telemetry.next_decision_seq(),
             )
             self.telemetry.log(record)
@@ -1199,6 +1209,21 @@ class ShadowExecutionEngine:
                 latency_ms=self._elapsed_ms(t0), approved=False,
                 reject_reason=RejectReason.INVALID_PRICE, status=None,
                 reject_detail="EMPTY_SIDE",
+                # Hier ist der Wert noch da — genau in diesem Moment.
+                # `snapshot_age_s`: die dritte Lücke der Akte ist nicht der
+                # Zeitstempel (den hat MarketSnapshot), sondern seine
+                # Persistenz. Ohne Alter wäre der Kontext ein Schnappschuß
+                # ohne Uhr, und EMPTY_SIDE ließe sich nicht von
+                # STALE_SNAPSHOT trennen — zwei verschiedene Reparaturen.
+                reject_context=RejectContext(
+                    token_id=active.token_id, side=side.value,
+                    best_bid=active.best_bid(), best_ask=active.best_ask(),
+                    # `received_at` ist da (MarketSnapshot) — ohne Alter
+                    # wäre der Kontext ein Schnappschuß ohne Uhr, und
+                    # EMPTY_SIDE wäre nicht von STALE_SNAPSHOT zu trennen.
+                    snapshot_age_s=max(
+                        0.0, time.time() - active.received_at),
+                    branch=1185),
                 decision_seq=self.telemetry.next_decision_seq(),
             )
             self.telemetry.log(record)

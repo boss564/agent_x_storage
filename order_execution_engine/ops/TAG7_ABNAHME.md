@@ -2424,3 +2424,153 @@ Ledger, sondern über die Produktionsseite.** Und dort ist der Engpass
 nicht der Name, sondern der Wert — ein Snapshot, der nicht persistiert
 wird, ein Preis, der nur im Speicher lebte, und ein Feld `reject_detail`,
 das es ab heute gibt und das die 26 alten Zeilen nicht mehr rettet.
+
+## 41. Runde 21 — wer blockt, was eine Lücke ist, und der Fehler im eigenen Befund
+
+### §5.4br — `RED` bekommt `blocking`, weil das Urteil einseitig war
+
+`RED` wegen vier fehlender Zeilen, nicht wegen 26 verlorener Preise und
+nicht wegen 264,5 h ohne Auslieferung. Das ist nicht falsch — ein Ledger
+muß vollständig sein —, aber es ist **einseitig**: das Urteil bewertet
+Buchführung, nicht Betrieb. Der 20.10. hätte `RED` gelesen, auf die vier
+Zeilen geschaut und die falsche Seite repariert.
+
+```
+reason:     (3) unattributed: 4 Dispatch(es) ohne Telemetriezeile
+blocking:   ledger
+```
+
+Der Wert ist immer gesetzt — bei GRÜN `none`. Ein Feld, das bei RED
+gefüllt und bei GRÜN leer ist, ist keine Auskunft, sondern eine
+Auslassung. `blocking` kennt drei Werte: `ledger`, `service`, `both`;
+letzterer, weil ein Gate, das nur den Ledger sieht, `service` niemals
+selbst setzen darf.
+
+Und dabei fiel eine Kollision auf: die Zeile „kein Aufrufer verdrahtet"
+hieß ebenfalls `blocking:`. Zwei Zeilen, ein Name, zwei Bedeutungen —
+dieselbe Kopie, die diese Akte seit Runde 12 jagt. Sie heißt jetzt
+`enforced:` (ob jemand das Urteil durchsetzt), `blocking:` sagt, was rot
+ist (was den Befund trägt).
+
+### §5.4bs — `8 / 34` war die falsche Frage: richtig ist `8 / 8`
+
+`order_id` steht genau dann, wenn eine Order entstand. Die 26 ohne Order
+sind **korrekt leer, nicht unvollständig**. Bezugsgröße ist der
+Order-Schritt (`requested_size IS NOT NULL`), nicht die Entscheidung:
+
+```
+fk order_id:  8/8 Order-Schritte gesetzt
+              (34 Entscheidungen, 26 ohne Order = korrekt leer)
+```
+
+Der Schreiber funktioniert vollständig. Daraus folgt:
+
+**`telemetry_seq` (0/361) braucht keinen Schreiber.** Die Paarung läuft
+über `order_id`, und der Fill liegt dort. Eine Spalte, die nie gefüllt
+wird und nie gefüllt werden muß, ist keine Lücke, sondern eine Altlast —
+`deprecated`, nicht `TODO`.
+
+**Die Lückenliste war nie vier Felder lang.** Sie ist zwei Felder
+(`closed_at`, `telemetry.ts`) und zwei Mißverständnisse (`telemetry_seq`
+überflüssig, `order_id` vollständig gefüllt) — und seit §5.4bq ein
+drittes echtes: die fehlende **Version** des Snapshots, nicht seine
+Tabelle.
+
+### §5.4bt — `reject_context` statt Snapshot-Tabelle, und `branch` als Pflicht
+
+Die Zahlen, die die Entscheidung tragen:
+
+| Lösung | Volumen (3 Token, 13 d) | beantwortet |
+|---|---|---|
+| Snapshot-Tabelle | ~5,6 Mio Zeilen | „wie sah der Markt aus" |
+| `reject_context` (JSON) | ~5 KB/Tag | „warum wurde abgelehnt" |
+
+Faktor ~10⁵. Und `_market_snapshots` überschreibt pro `token_id` — es ist
+kein Leck, sondern ein **Ringpuffer der Größe 1**: der Preis war im
+Ablehnungsmoment da und beim nächsten Tick weg. Es fehlt nicht die
+Tabelle, es fehlt die **Version**. Die billigste Version ist eine Kopie im
+Ablehnungsmoment, nicht eine Historie des Marktes.
+
+Risiko der Tabelle, explizit: 5,6 Mio Zeilen heißen Write-Lock pro Tick,
+die Gate-Suite liest mit, und ein Lauf schreibt dann mehr als er liest.
+Bei einem System, das seit 13 Tagen nichts ausliefert, ist das der
+falsche erste Schritt.
+
+`branch` ist Pflichtfeld, kein Kommentar: `INVALID_PRICE` trägt drei
+Ursachen an drei Code-Stellen, und ohne die Zeilennummer ist die Kategorie
+blind. Ein Feld mit drei Werten, das niemand zählt, ist ein Etikett mit
+Selbstbewußtsein.
+
+### §5.4bu — Korrektur an meiner eigenen Zuordnung: 1160 ist nicht `EMPTY_SIDE`
+
+Die naheliegende Lesart war, `side is None` sei „Seite leer". **Ist es
+nicht.** `resolved_side()` liefert `None`, wenn `Direction.NEUTRAL` —
+ein Richtungsfilter (`news_bridge.py:112`, Schwelle `theta = 0.1`), keine
+Buchseite. Der Code hat drei Stellen, und sie bedeuten drei Dinge:
+
+| Stelle | Fall | Name | Reparatur |
+|---|---|---|---|
+| `1160` | `resolved_side()` → None | `NEUTRAL_SIGNAL` | Strategie (Schwelle) |
+| `1174` | kein Buch / falscher Token | `NO_SNAPSHOT` | Zuführung / Cache |
+| `1185` | Buch da, `best_ask()` None | `EMPTY_SIDE` | Liquidität |
+
+Am echten Engine-Pfad durchgespielt — drei Signale, drei Zahlen:
+
+```
+detail=EMPTY_SIDE        branch=1185  best_bid=0.004 best_ask=None
+detail=NO_SNAPSHOT       branch=1174  token=TOK2
+detail=NEUTRAL_SIGNAL    branch=1160  side=None
+```
+
+Damit ist der Test der Absicht nicht „läuft es", sondern **ob die
+nächsten 26 drei Zahlen sind.** Und wenn nicht, sitzt das Feld an der
+falschen Stelle — was in dieser Akte schon einmal passiert ist
+(`PaperOrder` statt `TelemetryRecord`).
+
+### §5.4bv — `EMPTY_SIDE` gehört nicht unter `no_book`
+
+`no_book` = kein Buch (Bridge, vor dem Signal). `EMPTY_SIDE` = Buch ohne
+Gegenseite (Engine, nach dem Signal). Zwei Reparaturen an zwei Bauteilen:
+das eine ist ein Abruf, das andere ein illiquider Markt — und für einen
+Markt ohne Gegenseite ist **nichts tun** die richtige Antwort, nicht
+reparieren. Deshalb sind es zwei Namen, und `no_book` bleibt ohne
+Untertyp (§5.4bp).
+
+### §5.4bw — `snapshot_age_s` war falsch begründet
+
+Im ersten Entwurf stand, `MarketSnapshot` trage keinen Empfangszeitpunkt,
+und das Alter sei deshalb nicht erfaßbar. **Falsch:** das Feld heißt
+`received_at`. Das Alter ist berechenbar und wird jetzt geschrieben —
+ohne es wäre der Kontext ein Schnappschuß ohne Uhr, und `EMPTY_SIDE`
+ließe sich nicht von `STALE_SNAPSHOT` trennen (zwei verschiedene
+Reparaturen). Korrigiert vor dem Commit, nicht nach dem Abnahmetermin.
+
+## 42. Tests dieser Runde
+
+| Zeuge | Aussage |
+|---|---|
+| `test_red_says_who_blocks_and_green_says_nobody` | `ledger` bei RED, `none` bei GRÜN — als Wert, nicht als Lücke |
+| `test_order_id_denominator_is_the_order_step_not_the_decision` | Nenner 2, nicht 4 — `8/8`, nicht `8/34` |
+| `test_reject_context_carries_the_branch_that_makes_three_of_one` | `branch` Pflicht, drei Etiketten → drei Stellen |
+| `test_engine_writes_three_branches_through_the_real_path` | echte Engine: 1185 / 1174 / 1160 |
+
+Suite: **194 passed**.
+
+## 43. Der Satz dieser Runde
+
+Die Akte hat ihre Adresse — `RED` wegen vier Zeilen, die nie geschrieben
+wurden, und daneben 26 Entscheidungen, deren Preis im RAM lag, als die
+Order scheiterte, und beim nächsten Tick nicht mehr war.
+
+Zum ersten Mal steht ein Befund da, der nicht durch Prüfen, sondern nur
+durch **Schreiben** zu beheben ist: ein `reject_context` von 200 Bytes pro
+Ablehnung, ein `branch`, der aus einem Etikett drei macht — und eine
+Korrektur an der eigenen Zuordnung, die den Fehler in der Lesart fand und
+nicht im Code: `side is None` war nie eine leere Buchseite, sondern eine
+fehlende Richtung.
+
+Und die Lückenliste ist geschrumpft, nicht gewachsen: zwei Felder
+(`closed_at`, `telemetry.ts`), eine Altlast (`telemetry_seq`) und eine
+fehlende Version (der Snapshot im Ablehnungsmoment). **Was diese Akte
+seit dreizehn Tagen beschreibt, sind nicht vier fehlende Felder — es ist
+ein System, das seine eigenen Fehler nicht mehr bezeugen kann.**

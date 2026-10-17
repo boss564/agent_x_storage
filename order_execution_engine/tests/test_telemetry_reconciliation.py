@@ -7,8 +7,15 @@ import io
 import sqlite3
 import tempfile
 import time
+import uuid
 from contextlib import redirect_stdout
+from decimal import Decimal
 from pathlib import Path
+
+import pytest
+from pydantic import ValidationError
+
+from order_execution_engine.models import RejectReason
 
 from order_execution_engine.ops.preflight_check import (
     _gate_criterion,
@@ -1643,3 +1650,175 @@ def test_invalid_price_carries_three_causes_not_one_label() -> None:
     # Optional, weil 26 Zeilen der Akte das Feld nicht kennen.
     from order_execution_engine.shadow_execution_engine import TelemetryRecord
     assert TelemetryRecord.model_fields["reject_detail"].default is None
+
+
+# ---------------------------------------------------------------------------
+# §5.4br–bt — wer blockt, 8/8 statt 8/34, der Kontext im Ablehnungsmoment
+# ---------------------------------------------------------------------------
+
+
+def test_red_says_who_blocks_and_green_says_nobody() -> None:
+    """`RED` bewertet Buchführung, nicht Betrieb (§5.4br).
+
+    Vier fehlende Zeilen machen rot; 26 verlorene Preise und 264,5 h ohne
+    Auslieferung nicht. Beides ist richtig — aber ohne `blocking` liest der
+    20.10. `RED`, schaut auf die vier Zeilen und repariert die falsche
+    Seite. Und GRÜN trägt `none` als *Wert*: ein Feld, das bei RED gefüllt
+    und bei GRÜN leer ist, ist keine Auskunft, sondern eine Auslassung.
+    """
+    with tempfile.TemporaryDirectory() as td:
+        conn = sqlite3.connect(Path(td) / "t.db")
+        _schema(conn)
+        _seed_run(conn, rows=FIXTURE_ROWS, keyed=FIXTURE_ROWS,
+                  dispatched=FIXTURE_ROWS, reasons=FIXTURE_ROWS)
+        g = gate_telemetry_reconciliation(conn, min_run_id=9)
+        conn.close()
+    assert g.status.startswith("PROVISIONAL_LEDGER_CONSISTENT")
+    assert g.blocking == "none", g.blocking
+
+    conn = sqlite3.connect(":memory:")
+    _schema(conn)
+    t0 = time.time() - 3600
+    conn.execute("INSERT INTO telemetry_runs VALUES (9, ?, 'x', '{}')", (t0,))
+    conn.execute(
+        "INSERT INTO telemetry (signal_id, latency_ms, approved,"
+        " reject_reason, run_id, decision_seq)"
+        " VALUES ('s1', 1.0, 0, 'X', 9, 1)")
+    for i in range(3):
+        conn.execute("INSERT INTO dispatched_signals VALUES (?, ?, NULL)",
+                     (f"i{i}", t0 + 1))
+    conn.commit()
+    g = gate_telemetry_reconciliation(conn, min_run_id=9)
+    conn.close()
+    assert g.status == "RED"
+    assert g.blocking == "ledger", g.blocking
+
+
+def test_order_id_denominator_is_the_order_step_not_the_decision() -> None:
+    """`8 / 34` war die falsche Frage — richtig ist `8 / 8` (§5.4bs).
+
+    `order_id` steht genau dann, wenn eine Order entstand. Die 26 ohne
+    Order sind korrekt leer, nicht unvollständig. Bezugsgröße ist der
+    Order-Schritt (`requested_size IS NOT NULL`), nicht die Entscheidung.
+    Daraus folgt: `telemetry_seq` (0/361) braucht keinen Schreiber — die
+    Paarung läuft über `order_id`, und der Fill liegt dort. Eine Spalte,
+    die nie gefüllt wird und nie gefüllt werden muß, ist eine Altlast.
+    """
+    conn = sqlite3.connect(":memory:")
+    _schema(conn)
+    t0 = time.time() - 3600
+    conn.execute("INSERT INTO telemetry_runs VALUES (9, ?, 'x', '{}')", (t0,))
+    seed = [("INVALID_PRICE", None, None), ("INVALID_PRICE", None, None),
+            ("STALE_SNAPSHOT", "o1", "50"), ("NONE", "o2", "100")]
+    for i, (reason, oid, size) in enumerate(seed, start=1):
+        conn.execute(
+            "INSERT INTO telemetry (signal_id, order_id, latency_ms, approved,"
+            " reject_reason, requested_size, run_id, decision_seq)"
+            " VALUES (?, ?, 1.0, ?, ?, ?, 9, ?)",
+            (f"s{i}", oid, 1 if reason == "NONE" else 0, reason, size, i))
+    for i in range(4):
+        conn.execute("INSERT INTO dispatched_signals VALUES (?, ?, NULL)",
+                     (f"i{i}", t0 + 1))
+    conn.commit()
+    g = gate_telemetry_reconciliation(conn, min_run_id=9)
+    conn.close()
+    # Nenner = Order-Schritte (2), nicht Entscheidungen (4).
+    assert g.detail["fk_expected"] == 2, g.detail["fk_expected"]
+    assert g.detail["fk_set"] == 2, g.detail["fk_set"]
+
+
+def test_reject_context_carries_the_branch_that_makes_three_of_one() -> None:
+    """`branch` macht aus einem Etikett drei (§5.4bt).
+
+    `reject_detail` sagt die Kategorie, `branch` die Code-Stelle. Beide
+    zusammen sagen, ob der Zähler stimmt *und* wo er herkommt. Und die
+    Zuordnung ist nicht die naheliegende: 1160 (`side is None`) ist
+    NEUTRAL_SIGNAL — die Richtung —, nicht EMPTY_SIDE. EMPTY_SIDE ist 1185
+    (`best_ask()` leer). Für einen Markt ohne Gegenseite ist „nichts tun"
+    die richtige Antwort; für ein fehlendes Buch ist es ein Abruf. Zwei
+    Reparaturen, zwei Bauteile — und `EMPTY_SIDE` gehört nicht unter
+    `no_book`.
+
+    Der Test, ob das Feld wirkt, ist nicht „läuft es", sondern ob die
+    nächsten 26 drei verschiedene Zahlen werden.
+    """
+    from order_execution_engine.models import RejectContext, RejectDetail
+    from order_execution_engine.shadow_execution_engine import TelemetryRecord
+
+    ctx = RejectContext(token_id="t", branch=1185,
+                        best_ask=None, best_bid=Decimal("0.004"))
+    rec = TelemetryRecord(
+        signal_id=uuid.uuid4(), order_id=None, latency_ms=1.0, approved=False,
+        status=None, reject_reason=RejectReason.INVALID_PRICE,
+        reject_detail=RejectDetail.EMPTY_SIDE, reject_context=ctx,
+    )
+    assert rec.reject_context.branch == 1185
+    # `branch` ist Pflicht: ein Kontext ohne Code-Stelle ist ein Etikett.
+    with pytest.raises(ValidationError):
+        RejectContext()
+    # Und die drei Zweige sind paarig: Kategorie ↔ Stelle.
+    pairs = {
+        RejectDetail.NEUTRAL_SIGNAL: 1160,
+        RejectDetail.NO_SNAPSHOT: 1174,
+        RejectDetail.EMPTY_SIDE: 1185,
+    }
+    assert len(set(pairs.values())) == 3, "drei Etiketten, drei Stellen"
+
+
+def test_engine_writes_three_branches_through_the_real_path() -> None:
+    """Der Test, ob `reject_context` wirkt — nicht, ob es läuft (§5.4bt).
+
+    Ein Feld zuzufügen und zu prüfen, daß der Konstruktor es annimmt, ist
+    ein Test des Feldes gegen sich selbst. Der Test der Absicht ist der
+    Engine-Pfad: drei Signale, drei Zweige, drei verschiedene `branch`-
+    Zahlen. Wenn diese 26 beim nächsten Lauf nicht drei Zahlen sind, ist
+    `reject_detail` an der falschen Stelle eingehängt — und das war in
+    dieser Akte schon einmal der Fall (`PaperOrder` statt
+    `TelemetryRecord`).
+
+    Und die Zuordnung ist nicht die naheliegende: 1160 (`side is None`)
+    ist NEUTRAL_SIGNAL, nicht EMPTY_SIDE. EMPTY_SIDE ist 1185 —
+    `best_ask()` leer bei vorhandenem Buch.
+    """
+    from order_execution_engine.shadow_execution_engine import (
+        MarketSnapshot, OrderBookLevel, ShadowExecutionEngine,
+        SignalPayload, TelemetryLogger)
+    from order_execution_engine.models import Direction
+
+    def signal(tok: str, direction: Direction) -> SignalPayload:
+        return SignalPayload(
+            signal_id=uuid.uuid4(), source="t", target_token_id=tok,
+            market_id="0xabc", direction=direction,
+            confidence=Decimal("80"), suggested_price=None,
+            timestamp=datetime.datetime.now(datetime.timezone.utc))
+
+    log = TelemetryLogger()
+    engine = ShadowExecutionEngine(telemetry=log)
+    now = datetime.datetime.now(datetime.timezone.utc)
+
+    # 1185 — Buch da, Ask-Seite leer.
+    engine.on_signal(signal("TOK1", Direction.UP), MarketSnapshot(
+        token_id="TOK1",
+        bids=(OrderBookLevel(Decimal("0.004"), Decimal("100")),),
+        asks=(), received_at=now.timestamp()))
+    # 1174 — kein Buch für diesen Token.
+    engine.on_signal(signal("TOK2", Direction.UP), None)
+    # 1160 — Richtung NEUTRAL: keine Seite, kein Preis nötig.
+    engine.on_signal(signal("TOK1", Direction.NEUTRAL), MarketSnapshot(
+        token_id="TOK1",
+        bids=(OrderBookLevel(Decimal("0.004"), Decimal("100")),),
+        asks=(OrderBookLevel(Decimal("0.006"), Decimal("100")),),
+        received_at=now.timestamp()))
+
+    records = log._records
+    branches = [r.reject_context.branch for r in records]
+    assert branches == [1185, 1174, 1160], branches
+    assert {r.reject_detail.value for r in records} == {
+        "EMPTY_SIDE", "NO_SNAPSHOT", "NEUTRAL_SIGNAL"}
+    # Der Wert, der sterben würde: beim EMPTY_SIDE ist die Bid-Seite da.
+    empty = records[0].reject_context
+    assert empty.best_bid == Decimal("0.004")
+    assert empty.best_ask is None
+    assert empty.snapshot_age_s is not None
+    # Und NEUTRAL_SIGNAL hat keine Seite — es gab nie eine.
+    assert records[2].reject_context.side is None

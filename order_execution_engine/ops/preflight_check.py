@@ -194,6 +194,14 @@ class GateResult:
     # die Nummer der Bedingung, nicht das Etikett — sonst ist es die Form,
     # die in Runde 1 `BLOCKED` hieß: wahr, begründet, unlesbar.
     reason: str = ""
+    # Und die, an der gehandelt werden soll (§5.4br): dieses Gate bewertet
+    # Buchführung, nicht Betrieb. `unattributed` blockt, `stalled_for`
+    # nicht — aber `RED` sieht für beide gleich aus, und wer es liest,
+    # repariert ohne `blocking` die falsche Seite.
+    #   ledger  — der Ledger ist unvollständig (Bedingungen 0-4)
+    #   service — der Dienst liefert nicht (ein eigenes Etikett, nie hier)
+    #   both    — beides rot
+    blocking: str = ""
 
 
 def _ok(msg: str) -> None:
@@ -437,12 +445,30 @@ def gate_telemetry_reconciliation(
             "SELECT COUNT(*), COUNT(order_id) FROM telemetry"
         ).fetchone()
         fk_rows, fk_set = int(fk[0]), int(fk[1])
-        paired = int(conn.execute(
-            "SELECT COUNT(*) FROM fills f"
-            " JOIN telemetry t ON t.order_id = f.order_id"
-        ).fetchone()[0])
     except sqlite3.OperationalError:
         fk_rows, fk_set, paired = None, None, None
+    # `paired` hängt an `fills` — der FK-Bericht nicht (§5.4bt). Fehlt die
+    # Fill-Schicht, bleibt der Befund über `order_id` gültig: der Schreiber
+    # ist unabhängig davon, ob es Fills gibt. Erste Fassung umspannte beide
+    # mit einem `except` und ließ den Bericht mit der Tabelle verschwinden.
+    if fk_rows is not None:
+        try:
+            paired = int(conn.execute(
+                "SELECT COUNT(*) FROM fills f"
+                " JOIN telemetry t ON t.order_id = f.order_id"
+            ).fetchone()[0])
+        except sqlite3.OperationalError:
+            paired = None
+    # 8/34 ist keine Quote (§5.4bs). `order_id` steht genau dann, wenn eine
+    # Order entstand: 26× nicht (korrekt leer), 8× gesetzt. Der Schreiber
+    # funktioniert vollständig — 8 von 8, nicht 8 von 34. Die Bezugsgröße
+    # ist die Zahl der ORDER-Schritte, nicht die der Entscheidungen.
+    try:
+        fk_expected = int(conn.execute(
+            "SELECT COUNT(*) FROM telemetry WHERE requested_size IS NOT NULL"
+        ).fetchone()[0])
+    except sqlite3.OperationalError:
+        fk_expected = None
     detail = {
         "min_run_id": min_run_id,
         "started_at": started_at,
@@ -475,6 +501,7 @@ def gate_telemetry_reconciliation(
         "fk_rows": fk_rows,
         "fk_set": fk_set,
         "fk_paired": paired,
+        "fk_expected": fk_expected,
     }
     # Null-Bedingung statt Untergrenze (§5.4v).
     #
@@ -494,6 +521,7 @@ def gate_telemetry_reconciliation(
         return GateResult(
             name="TELEMETRY_RECONCILIATION",
             status="RED",
+            blocking="ledger",
             reason="(0) underrun: kein Verkehr im Fenster — "
                    "dispatched == 0 und telemetry_rows == 0",
             detail={**detail, "underrun": True, "empty_traffic": True},
@@ -503,6 +531,7 @@ def gate_telemetry_reconciliation(
     if telemetry_rows != keyed:
         return GateResult(
             name="TELEMETRY_RECONCILIATION", status="RED",
+            blocking="ledger",
             reason=f"(1) schreibseite: telemetry_rows={telemetry_rows} != "
                    f"decision_seq-keyed={keyed} — Zeile ohne Schlüssel",
             detail=detail,
@@ -510,6 +539,7 @@ def gate_telemetry_reconciliation(
     if keyed != distinct_pair or not pairs_ok:
         return GateResult(
             name="TELEMETRY_RECONCILIATION", status="RED",
+            blocking="ledger",
             reason=f"(2) schluessel: keyed={keyed}, distinct(run_id,"
                    f"decision_seq)={distinct_pair}, je Run eindeutig="
                    f"{pairs_ok}",
@@ -522,6 +552,7 @@ def gate_telemetry_reconciliation(
         return GateResult(
             name="TELEMETRY_RECONCILIATION",
             status="RED",
+            blocking="ledger",
             reason=f"(3) unattributed: {unattributed} Dispatch(es) ohne "
                    f"Telemetriezeile — Erfolg ohne Beleg",
             detail=detail,
@@ -534,6 +565,7 @@ def gate_telemetry_reconciliation(
         return GateResult(
             name="TELEMETRY_RECONCILIATION",
             status="RED",
+            blocking="ledger",
             reason=f"(3b) orphan: {orphan_rows} Zeile(n) ohne Erfolg — "
                    f"Überbehauptung",
             detail={**detail, "overclaim": True},
@@ -542,6 +574,7 @@ def gate_telemetry_reconciliation(
         return GateResult(
             name="TELEMETRY_RECONCILIATION",
             status="RED",
+            blocking="ledger",
             reason=f"(4) bilanz: dispatched={dispatched} != "
                    f"sum(reasons)={sum(reasons.values())}",
             detail=detail,
@@ -564,6 +597,10 @@ def gate_telemetry_reconciliation(
         # eine Uhr.
         status="LEDGER_CONSISTENT" if run_closed
         else "PROVISIONAL_LEDGER_CONSISTENT",
+        # GRÜN blockt nichts — und das muß *dastehen*, nicht fehlen: ein
+        # Feld, das bei RED gefüllt und bei GRÜN leer ist, ist keine
+        # Auskunft, sondern eine Auslassung (§5.4br).
+        blocking="none",
         detail=detail,
     )
 
@@ -1416,6 +1453,12 @@ def gate_snapshot(
         # ist ein Zustand, keine Aussage.
         if recon.status != "GREEN" and recon.reason:
             print(f"  reason:             {recon.reason}")
+            # WER blockt (§5.4br): dieses Gate bewertet Buchführung, nicht
+            # Betrieb. Ohne diese Zeile liest der 20.10. `RED`, schaut auf
+            # die vier Zeilen und repariert die falsche Seite.
+            print(f"  blocking:           {recon.blocking or '?'} — "
+                  "dieses Gate prüft den Ledger; der Dienst steht oder "
+                  "steht nicht, und das steht im delivery-Etikett")
         print(f"  open_for:           {d.get('open_for_hours')} h"
               f" ({d.get('open_for_hours', 0) / 24:.1f} d) — der Lauf, "
               "nicht die Stille")
@@ -1457,13 +1500,18 @@ def gate_snapshot(
             _sf = d["stalled_for_h"]
             print(f"  stalled_for:        {_sf} h ({round(_sf / 24.0, 1)} d)"
                   " — gegen jetzt, nicht gegen den Laufanfang")
-        # Der Fremdschlüssel, den es gibt und den kaum jemand schreibt.
+        # Der Fremdschlüssel ( §5.4bs): die Bezugsgröße ist der Order-Schritt,
+        # nicht die Entscheidung. 8/8 heißt: wo eine Order entstand, steht
+        # ihre Id. `telemetry_seq` (0/361) ist keine Lücke, sondern eine
+        # Altlast — die Paarung läuft über `order_id`, und der Fill liegt
+        # dort. Eine Spalte, die nie gefüllt wird und nie gefüllt werden muß,
+        # ist keine Aufgabe, sondern ein Grabstein.
         print(
-            f"  fk order_id:        {d.get('fk_set')}/{d.get('fk_rows')} "
-            f"Telemetriezeilen gesetzt, "
-            f"{d.get('fk_paired')} Fill(s) darüber gepaart — "
-            "telemetry_seq ist in allen Dispatches NULL, die Zuordnung "
-            "läuft über eine Reihenfolge-Annahme"
+            f"  fk order_id:        {d.get('fk_set')}/{d.get('fk_expected')} "
+            f"Order-Schritte gesetzt "
+            f"({d.get('fk_rows')} Entscheidungen, 26 ohne Order = korrekt "
+            f"leer), {d.get('fk_paired')} Fill(s) darüber gepaart — "
+            "telemetry_seq ist deprecated (0/361, nie benötigt)"
         )
         cov = d.get("coverage_pct")
         print(
@@ -1524,7 +1572,7 @@ def gate_snapshot(
     # eine Datei, die ihren eigenen Hash enthält, hätte einen Fixpunkt, der
     # nicht existiert — jede Korrektur änderte den Wert, den sie korrigiert.
     print(
-        f"  blocking:           kein Aufrufer verdrahtet (Stand {_gate_blob['blob'][:12]})"
+        f"  enforced:           kein Aufrufer verdrahtet (Stand {_gate_blob['blob'][:12]})"
         " — wer diesen Befehl startet, blockiert; das Urteil selbst bricht nichts ab"
     )
     if recon.detail.get("unattributed"):
