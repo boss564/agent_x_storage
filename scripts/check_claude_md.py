@@ -368,11 +368,18 @@ class Report:
     def ok(self) -> None:
         self.checked += 1
 
-    def claim(self, field: str, count: int) -> None:
-        """Eine Zahl, die im Doku-Text steht und im Code gezaehlt werden muss."""
+    def claim(self, field: str, count: int, line: int | None = None,
+              text: str = "") -> None:
+        """Eine Zahl, die im Doku-Text steht und im Code gezaehlt werden muss.
+
+        §A-MB (Runde 42): **wo** gezaehlt wurde, nicht nur wie oft. Ohne
+        Position ist `24 Zusagen` bei halbem Text keine Aussage darueber,
+        ob der Extraktor misst oder nur weniger liest — die Gegenprobe
+        `28 -> 24` belegte das eine, nicht das andere.
+        """
         if not field:
             raise AssertionError("jede Zusage braucht ihren Feldnamen")
-        self.claims.append((field, int(count)))
+        self.claims.append((field, int(count), line, text[:80]))
 
     def fail(self, line: int | None, kind: str, doc, real, note: str = "") -> None:
         self.checked += 1
@@ -479,7 +486,7 @@ def check_counts(text: str, waves: list[str], per: int | None, rep: Report,
             passed, total = int(m.group(1)), int(m.group(2))
             if refs:
                 for ref in refs:
-                    rep.claim(f"suite:{ref}", total)
+                    rep.claim(f"suite:{ref}", total, lineno, raw)
                     if root is not None and not (root / ref).exists():
                         rep.fail(lineno, "Suite zugesagt, Skript fehlt",
                                  f"{passed}/{total} ({ref})", "nicht vorhanden")
@@ -491,7 +498,7 @@ def check_counts(text: str, waves: list[str], per: int | None, rep: Report,
             elif total >= 20:
                 # Wellentabelle: Zahl ohne Skript — die Zusage steht, der
                 # Bezug fehlt. Gezaehlt, nicht bewertet.
-                rep.claim("suite:ohne-skript", total)
+                rep.claim("suite:ohne-skript", total, lineno, raw)
                 rep.skip("tests_ohne_skript")
         # §A-NA: ein `N/N` vor `waves` ist der Umfang **eines Skripts**,
         # nicht die Wellenzahl der Architektur. Der Bruch wird vor der
@@ -609,11 +616,25 @@ _CLAIM_COUNT_ORIGIN = (
 
 
 def _self_test_claim_count(doc_text: str | None = None) -> list[str]:
-    """Sind es noch 28 — gemessen, nicht behauptet? (§A-ND)
+    """Sind es noch 28 — gemessen, **und an welcher Stelle**? (§A-ND/§A-MB)
 
     Zwei Fragen: die live gezaehlte Menge stimmt mit der Sollzahl, **und**
-    jede Zusage traegt ihr Feld. Eine Zusage ohne Feld ist eine Zahl ohne
-    Herkunft in der Ausgabe `fields`.
+    jede Zusage traegt ihre Position. Eine Zusage ohne Position ist eine
+    Zahl ohne Herkunft.
+
+    §A-MB (Runde 42): die erste Gegenprobe halbierte den Text und sah
+    `24` — sie belegte, dass die Zahl sich aendert, nicht dass sie misst.
+    `24` ist keine Haelfte von `28`; die vier fehlenden lagen in der
+    zweiten Haelfte, die vier bleibenden im Kopf. Jetzt wird an einer
+    **bekannten Zeile** geschnitten: alle gefundenen Positionen muessen
+    **vor** dem Schnitt liegen. Das ist die Aussage, die der Extraktor
+    treffen muss, und die einzige, die er treffen kann.
+
+    **Formabhaengigkeit, benannt:** der Extraktor erkennt `N/N tests
+    passed` und `N/N Tests` — ein umformulierter Satz ohne
+    Bedeutungswechsel faellt aus der Zaehlung und macht diesen Test rot,
+    ohne dass etwas verloren ist. Das ist der Preis der Ableitung, und er
+    steht an der Konstante (§A-MC).
     """
     from pathlib import Path as _P
     text = doc_text if doc_text is not None else _P("CLAUDE.md").read_text(
@@ -629,6 +650,26 @@ def _self_test_claim_count(doc_text: str | None = None) -> list[str]:
     bare = [c for c in rep.claims if not c[0]]
     if bare:
         out.append(f"{len(bare)} Zusagen ohne Feld")
+    no_pos = [c for c in rep.claims if not c[2]]
+    if no_pos:
+        out.append(f"{len(no_pos)} Zusagen ohne Position")
+
+    # §A-MB: Schnitt an einer **bekannten** Zeile, dann Position pruefen.
+    lines = text.splitlines(keepends=True)
+    cut = next((i for i, ln in enumerate(lines, 1) if "Render-Pipeline" in ln),
+               None)
+    if cut is None:
+        out.append("Schnittzeile nicht gefunden — Gegenprobe blind")
+        return out
+    half = "".join(lines[:cut - 1])
+    rep_h = Report()
+    w_h, p_h = parse_waves(half)
+    check_counts(half, w_h, p_h, rep_h, _P.cwd())
+    late = [c for c in rep_h.claims if c[2] and c[2] >= cut]
+    if late:
+        out.append(f"{len(late)} Zusagen hinter dem Schnitt: {late[:2]!r}")
+    if not rep_h.claims:
+        out.append("Halbierung lieferte null Zusagen — Extraktor misst nicht")
     return out
 
 
@@ -960,7 +1001,7 @@ def _self_test_count_delta() -> list[str]:
         #     nicht beide nur "geprueft" heissen. Geprueft wird die
         #     Ausgabeform selbst — sie ist die Stelle, an der zwei
         #     Einheiten ein Wort teilten.
-        line = _status_line(Checks(223, 210, 0), 0)
+        line = _status_line(Checks(223, 210, 0), 0)  # §A-KR bewusst: Formprobe
         for need in ("223 Angaben geprueft", "433 Angaben gezaehlt",
                      "210 ausgeschlossen", "0 Abweichungen"):
             if need not in line:
@@ -1262,7 +1303,7 @@ def _self_test_count_delta() -> list[str]:
                 f"claim() veraendert total nicht: {c_no.total} vs {c_all.total}")
         if c_no.measured != c_all.measured:
             failures.append("claim() veraendert measured — falscher Eimer")
-        line_all = _status_line(c_all, 0)
+        line_all = _status_line(c_all, 0)  # §A-KR root=None
         for need in ("2 Angaben geprueft", "6 Angaben gezaehlt",
                      "5 gemessen", "1 Zusagen"):
             if need not in line_all:
@@ -1270,7 +1311,7 @@ def _self_test_count_delta() -> list[str]:
         # Ohne Zusagen: die Klammer nennt `0 Zusagen` — das ist eine Zahl,
         # keine Behauptung. Verboten ist nur der Zusatz **ausserhalb** der
         # Klammer, der eine vierte Einheit vortaeuscht (§A-KX).
-        line_no = _status_line(c_no, 0)
+        line_no = _status_line(c_no, 0)  # §A-KR root=None
         if "0 Zusagen" not in line_no or line_no.count("Zusagen") != 1:
             failures.append(f"Zeile verschweigt null Zusagen: {line_no!r}")
 
@@ -1337,10 +1378,45 @@ def _self_test_count_delta() -> list[str]:
         mark = "  # " + "\u00a7A-KR"
         quiet = prod.replace(mark + " bewusst: Default-Zweig", "")
         quiet = quiet.replace(mark, "")
-        if len(_probe_anchors(quiet)) == _PROBE_ANCHOR_EXPECTED:
+        _prod_after = [a for a in _probe_anchors(quiet) if "_status_line" not in a]
+        if len(_prod_after) == _PROBE_ANCHOR_EXPECTED:
             failures.append(
-                "Groessen-Guard blind: geloeschte Marker bleiben bei "
-                f"{_PROBE_ANCHOR_EXPECTED}")
+                "Groessen-Guard blind: geloeschte Produktions-Marker bleiben "
+                f"bei {_PROBE_ANCHOR_EXPECTED}")
+        # 32. §A-MD: **das Instrument im Messbereich.** Drei Runden, drei
+        #     Selbstmitzaehlungen, dreimal einzeln gefixt:
+        #       R40 Ankerliste zaehlte die Abschrift (mehr Anker als Code)
+        #       R41 _probe_anchors zaehlte den eigenen Kommentar (zwei zuviel)
+        #       R41 die Wache zaehlte den eigenen Marker (blind)
+        #     Der gemeinsame Nenner: ein Messinstrument, das seine eigene
+        #     Quelle liest, findet sich selbst. Ein Preset, vier Instrumente.
+        #     Marker **ausschliesslich** im Kommentar -> null Anker.
+        if _probe_anchors(mark + " nur im Kommentar, kein Anker\n"):
+            failures.append(
+                "_probe_anchors zaehlt einen Kommentar als Anker")
+        if _probe_anchors("x = g()" + mark + " bewusst\n") != (
+                "x = g()" + mark + " bewusst",):
+            failures.append("_probe_anchors findet echten Anker nicht")
+        #     _git_callers_without_cwd gegen sich selbst: die eigene Datei
+        #     enthaelt keinen offenen git-Aufruf — und eine Probedatei, die
+        #     nur einen Kommentar nennt, zaehlt nicht.
+        if open_git:
+            pass          # oben schon gemeldet
+        if _git_callers_without_cwd("# subprocess.run(['git','status'])\n"):
+            failures.append(
+                "_git_callers_without_cwd zaehlt einen Kommentar als Aufruf")
+        if _git_callers_without_cwd(
+                "import subprocess\nsubprocess.run(['git','x'])\n") == []:
+            failures.append("_git_callers_without_cwd findet den Zwilling nicht")
+        #     Und der Report: zwei roots, zwei Bezugszeilen (§A-MA).
+        line_own = _status_line(Checks(1), 0, Path("/tmp/a"))  # §A-KR root=fremd
+        #                          ^ Zwillingsprobe: zaehlt den Bezug
+        #                          nicht als Ausnahme (siehe unten)
+        line_two = _status_line(Checks(1), 0, Path("/tmp/b"))  # §A-KR root=fremd
+        if "/tmp/a" not in line_own or "/tmp/b" not in line_two:
+            failures.append(f"Kopfzeile nennt den Bezug nicht: {line_own!r}")
+        if line_own == line_two:
+            failures.append("Kopfzeile gleich fuer zwei roots")
         # Die Presets der Prueflogik, an Mini-Quellen statt an der
         # Produktionsdatei — so ist der Zwilling reproduzierbar. **Ein
         # Preset je Fehlerklasse**, nicht fuenf insgesamt (§A-LB): die
@@ -1428,7 +1504,7 @@ def _self_test_count_delta() -> list[str]:
         elif not _forwarding_violations(broken):
             failures.append("Pruefer findet eingebauten Fehler nicht in Produktion")
         # Die Zeile liest den Zaehler an genau einer Stelle.
-        line_c = _status_line(Checks(rep_c.checked, rep_c.skips.get("regel", 0)), 0)
+        line_c = _status_line(Checks(rep_c.checked, rep_c.skips.get("regel", 0)), 0)  # §A-KR root=None
         if f"{n_ok + 1} Angaben geprueft" not in line_c:
             failures.append(f"Zeile liest den Zaehler nicht: {line_c!r}")
 
@@ -1447,12 +1523,12 @@ def _self_test_count_delta() -> list[str]:
             failures.append("Aufteilung nicht im Objekt: gleiche Summe, gleicher Wert")
         if Checks(5, 1) == Checks(5, 2):
             failures.append("__eq__ ignoriert excluded")
-        line_ident = _status_line(c1, 0)
+        line_ident = _status_line(c1, 0)  # §A-KR root=None
         if "21 Angaben geprueft" not in line_ident or \
                 "231 Angaben gezaehlt" not in line_ident or \
                 "210 ausgeschlossen" not in line_ident:
             failures.append(f"Zeile rechnet nicht aus dem Typ: {line_ident!r}")
-        line_ident3 = _status_line(c3, 0)
+        line_ident3 = _status_line(c3, 0)  # §A-KR root=None
         if "11 Angaben gezaehlt" not in line_ident3:
             failures.append(f"Zeile rechnet nicht (zweites Paar): {line_ident3!r}")
         try:
@@ -1526,7 +1602,7 @@ def _self_test_count_delta() -> list[str]:
         if "21 Angaben" not in str(demo):
             failures.append(f"Checks bringt die Zahl nicht mit: {demo!r}")
         try:
-            _status_line(21, 0)              # type: ignore[arg-type]
+            _status_line(21, 0)  # §A-KR root=None  # type: ignore[arg-type]
             failures.append("_status_line akzeptiert int — die Einheit fehlt")
         except TypeError:
             pass
@@ -2127,6 +2203,7 @@ _DEFAULT_PROBE_LINES: frozenset[int] = frozenset()
 # ist, die sie prueft. Deshalb steht daneben ein **Groessen-Guard** mit
 # einer dokumentierten Zahl und ihrer Herkunft (§A-LA).
 _PROBE_ANCHOR_EXPECTED = 8
+_PROBE_ANCHOR_SELFTEST_EXPECTED = 9
 _PROBE_ANCHOR_ORIGIN = (
     "Runde 40, Marker §A-KR (Ableitung zaehlt nur Code vor dem Markerblock): "
     "vier Default-Zweig-Aufrufe (check_counts x2, _snapshot_path, "
@@ -2134,6 +2211,12 @@ _PROBE_ANCHOR_ORIGIN = (
     "fremdem Ort (_delta_line(1), _snapshot_path(root) gegen "
     "_snapshot_path(), repo_root(None) zweimal). Nachgezaehlt im "
     "Code-Abschnitt: `grep -n 'A-KR' scripts/check_claude_md.py | head -8`.")
+# §A-ME (Runde 42): `_status_line` bekam einen optionalen `root`, um den
+# Bezugsraum zu nennen. Damit fallen die **Pruefstand**-Aufrufe darunter
+# — Aufrufe im `--self-test`, die die Form pruefen, nicht einen Baum. Sie
+# sind keine Ausnahme im Produktionspfad: der Pruefstand ist ein anderer
+# Ort, kein geduldeter. Getrennt gezaehlt, weil eine Zahl, die beide
+# Mengen summiert, in Runde 43 `17` sagt und niemand weiss, warum.
 
 
 def _probe_anchors(src: str | None = None) -> tuple[str, ...]:
@@ -2205,10 +2288,12 @@ def _default_probe_lines_valid() -> list[str]:
     for anchor in anchors:
         if anchor not in joined:
             out.append(f"Anker fehlt: {anchor!r}")
-    if len(anchors) != _PROBE_ANCHOR_EXPECTED:
+    if len(anchors) != _PROBE_ANCHOR_EXPECTED + _PROBE_ANCHOR_SELFTEST_EXPECTED:
         out.append(
             f"{len(anchors)} abgeleitete Ausnahmen, erwartet "
-            f"{_PROBE_ANCHOR_EXPECTED} — Herkunft: {_PROBE_ANCHOR_ORIGIN}")
+            f"{_PROBE_ANCHOR_EXPECTED} Produktion + "
+            f"{_PROBE_ANCHOR_SELFTEST_EXPECTED} Pruefstand"
+            f" — Herkunft: {_PROBE_ANCHOR_ORIGIN}")
     if len(set(anchors)) != len(anchors):
         out.append(f"{len(anchors) - len(set(anchors))} doppelte Ausnahme(n)")
     # Jede Markierung muss einen Grund tragen: mehr als das blosse
@@ -2711,7 +2796,8 @@ class Checks:
         return hash(("Checks", self.n, self.excluded, self.claims))
 
 
-def _status_line(checked: Checks, problems: int) -> str:
+def _status_line(checked: Checks, problems: int,
+                 root: Path | None = None) -> str:
     """Die Kopfzeile: **jede Zahl mit ihrer Einheit** (§A-NI/§A-KH).
 
     `checked` kommt als `Checks` herein und bringt Wort, Zahl und die
@@ -2728,6 +2814,15 @@ def _status_line(checked: Checks, problems: int) -> str:
     Zerlegung: `N gezaehlt (M gemessen + K Zusagen)`. Zwei Zahlen, zwei
     Namen, eine Klammer — und `measured` ist dieselbe Zahl, nicht eine
     Nachrechnung.
+
+    §A-MA (Runde 42): die Zahl hatte **zwei Lesarten**. `223` im eigenen
+    Baum und `151` im Klon waren vor Runde 41 dieselbe Zahl, weil der
+    Lauf mit fremdem `root` den eigenen Baum mass. Nach dem Fix sind es
+    zwei Zahlen — und die Kopfzeile nannte keine davon. Ein Leser in
+    Runde 50 vergleicht zwei Reports und kann nicht entscheiden, welcher
+    verzerrt war. Jetzt steht der Bezugsraum **in der Zeile**: `root`
+    (aufgeloest) und `sha256` der gelesenen `CLAUDE.md`. Die Zahl bleibt
+    in der Klammer, aber sie ist ab jetzt **an** etwas gebunden.
     """
     if not isinstance(checked, Checks):
         raise TypeError("checks muss Checks sein, int ist die alte Falle")
@@ -2741,6 +2836,17 @@ def _status_line(checked: Checks, problems: int) -> str:
         # und werden nirgends als Pruefung gezaehlt — der Grund muss an
         # der Zahl stehen, nicht nur in der Akte.
         out += " (nicht doctest-gedeckt)"
+    # §A-MA: der Bezugsraum, nach der Zahl und ihren Gruenden — der
+    # Problemzaehler gilt fuer **diese** Datei, nicht fuer den Namen
+    # `CLAUDE.md`, den beide Reports tragen.
+    if root is not None:
+        out += f"\nBezug: root={root}"
+        doc = root / "CLAUDE.md"
+        try:
+            out += (f", CLAUDE.md sha256:"
+                    f"{hashlib.sha256(doc.read_bytes()).hexdigest()[:12]}")
+        except OSError:
+            out += ", CLAUDE.md nicht lesbar"
     return out + f", {problems} Abweichungen"
 
 
@@ -2903,7 +3009,7 @@ def main() -> int:
     # "Angaben" — zwei Einheiten, ein Wort. Die Einheit gehoert an die
     # Zahl; keine Zahl dieser Zeile ist mehr ambivalent.
     status = _status_line(Checks(rep.checked, sum(rep.skips.values()),
-                                   len(rep.claims)), len(rep.problems))
+                                 len(rep.claims)), len(rep.problems), root)
     if skipped:
         status += f", {skipped} uebersprungen (Umgebung)"
     # §A-NC: die Zahl, die sich aendert, nennt den Grund. Ohne diese Zeile

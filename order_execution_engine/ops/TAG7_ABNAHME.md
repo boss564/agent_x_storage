@@ -4792,7 +4792,181 @@ aus `--json-report`. **Gegenprobe:** halbierter Text → 24 Zusagen → rot.
 Die Zahl ist damit keine Konstante mehr, die jemand pflegen muß, sondern
 das Ergebnis einer Messung an der Doku, die sie behauptet.
 
-## 72. Der Satz dieser Runde
+### §71.32 — Runde 42: die Kopfzahl hatte zwei Lesarten und nannte keine
+
+`223` im eigenen Baum, `151` im Klon — **vor** Runde 41 war das dieselbe
+Zahl, weil der Lauf mit fremdem `root` den eigenen Baum maß. Nach dem
+Fix sind es zwei Zahlen, und die Kopfzeile nannte keine davon.
+
+| Feld | Quelle | Gegenprobe | gemessen |
+|---|---|---|---|
+| `root` | aufgelöster Bezugsraum | fremder Klon | `/private/tmp/klonprobe` |
+| `sha256` | Hash der gelesenen `CLAUDE.md` | geänderte Datei | `69159540db89` → `8537812f6ab8` |
+| Zahl | `Checks` | — | — |
+
+Die Zeile steht **nach** der Zahl mit ihren Gründen und **vor** dem
+Problemzähler — die Abweichungen gelten für diese Datei, nicht für den
+Namen `CLAUDE.md`, den beide Reports tragen. Erster Einbau zerriß den
+Satz `(nicht doctest-gedeckt), 0 Abweichungen`; gemessen, nicht vermutet.
+
+**Die 151 sind kein Befund.** Der Klon hat keine `scripts/`:
+
+| Art | n |
+|---|---|
+| tote Referenz | 71 |
+| Befehl zeigt ins Leere | 53 |
+| Suite zugesagt, Skript fehlt | 16 |
+| Datei fehlt | 10 |
+
+Sie stehen jetzt als **eigener Lauf mit eigenem `root`** in der Akte,
+nicht als Differenz `223 − 151 = 72` in einer Zeile.
+
+### §71.33 — Runde 42: ein Instrument, das seine Quelle liest, findet sich selbst
+
+Drei Runden, drei Formen derselben Selbstmitzählung, dreimal einzeln
+gefixt — **ohne gemeinsamen Preset**:
+
+| Runde | Instrument | zählte sich mit als | entdeckt durch |
+|---|---|---|---|
+| 40 | Ankerliste | Abschrift der Anker | 20 gegen 8 |
+| 41 | `_probe_anchors` | eigener Kommentar | 10 gegen 8 |
+| 41 | Wache der Ableitung | eigener Marker | blind |
+
+Der Nenner ist nicht die Liste der Fixes, sondern die **Lage**: das
+Instrument liegt im Meßbereich. Ein Preset deckt alle vier:
+
+| Instrument | Preset | erwartet | rot gemessen durch |
+|---|---|---|---|
+| `_probe_anchors` | Marker **nur** im Kommentar | `()` | `not ln.lstrip().startswith("#")` entfernt → 19 |
+| `_probe_anchors` | Marker im Code | 1 Anker | — |
+| `_git_callers_without_cwd` | `git` nur im Kommentar | `[]` | — |
+| `_git_callers_without_cwd` | `git` in Mini-Quelle | Fund | `words[:1] == ["git"]` → `["never"]` |
+| `_status_line` | zwei roots | zwei Zeilen | `if root is not None` → `if False` |
+
+**`_git_callers_without_cwd` gegen sich selbst:** die eigene Datei
+enthält keinen offenen `git`-Aufruf (`[]`). Das ist der Zustand — der
+Test ist der Nachweis, daß es so bleibt.
+
+**Der Marker zur Laufzeit ist die halbe Antwort.** Gebaut heißt: der
+Quelltext enthält ihn nicht. Die andere Hälfte ist die Probe oben —
+sonst ist „zur Laufzeit gebaut“ eine Zusicherung, die hält, bis jemand
+den Bau zurückdreht.
+
+### §71.34 — Runde 42: 24 war keine Halbierung
+
+Die Gegenprobe schnitt den Text und sah `24` — sie belegte, **daß** die
+Zahl sich ändert, nicht **was** sie mißt. `24` ist keine Hälfte von
+`28`; ein Schnitt an einer beliebigen Stelle läßt unterschiedlich viel
+stehen.
+
+**Der Extraktor liefert jetzt Positionen.** `claim(field, count, line,
+text)` — und der Test schneidet an einer **benannten** Zeile
+(`Render-Pipeline`, L1493) und prüft, daß kein Fund dahinter liegt:
+
+```
+28 Zusagen gesamt
+27 vor dem Schnitt (Positionen 1393, 1428, 1462 …)
+ 1 dahinter — und genau eins wird erwartet
+```
+
+**Formabhängigkeit (§A-MC), an der Konstante vermerkt:** erkannt werden
+`N/N tests passed` und `N/N Tests`. Ein umformulierter Satz ohne
+Bedeutungswechsel fällt aus der Zählung → Test rot, ohne Verlust. Der
+Preis der Ableitung, derselbe wie bei den Ankern: eine Form, die nur von
+der Form gehalten wird.
+
+### §71.35 — Runde 42: acht Produktion, neun Prüfstand
+
+`_status_line` bekam einen optionalen `root`. Damit fielen die Aufrufe
+im `--self-test` unter die Ausnahmen — **von 8 auf 17 in einem Edit**,
+und der Größen-Guard meldete es sofort.
+
+Die 9 sind keine Ausnahmen im Produktionspfad: der Prüfstand ist ein
+anderer Ort, kein geduldeter. Getrennt gezählt
+(`_PROBE_ANCHOR_SELFTEST_EXPECTED = 9`), getrennt bewacht — und der
+Zirkularitätstest prüft jetzt die **Produktionsmenge**, nicht die Summe.
+Eine Zahl, die beide Mengen summiert, sagt in Runde 43 `17` und niemand
+weiß, warum.
+
+**Was am 20.10. auf dem Tisch liegt: 216 Tests, 24/24 Selbsttests plus
+drei neue Wächter, eine Kopfzahl mit `root` und `sha256`, Zusagen mit
+Positionen, acht Produktions-Ausnahmen mit Größen-Guard — und eine
+Akte, in der die 151 des Klons einen eigenen Lauf mit eigenem `root`
+hat, statt eine Differenz ohne Bezug zu sein.**
+`223` und `151` waren vor Runde 41 **dieselbe** Zahl — der Lauf mit
+fremdem `root` maß den eigenen Baum. Nach dem Fix sind es zwei Zahlen,
+und die Zeile, die sie druckt, sagte nicht, welche. Jetzt:
+
+```
+223 ... 0 Abweichungen
+Bezug: root=/Volumes/…/agent_x_storage, CLAUDE.md sha256:69159540db89
+```
+
+**Ein Leser in Runde 50 kann zwei Reports unterscheiden, ohne sie zu
+datieren.** `root` und `sha256` ändern sich unabhängig voneinander,
+beides gemessen: fremder Klon → anderer `root`, geänderte Datei →
+anderer Hash (`69159540db89` → `8537812f6ab8`).
+
+**Und die 151 sind nicht 72.** Der Klon hat keine Testskripte, also:
+
+| Art | n |
+|---|---|
+| tote Referenz | 71 |
+| Befehl zeigt ins Leere | 53 |
+| Suite zugesagt, Skript fehlt | 16 |
+| Datei fehlt | 10 |
+
+Das ist ein **Artefakt des Klons**, kein Befund über das Repo — und
+deshalb steht der Klonlauf hier mit eigenem `root` und eigener Zahl,
+statt als Differenz zweier Läufe in einer Zeile.
+
+**Das Instrument im Meßbereich, dreimal in drei Runden:**
+
+| Runde | Instrument | zählte sich mit als | entdeckt durch |
+|---|---|---|---|
+| 40 | Ankerliste | Abschrift der Anker | 20 gegen 8 |
+| 41 | `_probe_anchors` | eigener Kommentar | 10 gegen 8 |
+| 41 | Wache der Ableitung | eigener Marker | blind |
+
+Der gemeinsame Nenner ist eine Zeile: **ein Meßinstrument, das seine
+eigene Quelle liest, findet sich selbst.** Jetzt ein Preset, vier
+Instrumente: `"# §A-KR nur im Kommentar"` → **null** Anker;
+`"# subprocess.run(['git','status'])"` → **null** Funde. Beide rot
+gemessen, indem die Kommentarprüfung entfernt wurde (`19` Anker,
+`_probe_anchors zaehlt einen Kommentar als Anker`).
+
+**Und `_git_callers_without_cwd` gegen sich selbst:** die eigene Datei
+enthält keinen offenen `git`-Aufruf — und der Zwilling beweist, daß das
+Instrument nicht blind ist (`git ohne cwd` in einer Mini-Quelle → Fund).
+
+**`24` war keine Halbierung.** Die erste Gegenprobe schnitt ins Leere:
+27 von 28 Claims standen vor der Schnittzeile. Jetzt liefert
+`claim(field, count, line, text)` die **Position**, und der Test schneidet
+an einer benannten Zeile (`Render-Pipeline`, L1493) und prüft, daß **kein**
+Fund dahinter liegt. Die Aussage ist damit: der Extraktor misst, wo er
+zählt — nicht nur, wie oft.
+
+**Der Preis, benannt:** der Extraktor erkennt `N/N tests passed` und
+`N/N Tests`. Ein umformulierter Satz ohne Bedeutungswechsel fällt aus der
+Zählung und macht den Test rot, ohne daß etwas verloren ist. Das ist
+dieselbe Formabhängigkeit wie bei den Ankern (§A-MC) — und sie steht
+jetzt an der Konstante, damit in Runde 45 niemand einen Fehler sucht,
+der eine Redaktion ist.
+
+**Ausnahmen: 8/13 → 8 Produktion + 9 Prüfstand.** `_status_line` bekam
+einen optionalen `root`; die Aufrufe im `--self-test` prüfen die Form,
+nicht einen Baum. Sie sind kein geduldeter Fall im Produktionspfad — sie
+liegen an einem anderen Ort. Getrennt gezählt, weil eine Zahl, die beide
+summiert, in Runde 43 `17` sagt und niemand weiß, warum.
+
+**Was am 20.10. auf dem Tisch liegt: 216 Tests, 24/24 Selbsttests plus
+drei neue Wächter (Instrument im Meßbereich, `git`-Zwilling,
+Bezugszeile), eine Kopfzahl, die ihren `root` und ihre `sha256` nennt,
+Zusagen mit Positionen, acht Produktions-Ausnahmen mit Größen-Guard —
+und eine Akte, in der die 151 des Klons einen eigenen Lauf mit eigenem
+`root` hat, statt eine Differenz ohne Bezug zu sein.**
+
+
 
 **Einundvierzig.** Der Prüfer, der dreizehn Stellen fand, sah Glieder und
 keine Ketten — und die Kette war echt: `_resolve_test_root(doc_root)` rief
