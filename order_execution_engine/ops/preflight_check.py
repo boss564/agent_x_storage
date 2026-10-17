@@ -591,8 +591,11 @@ def _two_verdicts(
 
     **Blockierend ist keine Eigenschaft des Verdikts, sondern des Aufrufers.**
     Dieser Prüfer ist ein Werkzeug: er setzt sein Exit-Code, wenn jemand ihn
-    startet. Es gibt keinen verdrahteten Aufrufer (kein launchd-Job, kein
-    Hook), also bricht bei ``current: RED`` nichts von selbst ab.
+    startet. Ein verdrahteter Aufrufer (launchd-Job, Hook) ist nicht Teil
+    dieses Moduls — die Ausgabe sagt „kein Aufrufer (Stand <blob>)", nicht
+    „kein Aufrufer, für immer". Ein Werkzeug kann seine eigene Verdrahtung
+    nicht kennen, ohne sie nachzusehen; die Datierung macht die Aussage
+    prüfbar statt behauptet.
     """
     row = conn.execute("SELECT MAX(run_id) FROM telemetry_runs").fetchone()
     latest = int(row[0]) if row and row[0] is not None else min_run_id
@@ -800,8 +803,8 @@ def gate_snapshot(
         f"(abgeschlossen, dokumentiert)"
     )
     print(
-        "  blocking:           kein Aufrufer verdrahtet — wer diesen Befehl "
-        "startet, blockiert; das Urteil selbst bricht nichts ab"
+        f"  blocking:           kein Aufrufer verdrahtet (Stand {_gate_blob['blob'][:12]})"
+        " — wer diesen Befehl startet, blockiert; das Urteil selbst bricht nichts ab"
     )
     if recon.detail.get("unattributed"):
         print(

@@ -40,7 +40,8 @@ synthetisch und hängt weder an Run 8/9 noch am Markt noch an
 | Gegenstand | Commit / Hash | Rolle |
 |---|---|---|
 | Run 8 + 9 (Daten) | `5c5bc364` · Runner `92338139e8…` | **erzeugt** von diesem Stand |
-| Gate (Urteil) | **`146b4be4`** · `preflight_check.py` `3dad796a…` | **neu**, beurteilt post hoc |
+| Gate (Urteil) | **`146b4be4`** · `3dad796a…` | **erzeugt** die Verdikte `current`/`historical` |
+| Gate (Kopfzeile) | **`ce80e9a9`** · `7ef57c49…` | **erzeugt** `gate:` und `blocking:` |
 | Gate im Betrieb | — | **kein Dienstbestandteil**, nur manueller Aufruf |
 | Ab `Run 10` | `e91916bd` (Runner identisch) | belastbare Basis des neuen Stands |
 
@@ -261,6 +262,21 @@ Dokument fehlt. Eine Rücknahme des Codes ist keine Messung.
 | Welchen Code lädt der Prozess? | **HEAD `5c5bc364`**, byte-gleich | `sha256(HEAD:shadow_runner.py) == sha256(worktree)` → `1a71c15f…ac4`; `lsof -p 962` zeigt **keine** offene `.py` und keine `.pyc` aus dem Paket |
 | Warum mtime 16:50? | meine Rücknahme, kein Start | Schreiben + Rückschreiben; `__pycache__/shadow_runner.cpython-314.pyc` trägt denselben Stempel und wurde nie importiert |
 
+**Laufzeit — Ist-Ausgabe, nicht abgeschrieben** (17.10.2026, 17:36:05):
+
+```
+$ ps -o pid=,lstart=,etime= -p 962
+  962 Wed Oct 14 21:23:32 2026     02-20:12:33
+```
+
+Das Format `02-20:12:33` ist `[[DD-]hh:]mm:ss`; ausgeschrieben „2 Tage 20
+Stunden 12 Minuten 33 Sekunden". **Jede Fassung dieses Dokuments, die hier
+„2 d 20 h" o. Ä. schreibt, ist falsch** — nicht weil die Größenordnung
+danebenläge, sondern weil `etime` monoton ist und zwei verschiedene Zeitpunkte
+keine gleiche Laufzeit haben können. Die Zahl wächst mit jeder Minute, in der
+dieses Dokument liegt; nur die Ausgabe des Befehls ist wahr, und sie ist mit
+Zeitstempel zu zitieren.
+
 **Ergebnis:** `integrate_news_index` war zu keinem Zeitpunkt im laufenden
 Prozess aktiv. Run 8 und Run 9 liefen unter demselben Runner-Code; der
 `config_json`-Diff ist ausschließlich `git_commit` (`9556b1d7` →
@@ -326,13 +342,30 @@ dokumentiert erscheint.
 > wegen eines längst behobenen Fehlers. Wenn, dann mit der Ausfallart im
 > Text — und mit `gate:`-Hash im Log, damit ein Block den Richter nennt.
 
-**Der Prüfer datiert sich selbst.** Seit dieser Runde trägt jede Ausgabe den
-Blob-Hash der urteilenden Fassung (`git hash-object`, 40 Hex SHA-1 — derselbe
-Wert wie in `git rev-parse <commit>:<path>`). Ein Verdikt ohne Prüfer-Hash
-nennt den Run, aber nicht den Richter: derselbe Befehl auf denselben Daten
-könnte nach dem nächsten Werkzeug-Commit anders lauten, und das Protokoll
-merkt es nicht. Ohne git fällt die Zeile auf SHA-256 zurück und **sagt das**
+**Der Prüfer datiert sich selbst.** Jede Ausgabe trägt den Blob-Hash der
+urteilenden Fassung (`git hash-object`, 40 Hex SHA-1 — derselbe Wert wie in
+`git rev-parse <commit>:<path>`). Ein Verdikt ohne Prüfer-Hash nennt den Run,
+aber nicht den Richter: derselbe Befehl auf denselben Daten könnte nach dem
+nächsten Werkzeug-Commit anders lauten, und das Protokoll merkt es nicht.
+Ohne git fällt die Zeile auf SHA-256 zurück und **sagt das**
 (`sha256 (git unavailable)`), statt eine falsche Form vorzutäuschen.
+
+**Zwei Adressen, ein Auflöser.** Das Dokument nennt den **Commit**, das
+Werkzeug nennt den **Blob**, `git rev-parse <commit>:<path>` löst den Commit
+in den Blob auf:
+
+```
+git rev-parse <commit>:order_execution_engine/ops/preflight_check.py
+  → muß dem `gate:`-Wert der vorgelegten Ausgabe entsprechen
+```
+
+Der umgekehrte Weg (Blob → Commit) ist nicht eindeutig. Deshalb steht in der
+Basis-Zeile kein Blob, sondern der Commit des Laufs, dessen Ausgabe vorgelegt
+wird — und diese Ausgabe trägt ihren eigenen Blob. Wer beides nebeneinander
+hält und `rev-parse` laufen lässt, hat die Probe, die das Dokument nicht
+leisten kann: **eine Wahrheit, zwei Adressen, ein Auflöser.** Ohne den
+Auflöser müßte das Dokument bei jedem Werkzeug-Commit nachgezogen werden —
+und genau dieses Nachziehen ist in sechs Runden fünfmal schiefgegangen.
 
 ### 5.4 mtime-Sweep — der Beweis für „Basis Run 8+9"
 
@@ -584,6 +617,15 @@ ausgeschlossen und daher ein Folgepunkt nach 01.11.
 sind die **Gegenmenge** der Frage: eine gestreute Erfolgsverteilung ist mit
 einem einzigen toten Symbol genauso vereinbar wie mit zwanzig. Es gibt derzeit
 **kein** Indiz zur Konzentration der `INVALID_PRICE`-Fälle.
+
+**Prüfungen dieser Runde, mit ihrem Gegenstand:**
+
+| Prüfung | Gegenstand | Aufrufer |
+|---|---|---|
+| `gate:`-Hash in der Ausgabe | Werkzeug | Dienst-Werkzeug selbst |
+| `blocking: … (Stand <blob>)` | Werkzeug, datiert | Werkzeug selbst |
+| Kopfzeilen-Regel im pre-commit | Doku | **Hook** (nicht mehr von Hand) |
+| `git rev-parse <commit>:<path>` | Adressauflösung Doc↔Werkzeug | Mensch, bei Abnahme |
 
 ## 8. Tests dieser Runde
 
