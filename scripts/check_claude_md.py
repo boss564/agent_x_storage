@@ -16,6 +16,7 @@ Gedacht als Pre-Commit-Hook oder naechtlicher Lauf.
 """
 from __future__ import annotations
 
+import datetime
 import json
 import re
 import subprocess
@@ -23,6 +24,9 @@ import sys
 from pathlib import Path
 
 AGENTS_PER_WAVE = 9
+# §A-NB: die Auswahl des Bezugsraums, benannt statt nur im Code.
+SCRIPT_SCOPE = "wave"      # `N/N waves` ist Skriptumfang, keine Architektur
+MIN_AGENT_CLAIM = 50       # kleinere "N agents" = Subagenten, nicht die Summe
 # Compliance-Modul (außerhalb ×9-Wellen) — Teil der 277-Gesamtformel.
 COMPLIANCE_AGENTS = 25
 # Fenster um eine Agentenzahl-Fundstelle: „total“/„insgesamt“ → 277 erlaubt.
@@ -399,6 +403,12 @@ def check_counts(text: str, waves: list[str], per: int | None, rep: Report,
     n_waves = len(main)
     n_agents = n_waves * n_per  # 243 = nur Hauptwellen
     n_total = len(waves) * n_per + COMPLIANCE_AGENTS  # 252 + 25 = 277
+    # §A-NB: jede Ausnahme braucht ihren Namen, sonst ist die Auswahl eine
+    # Entscheidung, die man erst beim Lesen des Pruefers sieht. `waves`
+    # faellt aus **einem** Grund: `11/11 waves` ist Skriptumfang
+    # (`SCRIPT_SCOPE`), keine Architekturzahl. `agents` faellt aus einem
+    # anderen: kleine Zahlen sind Subagenten-Angaben (`MIN_AGENT_CLAIM`).
+    # Beide Gruende stehen jetzt in der Ausgabe, nicht nur hier.
     _FRACTION = re.compile(r"\d+\s*/\s*\d+")
     agent_pat = re.compile(r"(\d+)\s+(agents?|waves?|Wellen|B2G-Agenten)", re.I)
     # §A-NA: die Suite-Zusagen. Format in CLAUDE.md:
@@ -442,7 +452,7 @@ def check_counts(text: str, waves: list[str], per: int | None, rep: Report,
                 else:
                     rep.ok()
                 continue
-            if n < 50:  # kleine Zahlen sind Subagenten-Angaben, nicht die Summe
+            if n < MIN_AGENT_CLAIM:  # Subagenten-Angabe, nicht die Summe
                 continue
             lo = max(0, m.start() - _COUNT_CONTEXT_CHARS)
             hi = min(len(raw), m.end() + _COUNT_CONTEXT_CHARS)
@@ -505,7 +515,7 @@ def self_test_check_counts() -> list[str]:
     failures.extend(_self_test_suite_claims(waves))
     if failures:
         return failures
-    _SELF_TEST_SCOPE[0] = "10/10 (5 Zaehlung + 5 Bezugsraum)"
+    _SELF_TEST_SCOPE[0] = "15/15 (5 Zaehlung + 5 Bezugsraum + 5 Differenz/Auswahl)"
 
 
 def _self_test_suite_claims(waves: list[str]) -> list[str]:
@@ -561,6 +571,63 @@ def _self_test_suite_claims(waves: list[str]) -> list[str]:
         rep = run("- 199/199 tests passed (`scripts/test_ok.py`)")
         if not rep.claims:
             failures.append("Zusage ohne Zaehlung im Bezugsraum")
+    failures.extend(_self_test_count_delta())
+    return failures
+
+
+def _self_test_count_delta() -> list[str]:
+    """Mutationsnachweis fuer §A-NC und §A-NB — beide Richtungen.
+
+    Ein Pruefer, der die Differenz **immer** druckt, macht jede Zeile
+    unlesbar; einer, der sie **nie** druckt, laesst 234 zu 223 stehen.
+    Getestet wird beides, wie bei der Gesamtzahl.
+    """
+    import tempfile
+    failures: list[str] = []
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        (root / "CLAUDE.md").write_text("", encoding="utf-8")
+
+        def lines_for(prev_checked: int | None, prev_why: str = "x") -> str:
+            snap = root / _COUNT_SNAPSHOT
+            if prev_checked is None:
+                snap.unlink(missing_ok=True)
+            else:
+                snap.write_text(json.dumps({
+                    "checked": prev_checked, "why": prev_why,
+                    "when": "2026-10-17", "counting": "test",
+                }), encoding="utf-8")
+            return _delta_line(223, root) or ""
+
+        # 1. Differenz vorhanden -> Zahl, Vorzeichen und Grund stehen da
+        line = lines_for(234, "Feld waves ausgeschlossen, Falsch-positiv")
+        for needle in ("-11", "234", "Feld waves ausgeschlossen"):
+            if needle not in line:
+                failures.append(f"Differenzzeile ohne {needle!r}: {line!r}")
+
+        # 2. gleiche Zahl -> keine Zeile (sonst Rauschen im Hook)
+        if lines_for(223):
+            failures.append("Differenzzeile bei gleicher Zahl gedruckt")
+
+        # 3. kein Snapshot -> keine Zeile (erster Lauf hat kein Gegenueber)
+        if lines_for(None):
+            failures.append("Differenzzeile ohne Snapshot gedruckt")
+
+        # 5. geaenderte Zaehlweise -> als nicht vergleichbar benannt
+        snap = root / _COUNT_SNAPSHOT
+        snap.write_text(json.dumps({
+            "checked": 234, "why": "x", "when": "2026-10-17",
+            "counting": "alte Formel ohne counts",
+        }), encoding="utf-8")
+        line = _delta_line(223, root) or ""
+        if "Zaehlweise geaendert" not in line:
+            failures.append(f"geaenderte Zaehlweise nicht benannt: {line!r}")
+
+        # 4. Auswahlzeile nennt die ausgeschlossenen Felder mit Grund
+        sel = _selection_line()
+        for needle in ("waves", "agents", "Skriptpfad"):
+            if needle not in sel:
+                failures.append(f"Auswahlzeile ohne {needle!r}: {sel!r}")
     return failures
 
 
@@ -866,6 +933,85 @@ def check_undocumented_tests(root: Path, rep: Report) -> None:
                      script, "fehlt in TEST_SCRIPTS oder NO_TEST_SUMMARY")
 
 
+_COUNT_SNAPSHOT = ".check_claude_md.last.json"
+
+
+def _count_reason(argv: list[str]) -> str:
+    """`--write-count "<grund>"` — der Grund steht im Snapshot, nicht im Kopf."""
+    i = argv.index("--write-count")
+    rest = [a for a in argv[i + 1:] if not a.startswith("-")]
+    return rest[0] if rest else "Grund nicht notiert"
+
+
+def _load_count_snapshot(root: Path | None = None) -> dict | None:
+    """Der letzte Lauf: Zahl, Zaehlweise, Grund, Datum (§A-NC).
+
+    Ohne ihn ist jede Differenz eine Behauptung. Die Zaehlweise steht
+    mit drin, weil `223` gegen `234` nur dann eine Bewegung ist, wenn
+    beide dieselbe Formel benutzen — zwei Aenderungen gleichzeitig
+    (andere Felder, andere Zaehlweise) beweisen nichts ueber die eigene
+    Entwicklung.
+    """
+    p = (root or Path(__file__).resolve().parent.parent) / _COUNT_SNAPSHOT
+    try:
+        return json.loads(p.read_text(encoding="utf-8"))
+    except (FileNotFoundError, ValueError):
+        return None
+
+
+def _delta_line(checked: int, root: Path | None = None) -> str | None:
+    """`(-11 gegenueber 234, 2026-10-17: Grund)` oder None (§A-NC).
+
+    None ist die richtige Antwort bei gleicher Zahl und beim ersten Lauf:
+    ein Pruefer, der jede Bewegung kommentiert, macht die echten
+    Abweichungen unlesbar.
+    """
+    prev = _load_count_snapshot(root)
+    if prev is None or prev.get("checked") == checked:
+        return None
+    try:
+        old = int(prev["checked"])
+    except (KeyError, TypeError, ValueError):
+        return "  (Vorgaenger unlesbar: checked fehlt oder ist keine Zahl)"
+    delta = checked - old
+    sign = "+" if delta > 0 else ""
+    # §A-NC, zweite Haelfte: bewegt sich die Zaehlweise mit, ist die Zahl
+    # keine Messung ihrer eigenen Entwicklung mehr. Dann sagen wir das,
+    # statt eine Differenz zu behaupten, die zwei Aenderungen mischt.
+    note = prev.get("why", "Grund nicht notiert")
+    if prev.get("counting") and prev["counting"] != _counting_signature():
+        note += "; Zaehlweise geaendert, Zahl nicht vergleichbar"
+    return (f"  ({sign}{delta} gegenueber {old}, "
+            f"{prev.get('when', 'undatiert')}: {note})")
+
+
+def _selection_line() -> str:
+    """Die zweite Grenze: was der Pruefer nicht ansieht (§A-NB)."""
+    return (
+        "Auswahl: 3 Ausschluesse — "
+        "`N/N waves` ist Skriptumfang (nicht Architektur), "
+        f"`N agents` < {MIN_AGENT_CLAIM} sind Subagenten-Angaben, "
+        "`N/N Tests` ohne Skriptpfad werden gezaehlt, nicht geprueft"
+    )
+
+
+def _counting_signature() -> str:
+    """Was gezaehlt wird, in einer Zeile. Aendert sie sich, ist die Zahl
+    nicht mehr mit der alten vergleichbar — und der Pruefer sagt das."""
+    return ("line_counts+dead_refs+counts+undocumented+inventories; "
+            f"waves={SCRIPT_SCOPE}, min_agents={MIN_AGENT_CLAIM}")
+
+
+def _save_count_snapshot(checked: int, why: str) -> None:
+    p = Path(__file__).resolve().parent.parent / _COUNT_SNAPSHOT
+    p.write_text(json.dumps({
+        "checked": checked,
+        "why": why,
+        "when": datetime.date.today().isoformat(),
+        "counting": _counting_signature(),
+    }, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+
+
 def main() -> int:
     if "--self-test" in sys.argv:
         fails = self_test_check_counts()
@@ -885,8 +1031,8 @@ def main() -> int:
         if skip:
             skip = False
             continue
-        if a == "--json-report":
-            skip = True   # nächster Wert ist der Pfad, kein Positionsargument
+        if a == "--json-report" or a == "--write-count":
+            skip = True   # nächster Wert ist Pfad/Grund, kein Positionsargument
             continue
         if a.startswith("-"):
             continue
@@ -906,6 +1052,9 @@ def main() -> int:
     check_counts(text, waves, per, rep, root)
     check_undocumented_tests(root, rep)
     check_doc_inventories(root, rep)
+    # §A-NC: --write-count schreibt den Stand mit Grund fort.
+    if "--write-count" in sys.argv:
+        _save_count_snapshot(rep.checked, _count_reason(sys.argv))
     if "--run-tests" in sys.argv:
         check_tests(text, root, rep)
 
@@ -944,6 +1093,13 @@ def main() -> int:
     status = f"{rep.checked} Angaben geprueft, {len(rep.problems)} Abweichungen"
     if skipped:
         status += f", {skipped} uebersprungen (Umgebung)"
+    # §A-NC: die Zahl, die sich aendert, nennt den Grund. Ohne diese Zeile
+    # ist `223` gegen `234` dieselbe Form wie 30 gegen 300: zwei Zahlen,
+    # ein Name, und niemand sagt, welche gilt. Vergleich gegen den letzten
+    # Lauf, mit Zaehlweise und Datum — nicht gegen eine gemerkte Zahl.
+    dl = _delta_line(rep.checked)
+    if dl:
+        status += "\n" + dl
     print(f"\n{status}\n")
 
     # §A-NA (Nicht-Abwesenheit): `0 Abweichungen` heisst, dass alles
@@ -969,6 +1125,12 @@ def main() -> int:
         print(f"Grenze: die Zahl in `N/N` wird nicht nachgerechnet "
               f"(Skriptbezug {len(rep.claims) - no_ref}, ohne Skript {no_ref}); "
               "geprueft wird Existenz und passed<=total")
+        # §A-NB: die zweite Grenze — die **Auswahl**. Ohne sie ist der
+        # Bezugsraum eine Entscheidung, die man erst beim Lesen des
+        # Pruefers sieht, und beim naechsten Feld wird sie wieder
+        # getroffen, ohne dass jemand weiss, welche schon ausgeschlossen
+        # sind. Drei Felder, drei Gruende, benannt.
+        print(_selection_line())
 
     for s in rep.env_skips:
         print(f"  ⏭️  {s['script']}  — {s['note']}")

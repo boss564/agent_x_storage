@@ -114,3 +114,6 @@ krypto_news_journalist/
 polysentinel-issue2-gate-drop/
 dashboard/_review_newsagent_cutover/
 artifacts/
+
+# Pruefer-Differenz gegen den letzten Lauf (Runde 29, A-NC)
+.check_claude_md.last.json
