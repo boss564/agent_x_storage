@@ -3127,3 +3127,119 @@ und er steht in der Akte.**
 
 Suite: **206 passed** (203 + 3 neue: `test_split_partitions_in_one_pass_not_by_sorting`,
 `test_discarded_rows_do_not_consume_decision_seq`, `test_verdict_names_the_number_it_uses`).
+
+## 55. Runde 25 — gemessen oder Rest, und der Preis der Reihenfolge
+
+### §5.4cn (Nachtrag) — `attributed` ist ein Summand, nicht die Differenz
+
+Die Frage war: ist `attributed` das Ergebnis einer Zuordnung, oder der
+Rest? Code, Zeile 940:
+
+```python
+i += 1
+if i in hits:            # hits = tatsächliche decision_seq aus telemetry
+    buckets["attributed"] += 1
+else:
+    buckets["unattributed"] += 1
+```
+
+`attributed` ist ein **Summand**. Der Rest ist `traffic_only`
+(`n - sum(drei Töpfe)`), und der beträgt 0/361 — er trägt nichts zur 4
+bei. Eine falsche Positionszuordnung würde `attributed` **senken**, nicht
+auffüllen; sie kann die 4 nicht erfinden.
+
+**Und trotzdem ist die Aussage aus §7 richtig:** bei 4 Claims und 4 Zeilen
+ist jede Bijektion gleich gut. Die Messung ist echt, aber sie hat keinen
+Fall, in dem sie widersprechen könnte — 4 Claims, 4 Zeilen, `decision_seq`
+`1,2,3,4`. **`open_unmatched = 0` ist wahr und unprüfbar**, und das ist
+genau die Formulierung, die in die Akte gehört.
+
+### §5.4cr — die ausgelieferte Config, nicht der Ladepfad
+
+`run_policy.json` **nennt** `theta`:
+
+```json
+{ "theta": "0.1", "max_book_age_ms": 2000, "max_news_age_s": 3900, ... }
+```
+
+Die Frage aus §3 — „steht `theta` drin, steht `0.1` drin" — ist damit
+beantwortet, aber die Antwort stand vorher nirgends in der Abnahme. Zwei
+Tests schließen das:
+
+| Test | prüft |
+|---|---|
+| `test_shipped_run_policy_defines_theta_explicitly` | Schlüssel **vorhanden** (fehlt er, greift der Default still) und Wert `0.1`, geladen über `load_policy_cfg(datei)` → `from_config` |
+| `test_shipped_run_policy_matches_defaults_...` | Datei-Policy `snapshot()` == Default-Policy `snapshot()` — der Dienst läuft nicht anders, je nachdem ob das Argument gesetzt ist |
+
+Ein fehlender `theta`-Schlüssel ist still (Default `0.1`), ein falscher
+ist laut (`ValueError`). Nur der **erste** Fall braucht einen Test, und
+er hatte keinen.
+
+### §5.4cs — die Zahl, die zählt, zuerst
+
+Vorher: das Urteil führte mit `300`, die aufgehenden Summanden folgten.
+Wer `unattributed: (\d+)` parst, las 300; wer nachrechnet, nahm 30.
+
+Jetzt:
+
+```
+reason: (3) unattributed: 30, (offener Run) von N=361
+        · kumuliert 300 inkl. früherer Runs · discarded=327
+        · attributed=4 (obere Schranke: Position gegen decision_seq,
+          keine item_id im Ledger)
+```
+
+`kumuliert` trägt die Gesamtsicht, `discarded`/`attributed` sind als
+Belege nachgeordnet — nicht als Summanden des Urteils.
+
+### §5.4ct — `attributed` ist eine obere Schranke
+
+Das steht jetzt **im Urteil**, nicht nur in dieser Akte. Die Begründung:
+
+- `attributed` entsteht aus einer Messung (Position gegen `decision_seq`)
+- die Messung läuft innerhalb **eines** Runs; sie kann nicht danebengreifen
+  und es auffallen, weil `telemetry` die `item_id` nicht schreibt
+- `telemetry_seq = 0/361` ist deshalb kein Schönheitsfehler, sondern die
+  Grenze der Aussage
+
+### Offene Position (nicht für den 20.10.)
+
+**`telemetry.item_id`** — die einzige Änderung, die `attributed` von einer
+begründeten Zahl in eine beweisbare verwandelt. Aufwand, explizit:
+
+1. **Migration**: `ALTER TABLE telemetry ADD COLUMN item_id TEXT` — SQLite
+   kann das ohne Tabellen-Neubau, aber die bestehende `CREATE TABLE`-Definition
+   muss mitziehen, sonst fehlt die Spalte beim nächsten Neuaufbau
+2. **Schreibpfad**: `shadow_runner`/`ShadowExecutionEngine` muss die
+   `item_id` des Dispatches bis zur Telemetriezeile durchreichen. Der
+   `DedupStore.bind_telemetry(item_id, telemetry_seq)` ist der vorhandene
+   Seam — er bekommt heute einen `telemetry_seq`, der nie geschrieben wird;
+   er muss die `item_id` **in die Zeile** bringen, nicht nur in den Store
+3. **Rückwärts**: 34 Altzeilen ohne `item_id`. Fail-closed heißt:
+   `attributed` zählt nur Zeilen **mit** `item_id`, Altzeilen bleiben
+   `unattributed` — die Zahl **sinkt** beim Umbau, und das ist die richtige
+   Richtung. Ein Backfill nach Position wäre die Wiederholung der Annahme,
+   die repariert werden soll
+4. **Erst danach** kann `attributed` das Kriterium (1) tragen statt nur
+   die Diagnose
+
+**Das ist kein Fix für den 20.10.** Es ist Schema, Schreibpfad und
+Rückwärtsbehandlung — drei Dinge, die man nicht in einer Woche vor einer
+Abnahme macht. Was am 20.10. abgenommen wird, ist die Schranke mit ihrer
+Begründung im Urteil.
+
+## 56. Der Satz dieser Runde
+
+Fünfundzwanzig Runden, und die Akte hat ihren Endpunkt benannt, ohne ihn
+zu verkleiden: `attributed = 4` ist gemessen und kann trotzdem nicht
+danebengreifen — vier Claims, vier Zeilen, jede Bijektion gleich gut, und
+kein Fall, in dem die Reihenfolge falsch wäre und man es sähe.
+
+**Was am 20.10. abgenommen wird, ist ein System, das seine Verwerfungen
+zählt, seine Herkunft mitführt, seine Töpfe disjunkt baut, seine Policy
+aus der ausgelieferten Datei liest und bei dem einen Topf im Urteil
+selbst steht, daß er eine Reihenfolge annimmt. Die verbleibende Arbeit ist
+keine Zeile Code, sondern eine Spalte — `telemetry.item_id` — und sie ist
+der Unterschied zwischen *die Zahl geht auf* und *die Zahl stimmt*.**
+
+Suite: **208 passed** (+2: ausgelieferte Config; +1 umgeschrieben: Zahl zuerst).

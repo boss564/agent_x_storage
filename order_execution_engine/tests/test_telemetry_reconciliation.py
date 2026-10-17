@@ -2360,9 +2360,13 @@ def test_verdict_names_the_number_it_uses() -> None:
     from order_execution_engine.ops import preflight_check
 
     src = inspect.getsource(preflight_check)
-    assert "offener Run:" in src, (
-        "die Urteilszeile muss den offenen Run nennen"
+    assert "(3) unattributed: {detail['origin_split']['unattributed']}" in src, (
+        "die Zahl, die das Kriterium prüft, muss **zuerst** und allein "
+        "hinter dem Etikett stehen — sonst parst `unattributed: (\\d+)` "
+        "die kumulierte 300 statt der 30 (§5.4cs)"
     )
-    assert "inkl. früherer Runs" in src, (
-        "und die Zahl, auf der das Kriterium steht"
+    assert "kumuliert" in src, "die 300 bleibt sichtbar, aber nachgeordnet"
+    assert "obere Schranke" in src, (
+        "attributed muss als Schranke benannt sein, solange keine "
+        "item_id im Ledger steht (§5.4ct)"
     )

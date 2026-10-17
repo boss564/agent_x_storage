@@ -606,16 +606,26 @@ def gate_telemetry_reconciliation(
             name="TELEMETRY_RECONCILIATION",
             status="RED",
             blocking="ledger",
-            # §5.4cm: das Urteil nennt die Zahl, auf der es steht. `unattributed`
-            # trägt zwei Lesarten — 300 (frühere Runs + offener Run) und 30
-            # (nur der offene Run). Welche das RED trägt, steht hier, nicht
-            # in einer WARN-Zeile daneben.
-            reason=f"(3) unattributed: {unattributed} "
-                   f"(offener Run: {detail['origin_split']['unattributed']}; "
-                   f"{unattributed} inkl. früherer Runs) — "
-                   f"von N={detail['dispatched_in_scope']}; "
-                   f"discarded={detail['origin_split']['discarded']}, "
-                   f"attributed={detail['origin_split']['attributed']}",
+            # §5.4cs: die Zahl, die zählt, zuerst und **allein** — wer
+            # `unattributed: (\d+)` parst, liest dieselbe 30, die das
+            # Kriterium prüft. Die 300 und die Belege stehen dahinter und
+            # sind als das benannt, was sie sind: Kumulation und Summanden,
+            # nicht das Urteil.
+            #
+            # §5.4ct: `attributed` ist eine **obere Schranke**, keine
+            # Zählung. Sie entsteht aus einer Messung (Position gegen
+            # `decision_seq`), aber die Messung kann nur innerhalb eines
+            # Runs greifen; `telemetry` schreibt keine `item_id`, also
+            # gibt es keinen Fall, in dem sie danebengriffe und es
+            # auffiele. Bis `telemetry.item_id` existiert (§53), steht
+            # das in der Urteilszeile, nicht nur in der Akte.
+            reason=f"(3) unattributed: {detail['origin_split']['unattributed']}, "
+                   f"(offener Run) von N={detail['dispatched_in_scope']} "
+                   f"· kumuliert {unattributed} inkl. früherer Runs "
+                   f"· discarded={detail['origin_split']['discarded']} "
+                   f"· attributed={detail['origin_split']['attributed']} "
+                   f"(obere Schranke: Position gegen decision_seq, "
+                   f"keine item_id im Ledger)",
             detail=detail,
         )
     # Die Gegenrichtung (§5.4ac). Bis hierher war nur Erfolg-ohne-Zeile

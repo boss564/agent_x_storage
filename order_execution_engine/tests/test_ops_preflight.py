@@ -229,3 +229,50 @@ def test_w_ops_5_freeze_rejects_bad_source() -> None:
         except FreezeError:
             pass
     print("OK test_w_ops_5_freeze_rejects_bad_source")
+
+
+def test_shipped_run_policy_defines_theta_explicitly() -> None:
+    """Die ausgelieferte Config, nicht ein Dict, muss `theta` tragen (§5.4cr).
+
+    `from_config` ist gepinnt — aber der Pin greift nur, wenn die Datei
+    den Wert **nennt**. Fehlt `theta` in `run_policy.json`, greift der
+    Default in `load_policy_cfg`, und der Assert im `from_config` wäre der
+    einzige Wächter: Code-Eigenschaft statt Betriebs-Eigenschaft. Ein
+    fehlender Schlüssel ist hier still, ein falscher laut — deshalb prüft
+    dieser Test **beides**: Präsenz und Wert.
+    """
+    import json as _json
+
+    path = (Path(__file__).resolve().parents[1] / "ops" / "run_policy.json")
+    assert path.exists(), f"ausgelieferte Config fehlt: {path}"
+
+    raw = _json.loads(path.read_text(encoding="utf-8"))
+    assert "theta" in raw, (
+        "theta steht nicht in run_policy.json — der Pin prüft dann den "
+        "Default aus load_policy_cfg, nicht die Datei"
+    )
+    assert str(raw["theta"]) == "0.1", (
+        f"ausgelieferte theta={raw['theta']!r} weicht von der Kalibrierung ab"
+    )
+
+    # Und der echte Ladepfad — nicht `{"theta": "0.1"}` im Test.
+    policy = BridgePolicy.from_config(load_policy_cfg(path))
+    assert policy.theta == Decimal("0.1")
+
+
+def test_shipped_run_policy_matches_defaults_except_theta_is_explicit() -> None:
+    """Der Dateipfad und der Default-Pfad dürfen sich nicht unterscheiden.
+
+    Wenn `load_policy_cfg(None)` und `load_policy_cfg(datei)` verschiedene
+    Policies ergeben, läuft der Dienst anders, je nachdem ob das Argument
+    gesetzt ist — und `ops/` ist der einzige Ort, an dem das auffiele.
+    """
+    path = (Path(__file__).resolve().parents[1] / "ops" / "run_policy.json")
+    shipped = BridgePolicy.from_config(load_policy_cfg(path))
+    defaulted = BridgePolicy.from_config(load_policy_cfg(None))
+
+    assert shipped.theta == defaulted.theta
+    assert shipped.max_news_age_s == defaulted.max_news_age_s
+    assert shipped.snapshot() == defaulted.snapshot(), (
+        "run_policy.json beschreibt eine andere Policy als der Default"
+    )
