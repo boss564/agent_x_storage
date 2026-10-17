@@ -583,7 +583,9 @@ def test_ankerd_meta_every_reject_reason_has_a_producer() -> None:
     import re
     from pathlib import Path as _P
 
-    src = _P("order_execution_engine/shadow_execution_engine.py").read_text()
+    src = (
+        _P(__file__).resolve().parent.parent / "shadow_execution_engine.py"
+    ).read_text()
     produced = set(re.findall(r"RejectReason\.([A-Z_]+)", src))
     allowed_without_producer = {"NONE"}
 

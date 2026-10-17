@@ -4,63 +4,61 @@ Warum diese Datei existiert
 ---------------------------
 In der Schwellen-Probe (TAG7_ABNAHME.md §5.4e) war der erste Lauf bei
 Schwelle 3 *und* 5 grün. Ursache war ein veralteter ``.pyc`` im
-Ladepfad: pytest maß gegen Bytecode von vor der Änderung. Erst
-``__pycache__`` leeren ließ die Probe greifen.
+Ladepfad: pytest maß gegen Bytecode von vor der Änderung.
 
 Das ist derselbe Mechanismus wie in §5.4d, diesmal als Messfehler in der
 Messung selbst — und in der einzigen Richtung, die niemand bemerkt:
-**grün**. Eine Probe, die bei jeder Eingabe dasselbe sagt, sagt nichts.
+**grün**.
 
-``-B`` beim Dienst verlangt einen Neustart aus falschem Anlaß und ist
-deshalb nach der Abnahme gebucht. ``-B`` beim Testlauf verlangt gar
-nichts: hier gibt es keinen laufenden Prozeß, dessen Bytecode sich
-ändert. Deshalb steht es hier, und nicht als Merksatz im Kopf.
+Was hier steht und was nicht
+----------------------------
+``PYTHONDONTWRITEBYTECODE`` **muss** hier gesetzt werden: die Variable wirkt
+vor dem Interpreterstart und kann von ``pytest.ini`` nicht gesetzt werden.
+Alles andere ist inzwischen woanders und damit launcher-unabhängig:
+
+======================  =========================================
+Importierbarkeit        ``pytest.ini`` → ``pythonpath = .``
+Cache-Verzeichnis       ``pytest.ini`` → ``cache_dir``
+Relative Testpfade      ``Path(__file__).parent`` im Test
+======================  =========================================
+
+Frühere Fassungen dieser Datei setzten zusätzlich ``sys.path`` und
+``os.chdir``. Beides waren **Bandagen**: sie machten den Lauf unter diesem
+Starter grün und verdeckten, dass direktes ``pytest`` brach (11
+Collection-Fehler, ``FileNotFoundError``). Wer sie entfernt, sieht den
+Fehler — und behebt ihn dort, wo er sitzt.
 
 Benutzung::
 
-    PYTHONPATH=. python3 order_execution_engine/run_tests.py
-    PYTHONPATH=. python3 order_execution_engine/run_tests.py -k threshold
+    python3 order_execution_engine/run_tests.py
+    python3 order_execution_engine/run_tests.py -k threshold
 
-Die Umgebungsvariable ``PYTHONDONTWRITEBYTECODE`` wird **vor** dem Import
-von pytest gesetzt — pytest selbst lädt beim Start Module aus dem Paket.
-Ein ``export`` in der Shell wäre gleichwertig, aber nicht erzwingbar;
-hier ist es Teil der Invokation.
+Gleichwertig, ohne diesen Starter::
+
+    PYTHONPATH=. PYTHONDONTWRITEBYTECODE=1 python3 -m pytest order_execution_engine/tests
 """
 
 from __future__ import annotations
 
 import os
-import pathlib
 
 # Vor jedem Import aus dem Paket: kein Bytecode schreiben.
 os.environ["PYTHONDONTWRITEBYTECODE"] = "1"
-# sys.dont_write_bytecode greift auch für bereits laufende Interpreter —
+# sys.dont_write_bytecode greift auch für den bereits laufenden Interpreter;
 # die Umgebungsvariable allein wirkt nur beim Start neuer Prozesse.
 import sys  # noqa: E402
 
 sys.dont_write_bytecode = True
 
-# Das Repo-Wurzelverzeichnis muss auf sys.path stehen, sonst findet pytest
-# `order_execution_engine` nicht, egal von wo es gestartet wird. Auch das
-# gehört in die Invokation, nicht in ein `export` im Kopf des Ausführenden.
-_ROOT = pathlib.Path(__file__).resolve().parent.parent
-if str(_ROOT) not in sys.path:
-    sys.path.insert(0, str(_ROOT))
+import pathlib  # noqa: E402
 
 import pytest  # noqa: E402
 
 if __name__ == "__main__":
     here = pathlib.Path(__file__).resolve().parent
-    # cwd auf das Paket setzen: einige Tests lesen Quellen über relative
-    # Pfade. Ohne das hängt das Ergebnis davon ab, wer den Test startet —
-    # dieselbe Form von Abhängigkeit, die diese Akte elf Runden beschäftigt.
-    os.chdir(_ROOT)
     argv = [
         str(here / "tests"),
         "-q",
-        # Kein pytest-Cache: `lastfailed` überlebt sonst Schwellen-Änderungen
-        # und ändert, welche Tests laufen.
-        "-p", "no:cacheprovider",
         *sys.argv[1:],
     ]
     raise SystemExit(pytest.main(argv))

@@ -260,14 +260,18 @@ def gate_telemetry_reconciliation(
     }
     # Untergrenze: ohne sie sind (1)-(4) bei einem leeren Lauf vier Tautologien
     # (0==0, 0==0, „nichts fehlt“, 0==0) und LEDGER_CONSISTENT bedeutet
-    # „keine Daten“. Die Dauer gehört in die Bedingung: 4 Zeilen in 69 h
-    # (eine alle 17 h) ist ein anderer Befund als 4 Zeilen in 4 min. Eine
-    # absolute Zahl ohne Zeitraum ist mit jedem System vereinbar, das noch
-    # atmet — und sie ist trotzdem erfüllt.
+    # „keine Daten“. Das ist ihr einziger Zweck — und nur der.
     #
-    # Die erwartete Rate wird NICHT erfunden: sie steht in keiner Aktenstelle,
-    # also steht sie hier als „unbekannt“. Eine Zahl aus den Daten wäre
-    # immer erfüllt und damit keine Prüfung.
+    # Was sie NICHT ist (§5.4q): eine Funktionsschwelle. Der Wert stammt aus
+    # Run 9, also aus 100 % der überlebenden Teilmenge dieses Laufs. Eine
+    # Untergrenze, die exakt auf dem beobachteten Wert einer gefilterten
+    # Menge sitzt, prüft den Filter, nicht das System. Sie ist gegen die
+    # Gesamtmenge (34 Zeilen) fünfzehnfach übererfüllt und gegen die
+    # gefilterte (4) exakt erfüllt — sie kann in keiner Richtung etwas
+    # finden, was Bedingung (1) nicht schon findet.
+    #
+    # Die Dauer steht deshalb daneben (§5.4p), und die erwartete Rate als
+    # „unbekannt": eine Zahl aus den Daten wäre immer erfüllt.
     if telemetry_rows < MIN_TELEMETRY_ROWS:
         return GateResult(
             name="TELEMETRY_RECONCILIATION",

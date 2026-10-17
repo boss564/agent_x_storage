@@ -138,7 +138,7 @@ Freifahrtschein für die einzige Zeile, die den Termin selbst trägt.
 | 6 | §5.1 + §5.4, dieses Dokument | Zeitstempel, Sweep- und Import-Graph-Ausgabe vorhanden | **NICHT ENTSCHEIDBAR** |
 | 7 | §5.4d, pyc-Inhalt gegen `5c5bc364` | 9/9 Module `OK`; `flags = 0x00000000` dokumentiert | **NICHT BESTANDEN** |
 | 8 | `gate_snapshot` | Etikett `LEDGER_CONSISTENT`, (0)–(4) == RED-Zweige, (5) Warnung | **NICHT BESTANDEN** |
-| 9 | §5.4f–§5.4o | eine `pyc`, Schwelle beidseitig, `etime`, Blob↔Commit, `delivered` datiert, `DERIVED` definiert, `INVALID_PRICE` aufgelöst | **NICHT BESTANDEN** |
+| 9 | §5.4f–§5.4u | eine `pyc`, Schwelle beidseitig, `etime`, Blob↔Commit, `delivered` datiert, `DERIVED` definiert, `INVALID_PRICE` aufgelöst | **NICHT BESTANDEN** |
 
 **Regel gegen den Haken-Fehler:** Ein Haken bedeutete bisher „ausgeführt",
 nicht „getroffen". Deshalb steht in jeder Zeile die erwartete **Ausgabe**;
@@ -947,6 +947,134 @@ gate commit: b69b163b:a77abb536433                   # ohne DERIVED
 ```
 
 Der Zeuge zitiert sich jetzt selbst: Commit `b69b163b`, Blob `a77abb536433`.
+
+### 5.4q `MIN_TELEMETRY_ROWS = 4` war auf den Filter kalibriert, nicht auf das System
+
+Drei Zahlen, die sich nicht versöhnen ließen — sie versöhnen sich so:
+
+```
+telemetry gesamt            34      (run 8: 30, run 9: 4)
+dispatched_signals gesamt  360
+Run-9-Fenster: 60 Dispatches -> 56 verworfen -> 4 Erfolgs-Dispatches -> 4 Zeilen
+```
+
+Das Verhältnis ist **exakt 1 : 1**, in beiden Läufen:
+
+| Lauf | Erfolgs-Dispatches | telemetry-Zeilen |
+|---|---|---|
+| run 8 | 30 | 30 |
+| run 9 | 4 | 4 |
+
+Also: `telemetry_rows` zählt nichts Eigenes — es ist eine Kopie von
+`dispatched_success`. Und `MIN_TELEMETRY_ROWS = 4` ist der Wert von Run 9,
+also **100 % der überlebenden Teilmenge** dieses einen Laufs.
+
+> **Eine Untergrenze, die genau auf dem beobachteten Wert einer gefilterten
+> Menge sitzt, ist auf den Filter kalibriert, nicht auf das System.** Sie
+> war fünfzehnfach übererfüllt gegen die Gesamtmenge (34) und exakt erfüllt
+> gegen die gefilterte (4). Sie hat nie etwas geprüft, was nicht schon durch
+> (1) geprüft war: `telemetry_rows == decision_seq_keyed`.
+
+Die Herkunft ist datierbar — und es war diese Unterhaltung:
+`git log -S 'MIN_TELEMETRY_ROWS'` → `e88f6d07`, **17.10. 18:04**, mit dem
+Kommentar „Herkunft: Run 9 … hat 4 Zeilen". Der Wert wurde aus dem
+Gegenstand abgeleitet, den er prüfen sollte.
+
+**Was in `START.md` steht — und was davon gilt:**
+
+> `TELEMETRY_RECONCILIATION` | GREEN: erfolgreiche Dispatches ≥1 ⇒
+> `telemetry_rows >= dispatched_success` (sonst RED: stiller Write-Ausfall)
+
+Das ist die Originalabsicht: eine **Identität**, keine Untergrenze. Sie ist
+in Bedingung (1) enthalten. Der eigentliche Zweck war „stiller
+Write-Ausfall": wenn die Engine entscheidet und die Zeile nie ankommt.
+
+Und der Tag-1-Gate daneben:
+
+> `no_book` | nahe 0 (2 Freeze-Märkte subscribed); sonst WS
+
+**Run 8: 101. Run 9: 23.** Der Tag-1-Gate ist an der ersten Messung
+gescheitert, und niemand hat es notiert. `START.md` selbst nennt in der
+Tag-7-Tabelle „1 Dispatch vs. 11 Verwürfe ≈ 8 %" — die Daten von heute
+sagen 30 vs. 269. Beide Zahlen sind echt; sie gehören zu verschiedenen
+Zeitpunkten, und dazwischen hat niemand nachgesehen.
+
+### 5.4r Um 11:12:39 am 04.10. begann Run 8 — und endete die Auslieferung
+
+Keine Logdatei im Datenverzeichnis (nur `shadow.db` + Tail-Offset; Logs
+liegen laut `START.md` unter `~/Library/Logs/agentx-shadow/`). Die
+Chronologie kommt deshalb aus der Datenbank:
+
+```
+09:03 – 09:06   run 1–7 (Restart-Spam, START.md: ausgeschlossen)
+10:00:08        dispatch → unresolved_asset
+11:12:39        RUN 8 START          ← und in denselben Sekunden 30 Zeilen
+12:00:10        dispatch → no_book
+16:00, 17:00    dispatch → mapping_miss
+21:00           dispatch → mapping_miss
+```
+
+Run 8 begann um **11:12:39** und schrieb **sofort 30 Entscheidungen** —
+`decision_seq` 1–30, lückenlos, mit einem Erfolg (`seq 12`,
+`PARTIALLY_FILLED`, `requested_size=100`). Danach: nur noch stündliche
+Dispatches, **alle verworfen**.
+
+`decision_seq` beginnt in Run 9 wieder bei 1 → Run 9 war ein **echter
+Neustart** (PID 962, 14.10. 21:23:32), kein fortgesetzter Prozeß.
+
+> **Der Vorfall hat jetzt eine Uhrzeit.** 04.10. 11:12:39 ist der letzte
+> Moment, in dem etwas ausgeliefert wurde. Nicht „ein Dienst, der nichts
+> tut" — ein Dienst, der **3 h 12 min nach Tabellenbeginn funktioniert hat
+> und dann stehengeblieben ist**. Ein Ausfall mit Uhrzeit ist ein Vorfall;
+> einer ohne ist ein Zustand. Diese Akte führte den Zustand seit Runde 1.
+
+**Nicht ermittelbar:** was in den 3 848 Sekunden zwischen 11:12:39 und
+12:00:10 passierte. Kein Log, kein WS-Status, kein Deployment-Commit in
+diesem Fenster (`git log` 04.10.: letzter Commit 11:11:58 `9556b1d7`, 41 s
+vor Run-8-Start — das ist Koinzidenz, nicht Ursache).
+
+### 5.4s Die vier Zeilen sind nicht mehr feststellbar, nicht „unbekannt"
+
+Ihre vier `signal_id`s stehen in **keiner** JSONL — der Signalpfad wird
+nicht protokolliert. Welche der drei `INVALID_PRICE`-Ursachen griff, ist
+**nicht mehr feststellbar**. Das ist ein Zustand, keine Lücke im Wissen:
+
+> „Grund unbekannt" wäre eine Beschreibung der Akte. „Grund nicht mehr
+> feststellbar" ist eine Beschreibung der Daten. Nur die zweite bleibt wahr,
+> wenn jemand später nachsieht.
+
+**Der Split ist eine Schemaänderung mit Datenverlust an genau diesen vier
+Zeilen.** `NO_SIDE` / `NO_SNAPSHOT` / `EMPTY_SIDE` verkürzt den Sammelnamen
+für alles, was *nach* der Umstellung geschrieben wird. Die vier Zeilen aus
+Run 9 bleiben `INVALID_PRICE` und erscheinen in jedem Zähler danach als
+Rest. Nicht rückdatierbar heißt nicht überschreibbar.
+
+### 5.4t `Σ reject_reasons = 4` ist exakt und sagt nichts
+
+Bedingung (4) prüft `dispatched_success == Σ reject_reasons`. Das ist wahr
+und scharf — über einer Taxonomie, die nicht partitioniert: **ein Ledger
+ist konsistent über Namen, die verschiedene Dinge bedeuten.** Keine der
+fünf Bedingungen verletzt das; keine kann es.
+
+Die Bedingung mißt **Bilanz**, nicht **Bedeutung**. Das war nie ihr Auftrag
+— aber es stand auch nirgends, bis jetzt.
+
+### 5.4u Zählliste dieser Runde — aus dem Lauf abgeschrieben
+
+```
+$ python3 order_execution_engine/run_tests.py            # aus /tmp
+173 passed in 1.19s                                       # 0 __pycache__
+
+$ python3 .../pytest order_execution_engine/tests -q     # direkt, ohne -B
+2 failed, 171 passed                                      # beide Hygiene-Zeugen
+                                                          # (Starter-Eigenschaft,
+                                                          #  nicht Code-Eigenschaft)
+
+$ python3 .../preflight_check.py --min-run-id 9
+verdict:    LEDGER_CONSISTENT (4 Zeilen, 0 Auslieferungen)
+observed:   69.4 h (2.89 d) — eine alle 17.4 h; erwartet: unbekannt
+delivered:  0 — unverändert seit ≤ 2026-10-04 11:12:39 (außerhalb des Fensters)
+```
 
 ### 5.4f Eine Kopie, nicht zwei
 

@@ -681,6 +681,42 @@ def test_criterion_count_matches_red_branches_in_source() -> None:
     assert "(6) NENNER" in line
 
 
+def test_non_blocking_conditions_have_no_red_branch() -> None:
+    """Gegenprobe zu ``{5, 6}``: die Ausnahme darf nicht mitwachsen.
+
+    Die vorige Prüfung zählt RED-Zweige und läßt (5) und (6) als benannte
+    Ausnahme zu. Damit ist sie in einer Richtung offen: kommt ein RED-Zweig
+    für (5) oder (6) dazu, wächst ``red_returns`` — und die Ausnahme bleibt
+    im Set stehen, der Test wäre also *grün mit falscher Begründung*.
+
+    Diese Prüfung schließt die Richtung: (5) ist eine Warnung, (6) ein
+    Geltungsbereich. Keiner von beiden darf blocken. Wer sie blockierend
+    macht, muß sie aus ``non_blocking`` entfernen — und dabei hier scheitern
+    und die Entscheidung begründen.
+    """
+    import inspect
+    import re
+
+    from order_execution_engine.ops import preflight_check
+
+    src = inspect.getsource(preflight_check.gate_telemetry_reconciliation)
+    # Strukturell statt textuell: jeder RED-Zweig bekommt die Nummer der
+    # Bedingung, die ihn auslöst, aus seiner Position in der Funktion.
+    # Heute: (0) hat zwei Ausgänge, (1)-(4) je einen = 6 RED-Zweige.
+    # (5) und (6) stehen hinter dem letzten RED-Zweig — ein weiterer RED-Zweig
+    # am Ende der Funktion gehört damit zu (5) oder (6) oder ist neu, und in
+    # beiden Fällen wächst die Zahl, ohne daß die Ausnahme es merkt.
+    red_positions = [m.start() for m in re.finditer(r'status="RED"', src)]
+    assert len(red_positions) == 6, (
+        f"{len(red_positions)} RED-Zweige, 6 erwartet (0 zweimal, 1-4 einmal). "
+        "Ein neuer Zweig muß entweder eine neue Kriterium-Nummer bekommen "
+        "oder die Ausnahme {5,6} muß begründet geändert werden."
+    )
+    # Der letzte RED-Zweig muß VOR der Warnungs-/Nenner-Deklaration liegen.
+    warn_at = src.find("(5) WARNUNG")
+    assert warn_at == -1, "(5) gehört in _gate_criterion, nicht ins Gate"
+
+
 def test_branch_0_underrun() -> None:
     """(0) leere/unzureichende Datenlage -> RED, nicht GREEN."""
     status, detail = _run(rows=0, keyed=0, dispatched=0, reasons=0)
