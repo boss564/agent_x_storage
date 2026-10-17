@@ -458,3 +458,70 @@ def test_unattributed_join_uses_decision_seq_not_item_id() -> None:
         assert g.detail["unattributed"] == 1
         conn.close()
     print("OK test_unattributed_join_uses_decision_seq_not_item_id")
+
+
+def test_historical_red_does_not_block_current_green() -> None:
+    """Abgeschlossener roter Lauf: current GREEN, historical RED, keine Blocker."""
+    with tempfile.TemporaryDirectory() as td:
+        db = Path(td) / "t.db"
+        conn = sqlite3.connect(db)
+        _schema(conn)
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS telemetry_fill_metrics ("
+            "telemetry_seq INTEGER PRIMARY KEY)"
+        )
+        t0 = 1_000_000.0
+        conn.execute("INSERT INTO telemetry_runs VALUES (8, ?, 'x', '{}')", (t0,))
+        conn.execute("INSERT INTO telemetry_runs VALUES (9, ?, 'y', '{}')", (t0 + 99,))
+        # Run 8: 2 Dispatches, 1 Zeile -> 1 unattributed (historisch rot).
+        conn.execute("INSERT INTO dispatched_signals VALUES ('a8', ?, NULL)", (t0 + 1,))
+        conn.execute("INSERT INTO dispatched_signals VALUES ('b8', ?, NULL)", (t0 + 2,))
+        conn.execute(
+            "INSERT INTO telemetry (signal_id, latency_ms, approved, run_id,"
+            " decision_seq) VALUES ('s8', 1.0, 1, 8, 2)")
+        # Run 9: 1 Dispatch, 1 Zeile -> grün.
+        conn.execute("INSERT INTO dispatched_signals VALUES ('a9', ?, NULL)", (t0 + 100,))
+        conn.execute(
+            "INSERT INTO telemetry (signal_id, latency_ms, approved, run_id,"
+            " decision_seq) VALUES ('s9', 1.0, 1, 9, 1)")
+        conn.commit()
+        errors: list[str] = []
+        with redirect_stdout(io.StringIO()):
+            snap = gate_snapshot(db, errors, min_run_id=8)
+        assert snap is not None
+        assert snap["reconciliation"].status == "RED"
+        assert snap["verdicts"]["current"] == "GREEN"
+        assert "RED (run 8" in snap["verdicts"]["historical"]
+        # Nicht blockierend: der historische Befund landet nicht in errors.
+        assert errors == [], errors
+        conn.close()
+    print("OK test_historical_red_does_not_block_current_green")
+
+
+def test_current_red_still_blocks() -> None:
+    """Jüngster Lauf rot -> current RED -> blockierend. Die Trennung schluckt nichts."""
+    with tempfile.TemporaryDirectory() as td:
+        db = Path(td) / "t.db"
+        conn = sqlite3.connect(db)
+        _schema(conn)
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS telemetry_fill_metrics ("
+            "telemetry_seq INTEGER PRIMARY KEY)"
+        )
+        t0 = 1_000_000.0
+        conn.execute("INSERT INTO telemetry_runs VALUES (9, ?, 'y', '{}')", (t0,))
+        conn.execute("INSERT INTO dispatched_signals VALUES ('a9', ?, NULL)", (t0 + 1,))
+        conn.execute("INSERT INTO dispatched_signals VALUES ('b9', ?, NULL)", (t0 + 2,))
+        conn.execute(
+            "INSERT INTO telemetry (signal_id, latency_ms, approved, run_id,"
+            " decision_seq) VALUES ('s9', 1.0, 1, 9, 2)")
+        conn.commit()
+        errors: list[str] = []
+        with redirect_stdout(io.StringIO()):
+            snap = gate_snapshot(db, errors, min_run_id=9)
+        assert snap is not None
+        assert snap["verdicts"]["current"] == "RED"
+        assert snap["verdicts"]["historical"] == "n/a"
+        assert any("TELEMETRY_RECONCILIATION" in e for e in errors), errors
+        conn.close()
+    print("OK test_current_red_still_blocks")

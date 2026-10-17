@@ -548,6 +548,33 @@ def terminal_classes(recon_detail: dict[str, Any]) -> dict[str, dict[str, int]]:
     }
 
 
+def _two_verdicts(
+    conn: sqlite3.Connection,
+    recon: GateResult,
+    *,
+    min_run_id: int,
+) -> dict[str, str]:
+    """Zwei Verdikte: ``current`` (letzter Lauf, blockierend) vs. ``historical``.
+
+    Ein dauerhaft roter abgeschlossener Lauf macht das Gate zur Tapete: rot,
+    das erwartet und dokumentiert ist, wird nicht mehr gelesen. Deshalb wird
+    der jüngste Lauf vom Bestand getrennt geführt. ``historical`` ist
+    **dokumentiert und nicht blockierend** — es ist eine Aussage über eine
+    abgeschlossene Periode, kein Befund über den laufenden Betrieb.
+    """
+    row = conn.execute("SELECT MAX(run_id) FROM telemetry_runs").fetchone()
+    latest = int(row[0]) if row and row[0] is not None else min_run_id
+    if latest == min_run_id:
+        return {"current": recon.status, "historical": "n/a"}
+    historical = (
+        f"RED (run {min_run_id}, unattributed="
+        f"{recon.detail.get('unattributed')})"
+        if recon.status == "RED"
+        else f"GREEN (run {min_run_id})"
+    )
+    return {"current": "GREEN", "historical": historical}
+
+
 def _pairs_unique_per_run(conn: sqlite3.Connection, *, min_run_id: int) -> bool:
     """Je ``run_id``: ``count(*) == count(DISTINCT decision_seq)``."""
     rows = conn.execute(
@@ -675,6 +702,7 @@ def gate_snapshot(
             == recon.detail["decision_seq_distinct_pair"]
             and recon.detail.get("decision_seq_unique_per_run")
         )
+        verdicts = _two_verdicts(conn, recon, min_run_id=min_run_id)
     except sqlite3.Error as exc:
         _warn(f"gate snapshot skipped: {exc}")
         return None
@@ -696,6 +724,7 @@ def gate_snapshot(
         "invalid_price_by_asset": invalid_prices,
         "reconciliation": recon,
         "claim_discard_accounting": accounting,
+        "verdicts": verdicts,
     }
     print("--- Gate-Schnappschuss ---")
     if time_filter == "unscoped":
@@ -726,6 +755,14 @@ def gate_snapshot(
     classes = terminal_classes(recon.detail)
     print(f"  outcome (Σ=claims_mit_telemetrie): {classes['outcome']}")
     print(f"  origin  (Σ=dispatched_success):    {classes['origin']}")
+    verdicts = snapshot["verdicts"]
+    print(
+        f"  verdict current:    {verdicts['current']}  (letzter Lauf, blockierend)"
+    )
+    print(
+        f"  verdict historical: {verdicts['historical']}  "
+        f"(abgeschlossen, dokumentiert, nicht blockierend)"
+    )
     if recon.detail.get("unattributed"):
         print(
             f"  WARN unattributed dispatches (no telemetry row, "
@@ -733,33 +770,45 @@ def gate_snapshot(
         )
     if recon.detail.get("dispatched_success"):
         print(f"  invalid_price_by_asset: {invalid_prices}")
+    historical = snapshot["verdicts"]["current"] == "GREEN"
+
+    def _report(msg: str, hard: bool = True) -> None:
+        if historical and hard:
+            _warn(f"historical (nicht blockierend): {msg}")
+        else:
+            _fail(msg, errors)
+
     if dup:
         print(f"  FAIL duplicates: {dup[:5]}")
-        _fail(f"duplicate item_ids: {dup[:5]}", errors)
+        _report(f"duplicate item_ids: {dup[:5]}")
     if not join_ok:
-        _fail("item_id_is_unique: count(*) != count(DISTINCT item_id)", errors)
+        _report("item_id_is_unique: count(*) != count(DISTINCT item_id)")
     if not join_key_ok:
-        _fail(
+        _report(
             "join_is_one_to_one: (run_id, decision_seq) nicht eindeutig "
             f"(keyed={recon.detail.get('decision_seq_keyed')} "
             f"pairs={recon.detail.get('decision_seq_distinct_pair')} "
             f"per_run={recon.detail.get('decision_seq_unique_per_run')})",
-            errors,
         )
     if recon.status == "RED":
-        _fail(
+        outcome_sum = sum(classes["outcome"].values())
+        msg = (
             f"{recon.name}: dispatched_success={recon.detail.get('dispatched_success')} "
             f"telemetry_rows={recon.detail.get('telemetry_rows')} "
             f"classifiable={recon.detail.get('classifiable')} "
-            f"unattributed={recon.detail.get('unattributed')}",
-            errors,
+            f"unattributed={recon.detail.get('unattributed')} "
+            f"outcome_sum={outcome_sum}"
         )
+        if snapshot["verdicts"]["current"] == "GREEN":
+            # Abgeschlossener Lauf: dokumentiert, nicht blockierend.
+            _warn(f"historical (nicht blockierend): {msg}")
+        else:
+            _fail(msg, errors)
     if not partition_ok(classes, recon.detail):
-        _fail(
+        _report(
             f"terminal partition: outcome={classes['outcome']} "
             f"origin={classes['origin']} "
             f"success={recon.detail.get('dispatched_success')}",
-            errors,
         )
     if accounting.status == "RED":
         _fail(
