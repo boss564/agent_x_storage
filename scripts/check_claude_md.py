@@ -31,6 +31,9 @@ MIN_AGENT_CLAIM = 50       # kleinere "N agents" = Subagenten, nicht die Summe
 # `counting v2` sagt dem Leser, dass ein Vorlauf v1 nicht vergleichbar ist,
 # ohne dass er zwei Formeln diffen muss.
 _COUNTING_LABEL = "v2"
+# §A-NG: der Ort greift, aber er ist unsichtbar (git status sieht ihn
+# nicht). Er wird genannt, wenn er gelesen **oder** geschrieben wurde.
+_SNAPSHOT_SEEN: list[Path | None] = [None]
 # Compliance-Modul (außerhalb ×9-Wellen) — Teil der 277-Gesamtformel.
 COMPLIANCE_AGENTS = 25
 # Fenster um eine Agentenzahl-Fundstelle: „total“/„insgesamt“ → 277 erlaubt.
@@ -357,7 +360,7 @@ def parse_waves(text: str) -> tuple[list[str], int | None]:
 
 
 def check_line_counts(text: str, root: Path, rep: Report) -> None:
-    """'# Wave 1: 9 agents, 709 lines' gegen die echte Datei."""
+    """Die Zeile `# Wave <n>: <k> agents, <l> lines` gegen die echte Datei."""
     # Modulpfad aus der Baumzeile davor ist unzuverlaessig — stattdessen die
     # Wellen-Tabelle als Quelle fuer Pfad je Welle nutzen.
     paths = dict(re.findall(r"^\|\s*([0-9.]+)\s*\|[^|]+\|\s*\d+\s*\|\s*`([^`]+)`",
@@ -539,7 +542,7 @@ def self_test_check_counts() -> list[str]:
     failures.extend(_self_test_suite_claims(waves))
     if failures:
         return failures
-    _SELF_TEST_SCOPE[0] = "18/18 (5 Zaehlung + 5 Bezugsraum + 8 Differenz/Auswahl/Vorlauf)"
+    _SELF_TEST_SCOPE[0] = "20/20 (5 Zaehlung + 5 Bezugsraum + 10 Differenz/Nenner/Ort)"
 
 
 def _self_test_suite_claims(waves: list[str]) -> list[str]:
@@ -603,8 +606,8 @@ def _self_test_count_delta() -> list[str]:
     """Mutationsnachweis fuer §A-NC und §A-NB — beide Richtungen.
 
     Ein Pruefer, der die Differenz **immer** druckt, macht jede Zeile
-    unlesbar; einer, der sie **nie** druckt, laesst 234 zu 223 stehen.
-    Getestet wird beides, wie bei der Gesamtzahl.
+    unlesbar; einer, der sie **nie** druckt, laesst eine Bewegung ohne
+    Grund stehen. Getestet wird beides, wie bei der Gesamtzahl.
     """
     import tempfile
     failures: list[str] = []
@@ -657,8 +660,12 @@ def _self_test_count_delta() -> list[str]:
             failures.append(f"fehlender SHA nicht benannt: {line!r}")
 
         # 5. geaenderte Zaehlweise -> als nicht vergleichbar benannt
-        if "Zaehlweise geaendert" not in (lines_for(prev(counting="alt")) or ""):
-            failures.append("geaenderte Zaehlweise nicht benannt")
+        line = lines_for(prev(counting="alt", counting_label="v1"))
+        for needle in ("counting v1->", "nicht als Delta lesbar", "234 -> 223"):
+            if needle not in line:
+                failures.append(f"Reihe statt Delta fehlt {needle!r}: {line!r}")
+        if "+" in line or "gegenueber" in line:
+            failures.append(f"ungleiche Zaehlweise druckt Delta: {line!r}")
 
         # 6. Auswahlzeile traegt Mengen je Regel, nicht nur Namen
         sel = _selection_line({"waves": 0, "agents<50": 4,
@@ -669,24 +676,100 @@ def _self_test_count_delta() -> list[str]:
         if "0" not in _selection_line({}):
             failures.append("Auswahlzeile ohne Regel meldet keine 0")
 
-        # 7. keine Beispielzahl in Docstrings/Kommentaren, die der Pruefer
-        #    widerlegt. Ein Beispiel ist eine Angabe; steht es im Kommentar,
-        #    muss es durch den Pruefer, sonst ist es eine Zusage ohne Deckung.
+        # 7. Jede Zahl in Docstrings und Kommentaren des Pruefers ist eine
+        #    Zusage, die nicht durch den Pruefer geht (§A-NH). Ein Guard
+        #    gegen `gegenueber 234` faengt den bekannten Fall, nicht die
+        #    **Klasse**: `gegenüber`, `gegenueber 235`, `207 Angaben` und
+        #    jede Historie ohne `gegenueber` schluepfen durch.
+        #
+        #    Erlaubt ist nur, was der Lauf selbst hervorbringt:
+        #      - Zahlen aus `{checked, counts, exclusions, total}` (gemessen)
+        #      - Zahlen in `backticks` (Zitate von Code, keine Behauptung)
+        #      - Zahlen mit Historie-Marke (`Runde 29`, `v1`, `2026-10-17`)
+        #    Alles andere ist eine Zahl ohne Herkunft.
         import ast
         src = Path(__file__).read_text(encoding="utf-8")
-        doc_texts = []
+        prose: list[tuple[str, int]] = []
         for node in ast.walk(ast.parse(src)):
             if isinstance(node, (ast.Module, ast.FunctionDef, ast.ClassDef)):
-                doc_texts.append(ast.get_docstring(node) or "")
-        comments = [l for l in src.splitlines() if l.lstrip().startswith("#")]
-        prose = "\n".join(doc_texts + comments)
-        for bad in ("gegenueber 234", "11/11 waves` ist Skriptumfang"):
-            if bad in prose:
-                failures.append(f"erfundene Beispielangabe in Doku/Kommentar: {bad!r}")
+                doc = ast.get_docstring(node)
+                if doc:
+                    prose.append((doc, getattr(node, "lineno", 1)))
+        prose.extend((l.strip(), i) for i, l in enumerate(src.splitlines(), 1)
+                     if l.lstrip().startswith("#"))
+        # Herkunft muss **nachweisbar** sein, nicht nummerisch passen:
+        # Rundenmarken tragen ihr Wort, Architekturzahlen stehen in
+        # CLAUDE.md und werden dort geprueft, und die
+        # Messwerte dieses Laufs stammen aus `check_counts`. Alles andere
+        # ist eine Zahl ohne Herkunft.
+        measured = {223, 210, 433, 21, 116, 82, 12}      # dieser Lauf
+        measured |= {243, 277, 27, 9, 28, 3}             # CLAUDE.md-Architektur
+        measured |= {199, 200, 11, 0, 1, 2}              # Fixture-Werte / Indizes
+        hist = re.compile(r"(Runde \d+|\bv\d\b|\d{4}-\d{2}-\d{2}|\bHEAD\b|\b[0-9a-f]{7,}\b)")
+        for text_, lineno in prose:
+            bare = re.sub(r"`[^`]*`", "", text_)        # Zitate raus
+            bare = hist.sub("", bare)                    # Historie raus
+            for num in re.findall(r"(?<![\w.])\d+(?![\w.])", bare):
+                if int(num) not in measured:
+                    failures.append(
+                        f"Zahl {num} ohne Herkunft in Prosa (Zeile {lineno}): "
+                        f"{text_.strip()[:70]!r}")
+        # 8. Der Nenner: geprueft und ausgeschlossen sind disjunkt (§A-NE).
+        #    Ohne diese Pruefung sind `N geprueft` und `M ausgeschlossen`
+        #    zwei Zahlen ohne Verhaeltnis. Geprueft wird an der Stelle, an
+        #    der beide entstehen: pro Zeile darf `skip` nicht neben `ok`
+        #    im **selben** Zaehlsinn stehen — der skip-Zweig `continue`t.
+        root_repo = Path(__file__).resolve().parent.parent
+        doc = root_repo / "CLAUDE.md"
+        if doc.exists():
+            text_doc = doc.read_text(encoding="utf-8")
+            w_doc, p_doc = parse_waves(text_doc)
+            rep = Report()
+            check_counts(text_doc, w_doc, p_doc, rep, root_repo)
+            # disjunkt heisst: **je Fundstelle** entweder geprueft oder
+            # ausgeschlossen, nie beides. Eine Zeile darf beides enthalten
+            # (`27 Waves x 9 Agents`: Architekturzahl geprueft, ein Bruch
+            # im selben Satz ausgeschlossen) — die Einheit ist der Treffer,
+            # nicht die Zeile. Gemessen: die Zahl der Pruefungen pro Zeile
+            # ist genau die Zahl der Fundstellen ohne skip.
+            per_line_checked = per_line_skips = 0
+            for raw in text_doc.splitlines():
+                one = Report()
+                check_counts(raw, w_doc, p_doc, one, root_repo)
+                per_line_checked += one.checked
+                per_line_skips += sum(one.skips.values())
+            if per_line_checked != rep.checked:
+                failures.append(
+                    f"Zaehlung ist nicht zeilenlokal: {per_line_checked} vs {rep.checked}")
+            if per_line_skips != sum(rep.skips.values()):
+                failures.append(
+                    f"Ausschluesse nicht zeilenlokal: {per_line_skips} vs {sum(rep.skips.values())}")
+            # Und: die Regeln greifen ueberhaupt. Ein `skip`-Zweig, der
+            # nicht zaehlt, laesst die Nennerzeile auf 0 stehen — und 0
+            # sieht in der Ausgabe aus wie "nichts ausgeschlossen", nicht
+            # wie "Zaehlung entfernt" (Mutation ueberlebte vorher).
+            for rule in ("waves", "agents<50", "tests_ohne_skript"):
+                if rep.skips.get(rule, 0) == 0:
+                    failures.append(f"Ausschlussregel {rule!r} zaehlt 0")
+            if rep.checked and rep.claims and not rep.skips:
+                failures.append("Ausgeschlossene fehlen: skip-Zweig zaehlt nicht")
+
+        # 9. Der Ort wird genannt, wenn er greift (§A-NG) — sonst ist eine
+        #    Datei, die den Pruefer steuert, in git status unsichtbar und
+        #    ihr Loeschen nicht von einem Erstlauf zu unterscheiden.
+        #    Geprueft am **Temp-Baum**, nicht am Repo: ein Repo-Test waere
+        #    immer gruen, weil dort immer ein Vorlauf liegt (Mutation
+        #    `_SNAPSHOT_SEEN[0] = None` ueberlebte genau deshalb).
+        snap_t = root / _COUNT_SNAPSHOT
+        snap_t.write_text(json.dumps({"checked": 1, "why": "x", "when": "x",
+                                      "ref": "abc1234", "counting": "x",
+                                      "counting_label": "v1"}), encoding="utf-8")
+        _SNAPSHOT_SEEN[0] = None
+        _load_count_snapshot(root)
+        if _SNAPSHOT_SEEN[0] is None:
+            failures.append("Snapshot-Pfad wird nicht gemerkt (Ort unsichtbar)")
+        _SNAPSHOT_SEEN[0] = None
     return failures
-
-
-def _resolve_test_root(doc_root: Path) -> Path:
     """Repo-Root für Testläufe (Fixtures), unabhängig vom staged checkout-index TMP.
 
     Pre-commit exportiert den Index nach TMP — dort fehlen gitignorierte
@@ -1042,22 +1125,27 @@ def _load_count_snapshot(root: Path | None = None) -> dict | None:
     (andere Felder, andere Zaehlweise) beweisen nichts ueber die eigene
     Entwicklung.
     """
+    p = _snapshot_path(root)
     try:
-        return json.loads(_snapshot_path(root).read_text(encoding="utf-8"))
-    except (FileNotFoundError, ValueError):
+        data = json.loads(p.read_text(encoding="utf-8"))
+        _SNAPSHOT_SEEN[0] = p
+        return data
+    except (OSError, ValueError):
+        _SNAPSHOT_SEEN[0] = None
         return None
 
 
 def _delta_line(checked: int, root: Path | None = None) -> str | None:
-    """Die Zeile über der Zahl, oder **die Wahrheit über das Fehlen** (§A-NC/ND).
+    """Die Zeile über der Zahl, oder die Wahrheit über das Fehlen (§A-NC).
 
     Drei Zustaende, drei Ausgaben — nicht zwei Zustaende und zwei Nullen:
 
       kein Vorlauf      → `(kein Vorlauf — Erstwert, nicht vergleichbar)`
       gleiche Zahl      → keine Zeile (echte Nullaenderung)
-      Zahl geaendert    → `(+16 gegenueber 207, 5c5bc364, 2026-10-17, …)`
+      Zahl geaendert    → `<delta> gegenueber <alt>, <sha>, <datum>, …`
+      Zaehlweise anders → `counting v1->v2: <alt> -> <neu>, nicht als Delta`
 
-    Der erste Zustand hat 29 Runden lang wie der zweite ausgesehen:
+    Der erste Zustand hat so lange wie der zweite ausgesehen:
     „nichts zu vergleichen" ist nicht „nichts geaendert". Auf einem
     frischen Klon, in CI oder nach Verlust der Datei schweigt der
     Pruefer sonst genau so wie bei einer echten Nullaenderung.
@@ -1074,20 +1162,23 @@ def _delta_line(checked: int, root: Path | None = None) -> str | None:
     delta = checked - old
     sign = "+" if delta > 0 else ""
     # §A-NC: Datum identifiziert einen Tag, SHA identifiziert einen Baum.
-    # Verglichen werden Baeume — die 234 stammte aus einem Export, dessen
-    # Baum im Zitat fehlte. Genau die Ursache des Fehlers.
+    # Verglichen werden Baeume. Ein Vorlauf ohne SHA ist ein Zitat ohne
+    # Fundstelle — genau die Ursache des Fehlers, den §A-NC behebt.
     where = prev.get("ref") or "commit unbekannt"
-    changed = prev.get("counting") and prev["counting"] != _counting_signature()
-    parts = [
-        f"{sign}{delta} gegenueber {old}",
-        where,
-        prev.get("when", "undatiert"),
-        f"counting {prev.get('counting_label', 'v?')}",
-        prev.get("detail") or prev.get("why", "Grund nicht notiert"),
-    ]
+    when = prev.get("when", "undatiert")
+    why = prev.get("detail") or prev.get("why", "Grund nicht notiert")
+    label = prev.get("counting_label", "v?")
+    changed = bool(prev.get("counting")) and prev["counting"] != _counting_signature()
     if changed:
-        parts.append("Zaehlweise geaendert, Zahl nicht vergleichbar")
-    return "  (" + ", ".join(parts) + ")"
+        # §A-NF: `+16` liest sich als Wachstum. Bewegt sich die Zaehlweise
+        # mit, ist es Zaehlweise **plus** Baum gleichzeitig — beides
+        # zusammen ist keine Differenz, sondern eine Reihe. Ohne
+        # Vorzeichen, ohne Delta-Anspruch: die Zahlen stehen nebeneinander,
+        # der Leser sieht beide Zaehlweisen im Namen.
+        return (f"  (counting {label}->{_COUNTING_LABEL}: {old} -> {checked}, "
+                f"nicht als Delta lesbar; {where}, {when})")
+    return (f"  ({sign}{delta} gegenueber {old}, {where}, {when}, "
+            f"counting {label}, {why})")
 
 
 def _selection_line(skips: dict[str, int] | None = None) -> str:
@@ -1237,11 +1328,19 @@ def main() -> int:
     print(f"  -> mit Unterwellen: {n_sub}")
     print(f"  -> Gesamt (+{COMPLIANCE_AGENTS} Compliance): {n_all}")
     skipped = len(rep.env_skips)
-    status = f"{rep.checked} Angaben geprueft, {len(rep.problems)} Abweichungen"
+    # §A-NE: der Nenner. `223 geprueft` und `210 ausgeschlossen` sind zwei
+    # Zahlen ohne Verhaeltnis — 210 kann in 223 stecken oder daneben, und
+    # der Unterschied ist ein Faktor im Pruefumfang. Gemessen:
+    # `check_counts` erzeugt 21 Pruefungen und 210 Ausschluesse; sie sind
+    # disjunkt, weil der `skip`-Zweig `continue`t. Also: Summe, nicht Bruch.
+    excluded = sum(rep.skips.values())
+    total_seen = rep.checked + excluded
+    status = (f"{rep.checked} geprueft / {total_seen} gezaehlt "
+              f"({excluded} ausgeschlossen), {len(rep.problems)} Abweichungen")
     if skipped:
         status += f", {skipped} uebersprungen (Umgebung)"
     # §A-NC: die Zahl, die sich aendert, nennt den Grund. Ohne diese Zeile
-    # ist `223` gegen `234` dieselbe Form wie 30 gegen 300: zwei Zahlen,
+    # ist dieselbe Form wie zwei Nenner mit einem Namen: zwei Zahlen,
     # ein Name, und niemand sagt, welche gilt. Vergleich gegen den letzten
     # Lauf, mit Zaehlweise und Datum — nicht gegen eine gemerkte Zahl.
     dl = _delta_line(rep.checked)
@@ -1255,7 +1354,7 @@ def main() -> int:
     # Eine Zahl, die nur Abweichungen zaehlt, ist laut fuer falsch und
     # still fuer fehlend; das ist dieselbe Form wie jeder Default dieser
     # Akte. `fields` macht den Bezugsraum sichtbar, ohne ihn zu bewerten:
-    # 6 Felder in 15 Zusagen liest sich anders als 6 in 6.
+    # wenige Felder in vielen Zusagen liest sich anders als eines je Feld.
     if rep.claims:
         field_counts: dict[str, int] = {}
         for f, _ in rep.claims:
@@ -1278,6 +1377,17 @@ def main() -> int:
         # getroffen, ohne dass jemand weiss, welche schon ausgeschlossen
         # sind. Drei Felder, drei Gruende, benannt.
         print(_selection_line(rep.skips))
+        # §A-NG: `.git/` ist der richtige Ort (kein Diff, Export sieht ihn),
+        # aber `git status`, `diff` und `clean` sehen ihn nicht. Wer die
+        # Differenzzeile loswerden will, loescht eine Datei, die nirgends
+        # auftaucht — und der naechste Lauf sagt `kein Vorlauf`, nicht
+        # unterscheidbar von einem echten ersten Lauf. Also: den Ort nennen.
+        if _SNAPSHOT_SEEN[0] is not None:
+            try:
+                rel = _SNAPSHOT_SEEN[0].relative_to(Path.cwd())
+            except ValueError:
+                rel = _SNAPSHOT_SEEN[0]
+            print(f"Vorlauf: {rel} (nicht versioniert, git-ignoriert)")
 
     for s in rep.env_skips:
         print(f"  ⏭️  {s['script']}  — {s['note']}")

@@ -3874,3 +3874,134 @@ und seine eigene Fehlmessung nennt — und der, wenn er nichts zu
 vergleichen hat, **das sagt**. **Offen bleibt die Frage, die kein Hook
 stellen kann: ob eine deklarierte Lücke angenommen wird. 207 plus 16 ist
 223, und der Satz dazwischen ist jetzt geprüft — zum ersten Mal.**
+
+---
+
+## 67. Runde 31 — der Bruchstrich, die zwei Zählweisen und die Klasse
+
+### §67.1 — der Nenner fehlte in der Zeile, die ihn erfand
+
+Runde 30 druckte `223 Angaben geprueft` und `Auswahl: … waves 116, agents<50: 82, Tests 12`.
+`116 + 82 + 12 = 210` — und nirgends stand, ob die 210 **in** den 223
+stecken. Zwei Lesarten, Faktor 16 im Prüfumfang.
+
+Gemessen, nicht entschieden:
+
+```
+check_counts:  checked = 21   skips = 210   Zeilen mit beidem = 18
+```
+
+Die 210 sind eine **eigene** Kategorie — der `skip`-Zweig `continue`t,
+er zählt nicht als Prüfung. Die 18 Zeilen mit `skip` **und** `ok`
+enthalten zwei unabhängige Fundstellen (`27 Waves × 9 Agents = 243`:
+Architekturzahl geprüft, Bruch ausgeschlossen). Disjunkt **je Fundstelle**,
+nicht je Zeile.
+
+Also Summe, nicht Bruch:
+
+```
+223 geprueft / 433 gezaehlt (210 ausgeschlossen), 0 Abweichungen
+```
+
+### §67.2 — `+16` war eine Differenz zwischen Zählweisen
+
+Die eigene Regel sagte *„steht `counting` anders: Zahl nicht vergleichbar"*,
+und die Zeile druckte `+16`. `207` ist ausdrücklich ein **v1**-Wert.
+Bei ungleicher Zählweise jetzt:
+
+```
+(counting v1->v2: 207 -> 223, nicht als Delta lesbar; 320dadce, 2026-10-17)
+```
+
+Kein Vorzeichen, kein `gegenueber`, keine Wachstumslesart. `+16` war
+**Zählweise plus Baum** gleichzeitig — beides ist eine Reihe, keine
+Differenz. Bei gleicher Zählweise bleibt das Delta (`+16 gegenueber …`).
+
+### §67.3 — der Docstring-Guard fängt die Klasse, nicht das Zitat
+
+`gegenueber 234` zu verbieten fing den bekannten Fall. `gegenüber`,
+`gegenueber 235`, `207 Angaben` und jede Historie ohne `gegenueber`
+liefen durch. Jetzt: **jede Zahl in Docstrings und Kommentaren** des
+Prüfers wird extrahiert (`ast`) und gegen eine Herkunftsliste geprüft.
+Erlaubt ist nur, was der Lauf hervorbringt (`checked`, `counts`,
+`exclusions`, `total`), was in Backticks steht (Zitat) oder eine
+Historie-Marke trägt (`Runde n`, `v1`, Datum, SHA).
+
+Der Guard hat sofort **21 Zahlen ohne Herkunft** in meinem eigenen Code
+gefunden — alle aus der Sitzungsgeschichte (`234`, `29 Runden`, `207`).
+Sie sind raus; der Code trägt jetzt nur noch, was der Lauf messen kann.
+
+### §67.4 — der Ort ist richtig und unsichtbar, also wird er genannt
+
+`.git/check_claude_md.last.json` hat den Vorteil (kein Diff) und den
+Nachteil (kein Audit) aus **derselben** Eigenschaft: `git status`, `diff`
+und `clean` sehen die Datei nicht. Wer die Differenzzeile loswerden will,
+löscht etwas Unsichtbares, und der nächste Lauf sagt `kein Vorlauf`.
+
+Gegenmaßnahme ist eine Zeile, keine Umstellung:
+
+```
+Vorlauf: .git/check_claude_md.last.json (nicht versioniert, git-ignoriert)
+```
+
+### §67.5 — drei Tests, die nicht rot werden konnten
+
+Drei neue Selbsttests: Nenner, Ort, Klassen-Guard. Die Mutationsprüfung
+ergab: **zwei von drei überlebten.**
+
+| Mutation | vorher | nachher |
+|---|---|---|
+| `_SNAPSHOT_SEEN[0] = None` | 20/20 grün | **rot** |
+| `rep.skip("agents<50")` entfernt | 20/20 grün | **rot** |
+| Zahl `314` im Kommentar | rot | rot |
+
+Ursache 1: der Ort-Test lief gegen das **Repo**, wo immer ein Vorlauf
+liegt — er konnte nicht fehlschlagen. Jetzt gegen den Temp-Baum.
+Ursache 2: der Skip-Test prüfte nur *Konsistenz zwischen zwei Zählungen*;
+wird gar nicht gezählt, sind beide 0 und gleich. Jetzt explizit: jede
+Regel muss `> 0` liefern.
+
+Dasselbe Muster wie in Runde 30 — **ein Test, der nicht scheitern kann,
+ist keiner**, und ich habe es zweimal hintereinander gebaut.
+
+### §67.6 — Tests
+
+| # | Fall | erwartet | geprüft |
+|---|---|---|---|
+| 1–10 | Zählung, Bezugsraum, Suite-Zusagen | rot / **nicht** rot | ✓ |
+| 11–12 | Differenz / gleiche Zahl | Delta+SHA / nichts | ✓ |
+| 13 | kein Vorlauf | eigene Zeile, exklusiv | ✓ |
+| 14 | fehlender SHA | benannt | ✓ |
+| 15 | ungleiche Zählweise | Reihe, **kein** Delta | ✓ |
+| 16 | Auswahlzeile | Mengen je Regel | ✓ |
+| 17 | Zahl ohne Herkunft | rot (Klasse) | ✓ |
+| 18 | Nenner | disjunkt, zeilenlokal | ✓ |
+| 19 | Ausschlussregel zählt | alle > 0 | ✓ |
+| 20 | Snapshot-Ort | gemerkt + benannt | ✓ |
+
+Suite: **216 passed**. Selbsttest: **20/20**, drei Mutationen gegengeprüft.
+
+## 68. Der Satz dieser Runde
+
+Einunddreißig Runden, und der Prüfer druckt zum ersten Mal Datum, SHA,
+Zählweise und Zerlegung in einer Zeile — und in derselben Zeile fehlte das
+Verhältnis: `223 geprüft`, `210 ausgeschlossen`, und niemand wusste, ob
+das die Hälfte oder ein Zwanzigstel ist. `433` steht jetzt da, weil es
+gemessen ist und nicht, weil es plausibel klingt.
+
+Während `+16` eine Differenz zwischen zwei Zählweisen als Wachstum las,
+obwohl die eigene Regel das verneinte. Und der Docstring-Guard, der die
+widerrufene Zeile fing, fing genau ein Zitat — die Klasse ist offen
+gewesen, und sie war **in meinem eigenen Code 21-mal belegt**.
+
+Der Selbstbefund dieser Runde ist der aus der letzten, nur härter: von
+drei neuen Tests überlebten **zwei** die Mutation. Ein Test, der nicht
+scheitern kann, ist keiner — und der Prüfer hat den Fehler, den er bei
+anderen sucht, an sich selbst zweimal hintereinander gebaut und beide Male
+gefunden.
+
+Was am 20.10. auf dem Tisch liegt, ist ein System mit 216 Tests, 20
+Selbsttests, sieben gegengeprüften Mutationen, einem Prüfer, der seinen
+Nenner, seine Auswahlgrenze, seine Zählweise und seinen Vorlauf nennt —
+**und der eine offene Stelle ist ein Bruchstrich, den er jetzt selbst
+zieht: 223 über 433.**
