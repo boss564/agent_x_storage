@@ -17,7 +17,9 @@ Gedacht als Pre-Commit-Hook oder naechtlicher Lauf.
 from __future__ import annotations
 
 import datetime
+import inspect
 import json
+import os
 import re
 import subprocess
 import sys
@@ -315,6 +317,14 @@ DOC_INVENTORY_FILES: list[dict] = [
 
 
 class Report:
+    """Zaehlt Pruefungen und Abweichungen.
+
+    `checked` ist die Zahl der **Pruefungen** in diesem Lauf — nicht zu
+    verwechseln mit den **Angaben**, die in der Ausgabe stehen (`_status_line`
+    nennt sie). Seit Runde 33 wird `checked` nicht mehr gedruckt; der
+    Name bleibt intern, die Einheit steht hier (Guard §A-JO).
+    """
+
     def __init__(self) -> None:
         self.problems: list[dict] = []
         self.env_skips: list[dict] = []
@@ -624,6 +634,7 @@ def _self_test_count_delta() -> list[str]:
                       root / "ort_test" / _COUNT_SNAPSHOT):
                 p.unlink(missing_ok=True)
             _SNAPSHOT_SEEN[0] = None
+            _test_results.clear()          # §A-JN: Speicher, nicht nur Datei
 
         reset()
         (root / _COUNT_SNAPSHOT).write_text(json.dumps(
@@ -838,12 +849,57 @@ def _self_test_count_delta() -> list[str]:
                 failures.append(f"Delta bei gleicher Zaehlweise fehlt {need!r}: {line!r}")
         if "nicht als Delta" in line:
             failures.append(f"gleiche Zaehlweise als Reihe gedruckt: {line!r}")
-    return failures
-    """Repo-Root für Testläufe (Fixtures), unabhängig vom staged checkout-index TMP.
 
-    Pre-commit exportiert den Index nach TMP — dort fehlen gitignorierte
-    Referenzdaten (z.B. GAEB X83). AGENT_X_TEST_ROOT oder git toplevel nutzen.
-    """
+        # 16. Das Repo, nicht das Arbeitsverzeichnis (§A-JM). Vier Runden
+        #     lang war `cwd == root` ein Testproblem; in Runde 33 stand die
+        #     Annahme im Code (relativer `--git-common-dir` gegen
+        #     `Path.cwd()`) und wurde ohne Test gefixt. Fremdes `cwd`,
+        #     relatives Verzeichnis in `root` — der Ort muss stimmen.
+        other = root / "anderes_cwd"
+        other.mkdir(exist_ok=True)
+        repo2 = root / "repo2"
+        (repo2 / "sub" / ".git").mkdir(parents=True, exist_ok=True)
+        # Der reale Fall: **kein** explizites `root`. `_snapshot_path()`
+        # leitet den Ort aus der Datei ab — der Ort der Datei, nicht der
+        # Ort der Shell. Nur so trifft der Fehler `Path.cwd()`.
+        here = Path(__file__).resolve().parent.parent
+        prev_cwd = Path.cwd()
+        try:
+            os.chdir(other)                    # cwd != Repo
+            got = _snapshot_path()             # root=None
+        finally:
+            os.chdir(prev_cwd)
+        if got.parent.resolve() != (here / "sub" / ".git").resolve() and \
+                not str(got).startswith(str(here)):
+            failures.append(
+                f"Ohne root gegen cwd aufgeloest statt gegen die Datei: {got}")
+
+        # 17. Jeder Modulglobal mit Zustand wird zurueckgesetzt (§A-JN).
+        #     `_SNAPSHOT_SEEN` war in einer Mutation gruen, weil sie nichts
+        #     aenderte — das Global wurde gesetzt und nie zurueckgesetzt.
+        #     Der Kreuztest prueft nur die Datei, nicht den Speicher.
+        _SNAPSHOT_SEEN[0] = root           # kuenstlich gesetzt
+        reset()
+        if _SNAPSHOT_SEEN[0] is not None:
+            failures.append("reset() laesst _SNAPSHOT_SEEN stehen")
+        _test_results["x"] = 1
+        reset()
+        if _test_results:
+            failures.append("reset() raeumt _test_results nicht")
+
+        # 18. Der Docstring von `Report` nennt die Einheit von `checked`
+        #     (§A-JO). Seit Runde 33 ist der Name intern und heisst
+        #     "Pruefungen", nicht "Angaben". Ein interner Name ohne
+        #     Einheit ist derselbe Fehler, nur unsichtbar — der Guard
+        #     prueft hier **fuer** eine Angabe, nicht gegen ein Zitat.
+        rdoc = inspect.getdoc(Report) or ""
+        if "Pruefung" not in rdoc:
+            failures.append(
+                f"Report nennt die Einheit von `checked` nicht: {rdoc[:60]!r}")
+    return failures
+
+
+def _resolve_test_root(doc_root: Path) -> Path:
     import os
     env = os.environ.get("AGENT_X_TEST_ROOT")
     if env:
@@ -1513,8 +1569,13 @@ def main() -> int:
         # auftaucht — und der naechste Lauf sagt `kein Vorlauf`, nicht
         # unterscheidbar von einem echten ersten Lauf. Also: den Ort nennen.
         if _SNAPSHOT_SEEN[0] is not None:
+            # §A-JM: relativ zum **Repo**, nicht zur Shell. `Path.cwd()`
+            # war die Annahme, dass das Arbeitsverzeichnis das Repo ist —
+            # dieselbe Annahme wie beim relativen `--git-common-dir`, nur
+            # eine Zeile weiter. Ausserhalb des Repos bleibt der Pfad
+            # absolut, statt in einen `ValueError` zu laufen.
             try:
-                rel = _SNAPSHOT_SEEN[0].relative_to(Path.cwd())
+                rel = _SNAPSHOT_SEEN[0].relative_to(root)
             except ValueError:
                 rel = _SNAPSHOT_SEEN[0]
             print(f"Vorlauf: {rel} (nicht versioniert, git-ignoriert)")

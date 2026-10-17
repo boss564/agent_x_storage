@@ -4164,6 +4164,26 @@ Die Spalte *Fix* ist die eigentliche Aussage: neun Runden lang war jeder
 Befund ein Einzelfall, und jeder Fix war eine Bandage. Erst Runde 33
 behebt die **Klasse** — und auch das nur an einer Stelle.
 
+**§A-JP — warum die Spalte „Bandage/Architektur" weg ist.** Sie hatte zwei
+Werte und maß das falsche Merkmal: sie fragte, *wie* gefixt wurde, nicht
+*welche Annahme* den Fehler erzeugt hat. Das Ergebnis war unangenehm
+lesbar — „Architektur" stand dort, wo von außen darauf bestanden wurde
+(Runde 33′), nicht dort, wo es erkannt wurde. Die brauchbare Frage ist die
+aus §1 dieser Runde: **derselbe Fehler in Code und Test.** Sie zeigt, daß
+31/32/33′/34 **eine** Zeile sind, nicht vier. Zwei Annahmen tragen alle
+zehn Runden:
+
+| Annahme | Runden | der Test war grün, weil … | wo sie saß |
+|---|---|---|---|
+| **`cwd == root`** | 31, 34 | der Lauf im Repo stattfand; `Path.cwd()` war das Repo | 31: Test (Vorlauf liegt immer vor) · **34: Code** (`gd = (root or Path.cwd()) / gd`) |
+| **geteilter Zustand** | 32, 32′ | der Fall den Zustand des Vorgängers erbte | Harness: kein `reset()`, `_SNAPSHOT_SEEN` gesetzt und nie geräumt |
+
+Runde 34 ist damit **kein neuer Fehler**, sondern Runde 31 eine Schicht
+tiefer: die Annahme hat die Testgrenze überschritten. Und sie wurde beim
+Aufräumen gefunden, nicht von einem Test — also ohne Test gefixt. Genau
+das ist die Bandage: die Zeile war richtig, die Annahme lebte weiter.
+Der Test steht seit Runde 34 (Fall 16, Mutation rot).
+
 | Runde | falsch war | gefunden durch | Fix |
 |---|---|---|---|
 | 23 | zwei Nenner unter einem Wort (30/300) | Lesen | Bandage: Nenner benannt |
@@ -4180,6 +4200,7 @@ behebt die **Klasse** — und auch das nur an einer Stelle.
 | 32′ | Test erbte Umgebung (viermal) | Mutation | **Bandage** (ein Fall) |
 | 33 | ohne `.git/` ist die Differenzmessung tot, Meldung grün | Einwand | Bandage: eigene Zeile |
 | 33′ | vier Einzelfixes, keine Vorbedingung | Einwand | **Architektur**: Harness-Reset + Kreuztest |
+| 34 | relativer `--git-common-dir` gegen `Path.cwd()`; `_SNAPSHOT_SEEN` ohne Reset | Lesen (`rg "cwd"`) | **Architektur**: Test 16/17/18, `reset()` vollständig, Docstring Einheit |
 
 ### §71.1 — was Runde 33 wirklich geändert hat
 
@@ -4218,6 +4239,32 @@ Größe **existiert** weiter — sie ist die Zählvariable des Reports — aber
 Frage offen ließ: weder „gedruckt" noch „entfernt", sondern *intern*.
 Der Name bleibt mehrdeutig, aber er erscheint nicht mehr in einer Zeile,
 die `geprueft` sagt.
+
+### §71.4 — Runde 34: der Guard prüft zum ersten Mal *für* etwas
+
+Bis Runde 33 war der AST-Zahlen-Guard ein Verbot: er entfernte Zahlen, die
+niemand gemessen hatte (`234`, `29 Runden`). Runde 34 dreht ihn: der
+Docstring von `Report` **muß** die Einheit von `checked` nennen
+(*Prüfungen*, nicht *Angaben*). Fall 18 prüft das gegen `inspect.getdoc`.
+
+Der naheliegende falsche Fix wäre die Umbenennung in `checked_fields`
+gewesen — ein Name mit einer Bedeutung, aber ein **zweiter Zählbegriff
+neben `geprueft`**. Der Docstring kostet nichts und nimmt niemandem einen
+Namen weg.
+
+### §71.5 — Runde 34: `reset()` deckte den Vorlauf, nicht den Speicher
+
+`rg "^_[A-Za-z_]+ *[:=]"` fand vier Modulglobals: `_SNAPSHOT_SEEN`,
+`_test_results`, `_COUNTING_LABEL`, `_SELF_TEST_SCOPE`. Zwei tragen
+Zustand. `reset()` räumte nur die Datei — `_SNAPSHOT_SEEN` und
+`_test_results` lebten über Fälle hinweg. In Runde 32 war eine Mutation an
+`_SNAPSHOT_SEEN` **grün**, weil sie nichts änderte: das Global wurde
+gesetzt und nirgends zurückgesetzt. Jetzt räumt `reset()` beide, und Fall
+17 ist unter Mutation rot (2 FAIL, gemessen).
+
+**Der Unterschied ist der Satz aus Runde 33:** ein Fall kann den Zustand
+eines alten nicht erben, weil er ihn nicht bekommt — das gilt ab Runde 34
+für **jeden** Zustand, Datei und Speicher, nicht nur für den Vorlauf.
 
 ## 72. Der Satz dieser Runde
 
