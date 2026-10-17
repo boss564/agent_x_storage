@@ -138,7 +138,7 @@ Freifahrtschein für die einzige Zeile, die den Termin selbst trägt.
 | 6 | §5.1 + §5.4, dieses Dokument | Zeitstempel, Sweep- und Import-Graph-Ausgabe vorhanden | **NICHT ENTSCHEIDBAR** |
 | 7 | §5.4d, pyc-Inhalt gegen `5c5bc364` | 9/9 Module `OK`; `flags = 0x00000000` dokumentiert | **NICHT BESTANDEN** |
 | 8 | `gate_snapshot` | Etikett `LEDGER_CONSISTENT`, (0)–(4) == RED-Zweige, (5) Warnung | **NICHT BESTANDEN** |
-| 9 | §5.4f–§5.4n | eine `pyc`, Schwelle beidseitig, `etime`, Blob↔Commit, `delivered` datiert, `DERIVED` definiert | **NICHT BESTANDEN** |
+| 9 | §5.4f–§5.4o | eine `pyc`, Schwelle beidseitig, `etime`, Blob↔Commit, `delivered` datiert, `DERIVED` definiert, `INVALID_PRICE` aufgelöst | **NICHT BESTANDEN** |
 
 **Regel gegen den Haken-Fehler:** Ein Haken bedeutete bisher „ausgeführt",
 nicht „getroffen". Deshalb steht in jeder Zeile die erwartete **Ausgabe**;
@@ -769,93 +769,101 @@ erfundenen Zeit:
 ```
 delivered:          0 — unverändert seit ≤ 2026-10-04 11:12:39
                     (letzte approved=1 in run 8, seq 12;
-                     Punktzeit nicht ermittelbar — telemetry_seq ist NULL)
+                     außerhalb des Beobachtungsfensters)
 ```
 
 Die Zeit ist eine **Obergrenze**: `telemetry_runs.started_at` des Laufs, der
 die letzte genehmigte Zeile trägt. Das `≤` ist Absicht — eine Lieferung lag
-irgendwann in diesem Lauf, nicht zu seinem Beginn. Geglättet wird nichts.
+irgendwann in diesem Lauf, nicht zu seinem Beginn.
 
-**Der Befund hinter der Zahl:** es gibt **genau eine** `approved = 1`-Zeile
-in der ganzen Datenbank — Run 8, `seq 12`, `PARTIALLY_FILLED`. Die letzte
-Auslieferung war am **04.10. um 11:12**. Seit 13 Tagen: nichts. Die nackte
-Null neben `LEDGER_CONSISTENT` hat das nicht gesagt; jetzt sagt sie es.
+**Der Nullpunkt liegt vor dem Zeugen.** Erste Zeile der Tabelle:
+04.10. 08:00:08. Letzter Erfolg: 04.10. 11:12:39 (`run 8`, `seq 12`,
+`PARTIALLY_FILLED`). Der Erfolg liegt **innerhalb** der Tabelle, nicht an
+ihrem Anfang — es ist also ein echter Nullpunkt und kein Tabellenanfang:
+
+> „kein Erfolg verzeichnet" wäre falsch. Ein Erfolg ist verzeichnet — nur
+> liegt er 10,4 Tage vor dem Fenster, das der laufende Runner beobachtet.
+> **Run 9 hat nie einen Erfolg gesehen und nie einen Mißerfolg der
+> Auslieferung.** Die Null ist im Fenster nicht gemessen, sondern geerbt.
 
 Ist gar keine Lieferung vorhanden, lautet die Ausgabe
-`kein Zeitstempel — nicht ermittelbar (nie delivered > 0)`. Auch das ist
-eine Auskunft und eine bessere als eine nackte Null.
+`kein Zeitstempel — nicht ermittelbar (nie delivered > 0)`.
 
 ### 5.4l `-B` beim Testlauf kostet nichts — und deshalb steht es da
 
 `PYTHONDONTWRITEBYTECODE` beim *Dienst* verlangt einen Neustart aus falschem
-Anlaß und ist nach der Abnahme gebucht. Beim *Testlauf* verlangt es nichts:
-dort läuft kein Prozeß, dessen Bytecode sich ändern könnte. Solange es nicht
-in der Invokation steht, fälscht jeder zweite Lauf seine eigene Probe — und
-zwar **grün**, die einzige Richtung, die niemandem auffällt.
+Anlaß und ist nach der Abnahme gebucht. Beim *Testlauf* verlangt es nichts.
+Solange es nicht in der Invokation steht, fälscht jeder zweite Lauf seine
+eigene Probe — und zwar **grün**, die einzige Richtung, die niemandem
+auffällt.
 
 `order_execution_engine/run_tests.py` trägt die Regel:
 
 ```python
 os.environ["PYTHONDONTWRITEBYTECODE"] = "1"
-sys.dont_write_bytecode = True      # wirkt auch im laufenden Interpreter
+sys.dont_write_bytecode = True        # wirkt auch im laufenden Interpreter
+sys.path.insert(0, repo_root)         # unabhängig vom Startverzeichnis
+os.chdir(repo_root)                   # Tests lesen Quellen relativ
 pytest.main([tests, "-q", "-p", "no:cacheprovider"])
 ```
 
 `-p no:cacheprovider` zusätzlich: `lastfailed` überlebt sonst eine
-Schwellenänderung und ändert, welche Tests laufen.
+Schwellenänderung und ändert, welche Tests laufen. `sys.path` und `chdir`
+kamen beim ersten Lauf aus `/tmp` hinzu — vorher hing das Ergebnis davon ab,
+**wer** den Test startet. Dieselbe Form von Abhängigkeit wie `etime` und
+`pyc`.
 
-**Die 168 — vor oder nach dem Leeren von `__pycache__`?** Beides:
+**Die 170 — vor oder nach dem Leeren von `__pycache__`?** Beides:
 
 | Lauf | Ergebnis |
 |---|---|
-| mit vorhandenem Cache (der Commit-Lauf) | 168 passed |
+| mit vorhandenem Cache (der damalige Commit-Lauf) | 168 passed |
 | `PYTHONDONTWRITEBYTECODE=1`, Cache vorhanden | 168 passed |
 | Cache geleert, `PYTHONDONTWRITEBYTECODE=1` | 168 passed |
+| nach 5.4k–5.4n, `run_tests.py`, Cache geleert, aus `/tmp` | **170 passed** |
 
-Die Zahl ist cache-unabhängig. **Aber das war Glück, kein Verfahren** —
+Die 168 sind cache-unabhängig. **Aber das war Glück, kein Verfahren** —
 der Schwellen-Probe-Lauf davor war bei 3 und 5 grün, bis der Cache weg war.
-Mit `run_tests.py` ist die Frage nicht mehr zu stellen: es schreibt keinen.
 
-### 5.4m Das erste echte Verdikt — Run 9, datiert
+### 5.4m Das erste echte Verdikt — Run 9, datiert, mit Nenner
 
 Es gibt kein archiviertes Urteil dieses Werkzeugs: im Fenster 17:21–18:20
 war `current` eine Konstante. Das erste Urteil, das eine Messung trägt, ist
-das über **Run 9** seit `162a89e7`.
+das über **Run 9**.
 
 ```
-Gate:       162a89e7 (LEDGER_CONSISTENT eingeführt, current gemessen)
+Gate:       162a89e7 (LEDGER_CONSISTENT, current gemessen)
 Run 9:      started_at 2026-10-14 21:23:36  commit 5c5bc364
 Runner:     PID 962, lstart Wed Oct 14 21:23:32 2026
 Konfig:     diagnostic_only=true, live_execution=false
-Fenster:    2 d 21 h (bis 17.10. 18:22)
+Fenster:    69,1 h (2,88 d) bis 17.10. 18:25
 ```
 
-**Was das Gate mißt:**
-
 ```
+verdict:    LEDGER_CONSISTENT (4 Zeilen, 0 Auslieferungen)
+observed:   69,1 h — eine Zeile alle 17,3 h; erwartet: unbekannt
 dispatched_signals im Fenster      60
-  davon verworfen (bridge_discards) 56   (no_book / unresolved_asset)
+  davon verworfen (bridge_discards) 56
+    mapping_miss                    33
+    no_book                         23
+    empty_list                      17   (Überschneidung: mehrere Gründe je Item)
   dispatched_success                 4
 telemetry_rows                       4
 unattributed                         0
 reasons            {INVALID_PRICE: 4}
-delivered                            0   seit ≤ 04.10. 11:12
-→ LEDGER_CONSISTENT
+delivered                            0   seit ≤ 04.10. 11:12 (außerhalb)
 ```
 
-**Was das Gate nicht mißt, und was daneben steht:**
+**Was `LEDGER_CONSISTENT` belegt und was nicht:**
 
-- **4 Terminalentscheidungen in 2 d 21 h.** Vier Zeilen, alle
-  `INVALID_PRICE`, alle `approved = 0`.
-- **0 Auslieferungen** seit dem 04.10.
-- **56 von 60 Dispatches** endeten in `bridge_discards` — kein Buch
-  (`no_book`) oder unauflösbares Asset. Das ist die Aktivität des
-  Dienstes: er sieht Märkte und verwirft sie.
+| belegt | nicht belegt |
+|---|---|
+| die vier Zeilen sind vollständig, eindeutig, attribuiert, bilanzieren | Erreichbarkeit des Dienstes |
+| | Verarbeitung jenseits des Ledgers |
+| | daß je etwas ausgeliefert wurde |
+| | daß die Signalquelle lebt |
 
-> **Das ist der Lauf, auf den sich „Run 9 = kalibrierender Lauf" bezieht —
-> und er ist nie beurteilt worden, bis jetzt.** Das Urteil lautet:
-> **der Ledger ist konsistent; der Dienst liefert nichts.** Beides ist wahr,
-> und nur das erste ist ein Verdikt des Gates.
+Das Urteil ist ein Urteil über **einen Ledger, nicht über einen Dienst**.
 
 ### 5.4n `DERIVED` — Definition in einer Zeile
 
@@ -868,6 +876,70 @@ hätte den `__pycache__` nie gezeigt (die 0 war keine Antwort), und **mit**
 `--ignored` feuert es immer, solange ignorierte Artefakte im Tree liegen
 (heute: 8). Die Frage ist nicht „ist der Baum sauber", sondern „ist genau
 dieser Text committet".
+
+### 5.4o `INVALID_PRICE` ist dreimal dasselbe Wort für drei Ursachen
+
+Das `SELECT` auf die vier Zeilen ist der billigste Schritt dieser Runde — und
+der einzige, der nicht das Gate betrifft, sondern das, was es beobachtet.
+
+Die vier Zeilen tragen: `order_id = NULL`, `requested_size = NULL`,
+`status = NULL`, `latency_ms` zwischen 0,0046 und 0,0167 (echte ms),
+`approved = 0`. Es wurde also **nie eine Order gebaut** — die Entscheidung
+fiel davor. (Zum Vergleich: die einzige `approved = 1`-Zeile aus `run 8` hat
+`requested_size = 100`, `status = PARTIALLY_FILLED`, `latency_ms = 0,48`.)
+
+Im Validator (`shadow_execution_engine.py`) führen **drei** verschiedene
+Bedingungen zum selben Etikett:
+
+| Zeile | Bedingung | Bedeutung | Etikett richtig? |
+|---|---|---|---|
+| 1160 | `side is None` (`Direction.NEUTRAL`) | kein BUY/SELL ableitbar — **das Signal ist unbrauchbar, kein Preis im Spiel** | **nein** |
+| 1175 | Snapshot fehlt oder `token_id` ≠ Signal | **kein Marktbild** — es gab keinen Preis zu prüfen | **nein** |
+| 1187 | `best_ask()` / `best_bid()` ist `None` | Buch vorhanden, aber **eine Seite leer** | ja |
+
+Zwei von drei Fällen tragen einen Namen, der die Ursache verschweigt:
+`INVALID_PRICE` behauptet, es habe einen Preis gegeben und der sei falsch
+gewesen. Bei `NEUTRAL` und fehlendem Snapshot gab es **keinen**.
+
+> **Ein Validator, der 4/4 mit demselben Grund ablehnt, ist entweder richtig
+> (die Quelle ist kaputt) oder falsch (der Validator ist es) — und `INVALID_PRICE`
+> unterscheidet die beiden nicht.** Diese Frage ist in elf Runden nicht
+> gestellt worden, weil alle elf Runden dem Zeugen galten.
+
+**Nicht entschieden, weil nicht entscheidbar mit den vorhandenen Daten:**
+die vier `signal_id`s stehen in **keiner** JSONL — der Signalpfad wird nicht
+protokolliert. Welche der drei Bedingungen griff, ist aus der Datenbank allein
+**nicht** rekonstruierbar. Vermutbar ist es: `direction = NEUTRAL` entsteht
+bei `confidence` unter der Schwelle, und alle vier Zeilen liegen in einem
+Fenster, in dem 56 von 60 Dispatches an `no_book`/`mapping_miss` scheiterten —
+das spricht für die Quelle, nicht für den Validator. **Vermutung ist aber
+kein Befund**, und sie wird hier nicht als einer eingetragen.
+
+**Buchung für den 20.10.:** ein Grund pro Ursache (`NO_SIDE`,
+`NO_SNAPSHOT`, `EMPTY_SIDE`) statt eines Sammelnamens. Das ist keine
+Verhaltensänderung, nur ein ehrlicherer String — und sie macht die nächste
+Frage in einer Zeile beantwortbar.
+
+### 5.4p Zählliste dieser Runde — aus dem Lauf abgeschrieben
+
+Alle vier Zahlen stammen aus **einem** Lauf dieses Baumes, in dieser
+Reihenfolge erhoben (Sektionen zuerst, Zahl danach):
+
+```
+$ cd /tmp && python3 .../order_execution_engine/run_tests.py
+170 passed in 1.19s                     # kein __pycache__ danach: 0 Verzeichnisse
+
+$ python3 order_execution_engine/ops/preflight_check.py --min-run-id 9
+verdict:    LEDGER_CONSISTENT (4 Zeilen, 0 Auslieferungen)
+observed:   69.1 h (2.88 d) — eine alle 17.3 h; erwartet: unbekannt
+delivered:  0 — unverändert seit ≤ 2026-10-04 11:12:39 (...)
+gate commit: 653f5bf1:325f71f655ea  DERIVED (Datei != HEAD-Blob)
+```
+
+`DERIVED` ist an dieser Stelle **korrekt und gewollt**: der Blob, der die
+Zahlen erzeugt, enthält die Sektionen, die sie beschreiben — er ist noch
+nicht committet. Nach dem Commit muß dieselbe Zeile `DERIVED` verlieren;
+tut sie das nicht, ist der Commit ein anderer Baum.
 
 ### 5.4f Eine Kopie, nicht zwei
 

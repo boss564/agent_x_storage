@@ -30,6 +30,7 @@ hier ist es Teil der Invokation.
 from __future__ import annotations
 
 import os
+import pathlib
 
 # Vor jedem Import aus dem Paket: kein Bytecode schreiben.
 os.environ["PYTHONDONTWRITEBYTECODE"] = "1"
@@ -39,12 +40,21 @@ import sys  # noqa: E402
 
 sys.dont_write_bytecode = True
 
+# Das Repo-Wurzelverzeichnis muss auf sys.path stehen, sonst findet pytest
+# `order_execution_engine` nicht, egal von wo es gestartet wird. Auch das
+# gehört in die Invokation, nicht in ein `export` im Kopf des Ausführenden.
+_ROOT = pathlib.Path(__file__).resolve().parent.parent
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
+
 import pytest  # noqa: E402
 
 if __name__ == "__main__":
-    import pathlib
-
     here = pathlib.Path(__file__).resolve().parent
+    # cwd auf das Paket setzen: einige Tests lesen Quellen über relative
+    # Pfade. Ohne das hängt das Ergebnis davon ab, wer den Test startet —
+    # dieselbe Form von Abhängigkeit, die diese Akte elf Runden beschäftigt.
+    os.chdir(_ROOT)
     argv = [
         str(here / "tests"),
         "-q",

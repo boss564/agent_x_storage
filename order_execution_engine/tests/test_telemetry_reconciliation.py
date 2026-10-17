@@ -662,8 +662,14 @@ def test_criterion_count_matches_red_branches_in_source() -> None:
     # nicht gegen numbered.
     red_returns = len(re.findall(r'status="RED"', src))
     line = _gate_criterion(9)
-    # (5) ist ausdrücklich als Warnung deklariert und hat keinen RED-Zweig.
-    numbered = {n for n in re.findall(r"\((\d)\)", line) if n != "5"}
+    # (5) und (6) sind Feststellungen ohne RED-Zweig: (5) ist die Warnung zu
+    # delivered, (6) der Nenner des Urteils. Beide sagen etwas über den
+    # Geltungsbereich, nicht über die Daten — sie dürfen nicht blocken und
+    # dürfen deshalb auch nicht als Zweig existieren. Die Ausnahme ist
+    # benannt: wer eine weitere Zahl ohne Zweig einführt, muß sie hier
+    # eintragen und damit begründen.
+    non_blocking = {"5", "6"}
+    numbered = {n for n in re.findall(r"\((\d)\)", line)} - non_blocking
     # numbered = {0,1,2,3,4}; (0) hat zwei RED-Zweige -> 6 erwartet.
     expected = len(numbered) + 1
     assert red_returns == expected, (
@@ -672,6 +678,7 @@ def test_criterion_count_matches_red_branches_in_source() -> None:
         "gedruckte Regel (oder umgekehrt)."
     )
     assert "(5) WARNUNG" in line
+    assert "(6) NENNER" in line
 
 
 def test_branch_0_underrun() -> None:
@@ -822,6 +829,38 @@ def test_threshold_one_below_is_red_underrun() -> None:
     assert detail["telemetry_rows"] == detail["decision_seq_keyed"]
     assert detail["unattributed"] == 0
     assert detail["dispatched_success"] == sum(detail["reasons"].values())
+
+
+def test_observed_window_and_rate_are_reported() -> None:
+    """Die Untergrenze nennt ihren Zeitraum — sonst hat sie keinen Nenner.
+
+    ``rows >= 4`` ohne Dauer ist mit jedem System vereinbar, das gerade noch
+    atmet. Die Rate wird aus Zeilen und Fenster gebildet, die erwartete Rate
+    ist ausdrücklich unbekannt (sie steht in keiner Aktenstelle) — eine Zahl
+    aus den Daten wäre immer erfüllt und damit keine Prüfung.
+    """
+    status, detail = _status_at(PINNED_MIN_TELEMETRY_ROWS)
+    assert status == "LEDGER_CONSISTENT", detail
+    assert detail["observed_hours"] > 0
+    expected = detail["telemetry_rows"] / detail["observed_hours"]
+    assert abs(detail["rows_per_hour"] - expected) < 1e-9
+    line = _gate_criterion(9)
+    assert "Beobachtungszeitraum" in line
+    assert "erwartete Rate: unbekannt" in line
+
+
+def test_rate_is_a_report_value_not_a_gate() -> None:
+    """Die Rate steht daneben, sie entscheidet nicht.
+
+    Wäre die Schwelle eine Rate, hinge der Status von der Laufzeit ab und
+    jede langsamere Quelle fiele durch. Das ist nicht die Bedingung: die
+    **Anzahl** zählt, die Dauer steht daneben. Das ist die bewusste Grenze
+    — sie ist datiert, nicht erraten.
+    """
+    status, detail = _status_at(PINNED_MIN_TELEMETRY_ROWS)
+    assert status == "LEDGER_CONSISTENT"
+    assert detail["rows_per_hour"] is not None
+    assert detail["observed_hours"] > 0
 
 
 def test_latest_run_failure_blocks_even_when_called_with_old_min_run_id() -> None:

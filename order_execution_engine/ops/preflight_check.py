@@ -236,9 +236,17 @@ def gate_telemetry_reconciliation(
             (min_run_id,),
         ).fetchone()[0]
     )
+    delivered_since = _delivered_since(conn, min_run_id=min_run_id,
+                                       in_scope=delivered)
+    observed_hours = max(0.0, (time.time() - float(started_at)) / 3600.0)
+    rows_per_hour = (
+        telemetry_rows / observed_hours if observed_hours > 0 else None
+    )
     detail = {
         "min_run_id": min_run_id,
         "started_at": started_at,
+        "observed_hours": observed_hours,
+        "rows_per_hour": rows_per_hour,
         "dispatched_success": dispatched,
         "telemetry_rows": telemetry_rows,
         "decision_seq_keyed": keyed,
@@ -248,12 +256,18 @@ def gate_telemetry_reconciliation(
         "classifiable": sum(reasons.values()),
         "unattributed": unattributed,
         "delivered": delivered,
+        "delivered_since": delivered_since,
     }
     # Untergrenze: ohne sie sind (1)-(4) bei einem leeren Lauf vier Tautologien
-    # (0==0, 0==0, „nichts fehlt“, 0==0) und GREEN bedeutet „keine Daten“.
-    # Die Zahl stammt aus dem dokumentierten Lauf, nicht aus der Absicht:
-    # Run 9 (2026-10-14T19:23:36) hat 4 decision_seq-Zeilen. Wer sie ändert,
-    # ändert das Kriterium — und das steht im selben Blob.
+    # (0==0, 0==0, „nichts fehlt“, 0==0) und LEDGER_CONSISTENT bedeutet
+    # „keine Daten“. Die Dauer gehört in die Bedingung: 4 Zeilen in 69 h
+    # (eine alle 17 h) ist ein anderer Befund als 4 Zeilen in 4 min. Eine
+    # absolute Zahl ohne Zeitraum ist mit jedem System vereinbar, das noch
+    # atmet — und sie ist trotzdem erfüllt.
+    #
+    # Die erwartete Rate wird NICHT erfunden: sie steht in keiner Aktenstelle,
+    # also steht sie hier als „unbekannt“. Eine Zahl aus den Daten wäre
+    # immer erfüllt und damit keine Prüfung.
     if telemetry_rows < MIN_TELEMETRY_ROWS:
         return GateResult(
             name="TELEMETRY_RECONCILIATION",
@@ -355,6 +369,43 @@ def _print_process_age() -> None:
             print(f"runner etime:        {r.stdout.strip()}  (gemessen jetzt)")
     except (OSError, subprocess.SubprocessError) as exc:  # pragma: no cover
         print(f"runner etime:        nicht lesbar ({exc})")
+
+
+def _delivered_since(
+    conn: sqlite3.Connection, *, min_run_id: int, in_scope: int
+) -> str:
+    """Seit wann ist ``delivered`` konstant — oder ehrlich: nicht ermittelbar.
+
+    ``telemetry`` hat keine Zeitspalte. Der einzige belastbare Anker ist
+    ``telemetry_runs.started_at`` des Laufs, der die letzte genehmigte Zeile
+    trägt — das ist eine **Obergrenze** (die Lieferung lag irgendwann in
+    diesem Lauf), keine Punktzeit. Das wird mitgedruckt, nicht geglättet.
+
+    ``dispatched_signals.telemetry_seq`` wäre die Punktzeit — ist aber NULL
+    in allen Zeilen (offener Punkt §6). Deshalb sage ich das, statt eine
+    Null in eine Zahl zu kleiden.
+    """
+    row = conn.execute(
+        "SELECT run_id, MAX(seq) FROM telemetry WHERE approved = 1 "
+        "GROUP BY run_id ORDER BY run_id DESC LIMIT 1"
+    ).fetchone()
+    if row is None:
+        return "kein Zeitstempel — nicht ermittelbar (nie delivered > 0)"
+    run_id, last_seq = int(row[0]), int(row[1])
+    started = conn.execute(
+        "SELECT started_at FROM telemetry_runs WHERE run_id = ?", (run_id,)
+    ).fetchone()
+    if started is None:
+        return f"kein Zeitstempel — nicht ermittelbar (run {run_id} ohne started_at)"
+    stamp = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(float(started[0])))
+    if in_scope:
+        return f"≥ {stamp} (run {run_id} started_at, {in_scope} in scope)"
+    # Nicht im Scope: die letzte Lieferung liegt in einem älteren Lauf.
+    return (
+        f"unverändert seit ≤ {stamp} "
+        f"(letzte approved=1 in run {run_id}, seq {last_seq}; "
+        "außerhalb des Beobachtungsfensters, Punktzeit nicht ermittelbar)"
+    )
 
 
 def check_git(expected_prefix: str, errors: list[str]) -> str:
@@ -740,14 +791,19 @@ def _gate_criterion(min_run_id: int) -> str:
     """
     return (
         "LEDGER_CONSISTENT nur wenn "
-        f"(0) telemetry_rows >= {MIN_TELEMETRY_ROWS} (Untergrenze aus Run 9) "
+        f"(0) telemetry_rows >= {MIN_TELEMETRY_ROWS} in <Beobachtungszeitraum> "
+        "(Untergrenze aus Run 9: 4 Zeilen / 69,0 h = eine alle 17,3 h; "
+        "erwartete Rate: unbekannt — steht in keiner Aktenstelle) "
         "(1) telemetry_rows == decision_seq-keyed "
         "(2) keyed == distinct(run_id, decision_seq) und je run eindeutig "
         "(3) unattributed == 0 "
         "(4) dispatched_success == Σ reject_reasons; "
         f"scope = run_id >= {min_run_id}. "
         "(5) WARNUNG, kein Blocker: delivered == 0 heißt Ledger konsistent "
-        "über einem Lauf ohne Auslieferung — das Etikett sagt dazu nichts."
+        "über einem Lauf ohne Auslieferung — das Etikett sagt dazu nichts. "
+        "(6) NENNER: das Urteil nennt Zeilen und Auslieferungen; es sagt "
+        "nichts über Erreichbarkeit, Verarbeitung jenseits des Ledgers "
+        "oder Leben der Signalquelle."
     )
 
 
@@ -919,6 +975,24 @@ def gate_snapshot(
     print(f"  telemetry_fill_metrics rows (run_id>={min_run_id}): {fills}")
     print(f"  duplicate item_ids: {len(dup)}")
     print(f"  {recon.name}: {recon.status} detail={recon.detail}")
+    if "delivered" in recon.detail:
+        d = recon.detail
+        hours = d.get("observed_hours") or 0.0
+        rate = d.get("rows_per_hour")
+        rate_s = f"eine alle {1.0 / rate:.1f} h" if rate else "Rate unbekannt"
+        print(
+            f"  verdict:            {recon.status} "
+            f"({d.get('telemetry_rows')} Zeilen, "
+            f"{d.get('delivered')} Auslieferungen)"
+        )
+        print(
+            f"  observed:           {hours:.1f} h ({hours / 24:.2f} d)"
+            f" — {rate_s}; erwartet: unbekannt"
+        )
+        print(
+            f"  delivered:          {d['delivered']} "
+            f"— {d.get('delivered_since', 'nicht ermittelbar')}"
+        )
     ad = accounting.detail
     print(
         f"  {accounting.name}: {accounting.status} "
