@@ -71,6 +71,17 @@ geprüft wurde. Geprüft wird sie an beiden Stellen, an denen sie entsteht —
 der Signatur-Default (Test) und ``from_config`` (Laufzeit).
 """
 
+_ABSENT_SENTIMENT = object()
+"""Sentinel für **fehlendes** ``sentiment_score`` (§5.4cz).
+
+``0`` ist ein legitimer Wert — neutral. Ein fehlendes Feld mit ``0`` zu
+beantworten lässt ein Loch wie eine Meinung aussehen; das ist die
+Familie aus §5.4cw, an der Stelle, an der ein Default **handelt**.
+Ein Sentinel trennt „abwesend" von „null" ohne die Signatur der
+Funktion zu ändern; `is`-Vergleich, weil ``object()`` nur mit sich selbst
+identisch ist.
+"""
+
 
 @dataclass
 class BridgePolicy:
@@ -284,13 +295,28 @@ class NewsBridge:
         size = self._policy.size_for_impact(item.get("impact_level"))
         self._policy.remember_size(signal_id, size)
 
+        # §5.4cz: Das ist eine **Regel**, kein Default. „Kein Sentiment" und
+        # „neutrales Sentiment" sind beide 0 — ohne diese Zeile wäre die
+        # Abwesenheit eines Feldes identisch mit einer Meinung über den
+        # Markt, und die `0` sähe aus wie ein Urteil statt wie ein Loch.
+        #
+        # Die Entscheidung (kein Signal ohne Sentiment) ist gewollt; die
+        # verkleidete Form war der Defekt. `_policy.direction_from` behandelt
+        # `0` als NEUTRAL → `resolved_side()` None → INVALID_PRICE mit
+        # NEUTRAL_SIGNAL. Belegt am 17.10.: `sentiment_absent = 0` von 502
+        # echten Items — die Regel greift nie, weil das Feld nie fehlt.
+        # Fehlte es, stünde es in `preflight` als `neutral_without_sentiment`.
+        score = item.get("sentiment_score", _ABSENT_SENTIMENT)
+        if score is _ABSENT_SENTIMENT:
+            self._log_discard(str(item_id), "absent_sentiment")
+            return False
         signal = SignalPayload(
             signal_id=signal_id,
             source="newsbot",
             target_token_id=target.token_id,
             market_id=target.market_id,
-            direction=self._policy.direction_from(item.get("sentiment_score", 0)),
-            confidence=self._policy.confidence_from(item.get("sentiment_score", 0)),
+            direction=self._policy.direction_from(score),
+            confidence=self._policy.confidence_from(score),
             suggested_price=None,
             timestamp=publish_ts,
         )

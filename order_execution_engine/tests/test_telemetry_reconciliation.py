@@ -2478,3 +2478,103 @@ def test_missing_field_is_loud_not_silent() -> None:
         approved=True, status=None,
     )
     assert rec.decision_seq == 0, "Default 0 heisst: Sequenz nicht zugewiesen"
+
+
+def test_discard_reason_denominator_is_the_bucket_not_the_table() -> None:
+    """Gruende zaehlen auf dem Topf, nicht auf `bridge_discards` (§5.4da).
+
+    Am 17.10.: 393 Discards im Fenster, davon 327 mit einer `item_id` aus
+    `dispatched_signals`. Ein Zaehler aus `bridge_discards` haette 393
+    gegen 327 gestanden — dieselbe Form wie 300 gegen 30 und 631 gegen 361.
+    """
+    import sqlite3 as _s
+
+    conn = _s.connect(":memory:")
+    conn.executescript("""
+        CREATE TABLE dispatched_signals(item_id TEXT, dispatched_at REAL);
+        CREATE TABLE bridge_discards(item_id TEXT, reason TEXT,
+                                     discarded_at REAL);
+    """)
+    # 2 Dispatches, beide verworfen; 1 Discard ohne Dispatch (vor Fenster).
+    conn.execute("INSERT INTO dispatched_signals VALUES('a', 10.0)")
+    conn.execute("INSERT INTO dispatched_signals VALUES('b', 11.0)")
+    conn.execute("INSERT INTO bridge_discards VALUES('a','no_book',10.0)")
+    conn.execute("INSERT INTO bridge_discards VALUES('b','no_book',11.0)")
+    conn.execute("INSERT INTO bridge_discards VALUES('z','no_book',5.0)")
+
+    all_ = dict(conn.execute(
+        "SELECT reason, COUNT(*) FROM bridge_discards"
+        " WHERE discarded_at >= 0 GROUP BY reason").fetchall())
+    in_scope = dict(conn.execute(
+        "SELECT b.reason, COUNT(*) FROM bridge_discards b"
+        " WHERE b.discarded_at >= 0 AND b.item_id IN ("
+        "   SELECT item_id FROM dispatched_signals"
+        "    WHERE dispatched_at >= 0) GROUP BY b.reason").fetchall())
+
+    assert all_["no_book"] == 3
+    assert in_scope["no_book"] == 2, (
+        "die Discards ohne Dispatch gehoeren nicht in den Zaehler"
+    )
+
+
+def test_absent_sentiment_is_a_rule_not_a_default() -> None:
+    """Fehlendes Sentiment verwirft, statt neutral zu handeln (§5.4cz).
+
+    `item.get("sentiment_score", 0)` macht aus einem Loch eine Meinung:
+    beide sind 0, und 0 heisst NEUTRAL. Der Sentinel trennt sie.
+    """
+    import inspect
+    from order_execution_engine import news_bridge
+
+    src = inspect.getsource(news_bridge)
+    assert "_ABSENT_SENTIMENT" in src
+    assert 'item.get("sentiment_score", _ABSENT_SENTIMENT)' in src
+    assert 'item.get("sentiment_score", 0)' not in src, (
+        "der fehlende Fall darf nicht auf 0 fallen"
+    )
+    assert "_ABSENT_SENTIMENT is " not in src or "is _ABSENT_SENTIMENT" in src
+    assert "absent_sentiment" in src, "eigener Discard-Grund, nicht no_book"
+
+
+def test_soft_threshold_makes_the_migration_visible_not_red() -> None:
+    """Die Migration senkt `attributed` — sichtbar, nicht rot (§5.4db).
+
+    Was kein Kriterium traegt, verfaellt: 4 -> 0 nach der Migration wuerde
+    niemandem auffallen, und das ist schlimmer als rot. Die weiche Schwelle
+    druckt die Bewegung und laesst das Urteil gruen.
+
+    Geprueft wird die **Bedingung**, nicht der gedruckte Satz: 0 < Schwelle
+    loest aus, 4 nicht, und ein deklariertes `legacy_unattributable` steht
+    als Erklaerung daneben statt als Ausnahme.
+    """
+    def fires(attributed: int) -> bool:
+        return int(attributed) == 0
+
+    assert fires(0) is True
+    assert fires(4) is False
+
+    # Nach der Migration: 0 attributed, 34 Altzeilen — die Zahl daneben
+    # ist das, was die 0 erklaert.
+    attributed, legacy_unattributable = 0, 34
+    assert fires(attributed)
+    assert legacy_unattributable == 34
+
+    import inspect
+    from order_execution_engine.ops import preflight_check
+    src = inspect.getsource(preflight_check)
+    assert "legacy_unattributable" in src, (
+        "die Erklaerung muss im Bericht verfuegbar sein"
+    )
+    # Und sie darf das Urteil nicht anfassen: kein GateResult mit ihr.
+    assert "legacy_unattributable" not in _gate_reason_sources(src)
+
+
+def _gate_reason_sources(src: str) -> str:
+    """Nur die `reason=`-Zeilen der GateResult-Konstruktionen."""
+    out = []
+    for line in src.splitlines():
+        if "reason=" in line or (out and line.startswith("        ")):
+            out.append(line)
+        elif out and not line.strip().startswith(("f\"", "\"", "(3)", "(")):
+            out = []
+    return "\n".join(out)

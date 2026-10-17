@@ -555,6 +555,27 @@ def gate_telemetry_reconciliation(
         "fk_set": fk_set,
         "fk_paired": paired,
         "fk_expected": fk_expected,
+        # §5.4cz: Verwerfungsgründe als Verteilung, eine Quelle für
+        # Anzeige und Zähler — nicht zweimal ermitteln.
+        "discard_reasons": {
+            str(r): int(c) for r, c in conn.execute(
+                "SELECT reason, COUNT(*) FROM bridge_discards"
+                " WHERE discarded_at >= ? GROUP BY reason",
+                (started_at,),
+            ).fetchall()
+        },
+        # §5.4da: dieselbe Verteilung, aber nur für Discards, die zu einem
+        # Dispatch im Fenster gehören — die Menge, die der Topf zählt.
+        "discard_reasons_in_scope": {
+            str(r): int(c) for r, c in conn.execute(
+                "SELECT b.reason, COUNT(*) FROM bridge_discards b"
+                " WHERE b.discarded_at >= ? AND b.item_id IN ("
+                "   SELECT item_id FROM dispatched_signals"
+                "    WHERE dispatched_at >= ?)"
+                " GROUP BY b.reason",
+                (started_at, started_at),
+            ).fetchall()
+        },
     }
     # Null-Bedingung statt Untergrenze (§5.4v).
     #
@@ -970,6 +991,24 @@ def dispatch_origin_split(
                          ("attributed", "discarded", "unattributed",
                           "traffic_only"))
     return buckets
+
+
+def _discard_reason_count(detail: dict, reason: str) -> int:
+    """Wie oft hat die Bridge aus ``reason`` **einen Dispatch** verworfen (§5.4da)?
+
+    Grundgesamtheit ist der Topf ``discarded`` (dispatched × discarded),
+    nicht ``bridge_discards`` allein. Am 17.10. standen 393 Discards im
+    Fenster, aber nur 327 mit einer `item_id` aus `dispatched_signals` —
+    die Differenz sind Verwerfungen vor dem Fenster, und die gehen in
+    kein Urteil. Eine Zahl aus der falschen Menge ist derselbe Fehler
+    wie 393 gegen 327.
+
+    Gelesen wird ``discard_reasons_in_scope`` (aus der Schnittmenge),
+    nicht ``discard_reasons`` (alle). Fehlt der Schlüssel, ist die
+    Antwort 0 — der Aufrufer unterscheidet das an ``discarded``.
+    """
+    reasons = detail.get("discard_reasons_in_scope") or {}
+    return int(reasons.get(reason, 0))
 
 
 def _unattributed_reason(detail: dict, cumulative: int) -> str:
@@ -1913,6 +1952,29 @@ def gate_snapshot(
         print(
             f"  source_unknown:     {_su} ({_su_note})"
         )
+        # §5.4cz: `absent_sentiment` ist der einzige Bridge-Default, der
+        # **handelt** — er verwirft ein Item als „neutral", obwohl es
+        # unbekannt ist. Der Zähler macht aus einer verkleideten Regel
+        # eine sichtbare. 0 ⇒ die Regel greift nie, weil das Feld immer
+        # kommt (belegt am 17.10.: 0/502 echte Items); n>0 ⇒ n Items
+        # wurden verworfen, weil das Feld fehlte, nicht weil der Markt
+        # neutral war.
+        #
+        # §5.4da: Grundgesamtheit ist **dispatched × discarded**, nicht
+        # `bridge_discards` allein. Am 17.10. standen 393 Discards im
+        # Fenster, aber nur 327 davon tragen eine `item_id` aus
+        # `dispatched_signals` — dieselbe Menge aus zwei Quellen wäre
+        # wieder 393 gegen 327. Der Zähler zählt deshalb nur, was im
+        # Topf `discarded` liegt; die 66 ohne Dispatch sind „vor dem
+        # Fenster verworfen" und gehen in kein Urteil.
+        _sa = _discard_reason_count(recon.detail, "absent_sentiment")
+        _sa_all = (recon.detail.get("discard_reasons") or {}).get(
+            "absent_sentiment", 0)
+        print(
+            f"  absent_sentiment:   {_sa} von {_ds.get('discarded')} im Topf"
+            f" (alle Discards im Fenster: {_sa_all}) "
+            f"{'— Regel tot: Feld kommt immer' if _sa_all == 0 else '— BEFUND'}"
+        )
     verdicts = snapshot["verdicts"]
     # Der Richter datiert sich selbst: ein Verdikt ohne Prüfer-Hash nennt den
     # Run, aber nicht die Fassung, die urteilte.
@@ -1946,6 +2008,24 @@ def gate_snapshot(
         "dem das Urteil gebunden ist; wer diesen Befehl startet, blockiert, "
         "das Urteil selbst bricht nichts ab"
     )
+    _ds = classes.get("dispatch_split") or {}
+    if _ds:
+        # §5.4db: weiche Schwelle statt Kriterium. `attributed` traegt kein
+        # Kriterium (Kriterium (1) prueft die Schreibseite) — und was nicht
+        # geprueft wird, verfaellt: die Migration senkt 4 auf 0, das Urteil
+        # bliebe gruen, und niemand saehe es. Die WARN macht die Bewegung
+        # sichtbar, ohne zu blocken. `legacy_unattributable` ist die
+        # **Erklaerung**, nicht die Ausnahme — nach der Migration steht die
+        # Zahl der Altzeilen daneben, und 0 daneben liest sich anders als
+        # 0 allein.
+        _att = int(_ds.get("attributed", 0))
+        _legacy = int(recon.detail.get("legacy_unattributable", 0) or 0)
+        if _att == 0:
+            print(
+                f"  WARN attributed:    0 < {_legacy or 4} "
+                f"(legacy_unattributable={_legacy}) — "
+                "Migration sichtbar, Urteil bleibt gruen"
+            )
     if recon.detail.get("unattributed"):
         _sp = recon.detail.get("origin_split") or {}
         _open = _sp.get("unattributed")

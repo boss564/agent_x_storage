@@ -3374,3 +3374,122 @@ nimmt das Kriterium eine deklarierte Lücke an — oder wird die Ehrlichkeit
 zurückgebaut, weil sie rot macht.**
 
 Suite: **211 passed** (+2 Default-Regel, +1 run-Scope; 1 Formattest ersetzt).
+
+## 59. Runde 27 — der Default, der handelt, und der Blindheit Ablaufdatum
+
+### §5.4cz — `sentiment_score`: 0 von 502
+
+Die Messung, die entscheidet, ob die Regel tot ist:
+
+| Datei | Zeilen | davon Run-Marker | echte Items | ohne `sentiment_score` |
+|---|---|---|---|---|
+| `agentx/news_scores.jsonl` | 827 | 325 | 502 | **0** |
+| `data/news_scores.jsonl` | 170 | 0 | 170 | **9** |
+
+Die erste Zählung ergab „325 von 827 fehlen" — und war falsch. Die 325
+waren **Run-Marker** (`source_type: "run_marker"`, Scheduler-Status),
+keine News-Items. Die Grundgesamtheit ist „Items, die die Bridge
+erreichen", nicht „Zeilen in der Datei". Dieselbe Familie, zum vierten
+Mal: die Zahl stimmte über der falschen Menge.
+
+Über echten Items: **0 von 502**. Die Regel ist tot — und sie steht
+jetzt als Regel da, nicht als Default:
+
+```python
+_ABSENT_SENTIMENT = object()          # Sentinel, `is`-Vergleich
+score = item.get("sentiment_score", _ABSENT_SENTIMENT)
+if score is _ABSENT_SENTIMENT:
+    self._log_discard(str(item_id), "absent_sentiment")
+    return False
+```
+
+Vorher: `item.get("sentiment_score", 0)` — ein fehlendes Feld wurde zu
+`0`, `0` heißt `NEUTRAL`, `NEUTRAL` heißt „kein Signal". **Ein Loch sah
+aus wie eine Meinung.** Das ist der einzige Default der Akte, der
+*handelt*, und darum war er der letzte, der noch offen stand.
+
+### §5.4da — `discarded` 327 gegen `bridge_discards` 393
+
+Der Zähler wäre aus der falschen Menge gekommen:
+
+```
+Discards im Fenster:                       393
+davon mit item_id aus dispatched_signals:  327   ← das ist der Topf
+Differenz (vor dem Fenster verworfen):      66
+```
+
+393 gegen 327 ist die Form von 300 gegen 30 und 631 gegen 361. Der
+Zähler liest jetzt `discard_reasons_in_scope` (Schnittmenge) und zeigt
+im Bericht beide Grundgesamtheiten:
+
+```
+absent_sentiment:   0 von 327 im Topf (alle Discards im Fenster: 0)
+```
+
+### §5.4db — weiche Schwelle für `attributed`
+
+`attributed` trägt kein Kriterium. Was kein Kriterium trägt, verfällt:
+die Migration senkt 4 → 0, das Urteil bliebe grün, und niemand sähe es.
+Die WARN macht die Bewegung sichtbar, ohne zu blocken:
+
+```
+WARN attributed:    0 < 4 (legacy_unattributable=34)
+                    — Migration sichtbar, Urteil bleibt grün
+```
+
+Heute schweigt sie (`attributed = 4`). Nach der Migration sagt sie, was
+passiert ist — und `legacy_unattributable` ist die **Erklärung**, nicht
+die Ausnahme.
+
+### §5.4dc — die Blindheit hat ein Ablaufdatum
+
+Der Gegenprobe-Befund aus §2, festgehalten, weil er der Grund ist, warum
+die Assertion dasteht und nicht die Zahl:
+
+```
+hits_run9 = {1,2,3,4}  ⊂  hits_run8 = {1..30}
+```
+
+Jede kurze Menge, die Teilmenge der langen ist, macht den Unterschied
+unsichtbar — und die kurze ist immer die spätere. **Der Bestand war blind
+von hinten nach vorn und wäre sehend geworden, sobald ein Run mehr Claims
+hat als sein Vorgänger** — also sobald die Pipeline voll läuft.
+
+Daraus die **Entlastung für die Abnahme vom 17.10.:** `attributed = 4`
+war unter **beiden** Lesarten wahr — run-scoped `{1..4} ∩ {1..4} = 4`,
+union `{1..30} ∩ {1..4} = 4`. Die Abnahme war robust gegen den Fehler,
+nicht weil sie gut war, sondern weil die Mengen es zuließen. Dritte Runde
+mit derselben Form: `4 = 4` (Etikett), `30 ⊂ 300` (Topf), `4 = 4`
+(Skopierung). **Die Zahlen stimmen, weil sie nicht unterscheiden können.**
+
+### §5.4dd — das Übergabeprotokoll
+
+`ops/UEBERGABEPROTOKOLL.md` — vier Felder, zwei Zustände, ein Datum.
+E1 ist die eine Frage, die vor dem 20.10. zu stellen ist:
+
+> **Deklarierte Lücke tragen?** Kriterium (1) prüft Vollständigkeit,
+> nicht Attribuierung. `attributed` ist Beobachtung. Die Migration senkt
+> sie auf 0 für 34 Altzeilen. Nimmt der Abnehmer eine deklarierte Lücke
+> an — oder wird die Ehrlichkeit zurückgebaut, weil sie rot macht?
+
+Die nicht gestellte Frage ist der sechste Default. Er steht nicht im
+Code, er steht in der Frage ohne Termin, und wie alle Defaults greift er,
+wenn niemand hingesehen hat.
+
+## 60. Der Satz dieser Runde
+
+Siebenundzwanzig Runden, und der sechste Default war der einzige, der
+handelt: kein Sentiment und neutrales Sentiment sind beide `0`, und `0`
+heißt „kein Trade" — ein Loch, das wie eine Meinung aussieht. Gemessen:
+**0 von 502 echten Items.** Die Regel ist tot, und sie steht jetzt als
+Regel da.
+
+**Was am 20.10. abgenommen wird, ist ein System, das seine Mengen
+skopiert, seine Ausgabe gegen die Abfrage klammert, seine fehlenden
+Felder lauter behandelt als seine falschen und eine Migration
+angekündigt hat, die die eigene Zahl auf Null senkt. Und die letzte
+offene Stelle ist keine Zeile Code: es ist die Frage im
+Übergabeprotokoll, ob eine deklarierte Lücke angenommen wird. Auch die
+nicht gestellte Frage hat einen Default, und er lautet *läuft doch*.**
+
+Suite: **214 passed** (+3: Discard-Nenner, Sentinel-Regel, weiche Schwelle).
