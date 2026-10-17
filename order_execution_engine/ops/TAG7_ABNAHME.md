@@ -4185,8 +4185,9 @@ braucht zwei Werte, die **verschieden** sein müssen — sonst sieht der Test
 nichts.
 
 > **Regel (§A-JW): jeder Test braucht einen zweiten Fall, in dem der Wert
-> anders ist.** Gegenproben: Fall 19 (`root` ≠ `root=None`), Fall 22 (zwei
-> `Checks`-Paare `(21,210)` und `(7,4)`), Fall 16c (zwei `chdir`-Zyklen).
+> anders ist.** Gegenproben: Fall 19 (`root` ≠ `root=None`), Fall 22
+> (`Checks`-Paare `(21,210)` und `(7,4)`), Fall 16c (zwei `chdir`-Zyklen),
+> Fall 24 (zwei Fälle, ein Zustand — Probesichtbarkeit und Reset getrennt).
 > Die Regel steht hier, an der Tabelle — nicht in einer eigenen §-Nummer.
 > Wer in Runde 50 die Annahmen sucht, findet sie mit der Regel daneben.
 
@@ -4224,6 +4225,7 @@ den Fehler ab. Drei Annahmen, elf Runden.
 | 35 | Tests übergaben `root` und übersprangen den Produktionspfad; `_status_line` zählte 21 als „Angaben"; Fall 17 kannte Namen statt Menge | Einwand + `rg` | **Architektur**: Fall 19 (Zwillings ohne `root`), `Checks`-Typ, Fall 17 gegen Globals-Menge, `repo_root()` mit Cache |
 | 36 | `reset()` und Cache-Reset waren zwei Vorbedingungen; `chdir` ohne Wiederherstellung; Filter ohne eigenen Test; `223` dreimal getippt | Einwand + Mutation | **Architektur**: `reset_all()` inkl. cwd, Fall 16b, Filter-Fixture, `Checks(n, excluded)` mit `total` |
 | 37 | `_START_CWD` wäre als Zustand klassifiziert und vom Reset auf den Fehler gesetzt (`Path.cwd()`); `Path`/`Decimal`/`Fraction` falsch-positiv; `Checks` mutierbar | Einwand + Messung | **Architektur**: dritte Kategorie *Referenz*, `_IMMUTABLE_CTORS`, Fall 16c (zwei Zyklen), `frozen` |
+| 38 | `checked` als nackter `int` ohne Test (Runde 23 saß in der Zahl); zwei Caches ohne Schreiber-Vertrag; Annahme 2 ohne Probe | Einwand + Messung | **Architektur**: Zählvertrag im Docstring + Fall 22, Schreiber leert Caches (Fall 25), Fall 24 (zwei Fälle, ein Zustand) |
 
 ### §71.1 — was Runde 33 wirklich geändert hat
 
@@ -4455,6 +4457,67 @@ sie per Konstruktion.
 Nebenwirkung, benannt: kein In-Place-Zähler. `Report.checked` bleibt ein
 `int` und wird **einmal** beim Druck in `Checks` übergeben — eine Stelle,
 an der Zahl und Wort zusammenkommen.
+
+### §71.16 — Runde 38: der Zähler hatte keinen Eigentümer
+
+Runde 23 saß **in der Zahl**, nicht im Wort. `Checks` macht „21 Angaben"
+unbaubar — es macht `checked == 21` nicht wahr. Der Zähler blieb ein
+`int`, den eine Schleife erhöht, ohne Test.
+
+| | geschützt |
+|---|---|
+| Wort neben der Zahl | ✓ `Checks` |
+| **Zahl == Anzahl gelaufener Prüfungen** | **erst seit Runde 38 (Fall 22)** |
+
+Vier Regeln, jetzt im Docstring **und** als Test:
+
+| Aufruf | zählt? |
+|---|---|
+| `ok()` / `fail()` | ja, je genau eins — auch eine *gescheiterte* Prüfung ist gelaufen |
+| `skip()` / `env()` | **nein** — was nicht lief, ist keine Prüfung |
+| `claim()` | nein — eine Zusage ist keine Messung |
+| frischer `Report()` | bei 0, unabhängig vom Vorgänger |
+
+Mutationen: `ok()` zählt doppelt → 2 FAIL; `skip()` erhöht `checked` → 2 FAIL.
+Die Begründung für `int` (statt `Checks` bei jedem Inkrement) steht am
+Konstruktor: eine Allokation pro Prüfung gegen einen Zähler, der im
+Bereich weniger Hundert bleibt.
+
+### §71.17 — Runde 38: zwei Caches, ein Schreiber, ein Vertrag
+
+`_SNAPSHOT_CACHE` (Inhalt) und `_ROOT_CACHE` (Ort) zeigen auf dieselbe
+Datei. Der einzige Schreiber — `_save_count_snapshot` — kannte keinen von
+beiden. Runde 36 hatte den Fix bewusst im Test gelassen; bei **einem**
+Cache war das richtig, bei **zwei** auf einer Datei ist „nur Tests
+schreiben" eine Annahme.
+
+Jetzt: der Schreiber leert beide, und die Invariante steht **an ihm**, nicht
+beim Aufrufer — der weiß nichts von Caches. Fall 25 füllt beide, schreibt,
+prüft leer (Mutation: 1 FAIL, mit beiden Cache-Schlüsseln im Text).
+
+Nicht gebaut, notiert: ein zweiter **Prozess** ist davon nicht erfasst.
+Dafür bräuchte es `(st_mtime_ns, st_ino, st_size)` im Cache — mit dem
+Vorbehalt, daß mtime auf manchen FS nur sekundengranular ist.
+
+### §71.18 — Runde 38: die schwächste Probe gehörte zur häufigsten Annahme
+
+Annahme 2 (geteilter Zustand) trat in 32, 32′, 33′ auf — dreimal — und hatte
+**keine** Probe: Runde 33′ hinterließ einen Fix, keinen Test. 16c prüft
+cwd, nicht den geteilten Speicher.
+
+Fall 24 schließt das: Zustand setzen, **nicht** zurücksetzen, prüfen daß
+der zweite Fall ihn sieht (sonst ist die Probe blind) — dann `reset_all()`
+und prüfen, daß er weg ist. Beides zusammen: der Reset wirkt **und** die
+Probe kann ihn sehen. Gegenprobe mit zwei Zyklen (§A-JW).
+
+### §71.19 — Runde 38: `__setattr__` von Hand — und warum
+
+`frozen=True` erzeugt dieselbe Sperre. Der Unterschied ist nicht
+Importkosten, sondern Umfang: `total` als `@property` bräuchte in einem
+frozen-Dataclass `field(init=False)`. Grenze, jetzt im Code: `copy`/`pickle`
+verhalten sich anders, `object.__setattr__` umgeht die Sperre (wie bei
+`frozen=True`). `__delattr__` fehlte — nachgetragen und geprüft (Mutation:
+1 FAIL).
 
 ## 72. Der Satz dieser Runde
 

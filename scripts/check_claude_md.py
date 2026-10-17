@@ -323,11 +323,37 @@ class Report:
     verwechseln mit den **Angaben**, die in der Ausgabe stehen (`_status_line`
     nennt sie). Seit Runde 33 wird `checked` nicht mehr gedruckt; der
     Name bleibt intern, die Einheit steht hier (Guard §A-JO).
+
+    **Vertrag des Zaehlers (§A-KC).** `Checks` bewacht die Anzeige — es
+    macht "21 Angaben" unbaubar. Es macht `checked == 21` nicht wahr; das
+    ist Aufgabe dieses Zaehlers, und er hat drei Regeln:
+
+      *gezaehlt wird, was geprueft wurde*
+          `ok()` und `fail()` erhoehen um genau eins. Auch eine Pruefung,
+          die **scheitert**, ist gelaufen — sie ist geprueft.
+      *nicht gezaehlt wird, was nicht lief*
+          `skip()` und `env()` erhoehen **nie**. Eine uebersprungene Pruefung
+          ist keine Pruefung; sie gehoert in `skips`, und `_status_line`
+          nennt sie getrennt.
+      *`claims` zaehlen nicht*
+          Eine Zusage ist, was es geben **muesste** — keine Messung.
+
+    Wer eine vierte Regel braucht (z. B. Unterpruefungen), muss sie hier
+    hinschreiben und mit einem Fall belegen. Ohne Test ist der Zaehler
+    eine Zahl mit einer Behauptung daneben — genau der Zustand, den
+    Runde 23 beschreibt.
     """
 
     def __init__(self) -> None:
         self.problems: list[dict] = []
         self.env_skips: list[dict] = []
+        # §A-KC: `checked` bleibt EIN int, mit benanntem Vertrag — siehe
+        # Docstring der Klasse. Die Alternative (Checks bei jedem Inkrement
+        # neu bauen) waere "sauberer", kostet aber eine Allokation pro
+        # Pruefung und macht den Zaehler zu einem unveraenderlichen Wert,
+        # der an jeder Stelle neu zugewiesen werden muss. Die Zahl bleibt
+        # im Bereich weniger Hundert (siehe `_status_line`), dort ist der
+        # Unterschied nicht messbar.
         self.checked = 0
         # §A-NA: Zusagen ueber den Bezugsraum. `checked` zaehlt, was
         # geprueft wurde; eine Zusage zaehlt, was es **geben muesste**.
@@ -1056,7 +1082,93 @@ def _self_test_count_delta() -> list[str]:
         if Checks(21).n == Checks(22).n:
             failures.append("Checks traegt die Zahl nicht")
 
-        # 22. Die Identitaet `total = checked + excluded` (§A-JX). Vorher
+        # 22. Der Zaehler selbst (§A-KC). `Checks` bewacht die Zeile; ob
+        #     `checked == n` gilt, weiss nur die Schleife. Runde 23 sass in
+        #     der Zahl, nicht im Wort.
+        rep_c = Report()
+        if rep_c.checked != 0:
+            failures.append(f"Zaehler startet nicht bei 0: {rep_c.checked}")
+        n_ok = 5
+        for _ in range(n_ok):
+            rep_c.ok()
+        if rep_c.checked != n_ok:
+            failures.append(f"ok() zaehlt nicht eins: {rep_c.checked} != {n_ok}")
+        rep_c.fail(None, "k", "d", "r")
+        if rep_c.checked != n_ok + 1:
+            failures.append(
+                f"fail() ist keine Pruefung: {rep_c.checked} != {n_ok + 1}")
+        # Gegenprobe (§A-JW): was NICHT lief, darf nicht zaehlen.
+        before = rep_c.checked
+        rep_c.skip("regel")
+        rep_c.skip("regel", 3)
+        rep_c.env("skript.py")
+        if rep_c.checked != before:
+            failures.append(
+                f"skip()/env() erhoehen den Zaehler: {rep_c.checked} != {before}")
+        if rep_c.skips.get("regel") != 4:
+            failures.append(f"skip() zaehlt nicht: {rep_c.skips}")
+        # Und: der Zaehler eines frischen Reports ist unabhaengig (geteilter
+        # Zustand, Annahme 2 — hier als Probe, nicht als Behauptung).
+        if Report().checked != 0:
+            failures.append("Report() teilt den Zaehler mit dem Vorgaenger")
+
+        # 23. Die Identitaet `total = checked + excluded` (§A-JX). Vorher
+        # 24. Annahme 2 braucht eine Probe (§A-KE): zwei Faelle hinter-
+        #     einander, die **denselben** Zustand setzen — der zweite darf
+        #     den ersten nicht sehen. Runde 32 war gruen, weil die Mutation
+        #     nichts aenderte; 16c prueft cwd, nicht den geteilten Speicher.
+        #     Also: Zustand setzen, NICHT zuruecksetzen, und pruefen, dass
+        #     der zweite Fall ihn noch sieht — dann zuruecksetzen und
+        #     pruefen, dass er weg ist. Beides zusammen beweist, dass der
+        #     Reset wirkt **und** dass die Probe ihn sehen kann.
+        _SNAPSHOT_SEEN[0] = root / "fall_a"
+        _test_results["a"] = 1
+        _ROOT_CACHE[Path("/fall_a")] = Path("/fall_a")
+        seen_by_second = (_SNAPSHOT_SEEN[0] is not None
+                          and "a" in _test_results
+                          and bool(_ROOT_CACHE))
+        if not seen_by_second:
+            failures.append(
+                "Probe blind: Zustand aus Fall A ist fuer Fall B nicht sichtbar")
+        reset_all()
+        if (_SNAPSHOT_SEEN[0] is not None or _test_results or _ROOT_CACHE
+                or _SNAPSHOT_CACHE):
+            failures.append(
+                f"Reset nach Fall A unvollstaendig: "
+                f"{_SNAPSHOT_SEEN[0]}, {_test_results}, {list(_ROOT_CACHE)}")
+        # Gegenprobe (§A-JW): zweimal derselbe Ablauf, gleiches Ergebnis.
+        # Ein Reset, der nur beim ersten Mal wirkt, ist der Fehler aus §1.
+        for zyklus in (1, 2):
+            _SNAPSHOT_SEEN[0] = root / "fall_b"
+            _test_results["b"] = zyklus
+            reset_all()
+            if _SNAPSHOT_SEEN[0] is not None or _test_results:
+                failures.append(f"Reset wirkt nur im Zyklus {zyklus}")
+
+        # 25. Der Schreiber leert beide Caches (§A-KD). Zwei Caches zeigen
+        #     auf dieselbe Datei; wer schreibt und sie stehen laesst, liest
+        #     beim naechsten Lauf den alten Stand. Die Invariante steht am
+        #     Schreiber, nicht beim Aufrufer — der weiss nichts von Caches.
+        _reset_root_cache()
+        _snapshot_path(root)                   # Ort-Cache fuellen
+        _snapshot_path(root)                   # Inhalt-Cache fuellen
+        if not _SNAPSHOT_CACHE:
+            failures.append("Vorbedingung: Snapshot-Cache war nicht gefuellt")
+        _save_count_snapshot(rep_c.checked, "selbsttest", root=root)
+        if _SNAPSHOT_CACHE or _ROOT_CACHE:
+            failures.append(
+                f"Schreiber laesst Caches stehen: "
+                f"{list(_SNAPSHOT_CACHE)} / {list(_ROOT_CACHE)}")
+        # Gegenprobe: der Schreiber muss wirklich geschrieben haben
+        got_snap = _load_count_snapshot(root)
+        if not got_snap or got_snap.get("checked") != rep_c.checked:
+            failures.append(f"Schreiber hat nicht geschrieben: {got_snap}")
+        _reset_root_cache()
+        # Die Zeile liest den Zaehler an genau einer Stelle.
+        line_c = _status_line(Checks(rep_c.checked, rep_c.skips.get("regel", 0)), 0)
+        if f"{n_ok + 1} Angaben geprueft" not in line_c:
+            failures.append(f"Zeile liest den Zaehler nicht: {line_c!r}")
+
         #     stand `223 = 433 - 210` zweimal getippt in der Zeile; jetzt
         #     haelt der Typ sie. Gegenprobe mit **verschiedenen** Werten:
         #     Rechentypen, die eine Zahl hart eintippen, bestehen ein
@@ -1097,6 +1209,11 @@ def _self_test_count_delta() -> list[str]:
                 pass
         if c_mut.total != 7:
             failures.append(f"total hat sich nach dem Bau geaendert: {c_mut.total}")
+        try:
+            del c_mut.n
+            failures.append("Checks ist loeschbar (__delattr__ fehlt)")
+        except AttributeError:
+            pass
         # und die Funktion selbst: `repo_root()` ist der eine Weg
         if repo_root(None) != here:
             failures.append(f"repo_root(None) != Dateiort: {repo_root(None)}")
@@ -1788,6 +1905,19 @@ class Checks:
 
     __slots__ = ("n", "excluded")
 
+    # §A-KF: warum `__setattr__` von Hand und nicht `@dataclass(frozen=True)`?
+    # `frozen=True` erzeugt genau diese Sperre (plus `__delattr__`) — die
+    # eigene Fassung hat also **keinen** Vorteil, ausser: das Modul importiert
+    # `dataclasses` sonst nicht, und `Checks` hat eine `@property` (`total`),
+    # die in einem `frozen`-Dataclass als `field(init=False)` deklariert
+    # werden muesste — mehr Zeilen als die zwei hier. Der Grund ist also
+    # **nicht** "spart Importkosten", sondern "haelt die Klasse klein".
+    #
+    # Grenze, die daraus folgt und dokumentiert gehoert: `object.__setattr__`
+    # umgeht die Sperre (das tut `frozen=True` auch), `copy`/`pickle`
+    # verhalten sich anders als bei einem Dataclass. Wer `Checks` je
+    # serialisiert, soll auf `__reduce__` oder ein Dataclass wechseln.
+
     def __init__(self, n: int, excluded: int = 0) -> None:
         # §A-KA: `frozen` — `total` ist eine Eigenschaft des Objekts, nicht
         # des Zugriffszeitpunkts. Ohne das koennte `n` zwischen Druck und
@@ -1801,6 +1931,9 @@ class Checks:
             raise ValueError("Pruefungen und Ausschluesse sind nicht negativ")
 
     def __setattr__(self, name: str, value: object) -> None:
+        raise AttributeError("Checks ist ein Wert (frozen)")
+
+    def __delattr__(self, name: str) -> None:
         raise AttributeError("Checks ist ein Wert (frozen)")
 
     @property
@@ -1843,20 +1976,35 @@ def _counting_signature() -> str:
 
 
 def _save_count_snapshot(checked: int, why: str,
-                         detail: dict[str, int] | None = None) -> None:
+                         detail: dict[str, int] | None = None,
+                         root: Path | None = None) -> None:
     """Schreibt Stand + Baum + Zaehlweise fort (§A-NC).
 
     `ref` ist der **Ball**, nicht das Datum: `git rev-parse --short HEAD`
     plus ein `dirty`-Merker. Eine Differenz gegen einen schmutzigen Baum
     ist keine Differenz zwischen Staenden, und das muss draufstehen.
+
+    **Invariante (§A-KD): jede Aenderung an der Snapshot-Datei macht
+    `_SNAPSHOT_CACHE` und `_ROOT_CACHE` ungueltig.** Zwei Caches zeigen
+    auf dieselbe Datei — der eine merkt sich den Ort, der andere den
+    Inhalt. Wer hier schreibt und die Caches stehen laesst, liest beim
+    naechsten Lauf den alten Stand: ein zweiter Schreiber im selben
+    Prozess (Test, Werkzeug) wuerde den eigenen Vorlauf ueberschreiben.
+
+    Der Cache wird **hier** geleert, nicht beim Aufrufer — der Aufrufer
+    weiss nicht, dass es Caches gibt. `lines_for` im Selbsttest leert
+    ebenfalls, weil es die Datei **umgeht** (direkt schreibt) und die
+    Invariante damit selbst haelt. Ein zweiter **Prozess** ist davon
+    nicht erfasst: dafuer braeuchte es einen mtime-Stempel im Cache —
+    notiert, nicht gebaut (mtime-Granularitaet 1 s auf manchen FS).
     """
-    p = _snapshot_path()
+    p = _snapshot_path(root)               # §A-JT: root durchreichen
     p.parent.mkdir(parents=True, exist_ok=True)
     payload = {
         "checked": checked,
         "why": why,
         "when": datetime.date.today().isoformat(),
-        "ref": _tree_ref(),
+        "ref": _tree_ref(root),
         "counting": _counting_signature(),
         "counting_label": _COUNTING_LABEL,
     }
@@ -1864,6 +2012,11 @@ def _save_count_snapshot(checked: int, why: str,
         payload["detail"] = _format_detail(detail)
     p.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n",
                  encoding="utf-8")
+    # §A-KD: nach dem Schreiben ist **jeder** Inhalt-Eintrag ungueltig, nicht
+    # nur der zu diesem Pfad — ein zweiter Root kann auf dieselbe Datei
+    # zeigen (Symlink, `..`). Ort-Cache bleibt: die Datei liegt, wo sie lag.
+    _SNAPSHOT_CACHE.clear()
+    _ROOT_CACHE.clear()
 
 
 def _tree_ref(root: Path | None = None) -> str:
