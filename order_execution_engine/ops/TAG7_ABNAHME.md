@@ -40,7 +40,7 @@ synthetisch und hängt weder an Run 8/9 noch am Markt noch an
 | Gegenstand | Commit / Hash | Rolle |
 |---|---|---|
 | Run 8 + 9 (Daten) | `5c5bc364` · Runner `92338139e8…` | **erzeugt** von diesem Stand |
-| Gate (Urteil) | `preflight_check.py` `3dad796a…` | **neu**, beurteilt post hoc |
+| Gate (Urteil) | **`146b4be4`** · `preflight_check.py` `3dad796a…` | **neu**, beurteilt post hoc |
 | Gate im Betrieb | — | **kein Dienstbestandteil**, nur manueller Aufruf |
 | Ab `Run 10` | `e91916bd` (Runner identisch) | belastbare Basis des neuen Stands |
 
@@ -48,6 +48,21 @@ synthetisch und hängt weder an Run 8/9 noch am Markt noch an
 > Codegrundlage.** Wer in drei Wochen Run 9 mit Run 11 vergleicht, vergleicht
 > Daten aus `5c5bc364` mit Daten aus `e91916bd` — bei identischem Runner, aber
 > neuem Prüfer. Ohne diese Zeile sieht das aus wie dasselbe Programm.
+
+**Korrektur (`01fdbb1d` → `146b4be4`).** Frühere Fassungen nannten
+`01fdbb1d` als Prüfer-Commit. Der Blob dieser Fassung ist dort aber
+`50769715…`; `3dad796a…` entsteht erst in `146b4be4` — dem Commit, der die
+zwei Verdikte einführte. Die Verdikte stammen also weder aus `01fdbb1d`
+(Gate/Join/zwei Achsen) noch aus dem Commit, den die alte Basis-Zeile nannte:
+
+```
+git rev-parse 01fdbb1d:…/preflight_check.py  → 50769715b52f5f745436c0949e9202d18dd0fcc2
+git rev-parse 146b4be4:…/preflight_check.py  → 3dad796a30149f1b089807921bbd46b3aef10164
+git hash-object  …/preflight_check.py        → (Fassung nach dieser Runde)
+```
+
+Ein Commit-Etikett, das nicht aufgelöst wurde — dieselbe Form wie die
+Kalenderangaben, nur heißt das Etikett diesmal Commit.
 
 ## 1. Festschreibung des Kriteriums (Variante C)
 
@@ -198,7 +213,34 @@ fest; `partition_ok` prüft, dass beide Achsen einzeln auf `success` schließen.
 Die zugrunde liegenden Spalten (`telemetry.reject_reason`, `status`) bleiben
 unverändert — eine Spaltenumbenennung würde Alarme stillschweigend verschieben.
 
-## 5. Vorbedingung mit Eigentümer (nicht mit Docs erledigt)
+## 5. Dienst vs. Abnahmegegenstand — die Grenze vor den Einzelprüfungen
+
+**Der Abnahmegegenstand ist ein Werkzeug. `preflight_check.py` ist kein
+Dienstbestandteil.** Die Plist `com.agentx.shadow-runner.plist` startet
+ausschließlich `-m order_execution_engine.shadow_runner`; `rg preflight_check`
+über das Repo ohne Tests/Doku liefert 0 Treffer.
+
+Daraus folgt für die folgenden Abschnitte:
+
+| Abschnitt | prüft | Gegenstand |
+|---|---|---|
+| §5.1 `lstart`, `runs=1` | den Dienst | **Runner** |
+| §5.2 `git status --porcelain` | den Tree | **beide** (Werkzeug + Dienst) |
+| §5.4 mtime-Sweep | geladenen Code | **Runner** |
+| §5.4b Objekt-Hash | geladenen Code | **Runner** |
+| §5.4c Aufrufer-Suche | ob es einen gibt | **Werkzeug** |
+| §5.3 `gate:`-Hash | die urteilende Fassung | **Werkzeug** |
+
+**§5.1, §5.4 und §5.4b sind Beweise über den Dienst, nicht über das Gate.**
+Sie stehen hier, weil eine Abnahme ohne intakten Datenlieferanten (Run 8/9)
+nicht beurteilbar wäre — aber sie zertifizieren nicht den Prüfer. Wer am
+20.10. 157 Tests, leere Wurzel und unveränderten Prozess liest und sie für
+Beweise über das Gate hält, liest drei grüne Prüfungen am falschen Ziel.
+Das ist die schlechteste Variante und deshalb steht die Grenze hier oben und
+nicht in einer Fußnote.
+
+### 5.0 Vorbedingung mit Eigentümer (nicht mit Docs erledigt)
+
 
 Der Runner lädt aus dem **Working Tree**, nicht aus einem gepinnten Commit.
 `-dirty` hätte die Messperiode entwertet, ohne dass eine Zeile es sagt.
@@ -255,15 +297,42 @@ erwartet ist, wird nach zwei Wochen nicht mehr gelesen. Die Ausgabe führt
 deshalb zwei Verdikte:
 
 ```
-verdict current:    GREEN                        (letzter Lauf, blockierend)
-verdict historical: RED (run 8, unattributed=4)  (abgeschlossen, nicht blockierend)
+gate:               <blob>  (git hash-object)
+verdict current:    GREEN  (letzter Lauf)
+verdict historical: RED (run 8, unattributed=4)  (abgeschlossen, dokumentiert)
+blocking:           kein Aufrufer verdrahtet — wer diesen Befehl startet,
+                    blockiert; das Urteil selbst bricht nichts ab
 ```
 
-`current` blockiert (`FAIL` in `errors`), `historical` wird als `WARN`
+`current` landet bei RED in `errors`, `historical` wird als `WARN`
 protokolliert. **Die Trennung schluckt nichts:** ist der *jüngste* Lauf rot,
-ist `current: RED` und blockiert — Zeuge `test_current_red_still_blocks`.
-Der zweite Zeuge (`test_historical_red_does_not_block_current_green`) hält
-fest, dass Run 8 dokumentiert und nicht blockierend erscheint.
+ist `current: RED` — Zeuge `test_current_red_still_blocks`. Der zweite Zeuge
+(`test_historical_red_does_not_block_current_green`) hält fest, dass Run 8
+dokumentiert erscheint.
+
+> **Korrektur: „blockierend" ist keine Eigenschaft des Verdikts, sondern des
+> Aufrufers.** Der Prüfer ist ein Werkzeug — er setzt seinen Exit-Code, wenn
+> jemand ihn startet. Es gibt **keinen verdrahteten Aufrufer** (kein
+> launchd-Job, kein Hook; `rg preflight_check` ohne Tests/Doku = 0 Treffer).
+> Bei `current: RED` bricht nichts von selbst ab. Das Wort stand im Output,
+> ohne dass irgendwo etwas abbrechen konnte — **ein Gegenstand ohne
+> Referenten**, die vierte Form in dieser Akte. Behoben ist es, sobald
+> dasteht, wer blockiert: am 20.10. um 10:00 ist das der Mensch, der
+> Zeile 0–6 abhakt.
+>
+> **Verdrahtung nicht vor dem 20.10.** Ein launchd-Job mit Exit ≠ 0 bei RED
+> macht aus dem Beobachter ein Teilsystem mit eigener Ausfallart: ein
+> falsches RED hält dann den Betrieb an, und ein veralteter Prüfer blockiert
+> wegen eines längst behobenen Fehlers. Wenn, dann mit der Ausfallart im
+> Text — und mit `gate:`-Hash im Log, damit ein Block den Richter nennt.
+
+**Der Prüfer datiert sich selbst.** Seit dieser Runde trägt jede Ausgabe den
+Blob-Hash der urteilenden Fassung (`git hash-object`, 40 Hex SHA-1 — derselbe
+Wert wie in `git rev-parse <commit>:<path>`). Ein Verdikt ohne Prüfer-Hash
+nennt den Run, aber nicht den Richter: derselbe Befehl auf denselben Daten
+könnte nach dem nächsten Werkzeug-Commit anders lauten, und das Protokoll
+merkt es nicht. Ohne git fällt die Zeile auf SHA-256 zurück und **sagt das**
+(`sha256 (git unavailable)`), statt eine falsche Form vorzutäuschen.
 
 ### 5.4 mtime-Sweep — der Beweis für „Basis Run 8+9"
 

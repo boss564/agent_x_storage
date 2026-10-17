@@ -37,6 +37,33 @@ DEFAULT_DATA_ROOT = _DEFAULT_APP / "shadow_live"
 DEFAULT_NEWS_JSONL = _DEFAULT_APP / "news_scores.jsonl"
 DEFAULT_MIN_RUN_ID = 7
 
+
+def _gate_blob_hash() -> dict[str, str]:
+    """Identify the version of *this* file that produced the verdict.
+
+    A verdict names the run but not the judge. `git hash-object` gives the
+    blob id (SHA-1, 40 hex) that also appears in `git rev-parse <c>:<path>`,
+    so a recorded verdict can be matched to a commit. Falls back to SHA-256
+    of the bytes when git is unavailable — the label says which one it is.
+    """
+    this = Path(__file__).resolve()
+    try:
+        out = subprocess.run(
+            ["git", "-C", str(REPO), "hash-object", str(this)],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=True,
+        )
+        return {"blob": out.stdout.strip(), "source": "git hash-object"}
+    except (subprocess.SubprocessError, OSError):
+        import hashlib
+
+        return {
+            "blob": hashlib.sha256(this.read_bytes()).hexdigest(),
+            "source": "sha256 (git unavailable)",
+        }
+
 REQUIRED_CONFIG_KEYS = (
     "max_book_age_ms",
     "max_news_age_s",
@@ -554,13 +581,18 @@ def _two_verdicts(
     *,
     min_run_id: int,
 ) -> dict[str, str]:
-    """Zwei Verdikte: ``current`` (letzter Lauf, blockierend) vs. ``historical``.
+    """Zwei Verdikte: ``current`` (letzter Lauf) vs. ``historical``.
 
     Ein dauerhaft roter abgeschlossener Lauf macht das Gate zur Tapete: rot,
     das erwartet und dokumentiert ist, wird nicht mehr gelesen. Deshalb wird
     der jüngste Lauf vom Bestand getrennt geführt. ``historical`` ist
-    **dokumentiert und nicht blockierend** — es ist eine Aussage über eine
-    abgeschlossene Periode, kein Befund über den laufenden Betrieb.
+    **dokumentiert** — es ist eine Aussage über eine abgeschlossene Periode,
+    kein Befund über den laufenden Betrieb.
+
+    **Blockierend ist keine Eigenschaft des Verdikts, sondern des Aufrufers.**
+    Dieser Prüfer ist ein Werkzeug: er setzt sein Exit-Code, wenn jemand ihn
+    startet. Es gibt keinen verdrahteten Aufrufer (kein launchd-Job, kein
+    Hook), also bricht bei ``current: RED`` nichts von selbst ab.
     """
     row = conn.execute("SELECT MAX(run_id) FROM telemetry_runs").fetchone()
     latest = int(row[0]) if row and row[0] is not None else min_run_id
@@ -756,12 +788,20 @@ def gate_snapshot(
     print(f"  outcome (Σ=claims_mit_telemetrie): {classes['outcome']}")
     print(f"  origin  (Σ=dispatched_success):    {classes['origin']}")
     verdicts = snapshot["verdicts"]
+    # Der Richter datiert sich selbst: ein Verdikt ohne Prüfer-Hash nennt den
+    # Run, aber nicht die Fassung, die urteilte.
+    _gate_blob = _gate_blob_hash()
+    print(f"  gate:               {_gate_blob['blob']}  ({_gate_blob['source']})")
     print(
-        f"  verdict current:    {verdicts['current']}  (letzter Lauf, blockierend)"
+        f"  verdict current:    {verdicts['current']}  (letzter Lauf)"
     )
     print(
         f"  verdict historical: {verdicts['historical']}  "
-        f"(abgeschlossen, dokumentiert, nicht blockierend)"
+        f"(abgeschlossen, dokumentiert)"
+    )
+    print(
+        "  blocking:           kein Aufrufer verdrahtet — wer diesen Befehl "
+        "startet, blockiert; das Urteil selbst bricht nichts ab"
     )
     if recon.detail.get("unattributed"):
         print(
@@ -774,7 +814,7 @@ def gate_snapshot(
 
     def _report(msg: str, hard: bool = True) -> None:
         if historical and hard:
-            _warn(f"historical (nicht blockierend): {msg}")
+            _warn(f"historical (dokumentiert, kein Abbruch): {msg}")
         else:
             _fail(msg, errors)
 
@@ -800,8 +840,8 @@ def gate_snapshot(
             f"outcome_sum={outcome_sum}"
         )
         if snapshot["verdicts"]["current"] == "GREEN":
-            # Abgeschlossener Lauf: dokumentiert, nicht blockierend.
-            _warn(f"historical (nicht blockierend): {msg}")
+            # Abgeschlossener Lauf: dokumentiert; kein Abbruch, weil niemand verdrahtet ist.
+            _warn(f"historical (dokumentiert, kein Abbruch): {msg}")
         else:
             _fail(msg, errors)
     if not partition_ok(classes, recon.detail):
