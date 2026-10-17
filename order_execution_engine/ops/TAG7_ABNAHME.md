@@ -941,6 +941,13 @@ Zahlen erzeugt, enthält die Sektionen, die sie beschreiben — er ist noch
 nicht committet. Nach dem Commit muß dieselbe Zeile `DERIVED` verlieren;
 tut sie das nicht, ist der Commit ein anderer Baum.
 
+```
+$ python3 .../preflight_check.py --min-run-id 9     # nach dem Commit
+gate commit: b69b163b:a77abb536433                   # ohne DERIVED
+```
+
+Der Zeuge zitiert sich jetzt selbst: Commit `b69b163b`, Blob `a77abb536433`.
+
 ### 5.4f Eine Kopie, nicht zwei
 
 Der `pyc`-Vergleich aus §5.4d prüft **einen** Pfad. Geladen wird der, den
