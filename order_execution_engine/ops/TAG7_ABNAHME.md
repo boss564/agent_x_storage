@@ -4176,13 +4176,22 @@ zehn Runden:
 | Annahme | Runden | der Test war grün, weil … | wo sie saß |
 |---|---|---|---|
 | **`cwd == root`** | 31, 34 | der Lauf im Repo stattfand; `Path.cwd()` war das Repo | 31: Test (Vorlauf liegt immer vor) · **34: Code** (`gd = (root or Path.cwd()) / gd`) |
-| **geteilter Zustand** | 32, 32′ | der Fall den Zustand des Vorgängers erbte | Harness: kein `reset()`, `_SNAPSHOT_SEEN` gesetzt und nie geräumt |
+| **geteilter Zustand** | 32, 32′, 33′ | der Fall den Zustand des Vorgängers erbte | Harness: kein `reset()`, `_SNAPSHOT_SEEN` gesetzt und nie geräumt |
+| **der Test erreicht den Code** | 29, 30, 35 | die Mutante lag außerhalb des Prüfbereichs; zwei Erwartungen lasen dieselbe Zeile; der Test übergab `root` — das Argument, das den Fehler **abschaltet** | Test: Prüfbereich, geteilte Zeile, explizites `root` |
 
 Runde 34 ist damit **kein neuer Fehler**, sondern Runde 31 eine Schicht
 tiefer: die Annahme hat die Testgrenze überschritten. Und sie wurde beim
 Aufräumen gefunden, nicht von einem Test — also ohne Test gefixt. Genau
 das ist die Bandage: die Zeile war richtig, die Annahme lebte weiter.
 Der Test steht seit Runde 34 (Fall 16, Mutation rot).
+
+**Runde 35 ergänzt die dritte Annahme.** 29 (*die Mutante lag nicht im
+Prüfbereich*), 30 (*zwei Erwartungen lasen dieselbe Zeile*) und 35
+(*der Test übergab `root` — das Argument, das den Fehler abschaltet*)
+sind **nicht** `cwd == root` und **nicht** geteilter Zustand. Sie sind:
+der Test erreicht den Code nicht, den er prüfen soll. Bei 29 lag er
+daneben, bei 30 las er die falsche Zeile, bei 35 schaltete der Parameter
+den Fehler ab. Drei Annahmen, elf Runden.
 
 | Runde | falsch war | gefunden durch | Fix |
 |---|---|---|---|
@@ -4201,6 +4210,7 @@ Der Test steht seit Runde 34 (Fall 16, Mutation rot).
 | 33 | ohne `.git/` ist die Differenzmessung tot, Meldung grün | Einwand | Bandage: eigene Zeile |
 | 33′ | vier Einzelfixes, keine Vorbedingung | Einwand | **Architektur**: Harness-Reset + Kreuztest |
 | 34 | relativer `--git-common-dir` gegen `Path.cwd()`; `_SNAPSHOT_SEEN` ohne Reset | Lesen (`rg "cwd"`) | **Architektur**: Test 16/17/18, `reset()` vollständig, Docstring Einheit |
+| 35 | Tests übergaben `root` und übersprangen den Produktionspfad; `_status_line` zählte 21 als „Angaben"; Fall 17 kannte Namen statt Menge | Einwand + `rg` | **Architektur**: Fall 19 (Zwillings ohne `root`), `Checks`-Typ, Fall 17 gegen Globals-Menge, `repo_root()` mit Cache |
 
 ### §71.1 — was Runde 33 wirklich geändert hat
 
@@ -4265,6 +4275,61 @@ gesetzt und nirgends zurückgesetzt. Jetzt räumt `reset()` beide, und Fall
 **Der Unterschied ist der Satz aus Runde 33:** ein Fall kann den Zustand
 eines alten nicht erben, weil er ihn nicht bekommt — das gilt ab Runde 34
 für **jeden** Zustand, Datei und Speicher, nicht nur für den Vorlauf.
+
+### §71.6 — Runde 35: der Default ist der Produktionspfad
+
+`_snapshot_path(root)` hat sechs Aufrufer mit `root` und **einen** ohne —
+den in `main()`. Also testete die Suite fünfmal den bequemen Weg und
+niemals den, den jede echte Invocation nimmt. Der erste Fix in Runde 34
+(Fall 16) übergab `root` und blieb deshalb unter Mutation **dreimal grün**:
+das Argument schaltete den Fehler ab.
+
+| Weg | wer nimmt ihn | vorher getestet |
+|---|---|---|
+| `root` gesetzt | Tests, `--root` | sechs Aufrufer |
+| `root=None` | **jede echte Invocation** | **erst seit Runde 34, scharf seit 35** |
+
+Fall 19 prüft den Zwilling: derselbe Aufruf ohne `root`, und der Ort muss
+auf **dieses** Repo zeigen, nicht auf `root`. Dazu: `repo_root(None)`
+liefert den Dateiort, `repo_root(root)` löst auf, und der Cache kostet
+genau **einen** `git`-Aufruf für drei Abfragen (gemessen: 3 → 1).
+
+### §71.7 — Runde 35: `223` und `checked` an einer Stelle
+
+`Report.checked` zählt **Prüfungen** (21); `_status_line` schrieb daneben
+„Angaben". Zahl und Wort entstanden getrennt, also konnte kein Test die
+Korrespondenz prüfen — Fall 18 sah nur, *daß* ein Wort dasteht.
+
+`Checks` macht den Fehler unmöglich: `_status_line` nimmt keinen `int`
+mehr an (`TypeError`), und die Zahl kommt mit ihrem Wort. Fall 18 prüft
+jetzt beides — den Docstring **an der Zeile, die `checked` nennt**, und
+die Ablehnung von `int`. Mutationen: Docstring-Zeile geleert → rot;
+`int` akzeptiert → rot.
+
+### §71.8 — Runde 35: `reset()` gegen die Menge, nicht die Namen
+
+Fall 17 kannte zwei Namen. Ein fünftes Global wäre unsichtbar geblieben.
+Jetzt gilt: jedes Modulglobal mit Zustand steht in `_RESET_GLOBALS` oder
+in `_STATE_FREE` — sonst rot. Die Ermittlung ist AST-basiert: `list`/`dict`
+gelten als Zustand (auch als Literal — `[None]` ist ein Speicherplatz),
+`tuple`/`str`/`compiled regex` als unveränderlich.
+
+Der Test fand sofort das Global, das ich in derselben Runde eingeführt
+hatte (`_ROOT_CACHE`) und das `reset()` noch nicht räumte — der Erbfall,
+den §4 beschreibt, im eigenen Neuzugang.
+
+**xdist-Hinweis:** `reset()` ist sequenziell. Unter `-n auto` sieht jeder
+Worker seine eigene Kopie, `reset()` löscht nur die eigene — die
+Isolation wäre dann eine Illusion. Steht im Docstring.
+
+### §71.9 — Runde 35: ein `cwd`-Treffer, nicht zwei mit Häkchen
+
+`Path.cwd()` steht jetzt an genau **einer** Stelle (der `__main__`-Default
+für ein explizites Ziel). Alle Aufrufer gehen durch `repo_root()`. Der
+Beweis ist mechanisch: `rg "Path\.cwd\(\)"` → ein funktionaler Treffer.
+Die Nebenwirkung ist benannt und getestet: der Cache macht aus drei
+`git`-Aufrufen einen — und wer die Snapshot-Datei anfaßt, muß den Cache
+leeren (`lines_for` tat es nicht, der Test fiel sofort).
 
 ## 72. Der Satz dieser Runde
 

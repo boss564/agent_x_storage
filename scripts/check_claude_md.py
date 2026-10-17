@@ -552,7 +552,7 @@ def self_test_check_counts() -> list[str]:
     failures.extend(_self_test_suite_claims(waves))
     if failures:
         return failures
-    _SELF_TEST_SCOPE[0] = "24/24 (5 Zaehlung + 5 Bezugsraum + 14 Differenz/Nenner/Ort/Einheit)"
+    _SELF_TEST_SCOPE[0] = "24/24 (5 Zaehlung + 5 Bezugsraum + 14 Differenz/Nenner/Ort/Einheit/Zwillingspfad)"
 
 
 def _self_test_suite_claims(waves: list[str]) -> list[str]:
@@ -635,6 +635,8 @@ def _self_test_count_delta() -> list[str]:
                 p.unlink(missing_ok=True)
             _SNAPSHOT_SEEN[0] = None
             _test_results.clear()          # §A-JN: Speicher, nicht nur Datei
+            _reset_root_cache()            # §A-JQ: sonst merkt sich der
+                                           # Test das root des Vorgaengers
 
         reset()
         (root / _COUNT_SNAPSHOT).write_text(json.dumps(
@@ -648,6 +650,11 @@ def _self_test_count_delta() -> list[str]:
 
         def lines_for(prev: dict | None) -> str:
             snap = root / _COUNT_SNAPSHOT
+            # §A-JQ: der Ort ist jetzt gecacht, also ist die Datei nicht
+            # mehr die einzige Quelle des Zustands. Wer die Datei
+            # anfasst, muss den Cache leeren — sonst liest der naechste
+            # Aufruf den alten Ort und meldet `kein Vorlauf` falsch.
+            _reset_root_cache()
             snap.unlink(missing_ok=True)
             if prev is not None:
                 snap.write_text(json.dumps(prev), encoding="utf-8")
@@ -831,7 +838,7 @@ def _self_test_count_delta() -> list[str]:
         #     nicht beide nur "geprueft" heissen. Geprueft wird die
         #     Ausgabeform selbst — sie ist die Stelle, an der zwei
         #     Einheiten ein Wort teilten.
-        line = _status_line(223, {"waves": 116, "agents<50": 82,
+        line = _status_line(Checks(223), {"waves": 116, "agents<50": 82,
                                   "tests_ohne_skript": 12}, 0)
         for need in ("223 Angaben geprueft", "433 Angaben gezaehlt",
                      "210 ausgeschlossen", "0 Abweichungen"):
@@ -874,10 +881,10 @@ def _self_test_count_delta() -> list[str]:
             failures.append(
                 f"Ohne root gegen cwd aufgeloest statt gegen die Datei: {got}")
 
-        # 17. Jeder Modulglobal mit Zustand wird zurueckgesetzt (§A-JN).
-        #     `_SNAPSHOT_SEEN` war in einer Mutation gruen, weil sie nichts
-        #     aenderte — das Global wurde gesetzt und nie zurueckgesetzt.
-        #     Der Kreuztest prueft nur die Datei, nicht den Speicher.
+        # 17. Jeder Modulglobal mit Zustand wird zurueckgesetzt (§A-JN/§A-JR).
+        #     Ein Test, der zwei **Namen** kennt, sagt nichts ueber einen
+        #     fuenften. Also: die Menge. Alles in `reset()` dokumentiert
+        #     oder als zustandslos markiert (`_STATE_FREE`) — sonst rot.
         _SNAPSHOT_SEEN[0] = root           # kuenstlich gesetzt
         reset()
         if _SNAPSHOT_SEEN[0] is not None:
@@ -886,16 +893,100 @@ def _self_test_count_delta() -> list[str]:
         reset()
         if _test_results:
             failures.append("reset() raeumt _test_results nicht")
+        repo_root(root)                    # Cache fuellen
+        reset()
+        if _ROOT_CACHE:
+            failures.append("reset() raeumt _ROOT_CACHE nicht")
 
-        # 18. Der Docstring von `Report` nennt die Einheit von `checked`
-        #     (§A-JO). Seit Runde 33 ist der Name intern und heisst
-        #     "Pruefungen", nicht "Angaben". Ein interner Name ohne
-        #     Einheit ist derselbe Fehler, nur unsichtbar — der Guard
-        #     prueft hier **fuer** eine Angabe, nicht gegen ein Zitat.
-        rdoc = inspect.getdoc(Report) or ""
-        if "Pruefung" not in rdoc:
+        # Die Menge, nicht die Namen. Neue Globals muessen entschieden sein.
+        guarded = set(re.split(r"[\s,]+", _RESET_GLOBALS)) - {""}
+        state_free = set(re.split(r"[\s,]+", _STATE_FREE)) - {""}
+        declared = guarded | state_free
+        lost = [n for n in _module_state_globals() if n not in declared]
+        if lost:
             failures.append(
-                f"Report nennt die Einheit von `checked` nicht: {rdoc[:60]!r}")
+                f"Modulglobal mit Zustand nicht deklariert: {lost}")
+        both = guarded & state_free
+        if both:
+            failures.append(f"Global gleichzeitig Reset und zustandslos: {both}")
+
+        # 19. Der Zweig, den jede echte Invocation nimmt (§A-JT):
+        #     `root=None`. Bis Runde 34 war er ungetestet, weil Tests ihre
+        #     Umgebung konstruieren — und damit genau den Zweig ueberspringen,
+        #     in dem die Umgebung **fehlt**. Jede Funktion mit `root`-Parameter
+        #     braucht einen Zwilling ohne: sonst prueft die Suite nur den
+        #     bequemen Weg.
+        _reset_root_cache()
+        with_root = {
+            "_snapshot_path": _snapshot_path(root),
+            "_delta_line": _delta_line(1, root),
+            "_save_count_snapshot": None,
+        }
+        no_root = {
+            "_snapshot_path": _snapshot_path(),
+            "_delta_line": _delta_line(1),
+        }
+        # ohne root zeigt der Ort auf **dieses** Repo, nicht auf `root`
+        here = Path(__file__).resolve().parent.parent
+        if not str(no_root["_snapshot_path"]).startswith(str(here)):
+            failures.append(
+                f"ohne root zeigt der Ort nicht auf das eigene Repo: {no_root['_snapshot_path']}")
+        if str(no_root["_snapshot_path"]) == str(with_root["_snapshot_path"]):
+            failures.append(
+                "root und root=None liefern denselben Ort — der Test misst nichts")
+        # und die Funktion selbst: `repo_root()` ist der eine Weg
+        if repo_root(None) != here:
+            failures.append(f"repo_root(None) != Dateiort: {repo_root(None)}")
+        if repo_root(root) != root.resolve():
+            failures.append("repo_root(root) loest nicht auf root auf")
+        # Cache: zweiter Aufruf darf keinen neuen Subprozess kosten
+        calls = []
+        orig_run = subprocess.run
+
+        def counting_run(args, **kw):
+            if "--git-common-dir" in args:
+                calls.append(args)
+            return orig_run(args, **kw)
+
+        _reset_root_cache()
+        subprocess.run = counting_run
+        try:
+            _snapshot_path(root)
+            _snapshot_path(root)
+            _snapshot_path(root)
+        finally:
+            subprocess.run = orig_run
+        if len(calls) != 1:
+            failures.append(
+                f"repo_root-Cache greift nicht: {len(calls)} git-Aufrufe")
+        _reset_root_cache()
+
+        # 18. Der Docstring nennt die Einheit — und die **Zahl** muss die
+        #     sein, die er nennt (§A-JO/§A-JS). Existenz eines Wortes ist
+        #     die halbe Pruefung: 21 und 223 koennen beide "geprueft"
+        #     heissen. Also beides: Text, und die Zahl an derselben Stelle.
+        rdoc = inspect.getdoc(Report) or ""
+        # Nicht "irgendwo im Docstring steht Pruefung" — sondern: die
+        # Zeile, die `checked` nennt, nennt auch die Einheit. Sonst
+        # besteht der Test, weil "Zaehlt Pruefungen" in Zeile 1 steht
+        # und `checked` in Zeile 3 etwas anderes behauptet.
+        checked_lines = [ln for ln in rdoc.splitlines() if "checked" in ln]
+        if not checked_lines or not any("Pruefung" in ln
+                                        for ln in checked_lines):
+            failures.append(
+                f"Report nennt die Einheit nicht an `checked`: {checked_lines[:2]!r}")
+        # Der Wert: `Report.checked` ist die Zahl der Pruefungen. Wenn
+        # `_status_line` sie als "Angaben" ausgibt und `checked` zugleich
+        # "Pruefungen" heisst, muessen die Zahlen im Report und in der
+        # Zeile uebereinstimmen — sonst sind es zwei Messungen.
+        demo = Checks(21)
+        if "21 Angaben" not in str(demo):
+            failures.append(f"Checks bringt die Zahl nicht mit: {demo!r}")
+        try:
+            _status_line(21, {}, 0)          # type: ignore[arg-type]
+            failures.append("_status_line akzeptiert int — die Einheit fehlt")
+        except TypeError:
+            pass
     return failures
 
 
@@ -1198,12 +1289,104 @@ def check_undocumented_tests(root: Path, rep: Report) -> None:
 
 _COUNT_SNAPSHOT = ".check_claude_md.last.json"
 
+# §A-JR: die MENGEN-Fassung des Harness-Tests prueft die **Menge** der
+# Modulglobals, nicht zwei Namen.
+# Zwei Deklarationen, disjunkt und vollstaendig — sonst rot:
+#   _RESET_GLOBALS: traegt Zustand, wird von `reset()` geraeumt
+#   _STATE_FREE:    unveraenderlich (Skalar, Tuple, frozenset, kompiliert)
+# Wer ein fuenftes Global mit Zustand hinzufuegt, muss es hier entscheiden.
+_RESET_GLOBALS = "_SNAPSHOT_SEEN _test_results _ROOT_CACHE _SNAPSHOT_CACHE"
+_STATE_FREE = ("AGENTS_PER_WAVE SCRIPT_SCOPE MIN_AGENT_CLAIM _COUNTING_LABEL "
+               "COMPLIANCE_AGENTS _COUNT_CONTEXT_CHARS _TOTAL_MARK "
+               "_SELF_TEST_SCOPE INVENTORY_RUNTIME_MAX_AGE_H _COUNT_SNAPSHOT "
+               "_RESET_GLOBALS _STATE_FREE")
+
+
+def _module_state_globals() -> list[str]:
+    """Modulglobals, die Zustand tragen koennten — ohne AST-Raterei.
+
+    Ein Name faellt raus, wenn er in `_STATE_FREE` steht, `Final`
+    annotiert ist oder ein Literal/Tupel/frozenset/compiled regex ist.
+    Alles andere gilt als Zustand: lieber eine Deklaration zu viel als
+    ein Erbfall, den niemand sieht.
+    """
+    import ast
+    src = Path(__file__).read_text(encoding="utf-8")
+    tree = ast.parse(src)
+    free = set(_STATE_FREE.split())
+    out: list[str] = []
+    for node in tree.body:
+        if not isinstance(node, (ast.Assign, ast.AnnAssign)):
+            continue
+        targets = (node.targets if isinstance(node, ast.Assign)
+                   else [node.target])
+        names = [t.id for t in targets if isinstance(t, ast.Name)]
+        for n in names:
+            if not n.startswith("_"):
+                continue
+            if n in free:
+                continue
+            val = node.value
+            # Mutable Behaelter sind Zustand, auch wenn sie literale sind:
+            # `[None]` und `{}` sehen aus wie Werte und sind Speicherplaetze.
+            if isinstance(val, (ast.List, ast.Dict)):
+                mutable = True
+            else:
+                mutable = False
+            literal = isinstance(val, (ast.Tuple, ast.Constant))
+            if isinstance(val, ast.Call) and isinstance(val.func, ast.Name) \
+                    and val.func.id == "frozenset":
+                literal = True
+            if isinstance(val, ast.Call) and isinstance(val.func, ast.Attribute) \
+                    and val.func.attr == "compile":
+                literal = True
+            if isinstance(val, ast.Tuple) and mutable:
+                literal = False
+            if not literal or mutable:
+                out.append(n)
+    return out
+
 
 def _count_reason(argv: list[str]) -> str:
     """`--write-count "<grund>"` — der Grund steht im Snapshot, nicht im Kopf."""
     i = argv.index("--write-count")
     rest = [a for a in argv[i + 1:] if not a.startswith("-")]
     return rest[0] if rest else "Grund nicht notiert"
+
+
+_ROOT_CACHE: dict = {}
+_SNAPSHOT_CACHE: dict = {}
+
+
+def repo_root(root: Path | None = None) -> Path:
+    """Der **eine** Weg zum Repo (§A-JQ).
+
+    Drei Wege fuehrten hierher und zwei waren falsch: `root`, `base` und
+    `Path.cwd()`. Nach Runde 34 stimmten alle — in dem Moment, in dem ein
+    vierter dazukommt, hat niemand einen Ort, an dem er nachsieht. Also
+    ein Ort: diese Funktion. `rg "Path\\.cwd\\(\\)"` muss danach **einen**
+    Treffer haben (den Default im `__main__`), nicht vier mit Haekchen.
+
+    Ohne `root` ist die Antwort der Ort **dieser Datei**, nicht die Shell:
+    der Pruefer beschreibt den Baum, in dem er liegt. Der Shell-Default
+    gilt nur dort, wo jemand bewusst ein Ziel angibt.
+
+    Nebenwirkung, benannt: `git rev-parse` ist ein Subprozess. Wer die
+    Funktion in einer Schleife nutzt, bezahlt pro Zeile. Deshalb Cache —
+    der Schluessel ist das aufgeloeste `root` (oder `None`).
+    """
+    key = None if root is None else Path(root).resolve()
+    if key in _ROOT_CACHE:
+        return _ROOT_CACHE[key]
+    base = key or Path(__file__).resolve().parent.parent
+    _ROOT_CACHE[key] = base
+    return base
+
+
+def _reset_root_cache() -> None:
+    """Cache leeren — Testzustand, nicht Produktionszustand (§A-JQ)."""
+    _ROOT_CACHE.clear()
+    _SNAPSHOT_CACHE.clear()
 
 
 def _snapshot_path(root: Path | None = None) -> Path:
@@ -1227,8 +1410,11 @@ def _snapshot_path(root: Path | None = None) -> Path:
     nicht `kein Vorlauf`. „Noch leer" und „nicht messbar" sind zwei
     Zustaende, und nur einer davon verschwindet beim naechsten Lauf.
     """
+    key = None if root is None else Path(root).resolve()
+    if key in _SNAPSHOT_CACHE:
+        return _SNAPSHOT_CACHE[key]
     try:
-        base = (root or Path(__file__).resolve().parent.parent).resolve()
+        base = repo_root(root)
         r = subprocess.run(
             ["git", "rev-parse", "--git-common-dir"],
             cwd=str(base),
@@ -1238,10 +1424,12 @@ def _snapshot_path(root: Path | None = None) -> Path:
             if not gd.is_absolute():
                 # relativ zum Repo, nicht zur Shell: `git` lief in `base`
                 gd = base / gd
-            return gd / "check_claude_md.last.json"
+            _SNAPSHOT_CACHE[key] = gd / "check_claude_md.last.json"
+            return _SNAPSHOT_CACHE[key]
     except (OSError, subprocess.SubprocessError):
         pass
-    return (root or Path(__file__).resolve().parent.parent) / _COUNT_SNAPSHOT
+    _SNAPSHOT_CACHE[key] = repo_root(root) / _COUNT_SNAPSHOT
+    return _SNAPSHOT_CACHE[key]
 
 
 def _load_count_snapshot(root: Path | None = None) -> dict | None:
@@ -1369,18 +1557,52 @@ def _snapshot_writable(root: Path | None = None) -> bool:
     return p.parent.name == ".git" and p.parent.is_dir()
 
 
-def _status_line(checked: int, skips: dict[str, int],
+class Checks:
+    """Pruefungen — **die Einheit traegt den Namen** (§A-JS).
+
+    Runde 23 in kleinster Form: zwei Zahlen, ein Wort. `Report.checked`
+    ist die Zahl der **Pruefungen**; `_status_line` sagte dazu "Angaben".
+    Solange Zahl und Wort getrennt entstehen, ist der Docstring eine
+    Behauptung neben der Messung — und ein Test, der nur prueft, *dass*
+    ein Wort dasteht, kann 21 nicht von 223 unterscheiden.
+
+    Diese Klasse macht den Fehler unmoeglich: der Ausdruck, der die Zahl
+    erzeugt, sagt seine Einheit selbst, und `__str__` ist der einzige
+    Weg, sie in die Ausgabe zu bringen.
+    """
+
+    __slots__ = ("n",)
+
+    def __init__(self, n: int) -> None:
+        self.n = int(n)
+
+    def __str__(self) -> str:
+        return f"{self.n} Angaben geprueft"
+
+    def __repr__(self) -> str:
+        return f"Checks({self.n})"
+
+    def __eq__(self, other: object) -> bool:
+        return isinstance(other, Checks) and self.n == other.n
+
+    def __hash__(self) -> int:
+        return hash(("Checks", self.n))
+
+
+def _status_line(checked: Checks, skips: dict[str, int],
                  problems: int) -> str:
     """Die Kopfzeile: **jede Zahl mit ihrer Einheit** (§A-NI).
 
-    `checked` heisst im `Report` „Pruefungen"; `223` ist „Angaben". Zwei
-    Einheiten, ein Wort — und der Leser muss raten, welche gilt. Ein
-    Test, der die Zeile nicht pruefen kann, weil sie im `print` steht,
-    ist ein Test gegen ein beobachtetes Format, nicht gegen ein
-    definiertes.
+    `checked` kommt als `Checks` herein und bringt Wort und Zahl mit —
+    nicht als `int`, bei dem der Aufrufer das Wort danebenstellen muss.
+    `223` ist die Summe aus Pruefungen und Ausschluessen; auch sie
+    entsteht hier, in derselben Zeile wie das Wort.
     """
+    if not isinstance(checked, Checks):
+        raise TypeError("checks muss Checks sein, int ist die alte Falle")
     excluded = sum(skips.values())
-    return (f"{checked} Angaben geprueft / {checked + excluded} Angaben gezaehlt "
+    total = checked.n + excluded
+    return (f"{checked.n} Angaben geprueft / {total} Angaben gezaehlt "
             f"({excluded} ausgeschlossen), {problems} Abweichungen")
 
 
@@ -1522,7 +1744,7 @@ def main() -> int:
     # §A-NI: `checked` heisst im Report "Pruefungen", in der Ausgabe
     # "Angaben" — zwei Einheiten, ein Wort. Die Einheit gehoert an die
     # Zahl; keine Zahl dieser Zeile ist mehr ambivalent.
-    status = _status_line(rep.checked, rep.skips, len(rep.problems))
+    status = _status_line(Checks(rep.checked), rep.skips, len(rep.problems))
     if skipped:
         status += f", {skipped} uebersprungen (Umgebung)"
     # §A-NC: die Zahl, die sich aendert, nennt den Grund. Ohne diese Zeile
