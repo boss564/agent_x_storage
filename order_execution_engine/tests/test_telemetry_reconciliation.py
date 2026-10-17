@@ -634,6 +634,34 @@ def test_criterion_is_printed_in_the_same_order_as_the_red_branches() -> None:
     assert "scope = run_id >= 9" in line
 
 
+def test_criterion_count_matches_red_branches_in_source() -> None:
+    """Ein fünfter RED-Zweig ohne criterion-Ergänzung bricht diesen Test.
+
+    Die vier (jetzt fünf) Fixtures unten prüfen, dass jeder Zweig existiert.
+    Sie prüfen **nicht**, dass kein weiterer dazukommt — das tut diese
+    Zeugenfunktion, indem sie die RED-Rückgaben im Quelltext des Gates
+    zählt und mit der Anzahl der Bedingungen in der criterion-Zeile
+    vergleicht. Genau hier bricht es, wenn eine Bedingung eingefügt wird,
+    ohne daß die gedruckte Regel mitwächst.
+    """
+    import inspect
+    import re
+
+    from order_execution_engine.ops import preflight_check
+
+    src = inspect.getsource(preflight_check.gate_telemetry_reconciliation)
+    red_returns = len(re.findall(r'status="RED"', src))
+    line = _gate_criterion(9)
+    numbered = set(re.findall(r"\((\d)\)", line))
+    # (0) enthält keine Gleichheitsbedingung; die Zweige (1)-(4) plus der
+    # Untergrenzen-Zweig (0) ergeben zusammen die RED-Rückgaben.
+    assert red_returns == len(numbered), (
+        f"{red_returns} RED-Rückgaben im Gate, aber {len(numbered)} "
+        f"Bedingungen ({sorted(numbered)}) in der criterion-Zeile — "
+        "ein Zweig ohne gedruckte Regel (oder umgekehrt)."
+    )
+
+
 def test_branch_0_underrun() -> None:
     """(0) leere/unzureichende Datenlage -> RED, nicht GREEN."""
     status, detail = _run(rows=0, keyed=0, dispatched=0, reasons=0)
