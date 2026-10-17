@@ -2348,25 +2348,133 @@ def test_discarded_rows_do_not_consume_decision_seq() -> None:
     assert split["sum"] == split["N"] == 5
 
 
-def test_verdict_names_the_number_it_uses() -> None:
-    """Das Urteil trägt seine Zahl, nicht nur ihr Etikett (§5.4cm).
+def test_verdict_number_equals_the_query_not_the_expected() -> None:
+    """Die Zahl in der Urteilszeile == die Zahl aus der Abfrage (§5.4cv).
 
-    `unattributed` hat zwei Gültigkeitsbereiche (offener Run / alle Runs).
-    Ein RED, das nur „unattributed" sagt, lässt offen, welche Zahl es
-    meint — und die beiden unterscheiden sich im Bestand um eine
-    Größenordnung.
+    Der erste Test dieser Stelle prüfte die **Ordnung** der Felder und fiel
+    beim naechsten Umbau. Ein Formattest prueft den Vertrag mit dem Leser;
+    er prueft nicht, ob die Ausgabe stimmt. Hier wird geparst und gegen
+    `dispatch_split` verglichen — eine Klammer zwischen Ausgabe und Quelle,
+    nicht zwischen Ausgabe und Erwartung.
+    """
+    import re as _re
+    from order_execution_engine.ops.preflight_check import _unattributed_reason
+
+    split = {"attributed": 4, "unattributed": 30, "discarded": 327,
+             "traffic_only": 0, "N": 361, "sum": 361}
+    detail = {"origin_split": split, "dispatched_in_scope": 361}
+
+    line = _unattributed_reason(detail, cumulative=300)
+
+    m = _re.search(r"unattributed: (\d+)", line)
+    assert m, "die Urteilszeile muss `unattributed: n` tragen"
+    assert int(m.group(1)) == split["unattributed"], (
+        "geparst wird die Zahl, die das Kriterium prueft — nicht die "
+        "kumulierte"
+    )
+    assert "kumuliert 300" in line
+    assert f"N={split['N']}" in line
+    assert f"discarded={split['discarded']}" in line
+    assert "obere Schranke" in line
+
+    # Die Klammer, die zaehlt: aendert sich die Quelle, aendert sich die
+    # geparste Zahl. Ein Formattest wuerde das nicht merken.
+    split2 = {**split, "unattributed": 7}
+    line2 = _unattributed_reason({**detail, "origin_split": split2}, 300)
+    assert int(_re.search(r"unattributed: (\d+)", line2).group(1)) == 7
+
+
+def test_hits_are_scoped_to_one_run() -> None:
+    """`i in hits` ist nur dann eine Attribuierung, wenn `hits` ein Run ist.
+
+    `decision_seq` beginnt in jedem Run bei 1 (§3, Runde 23). Waere `hits`
+    eine Union ueber Runs, traefe die Position aus Run 9 die Zeilenwerte aus
+    Run 8 — derselbe Fenster-Schnitt, nur anders etikettiert.
+    """
+    from order_execution_engine.ops.preflight_check import dispatch_origin_split
+
+    conn = sqlite3.connect(":memory:")
+    conn.executescript("""
+        CREATE TABLE dispatched_signals(item_id TEXT, dispatched_at REAL);
+        CREATE TABLE bridge_discards(item_id TEXT);
+        CREATE TABLE telemetry(run_id INTEGER, decision_seq INTEGER);
+        CREATE TABLE telemetry_runs(run_id INTEGER, started_at REAL);
+    """)
+    # Run 8: 5 Zeilen, seq 1..5. Run 9: 2 Zeilen, seq 1..2, 3 Claims.
+    for seq in range(1, 6):
+        conn.execute("INSERT INTO telemetry VALUES(8,?)", (seq,))
+    for seq in (1, 2):
+        conn.execute("INSERT INTO telemetry VALUES(9,?)", (seq,))
+    conn.execute("INSERT INTO telemetry_runs VALUES(8, 50.0)")
+    conn.execute("INSERT INTO telemetry_runs VALUES(9, 100.0)")
+    for i in range(3):
+        conn.execute("INSERT INTO dispatched_signals VALUES(?,?)",
+                     (f"r9-{i}", 100.0 + i))
+
+    split = dispatch_origin_split(
+        conn, min_run_id=7, started_at=0.0, run_started_at=100.0)
+
+    # Waere `hits` = {1..5} u {1,2} = {1..5}, waere attributed == 3.
+    assert split["attributed"] == 2, (
+        "Run 8 hat seq 3..5 — diese duerfen Run 9 nicht attribuieren"
+    )
+    assert split["unattributed"] == 1
+    assert split["sum"] == split["N"] == 3
+
+
+def test_telemetry_record_always_has_its_sequence() -> None:
+    """Ein fehlender Schluessel ist lauter zu behandeln als ein falscher (§5.4cw).
+
+    `persistence.py` liest `getattr(record, "decision_seq", 0) or None` —
+    der Default ist eine **stille** Behandlung des fehlenden Falls: die
+    Zeile bekommt NULL und faellt aus der Attribuierung, ohne dass es
+    auffiele. Fuenf Stellen dieser Familie stehen in der Akte
+    (`getattr("book")`, `DATASET`, `theta`, `item_id`, `.status`).
+
+    Der Default ist zulaessig, **weil** das Feld nie fehlt: `TelemetryRecord`
+    ist ein Pydantic-Model mit dem Feld im Schema. Dieser Test haelt die
+    Vorbedingung fest, unter der der Default eine Gewohnheit ist und keine
+    Entscheidung.
     """
     import inspect
-    from order_execution_engine.ops import preflight_check
+    from order_execution_engine.shadow_execution_engine import TelemetryRecord
 
-    src = inspect.getsource(preflight_check)
-    assert "(3) unattributed: {detail['origin_split']['unattributed']}" in src, (
-        "die Zahl, die das Kriterium prüft, muss **zuerst** und allein "
-        "hinter dem Etikett stehen — sonst parst `unattributed: (\\d+)` "
-        "die kumulierte 300 statt der 30 (§5.4cs)"
+    assert "decision_seq" in TelemetryRecord.model_fields, (
+        "decision_seq muss im Schema stehen, sonst ist der getattr-Default "
+        "eine stille Entscheidung statt einer Gewohnheit"
     )
-    assert "kumuliert" in src, "die 300 bleibt sichtbar, aber nachgeordnet"
-    assert "obere Schranke" in src, (
-        "attributed muss als Schranke benannt sein, solange keine "
-        "item_id im Ledger steht (§5.4ct)"
+
+    from order_execution_engine import persistence
+    src = inspect.getsource(persistence)
+    assert 'getattr(record, "decision_seq"' in src, (
+        "der Default ist nur zulaessig, weil TelemetryRecord ein Schema hat"
     )
+
+    from order_execution_engine.shadow_execution_engine import (
+        ShadowExecutionEngine)
+    eng_src = inspect.getsource(ShadowExecutionEngine)
+    assert "decision_seq=self.telemetry.next_decision_seq()" in eng_src, (
+        "jede Record-Konstruktion muss ihre Sequenz ziehen"
+    )
+
+
+def test_missing_field_is_loud_not_silent() -> None:
+    """Die Regel als Verhalten: fehlt der Schluessel, gibt es einen Fehler.
+
+    Gegenprobe zum Test darueber — ein Record **ohne** `signal_id` darf
+    nicht still durchgehen. `getattr` mit Default tut genau das; darum
+    steht daneben, dass das Schema es nicht zulaesst.
+    """
+    import uuid
+    import pytest
+    from order_execution_engine.shadow_execution_engine import TelemetryRecord
+
+    with pytest.raises(Exception):
+        TelemetryRecord(latency_ms=1.0, approved=True, status=None)
+
+    # Und der Gegenfall: mit dem Feld ist es still, wie gewollt.
+    rec = TelemetryRecord(
+        signal_id=uuid.uuid4(), order_id=None, latency_ms=1.0,
+        approved=True, status=None,
+    )
+    assert rec.decision_seq == 0, "Default 0 heisst: Sequenz nicht zugewiesen"

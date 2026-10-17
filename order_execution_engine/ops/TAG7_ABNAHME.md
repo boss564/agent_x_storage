@@ -3243,3 +3243,134 @@ keine Zeile Code, sondern eine Spalte — `telemetry.item_id` — und sie ist
 der Unterschied zwischen *die Zahl geht auf* und *die Zahl stimmt*.**
 
 Suite: **208 passed** (+2: ausgelieferte Config; +1 umgeschrieben: Zahl zuerst).
+
+## 57. Runde 26 — der Übergang, der Default-Audit und die Klammer
+
+### §5.4cu — `hits` ist run-skopiert, jetzt assertion-weise
+
+Die Abfrage war schon skopiert (`WHERE run_id = (SELECT MAX(run_id) …)`),
+aber **als Prädikat, nicht als Größe** — und `i in hits` liest sich wie
+ein Mengentest. Jetzt wird `open_run_id` einmal gezogen, `hit_rows` mit
+`run_id` selektiert, und:
+
+```python
+assert all(int(r) == int(open_run_id) for r, _ in hit_rows)
+```
+
+Die Gegenprobe macht den Unterschied sichtbar:
+
+| Variante | `attributed` im Testfall (Run 8: seq 1..5, Run 9: seq 1..2, 3 Claims) |
+|---|---|
+| run-skopiert | **2** (korrekt) |
+| Union über Runs | **3** (falsch) |
+
+Im **Produktionsbestand** wäre der Fehler unsichtbar geblieben: Run 9 hat
+4 Claims und beide Runs beginnen bei 1 — der Schnitt und die Attribuierung
+ergeben dieselbe Zahl. Der Test ist der einzige Ort, an dem es auffällt.
+`test_hits_are_scoped_to_one_run` hält ihn.
+
+### §5.4cv — die Klammer statt des Formats
+
+Der Test aus Runde 25 prüfte die **Reihenfolge** der Felder. Das ist ein
+Formattest: er fällt beim nächsten Umbau und sagt nichts über die Zahl.
+Ersetzt durch:
+
+```python
+re.search(r"unattributed: (\d+)", line).group(1) == split["unattributed"]
+```
+
+Die Zeile wird jetzt von `_unattributed_reason(detail, cumulative)`
+gebaut — eine Funktion, nicht ein f-string im Gate. Damit kann der Test
+**die Ausgabe gegen die Quelle** laufen lassen, nicht gegen eine
+abgeschriebene Erwartung. Und die zweite Behauptung: ändert sich die
+Quelle (`unattributed=7`), ändert sich die geparste Zahl. Ein Formattest
+merkt das nicht.
+
+### §5.4cw — der Default-Audit: fünf Stellen, ein Muster
+
+`rg "\.get\(|getattr\(" order_execution_engine/` → **209 Treffer** in
+Produktionscode. Nicht einzeln bewertbar, aber die gefährliche Klasse ist
+klein: **Defaults, die eine Entscheidung ersetzen.** Gefunden:
+
+| Stelle | Default | Familie |
+|---|---|---|
+| `shadow_execution_engine.py:1230` | `getattr(active, "source", None)` | fehlende Herkunft → `SIDE_UNKNOWN_SOURCE` ✓ **laut** (Runde 23) |
+| `persistence.py:497` | `getattr(record, "status", None)` | fehlender Status → `NULL` — zulässig, `status: Optional` |
+| `persistence.py:503` | `getattr(record, "decision_seq", 0) or None` | **fehlende Sequenz → NULL, still** |
+| `news_bridge.py:292/293` | `item.get("sentiment_score", 0)` | fehlendes Sentiment → `0` → `NEUTRAL` → **kein Signal, still** |
+| `preflight_check.py:1203` | `cfg.get("max_book_age_ms", 0) != 2000` | fehlend → `0` → **weicht von 2000 ab, laut** ✓ |
+
+Die Regel der Akte:
+
+> **Ein fehlender Schlüssel ist lauter zu behandeln als ein falscher.**
+
+Zulässig sind genau zwei Antworten je Default: **„nie abwesend, per
+Schema"** oder **„abwesend, dann laut"**. „Abwesend, dann irgendwas" ist
+keine. Drei Stellen erfüllen das heute:
+
+- `source`: Schema der Klasse ist `str = "book"`, aber Fremd-Konstruktoren
+  können es umgehen — deshalb `None` statt Geratenem (§5.4cl)
+- `decision_seq`: Schema per Pydantic (`TelemetryRecord.model_fields`),
+  `test_telemetry_record_always_has_its_sequence` hält die Vorbedingung
+- `max_book_age_ms`: fehlend weicht vom erwarteten Wert ab → das Gate
+  schlägt an, statt still den Default zu nehmen
+
+**Offen und bewusst nicht geändert:** `sentiment_score`. Fehlt der Wert,
+wird das Signal neutral — das ist eine *Entscheidung* über die Strategie
+(kein Sentiment = kein Trade), und sie steht nicht zur Debatte; sie
+sollte nur als Entscheidung dokumentiert sein und nicht als `item.get(...)`
+aussehen. Für den 20.10. keine Änderung: die Lieferung enthält das Feld
+immer (Schema der Gamma-Allowlist), und ein Fail-closed an dieser Stelle
+würde die Signalrate ändern — mitten in der Messperiode.
+
+### §5.4cx — eine Reparatur, die die Zahl erhöht, prüft sich selbst
+
+Runde 23: `unattributed_earlier + discarded = 631` über 361. Die Zahl
+**wuchs**, während der Code „disjunkter" wurde. Runde 24: 300, 30, 4 —
+alle kleiner, alle belegt. Runde 26 (nach Migration): 4 → 0.
+
+Die Richtung ist das Signal. Als Modulkopf-Regel notiert.
+
+### §5.4cy — der Übergang, den das Kriterium braucht (Entscheidungsvorlage)
+
+`attributed` trägt heute **kein** Kriterium. Kriterium (1) prüft die
+**Schreibseite** (`telemetry_rows == decision_seq-keyed`), nicht die
+Attribuierung. Das ist wichtig für die Frage aus §1: **die Migration
+macht das Urteil heute nicht rot** — sie würde es erst rot machen, wenn
+`attributed == 0` zum Kriterium erhoben würde, und das ist nirgends
+geplant.
+
+Wenn es das werden soll, lautet die Form:
+
+```
+attributed: 0 (post-migration, ab 2026-10-XX)
+legacy_unattributable: 34 (vor 2026-10-XX, keine item_id)
+```
+
+Das Kriterium zählt dann nur, was es zählen kann, und die 34 stehen als
+**deklarierte** Lücke statt als stille 0 — dieselbe Form wie die
+Datum-gebundenen Einträge aus Runde 20.
+
+**Das ist eine Abnehmer-Entscheidung, keine Commit-Entscheidung:**
+nimmt das Kriterium eine deklarierte Lücke an, oder wird die Ehrlichkeit
+zurückgebaut, weil sie rot macht? Die Frage ist vor dem 20.10. zu
+stellen, weil sie danach im Betrieb nicht mehr gestellt wird — sie wird
+dann entschieden, unter Zeitdruck.
+
+## 58. Der Satz dieser Runde
+
+Sechsundzwanzig Runden, und die Akte hat zum vierten Mal dieselbe Familie
+gefunden: `getattr("book")`, `DATASET`, `theta`, `item_id` — der stille
+Fall ist immer der fehlende, und fehlend schreit nie. 209 Defaults im
+Produktionscode, drei sind Familienmitglieder, zwei sind zulässig, einer
+ist offen und bewusst so gelassen.
+
+**Was am 20.10. abgenommen wird, ist ein System, dessen Urteil seine
+obere Schranke mitdruckt, dessen Policy aus der ausgelieferten Datei
+kommt, dessen Attribuierung run-skopiert ist und dessen gefallener Test
+durch eine Klammer ersetzt wurde, die gegen die Abfrage prüft. Und die
+eine Frage, die vor diesem Datum zu stellen ist, ist keine technische:
+nimmt das Kriterium eine deklarierte Lücke an — oder wird die Ehrlichkeit
+zurückgebaut, weil sie rot macht.**
+
+Suite: **211 passed** (+2 Default-Regel, +1 run-Scope; 1 Formattest ersetzt).

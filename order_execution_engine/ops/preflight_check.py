@@ -619,13 +619,7 @@ def gate_telemetry_reconciliation(
             # gibt es keinen Fall, in dem sie danebengriffe und es
             # auffiele. Bis `telemetry.item_id` existiert (§53), steht
             # das in der Urteilszeile, nicht nur in der Akte.
-            reason=f"(3) unattributed: {detail['origin_split']['unattributed']}, "
-                   f"(offener Run) von N={detail['dispatched_in_scope']} "
-                   f"· kumuliert {unattributed} inkl. früherer Runs "
-                   f"· discarded={detail['origin_split']['discarded']} "
-                   f"· attributed={detail['origin_split']['attributed']} "
-                   f"(obere Schranke: Position gegen decision_seq, "
-                   f"keine item_id im Ledger)",
+            reason=_unattributed_reason(detail, unattributed),
             detail=detail,
         )
     # Die Gegenrichtung (§5.4ac). Bis hierher war nur Erfolg-ohne-Zeile
@@ -916,15 +910,27 @@ def dispatch_origin_split(
     ).fetchall()
     n = len(rows)
     boundary = run_started_at if run_started_at is not None else float("inf")
-    hits = {
-        int(seq) for (seq,) in conn.execute(
-            "SELECT decision_seq FROM telemetry"
-            " WHERE run_id = (SELECT MAX(run_id) FROM telemetry_runs"
-            "                 WHERE run_id >= ?)"
-            "   AND decision_seq IS NOT NULL",
-            (min_run_id,),
-        )
-    }
+    # §5.4cu: `hits` ist run-skopiert — **eine** run_id, per `MAX(run_id)`.
+    # Wäre es eine Union über Runs, wäre `i in hits` derselbe
+    # Überlappungs-Schnitt wie in Runde 23, nur mit anderem Etikett: die
+    # Position aus Run 9 träfe die `decision_seq`-Werte aus Run 8, weil
+    # beide bei 1 beginnen. Sequenz braucht ihren Partitionierungsschlüssel
+    # — hier steht er als einzelne Größe, nicht als Prädikat in der Abfrage,
+    # und darum prüft die Assertion ihn, statt ihm zu vertrauen.
+    open_run_id = conn.execute(
+        "SELECT MAX(run_id) FROM telemetry_runs WHERE run_id >= ?",
+        (min_run_id,),
+    ).fetchone()[0]
+    hit_rows = conn.execute(
+        "SELECT run_id, decision_seq FROM telemetry"
+        " WHERE run_id = ? AND decision_seq IS NOT NULL",
+        (open_run_id,),
+    ).fetchall()
+    assert all(int(r) == int(open_run_id) for r, _ in hit_rows), (
+        "hits kommen aus mehreren Runs — `i in hits` wäre dann ein "
+        "Fenster-Schnitt, keine Attribuierung (run-lokale Sequenz)"
+    )
+    hits = {int(seq) for _, seq in hit_rows}
     attributed = 0
     unclaimed_open = 0
     # §5.4cn: **ein** Topf je Zeile, in **einem** Durchlauf, ohne Rangfolge
@@ -964,6 +970,32 @@ def dispatch_origin_split(
                          ("attributed", "discarded", "unattributed",
                           "traffic_only"))
     return buckets
+
+
+def _unattributed_reason(detail: dict, cumulative: int) -> str:
+    """Die Urteilszeile für (3) — als Funktion, damit ein Test sie bauen kann.
+
+    §5.4cv: Eine Ausgabe, deren **Format** ein Test prüft, ist Vertrag;
+    eine Ausgabe, deren **Zahl** ein Test gegen die Quelle prüft, ist
+    Buchführung. Der Test kann ``re.match(r"\\d+", ...)`` jetzt gegen
+    ``dispatch_split`` laufen lassen, ohne dass die Ordnung im Test
+    abgeschrieben steht — ein Formattest fällt beim nächsten Umbau wieder,
+    dieser nicht.
+
+    Ordnung (§5.4cs): die Zahl, die das Kriterium prüft, steht **zuerst
+    und allein**. ``kumuliert`` und die Belege folgen, weil sie Belege
+    sind und nicht Summanden des Urteils.
+    """
+    split = detail.get("origin_split") or {}
+    return (
+        f"(3) unattributed: {split.get('unattributed')}, "
+        f"(offener Run) von N={detail.get('dispatched_in_scope')} "
+        f"· kumuliert {cumulative} inkl. früherer Runs "
+        f"· discarded={split.get('discarded')} "
+        f"· attributed={split.get('attributed')} "
+        f"(obere Schranke: Position gegen decision_seq, "
+        f"keine item_id im Ledger)"
+    )
 
 
 def _blocking_callers() -> set:
