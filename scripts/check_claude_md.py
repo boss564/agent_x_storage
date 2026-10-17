@@ -821,18 +821,39 @@ def _self_test_literal_errors(src: str | None = None) -> list[str]:
 # und unveraenderter Tabelle schloesse die Akte eine zu niedrig — und die
 # Akte ist die, die man in Runde 50 liest.
 # Darum wird die Klassenliste **ausgegeben**, nicht als Eingabe gelesen.
-def calibration_run(root: Path, text: str | None = None) -> dict[str, object]:
-    """Ein Lauf, fuenf Pruefer, Klassen aus dem Lauf (§A-MM).
+def calibration_run(root: Path, text: str | None = None,
+                    with_tests: bool = False) -> dict[str, object]:
+    """Ein Lauf, **sechs** Pruefer — die Kette, die `main` faehrt (§A-MM).
 
     Rueckgabe:
-        {"total": int, "classes": [(name, n), ...]}
+        {"total": int, "classes": [(name, n), ...], "unclassified": int,
+         "chain_total": int}
 
-    `classes` ist die **Ausgabe** des Laufs, nicht eine Eingabeliste. Kommt
-    ein sechster Pruefer hinzu, steht er hier — ohne dass jemand die Akte
-    nachzieht. Der einzige Fall, den diese Funktion nicht selbst schliesst,
-    ist ein Befund, fuer den **kein** Pruefer zustaendig ist; dann meldet
-    der Summenvergleich gegen `main` eine Differenz.
+    `classes` ist die **Ausgabe** des Laufs, nicht eine Eingabeliste.
+    `unclassified` ist die Differenz gegen die `main`-Kette: Befunde, fuer
+    die **kein** Pruefer in dieser Liste zustaendig ist. Sie muss 0 sein.
+
+    **Herkunft der Korrektur (Runde 44, nachgetragen):** die erste Fassung
+    dieses Laufes kannte fuenf Pruefer. `main` faehrt sechs —
+    `check_undocumented_tests` fehlte. Im eigenen Baum waren beide Summen
+    null, die Luecke unsichtbar; im Klon stand die Summe unter der Kette,
+    und die Differenz war echte Befunde ohne Klasse. Das ist derselbe
+    Fehler, den diese Funktion abschaffen sollte: eine Handliste ueber
+    einem Code, der sie hergibt. Zweite Fassung: `check_counts` ohne
+    `root` — die Zahl hing am Aufrufweg.
     """
+
+    def chain(rep: Report) -> None:
+        """Die Reihenfolge ist die von `main` — nicht eine eigene."""
+        w, per = parse_waves(doc)
+        check_line_counts(doc, root, rep)          # type: ignore[name-defined]
+        check_dead_refs(doc, root, rep)            # type: ignore[name-defined]
+        check_counts(doc, w, per, rep, root)       # type: ignore[name-defined]
+        check_undocumented_tests(root, rep)        # type: ignore[name-defined]
+        check_doc_inventories(root, rep)           # type: ignore[name-defined]
+        if with_tests:
+            check_tests(doc, root, rep)            # type: ignore[name-defined]
+
     doc = text if text is not None else (root / "CLAUDE.md").read_text(
         encoding="utf-8")
     waves, per = parse_waves(doc)
@@ -843,25 +864,53 @@ def calibration_run(root: Path, text: str | None = None) -> dict[str, object]:
         fn(*args, rep)
         classes.append((name, len(rep.problems)))
 
+    def run(name: str, fn, *args, kw: dict | None = None) -> None:  # type: ignore[no-untyped-def]
+        rep = Report()
+        fn(*args, rep, **(kw or {}))
+        classes.append((name, len(rep.problems)))
+
+    def run_kw(name: str, fn, *args, **kw) -> None:  # type: ignore[no-untyped-def]
+        """Fuer Pruefer, deren `rep` **nicht** der letzte Parameter ist."""
+        rep = Report()
+        fn(*args, rep, **kw)
+        classes.append((name, len(rep.problems)))
+
     run("Zeilen", check_line_counts, doc, root)
     run("Referenzen", check_dead_refs, doc, root)
-    run("Wellen", check_counts, doc, waves, per)
+    # §A-MM: `root` ist hier **nicht** optional. `check_counts` liefert ohne
+    # `root` andere Befunde (im Klon: keine statt sechzehn) — die Zahl
+    # haengt sonst vom Aufrufweg ab, und genau das war der Fehler, den
+    # `_git_callers_without_cwd` in Runde 41 fand.
+    run_kw("Wellen", check_counts, doc, waves, per, root=root)
+    run("Tests ohne Skript", check_undocumented_tests, root)
     run("Inventare", check_doc_inventories, root)
-    run("Tests", check_tests, doc, root)
+    if with_tests:
+        run("Testsuite", check_tests, doc, root)
+
+    chain_rep = Report()
+    chain(chain_rep)
+    total = sum(n for _, n in classes)
     return {
-        "total": sum(n for _, n in classes),
+        "total": total,
         "classes": sorted(classes, key=lambda kv: -kv[1]),
+        "unclassified": len(chain_rep.problems) - total,
+        "chain_total": len(chain_rep.problems),
     }
 
 
 def _self_test_calibration_classes() -> list[str]:
-    """Kommt die Klassenliste aus dem Lauf? (§A-MM, Runde 44)
+    """Kommt die Klassenliste aus dem Lauf — und schliesst sie? (§A-MM)
 
-    Die Gegenprobe ist ein **sechster Pruefer**, der nur zur Laufzeit
-    existiert: er bekommt eine Probe, die einen Befund erzeugt, und die
-    Klassenliste muss ihn nennen. Waere die Summe eine Handliste, fehlte
-    er — und der Lauf schloesse still auf die falsche Zahl. Genau das war
-    die fuenfte Klasse in Runde 43.
+    Zwei Behauptungen, und die zweite ist die, die in der ersten Fassung
+    fehlte:
+
+      1. Jeder Pruefer der `main`-Kette erscheint in der Ausgabe.
+      2. `unclassified` ist 0 — kein Befund ohne Klasse.
+
+    Die erste Fassung kannte fuenf Pruefer; `main` faehrt sechs. Im
+    eigenen Baum waren beide Summen null und die Luecke unsichtbar. Der
+    Test prueft darum **dieselbe Zahl auf beiden Wegen**, nicht nur die
+    Anwesenheit der Namen.
     """
     import tempfile
     out: list[str] = []
@@ -869,20 +918,24 @@ def _self_test_calibration_classes() -> list[str]:
         root = Path(td)
         (root / "CLAUDE.md").write_text("# leer\n", encoding="utf-8")
         base = calibration_run(root)
-        # Erwartung ist ein Literal mit Herkunft: die Probe-Doku ist leer,
-        # also traegt jeder Pruefer 0 bei. Vier Befunde sind strukturell
-        # (`Inventare` meldet fehlende Docs) — die Zahl selbst wird nicht
-        # behauptet, wohl aber, dass alle fuenf Pruefer **erscheinen**.
-        names = [n for n, _ in base["classes"]]
-        if names != ["Inventare", "Wellen", "Zeilen", "Tests", "Referenzen"] \
-                and sorted(names) != sorted(["Zeilen", "Referenzen", "Wellen",
-                                             "Inventare", "Tests"]):
-            out.append(f"Kalibrierlauf nennt nicht alle fuenf Pruefer: {names}")
+        names = sorted(n for n, _ in base["classes"])
+        # Erwartung als Literal mit Herkunft: die `main`-Kette ruft
+        # `check_line_counts`, `check_dead_refs`, `check_counts`,
+        # `check_undocumented_tests`, `check_doc_inventories` (und
+        # `check_tests` nur unter `--run-tests`). Ohne `with_tests` sind
+        # das **fuenf** Klassen.
+        if names != sorted(["Zeilen", "Referenzen", "Wellen",
+                            "Tests ohne Skript", "Inventare"]):
+            out.append(f"Kalibrierlauf nennt nicht die fuenf der Kette: {names}")
         if len(base["classes"]) != 5:
             out.append(f"Kalibrierlauf hat {len(base['classes'])} Klassen, "
                        f"erwartet 5")
         if base["total"] != sum(n for _, n in base["classes"]):
             out.append("Kalibrierlauf: Summe passt nicht zu den Klassen")
+        if base["unclassified"] != 0:
+            out.append(f"Kalibrierlauf: {base['unclassified']} Befunde ohne "
+                       f"Klasse (Kette {base['chain_total']}, "
+                       f"Summe {base['total']})")
     return out
 
 

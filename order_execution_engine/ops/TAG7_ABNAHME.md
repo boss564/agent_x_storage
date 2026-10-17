@@ -5354,3 +5354,49 @@ in einer eigenen Spalte — und sie steht an **einem** Ort.
 **Was am 20.10. auf dem Tisch liegt: 216 Tests, 24 Selbsttests, ein
 Kreuztest gegen Zustandsvererbung, drei benannte Umgebungen, ein Nenner
 von 433 und eine Rundentabelle, die ihre eigenen Bandagen zählt.**
+
+### §71.46 — Runde 44: der Kalibrierlauf war selbst eine Handliste
+
+§71.43 hat die Fünf-Klassen-Tabelle als Abschrift verurteilt und durch
+`calibration_run` ersetzt. **Die erste Fassung kannte fünf Prüfer. `main`
+fährt sechs.** `check_undocumented_tests` fehlte — dieselbe Form, nur
+diesmal von mir gebaut, in derselben Runde, in der ich sie beschrieben
+habe.
+
+**Und sie war unsichtbar:** im eigenen Baum meldeten beide Wege null.
+Eine Lücke, hinter der gerade nichts steht, ist keine Lücke, die man
+sieht. Erst der Klon zeigte sie:
+
+```
+calibration_run(klon) = 135
+main-Kette(klon)      = 151
+```
+
+**Der zweite Fehler kam beim Schließen des ersten.** `check_counts` gibt
+ohne `root` andere Befunde als mit (im Klon: keine statt sechzehn) — die
+Zahl hing am **Aufrufweg**. Das ist exakt der Fehler aus Runde 41, den
+`_git_callers_without_cwd` gefunden hatte, und er stand wieder da, in der
+Funktion, die ihn verhindern soll.
+
+**Jetzt schließt der Lauf gegen die Kette, statt sich selbst zu glauben:**
+
+```python
+{
+ "total": 151, "chain_total": 151, "unclassified": 0,
+ "classes": [("Referenzen", 124), ("Zeilen", 10), ("Inventare", 1),
+             ("Wellen", 0), ("Tests ohne Skript", 0)]
+}
+```
+
+`unclassified` ist die Differenz, und der Selbsttest verlangt `0` auf
+**beiden** Bäumen: eigen 0/0, Klon 151/151. Damit ist die zweite
+Behauptung des Tests nicht mehr „alle Namen erscheinen", sondern
+„dieselbe Zahl auf zwei Wegen" — und die ist auch dann rot, wenn ein
+fehlender Prüfer gerade nichts meldet.
+
+**Das ist der eigentliche Befund der Runde 44.** Nicht die Regel
+(§71.41), nicht der Zwilling (§71.42), sondern: **ich habe denselben
+Fehler in der Reparatur desselben Fehlers gemacht, zweimal, und beide
+Male hat ihn eine Messung gefunden und nicht das Hinsehen.**
+
+
