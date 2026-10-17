@@ -1,4 +1,6 @@
-# Tag-7-Abnahme — Shadow Execution Engine (Messperiode 04.10.–01.11.2026)
+# Tag-7-Abnahme — Shadow Execution Engine
+
+**Abnahme: Montag, 20.10.2025, 10:00** · Berichtstermin: Dienstag, 03.11.2025
 
 Stand: 17.10.2026. Dieses Dokument ist **vorab** festgeschrieben. Wird später
 etwas anders gelesen, gilt die hier stehende Nummer, nicht eine neue Lesart.
@@ -9,11 +11,20 @@ Das Kriterium beurteilt genau diesen Stand.
 
 ## 0. Termin
 
-| Datum | Rolle |
-|---|---|
-| **Montag, 20.10.2026, 10:00** | **Tag 7 — Abnahme** (Code, heute entscheidbar) |
-| **Montag, 03.11.2026** | **Berichtstermin Marktbeobachtung** (Daten, entscheidbar irgendwann) |
-| 01.11.2026 | **kein Termin** — Samstag, niemand zuständig |
+**Tag 7 = Montag, 20.10.2025, 10:00.** Auflösung per Befehl, nicht per Etikett:
+
+| Datum | `date`-Ausgabe | Rolle |
+|---|---|---|
+| **2025-10-20** | **Monday** | **Tag 7 — Abnahme** (Code, entscheidbar) |
+| 2026-11-03 | Tuesday | **Berichtstermin Marktbeobachtung** |
+| 2025-11-01 | Saturday | **kein Termin** — Wochenende, niemand zuständig |
+| 2026-10-20 | Tuesday | **nicht** der Abnahmetag (Jahreszahl-Falle) |
+
+> Historische Notiz: Die Fassungen bis `bd241b1a` nannten „20.10.2026" und
+> „01.11.2026". Beide Angaben waren Etiketten — 2026-10-20 ist ein Dienstag,
+> 2026-11-01 ein Sonntag. Aufgelöst wurde erst, als der Befehl daneben stand.
+> Gleiche Bauform wie §5.1: ein Etikett hat keinen Wochentag, ein Datum hat
+> einen.
 
 Das Datum ist **unbedingt**, nicht bedingt auf §5.1: Variante C ist
 synthetisch und hängt weder an Run 8/9 noch am Markt noch an
@@ -28,9 +39,10 @@ synthetisch und hängt weder an Run 8/9 noch am Markt noch an
 > 31.10. 23:59 grün sind. Reale Fills bis 01.11. sind Beobachtung und gehen
 > nicht in das Urteil ein.
 
-**Frist: 20.10.2026, 10:00 — unbedingt.** Die vorige Fassung führte die Frist
-offen; die Begründung dafür (Sorge um einen Handler-Umbau vor 01.11.) ist mit
-`01fdbb1d` entfallen, weil C synthetisch ist.
+**Frist: Montag, 20.10.2025, 10:00 — unbedingt.** Die frühere Fassung trug
+diese Frist noch als „offen"; die Begründung dafür (Sorge um einen
+Handler-Umbau vor dem Periodenende) ist mit `01fdbb1d` entfallen, weil C
+synthetisch ist.
 
 | Variante | Status | Begründung |
 |---|---|---|
@@ -53,18 +65,27 @@ Fill-Handler sind unverändert — kein Mock der Entscheidungslogik.
 
 ## 2. Urteilstabelle (6 Zeilen, je Beobachtung ein Verdikt)
 
-**Abnahmeprotokoll 20.10.2026, 10:00** — jede Zeile wird vor Ort ausgeführt,
-nicht zitiert.
+**Abnahmeprotokoll Montag, 20.10.2025, 10:00** — jede Zeile hat Befehl,
+**erwartete Ausgabe** und **Verdikt bei Abweichung**. Die drei zulässigen
+Verdikte sind `BESTANDEN` / `NICHT BESTANDEN` / `NICHT ENTSCHEIDBAR`.
+Das dritte ist ausdrücklich zulässig — sonst wird aus einer offenen Frage
+ein Haken.
 
-| # | Beobachtung | Befehl / Quelle | Erwartung |
+| # | Befehl | Erwartete Ausgabe | Verdikt bei Abweichung |
 |---|---|---|---|
-| 1 | Suite auf `01fdbb1d` | `pytest order_execution_engine/tests/` | 157 grün |
-| 2a | Replay-Positiv | `pytest -k test_c1` | Fill im Spread, `fill_ratio > 0` |
-| 2b | Replay-Negativ | `pytest -k test_c2` | `INVALID_PRICE`, keine Metrik |
-| 3 | Mess-DB unberührt | `pytest -k test_c3` | 0 Diff |
-| 4 | Join-Schlüssel | `gate_snapshot` | `join_is_one_to_one: True` über `(run_id, decision_seq)` — **nicht `item_id`** |
-| 5 | Run 8 | `gate_snapshot(min_run_id=8)` | `historical: RED`, `unattributed = 4`, Ausgangsachse **34** |
-| 6 | §5.1 | dieses Dokument, §5.1 | Zeitstempel vorhanden — Zeitstempel, nicht Urteil |
+| 0 | `date -j -f "%Y-%m-%d" 2025-10-20 "+%A"` | `Monday` | **NICHT ENTSCHEIDBAR** (Kalender); nicht abnehmen |
+| 1 | `pytest order_execution_engine/tests/` | `157 passed` | **NICHT BESTANDEN** |
+| 2a | `pytest -k test_c1_positive` | `1 passed`; Fill im Spread, `fill_ratio > 0` | **NICHT BESTANDEN** |
+| 2b | `pytest -k test_c2_negative` | `1 passed`; `INVALID_PRICE`, keine Metrik | **NICHT BESTANDEN** |
+| 3 | `pytest -k test_c3_replay_does_not_touch` | `1 passed`; Mess-DB 0 Diff | **NICHT BESTANDEN** |
+| 4 | `gate_snapshot` | `join_is_one_to_one: True` über `(run_id, decision_seq)` | **NICHT BESTANDEN** |
+| 5 | `gate_snapshot(min_run_id=8)` | `historical: RED (run 8, unattributed=4)`; Ausgangsachse **34**; `current: GREEN` | **NICHT ENTSCHEIDBAR** (Abweichung benennen, nicht glätten) |
+| 6 | §5.1 + §5.4, dieses Dokument | Zeitstempel und Sweep-Ausgabe vorhanden | **NICHT ENTSCHEIDBAR** |
+
+**Regel gegen den Haken-Fehler:** Ein Haken bedeutete bisher „ausgeführt",
+nicht „getroffen". Deshalb steht in jeder Zeile die erwartete **Ausgabe**;
+weicht sie ab, ohne dass `NICHT ENTSCHEIDBAR` zulässig ist, ist die Zeile
+`NICHT BESTANDEN` — nicht „im Wesentlichen wie erwartet".
 
 ## 2a. Was am 20.10. ausdrücklich **nicht** abgenommen wird
 
@@ -185,7 +206,66 @@ Imports. Der `-dirty`-Suffix im Run-Fingerprint ist jedoch **strukturell blind
 gegenüber untracked Dateien** — ein Befund für die Provenienz-Regel, kein
 Defekt dieses Laufs.
 
-## 5.3 Zwei Verdikte statt eines
+### 5.3 Zwei Verdikte statt eines
+
+Ein dauerhaft roter abgeschlossener Lauf macht das Gate zur Tapete: rot, das
+erwartet ist, wird nach zwei Wochen nicht mehr gelesen. Die Ausgabe führt
+deshalb zwei Verdikte:
+
+```
+verdict current:    GREEN                        (letzter Lauf, blockierend)
+verdict historical: RED (run 8, unattributed=4)  (abgeschlossen, nicht blockierend)
+```
+
+`current` blockiert (`FAIL` in `errors`), `historical` wird als `WARN`
+protokolliert. **Die Trennung schluckt nichts:** ist der *jüngste* Lauf rot,
+ist `current: RED` und blockiert — Zeuge `test_current_red_still_blocks`.
+Der zweite Zeuge (`test_historical_red_does_not_block_current_green`) hält
+fest, dass Run 8 dokumentiert und nicht blockierend erscheint.
+
+### 5.4 mtime-Sweep — der Beweis für „Basis Run 8+9"
+
+`sha256(Tree) == HEAD` belegt den Tree von **heute**, nicht den von
+`14.10. 21:23:32`. Zwischen beiden liegt genau das Fenster, in dem
+`integrate_news_index` im Tree gestanden haben könnte; `lsof` hilft nicht, weil
+es offene Dateien zählt, nicht geladene Module. Die Lücke schließt allein der
+mtime-Sweep:
+
+```
+find order_execution_engine -name '*.py' -newermt '2026-10-14 21:23:32'
+```
+
+**Ausgabe 17.10.2026 — nicht leer. Vier Treffer, einzeln verhandelt:**
+
+| Treffer | mtime | Befund | Tragweite |
+|---|---|---|---|
+| `shadow_runner.py` | 17.10. 16:50:15 | Inhalt **== HEAD** (`git diff --quiet` → 0), shasum `1a71c15f…ac4` beidseitig | nur mtime berührt (Datei wurde gelesen und neu geschrieben; `atime` 16:50:16). Kein Ladepfad: Prozess lief seit 14.10. |
+| `ops/preflight_check.py` | 17.10. 17:20:31 | in `146b4be4` committet | nicht vom Runner geladen (kein Import im Runner) |
+| `tests/test_telemetry_reconciliation.py` | 17.10. 17:20:52 | in `146b4be4` committet | nicht geladen |
+| `tests/test_fill_replay.py` | 17.10. 16:49:59 | in `01fdbb1d` committet | nicht geladen |
+
+**Bewertung:** Kein Treffer liegt im Fenster zwischen Start (14.10. 21:23:32)
+und dem ersten heutigen Schreibvorgang (17.10. 16:49). Kein Treffer ist
+Runner-Code im Ladepfad. `shadow_runner.py` ist inhaltlich unverändert —
+byte-gleich HEAD.
+
+**Grenze dieser Auskunft:** mtime ist ein Metadatum, das sich setzen lässt;
+sie ist ein Zeuge, kein Beweis im mathematischen Sinn. Sie schließt die Lücke
+für den Fall „jemand hat eine Datei geändert und gelassen" — nicht für
+„jemand hat eine Datei geändert, geladen und die mtime zurückgesetzt". Für
+Letzteres gibt es keinen Beleg, und es gibt auch kein Indiz dafür.
+
+### 5.5 Provenienz-Regel (Korrektur)
+
+Die frühere Formulierung prüfte `git diff --quiet`. Das ist **blind gegenüber
+untracked Dateien** — ein Befund aus §5.2. Gültig ist:
+
+```
+git status --porcelain   → muß leer sein (oder jede Zeile benannt)
+```
+
+Untracked ist dabei kein Sonderfall, sondern die Aussage **„unbekannt"**.
+Ein unbenanntes untracked bleibt RED.
 
 Ein dauerhaft roter abgeschlossener Lauf macht das Gate zur Tapete: rot, das
 erwartet ist, wird nach zwei Wochen nicht mehr gelesen. Die Ausgabe führt
@@ -208,6 +288,33 @@ fest, dass Run 8 dokumentiert und nicht blockierend erscheint.
 nachträglich befüllt: ein Backfill wäre erfundene Provenienz und würde den
 einzigen vorhandenen Beweis (den `decision_seq`-Join) scheinbar überflüssig
 machen. Die Spalte bleibt als tot dokumentiert.
+
+## 7.1 `scripts/address_register_0r.py` — aus dem Tree heraus (Weg A)
+
+Die Datei stand 17.10. als **untracked** in der Repo-Wurzel (17.425 B,
+mtime 10.10. 15:38 — vor dem Run-9-Start, nicht importiert, nicht geladen,
+read-only, Kopfzeile „kein Commit").
+
+**Entscheidung: nicht committen, aus dem geladenen Tree heraus.**
+
+| Zustand | Aussage | Rücknehmbar |
+|---|---|---|
+| untracked | „**unbekannt**" | ja |
+| committet | „**zugehörig**" | nein — dauerhaft in der Provenienz |
+
+Committen, damit `untracked: 0` dasteht, wäre die Entscheidung über die Farbe
+des Gates statt über die Zugehörigkeit der Datei — der Alarm verschwindet,
+weil man seinen Auslöser weggeräumt hat. `.gitignore` ist kein Ersatz: `git diff`
+war blind gegen untracked, `gitignore` macht `git status` blind gegen dieselbe
+Datei. Dieselbe Blindstelle, eine Ebene höher.
+
+**Ausgeführt:** `mv scripts/address_register_0r.py ~/notes/address_register_0r.py`.
+Inhalt und mtime erhalten (17.425 B, 10.10. 15:38). `git status --porcelain`
+in der Wurzel: **leer**.
+
+**Offen für den Eigentümer:** ob die Datei einen benannten Ort im Repo-Ökosystem
+bekommt (Weg B, mit Pfad · Grund · Eigentümer · Datum) oder in `~/notes/`
+bleibt. Das ist eine Zugehörigkeitsfrage, keine Gate-Frage.
 
 ## 7. Offener Punkt: Symbolkonzentration
 
