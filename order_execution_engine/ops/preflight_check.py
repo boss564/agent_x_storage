@@ -114,13 +114,70 @@ def gate_telemetry_reconciliation(
             (min_run_id,),
         ).fetchone()[0]
     )
+    # Vollständigkeit: die Bezugszahl muss sich vollständig zerlegen lassen.
+    reasons = {
+        str(r): int(c)
+        for r, c in conn.execute(
+            "SELECT reject_reason, COUNT(*) FROM telemetry WHERE run_id >= ? "
+            "GROUP BY 1",
+            (min_run_id,),
+        )
+    }
+    # Join-Kardinalität: die Id, über die der Replay-/Dispatch-Join läuft.
+    # NICHT item_id — das ist eine Eindeutigkeitsaussage über eine Spalte,
+    # keine über den Join. Gültig ist das *Paar* (run_id, decision_seq):
+    # der Zähler startet je Prozess neu (Run 9 beginnt wieder bei 1).
+    keyed = int(
+        conn.execute(
+            "SELECT COUNT(*) FROM telemetry WHERE run_id >= ? "
+            "AND decision_seq IS NOT NULL",
+            (min_run_id,),
+        ).fetchone()[0]
+    )
+    distinct_pair = int(
+        conn.execute(
+            "SELECT COUNT(*) FROM (SELECT DISTINCT run_id, decision_seq "
+            "FROM telemetry WHERE run_id >= ? AND decision_seq IS NOT NULL)",
+            (min_run_id,),
+        ).fetchone()[0]
+    )
+    # Je Lauf prüfen: innerhalb eines run_id darf decision_seq nicht kollidieren.
+    pairs_ok = _pairs_unique_per_run(conn, min_run_id=min_run_id)
+    unattributed = dispatches_without_telemetry(
+        conn, min_run_id=min_run_id, started_at=started_at,
+    )
     detail = {
         "min_run_id": min_run_id,
         "started_at": started_at,
         "dispatched_success": dispatched,
         "telemetry_rows": telemetry_rows,
+        "decision_seq_keyed": keyed,
+        "decision_seq_distinct_pair": distinct_pair,
+        "decision_seq_unique_per_run": pairs_ok,
+        "reasons": reasons,
+        "classifiable": sum(reasons.values()),
+        "unattributed": unattributed,
     }
-    if dispatched > 0 and telemetry_rows < dispatched:
+    # Kardinalität: jede Telemetriezeile braucht ihren Schlüssel, und der
+    # Schlüssel darf sich weder je Lauf noch über Läufe wiederholen.
+    if telemetry_rows != keyed:
+        return GateResult(
+            name="TELEMETRY_RECONCILIATION", status="RED", detail=detail,
+        )
+    if keyed != distinct_pair or not pairs_ok:
+        return GateResult(
+            name="TELEMETRY_RECONCILIATION", status="RED", detail=detail,
+        )
+    # Vollständigkeit: ein Dispatch ohne Telemetriezeile ist nicht
+    # "unbedenklich" — er ist eine unklassifizierte Terminalentscheidung.
+    # < wäre grün über einer Lücke (Run 8: 30 Zeilen vs. 34 Dispatches).
+    if unattributed > 0:
+        return GateResult(
+            name="TELEMETRY_RECONCILIATION",
+            status="RED",
+            detail=detail,
+        )
+    if dispatched != sum(reasons.values()):
         return GateResult(
             name="TELEMETRY_RECONCILIATION",
             status="RED",
@@ -130,6 +187,39 @@ def gate_telemetry_reconciliation(
         name="TELEMETRY_RECONCILIATION",
         status="GREEN",
         detail=detail,
+    )
+
+
+def dispatches_without_telemetry(
+    conn: sqlite3.Connection,
+    *,
+    min_run_id: int,
+    started_at: float,
+) -> int:
+    """Erfolgs-Dispatches ohne Telemetriezeile (unklassifiziert, Warn-Stufe).
+
+    Zählung über ``decision_seq``: Engine und Storage teilen die Id je
+    Entscheidung (F1/VM3). ``signal_id`` ist nicht joinbar — ``item_id`` aus
+    der Bridge ist ein MD5-Hash, ``telemetry.signal_id`` eine UUID.
+    """
+    return int(
+        conn.execute(
+            """
+            SELECT COUNT(*) FROM (
+              SELECT d.item_id, row_number() OVER (
+                       ORDER BY d.dispatched_at, d.item_id) AS rn
+              FROM dispatched_signals d
+              WHERE d.dispatched_at >= ?
+                AND NOT EXISTS (
+                  SELECT 1 FROM bridge_discards b WHERE b.item_id = d.item_id
+                )
+            ) s
+            LEFT JOIN telemetry t
+              ON t.run_id >= ? AND t.decision_seq = s.rn
+            WHERE t.seq IS NULL
+            """,
+            (started_at, min_run_id),
+        ).fetchone()[0]
     )
 
 
@@ -360,6 +450,144 @@ def gate_claim_discard_accounting(
     )
 
 
+def invalid_price_concentration(
+    conn: sqlite3.Connection,
+    *,
+    min_run_id: int,
+    started_at: float,
+) -> dict[str, int]:
+    """``INVALID_PRICE`` je Token — Kanal vs. Universum trennen.
+
+    Die DB führt kein Symbol. ``dispatched_signals`` und ``telemetry`` sind
+    über ``decision_seq`` (Reihenfolge der Erfolgs-Dispatches) verknüpft;
+    der Token kommt aus der freiwilligen ``<data_root>/<user_id>/shadow/
+    news_index.jsonl`` (``item_id`` → ``target_assets``). Ohne Index bleibt
+    der Report leer und benennt das.
+    """
+    index_path = Path.home() / "Library" / "Application Support" / "agentx"
+    items = _load_item_index(index_path)
+    token_map: dict[str, str] = {}
+    for entry in items.values():
+        assets = entry.get("target_assets") or []
+        if len(assets) == 1:
+            token_map[entry.get("item_id", "")] = assets[0]
+
+    rows = conn.execute(
+        """
+        SELECT s.item_id, t.reject_reason FROM (
+          SELECT d.item_id, row_number() OVER (
+                   ORDER BY d.dispatched_at, d.item_id) AS rn
+          FROM dispatched_signals d
+          WHERE d.dispatched_at >= ?
+            AND NOT EXISTS (
+              SELECT 1 FROM bridge_discards b WHERE b.item_id = d.item_id
+            )
+        ) s
+        LEFT JOIN telemetry t ON t.run_id >= ? AND t.decision_seq = s.rn
+        WHERE t.reject_reason = 'INVALID_PRICE'
+        """,
+        (started_at, min_run_id),
+    ).fetchall()
+    out: dict[str, int] = {}
+    for item_id, _reason in rows:
+        token = token_map.get(item_id) or "unknown"
+        out[token] = out.get(token, 0) + 1
+    return dict(sorted(out.items(), key=lambda kv: -kv[1]))
+
+
+def _load_item_index(data_root: Path) -> dict[str, dict[str, Any]]:
+    """Liest ``news_index.jsonl`` (item_id → News-Zeile), falls vorhanden."""
+    out: dict[str, dict[str, Any]] = {}
+    path = data_root / "shadow" / "shadow" / "news_index.jsonl"
+    if not path.exists():
+        return out
+    try:
+        with path.open() as fh:
+            for line in fh:
+                try:
+                    row = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if isinstance(row, dict) and row.get("item_id"):
+                    out[str(row["item_id"])] = row
+    except OSError:
+        return out
+    return out
+
+
+def terminal_classes(recon_detail: dict[str, Any]) -> dict[str, dict[str, int]]:
+    """Zwei orthogonale Achsen — jede schließt auf ihre eigene Bezugsmenge.
+
+    * ``outcome`` klassifiziert nach **Ausgang**; Summe = ``dispatched_success``.
+    * ``origin`` klassifiziert nach **Herkunft**; Summe = ``dispatched_success``.
+
+    ``unattributed`` gehört **nur** in ``origin``. In ``outcome`` gelegt wäre
+    es doppelt gezählt (Run 8: 1 + 26 + 7 + 4 = 38 gegen 34). Die frühere
+    Ein-Zeilen-View mischte zwei Achsen in einer Summe.
+
+    Die Herkunfts-Zeile ist ``telemetry_rows`` **nicht** — die Zahl ist auf
+    Run-Ebene identisch mit der Ausgangssumme und damit als Herkunftszähler
+    wertlos. Gezählt wird ``dispatched_success - unattributed``.
+    """
+    reasons = recon_detail.get("reasons") or {}
+    success = int(recon_detail.get("dispatched_success", 0))
+    unattributed = int(recon_detail.get("unattributed", 0))
+    return {
+        "outcome": {
+            "filled": int(reasons.get("NONE", 0)),
+            "rejected": sum(
+                int(c) for r, c in reasons.items()
+                if r not in ("NONE", "STALE_SNAPSHOT")
+            ),
+            "stale": int(reasons.get("STALE_SNAPSHOT", 0)),
+        },
+        "origin": {
+            "telemetry": success - unattributed,
+            "unattributed": unattributed,
+        },
+    }
+
+
+def _pairs_unique_per_run(conn: sqlite3.Connection, *, min_run_id: int) -> bool:
+    """Je ``run_id``: ``count(*) == count(DISTINCT decision_seq)``."""
+    rows = conn.execute(
+        "SELECT run_id, COUNT(*), COUNT(DISTINCT decision_seq) FROM telemetry "
+        "WHERE run_id >= ? AND decision_seq IS NOT NULL GROUP BY run_id",
+        (min_run_id,),
+    ).fetchall()
+    return all(int(total) == int(distinct) for _rid, total, distinct in rows)
+
+
+def partition_ok(classes: dict[str, dict[str, int]], recon_detail: dict[str, Any]) -> bool:
+    """Jede Achse muss auf ``dispatched_success`` schließen (kein Doppelzählen)."""
+    success = int(recon_detail.get("dispatched_success", 0))
+    return (
+        sum(classes["outcome"].values()) == success
+        and sum(classes["origin"].values()) == success
+    )
+
+
+def count_distinct_item(
+    conn: sqlite3.Connection,
+    table: str,
+    ts_col: str,
+    started_at: Optional[float],
+) -> int:
+    """``count(DISTINCT item_id)`` im selben Zeitfenster — 1:1-Join-Beweis."""
+    if started_at is None:
+        return int(
+            conn.execute(
+                f"SELECT COUNT(DISTINCT item_id) FROM {table}"
+            ).fetchone()[0]
+        )
+    return int(
+        conn.execute(
+            f"SELECT COUNT(DISTINCT item_id) FROM {table} WHERE {ts_col} >= ?",
+            (started_at,),
+        ).fetchone()[0]
+    )
+
+
 def gate_snapshot(
     db_path: Path,
     errors: list[str],
@@ -427,6 +655,26 @@ def gate_snapshot(
         ).fetchone()[0]
         recon = gate_telemetry_reconciliation(conn, min_run_id=min_run_id)
         accounting = gate_claim_discard_accounting(conn, started_at=started_at)
+        invalid_prices = (
+            invalid_price_concentration(
+                conn, min_run_id=min_run_id, started_at=started_at)
+            if started_at is not None
+            else {}
+        )
+        join_ok = (
+            disp == count_distinct_item(
+                conn, "dispatched_signals", "dispatched_at", started_at)
+            and sum(int(c) for _, c in discards)
+            == count_distinct_item(
+                conn, "bridge_discards", "discarded_at", started_at)
+        )
+        # Join-Kardinalität (der Schlüssel, über den tatsächlich gejoint wird).
+        join_key_ok = bool(
+            recon.detail.get("decision_seq_keyed") is not None
+            and recon.detail["decision_seq_keyed"]
+            == recon.detail["decision_seq_distinct_pair"]
+            and recon.detail.get("decision_seq_unique_per_run")
+        )
     except sqlite3.Error as exc:
         _warn(f"gate snapshot skipped: {exc}")
         return None
@@ -443,6 +691,9 @@ def gate_snapshot(
         "stale_snapshot": int(stale),
         "telemetry_fill_metrics": int(fills),
         "duplicate_item_ids": len(dup),
+        "item_id_is_unique": join_ok,
+        "join_is_one_to_one": join_key_ok,
+        "invalid_price_by_asset": invalid_prices,
         "reconciliation": recon,
         "claim_discard_accounting": accounting,
     }
@@ -455,8 +706,10 @@ def gate_snapshot(
     else:
         scope = f">={time_filter}"
     print(f"  time_filter: {scope}")
-    print(f"  dispatched_signals: {disp}")
+    print(f"  claims_total: {disp}")
     print(f"  discard_reasons: {discard_reasons}")
+    print(f"  item_id_is_unique: {join_ok} (Eindeutigkeit der Spalte)")
+    print(f"  join_is_one_to_one: {join_key_ok} (decision_seq / run_id+decision_seq)")
     print(f"  STALE_SNAPSHOT telemetry (run_id>={min_run_id}): {stale}")
     print(f"  telemetry_fill_metrics rows (run_id>={min_run_id}): {fills}")
     print(f"  duplicate item_ids: {len(dup)}")
@@ -469,13 +722,43 @@ def gate_snapshot(
         f"discards={ad.get('discards')} = post={ad.get('post_claim_from_discards')} "
         f"+ pre={ad.get('pre_claim_discards')}"
     )
+    # Terminalklassen (View-Ersatz, kein Rename der Spalten) — zwei Achsen:
+    classes = terminal_classes(recon.detail)
+    print(f"  outcome (Σ=claims_mit_telemetrie): {classes['outcome']}")
+    print(f"  origin  (Σ=dispatched_success):    {classes['origin']}")
+    if recon.detail.get("unattributed"):
+        print(
+            f"  WARN unattributed dispatches (no telemetry row, "
+            f"decision_seq join): {recon.detail['unattributed']}"
+        )
+    if recon.detail.get("dispatched_success"):
+        print(f"  invalid_price_by_asset: {invalid_prices}")
     if dup:
         print(f"  FAIL duplicates: {dup[:5]}")
         _fail(f"duplicate item_ids: {dup[:5]}", errors)
+    if not join_ok:
+        _fail("item_id_is_unique: count(*) != count(DISTINCT item_id)", errors)
+    if not join_key_ok:
+        _fail(
+            "join_is_one_to_one: (run_id, decision_seq) nicht eindeutig "
+            f"(keyed={recon.detail.get('decision_seq_keyed')} "
+            f"pairs={recon.detail.get('decision_seq_distinct_pair')} "
+            f"per_run={recon.detail.get('decision_seq_unique_per_run')})",
+            errors,
+        )
     if recon.status == "RED":
         _fail(
             f"{recon.name}: dispatched_success={recon.detail.get('dispatched_success')} "
-            f"> telemetry_rows={recon.detail.get('telemetry_rows')}",
+            f"telemetry_rows={recon.detail.get('telemetry_rows')} "
+            f"classifiable={recon.detail.get('classifiable')} "
+            f"unattributed={recon.detail.get('unattributed')}",
+            errors,
+        )
+    if not partition_ok(classes, recon.detail):
+        _fail(
+            f"terminal partition: outcome={classes['outcome']} "
+            f"origin={classes['origin']} "
+            f"success={recon.detail.get('dispatched_success')}",
             errors,
         )
     if accounting.status == "RED":
