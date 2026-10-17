@@ -3493,3 +3493,104 @@ offene Stelle ist keine Zeile Code: es ist die Frage im
 nicht gestellte Frage hat einen Default, und er lautet *läuft doch*.**
 
 Suite: **214 passed** (+3: Discard-Nenner, Sentinel-Regel, weiche Schwelle).
+
+## 61. Runde 28 — der dritte Zustand, und die erste Regel, die vor dem Commit fand
+
+### §5.4de — `str(None)` ist `"None"`
+
+```
+SELECT COUNT(*) FROM bridge_discards WHERE item_id IN (NULL,'','None')  → 0
+SELECT COUNT(*) FROM dispatched_signals WHERE …                          → 0
+```
+
+Im Bestand erledigt — **der Bestand entlastet die Codestelle nicht.**
+`str(item_id)` hätte aus einem fehlenden Item eine ID gemacht, die wie
+ein Wert aussieht, und ein Discard mit Grund + scheinbarer ID ist eine
+Zeile, die man später für ein Item hält. Jetzt: `__no_item_id__`, eigener
+Wert, der als Abwesenheit lesbar ist.
+
+### §5.4df — das Protokoll hat drei Zustände und einen Ort für das Ergebnis
+
+Zwei Kästchen (`ja`/`nein`) haben keinen Zustand für „niemand hat
+hingesehen" — und sehen aus wie „bewusst offengelassen". Die Vorlage
+trägt jetzt:
+
+```
+☐ ja   ☐ nein   ☐ nicht entschieden (Grund: ________________)
+```
+
+Und die unterschriebene Fassung bekommt einen Namen mit Datum:
+`UEBERGABEPROTOKOLL-YYYY-MM-DD.md`, committet **nach** dem Gespräch.
+Die Vorlage sagt von sich selbst, dass sie der Entwurf ist — sonst liest
+sie in vier Wochen jemand für die Entscheidung, und dann ist das
+Protokoll die sechste stille Stelle: es existiert, es liegt da, und das
+ausgefüllte Exemplar existiert nur auf Papier.
+
+### §5.4dg — jeder Bruch trägt seine Population im Namen
+
+`325 von 827` war als Bruch korrekt; 827 war nicht die Population, über
+die die Frage gestellt war. Die Regel steht jetzt im Modulkopf:
+
+> **Ein `len()` ohne Prädikat ist die häufigste falsche Menge, weil es
+> wie eine Entscheidung aussieht und keine ist.**
+
+Und die Konsequenz, die schon gegriffen hat:
+
+> **Jede Zahl mit Nenner druckt ihn daneben; sind zwei Nenner möglich,
+> beide.**
+
+Angewandt auf die zwei Kriterienzahlen, die ihren Nenner nicht im Namen
+trugen:
+
+| vorher | jetzt |
+|---|---|
+| `decision_seq-keyed=34` | `decision_seq-keyed(run_id>=7)=34` |
+| `discarded=327` | `discarded=327 (dispatched×discarded im Fenster)` |
+
+### §5.4dh — die Regel hat vor dem Commit gefunden
+
+Das ist der Befund dieser Runde, und er ist keiner über Zahlen:
+
+```
+Discards im Fenster: 393    Topf: 327
+```
+
+393 stand neben 327, im selben `print`, und **fiel auf** — beim Bauen,
+ohne Test. In Runde 24 wäre es durchgegangen. Der Mechanismus ist das
+Nebeneinanderstehen: eine Zahl, die ihren Nenner daneben hat, kann ihren
+Nenner nicht verbergen. Das ist kein Stil, das ist ein Fehlerfinder —
+und er ist jetzt Regel, weil er **zweimal** gefunden hat, was kein Test
+fand.
+
+Buchführungs-Korrektur: die Nenner-Form ist **viermal** dagewesen, nicht
+dreimal — `unattributed 30/300`, `absent_sentiment 325/0`,
+`discard 393/327`, `attributed 4` (skopiert). §1b war die erste, die beim
+Bauen gefunden wurde statt bei der Abnahme.
+
+### §5.4di — siebte Regel: was kein Kriterium trägt, verfällt
+
+Eine Beobachtung ohne Schwelle wird gedruckt, gelesen und irgendwann
+nicht mehr gelesen. Weiche Schwelle statt Kriterium, wo ein Kriterium
+das Urteil unnötig rot machen würde (`WARN attributed: 0 < 4`).
+
+## 62. Der Satz dieser Runde
+
+Achtundzwanzig Runden, und diese ist die erste, in der eine Regel der
+Akte einen Fehler gefunden hat, **bevor er committet wurde**: `393`
+stand neben `327`, und das Nebeneinanderstehen tat, was kein Test tat —
+es zeigte den Nenner.
+
+Der eigene Fehler dabei war der lehrreichste: *die Zahl stimmte, die
+Menge war falsch* — 325 von 827 waren Run-Marker, über echten Items 0
+von 502. Ein `len()` ohne Prädikat ist die häufigste falsche Menge, weil
+es aussieht wie eine Entscheidung und keine ist.
+
+**Was am 20.10. abgenommen wird, ist ein System, das seine Löcher nicht
+mehr wie Meinungen aussehen lässt, seine Nenner danebendruckt und ein
+Protokoll auf den Tisch legt, das von sich sagt, dass es ein Entwurf ist.
+Die eine Stelle, die noch fehlt, ist die billigste: ein drittes Kästchen
+und ein Datum im Dateinamen — damit *niemand hat hingesehen* nicht
+aussieht wie *bewusst offengelassen*. Denn zwei leere Kästchen sind kein
+Zustand, sie sind ein Default.**
+
+Suite: **216 passed** (+2: Protokoll-Zustände, `str(None)`).

@@ -308,6 +308,15 @@ class NewsBridge:
         # Fehlte es, stünde es in `preflight` als `neutral_without_sentiment`.
         score = item.get("sentiment_score", _ABSENT_SENTIMENT)
         if score is _ABSENT_SENTIMENT:
+            # §5.4de: `str(None)` wäre `"None"` — eine Zeichenkette, die wie
+            # eine ID aussieht. Belegt am 17.10.: 0 Zeilen mit `item_id`
+            # `'None'`/NULL/'' im Bestand. Der Bestand entlastet die
+            # Codestelle nicht: ohne diese Prüfung kann sie es erzeugen,
+            # und ein Discard mit Grund + scheinbarer ID ist eine Zeile,
+            # die man später für ein Item hält.
+            if item_id is None or str(item_id).strip() in ("", "None"):
+                self._log_discard("__no_item_id__", "absent_sentiment")
+                return False
             self._log_discard(str(item_id), "absent_sentiment")
             return False
         signal = SignalPayload(

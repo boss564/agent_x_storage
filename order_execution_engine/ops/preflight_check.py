@@ -32,6 +32,25 @@ Vierte Regel: **eine Sequenz braucht ihren Partitionierungsschlüssel.**
 ``decision_seq`` beginnt je Run bei 1 — der vollständige Schlüssel war
 immer ``(run_id, decision_seq)``. Herkunft sagt *woher*, Partition sagt
 *innerhalb wovon*; ein Sequenzwert braucht beides.
+
+Fünfte Regel (§5.4dg): **jeder Bruch trägt seine Population im Namen.**
+Ein ``len()`` ohne Prädikat ist die häufigste falsche Menge, weil es wie
+eine Entscheidung aussieht und keine ist. ``325 von 827`` war als Bruch
+korrekt — 827 war nur nicht die Population, über die die Frage gestellt
+war (die 325 waren Run-Marker; über echten Items: 0 von 502). Wo zwei
+Nenner möglich sind, werden **beide** gedruckt: ``393`` und ``327``
+nebeneinander haben gefunden, was kein Test fand — beim Bauen, nicht bei
+der Abnahme.
+
+Sechste Regel: **ein fehlender Schlüssel ist lauter zu behandeln als ein
+falscher.** Fünf Stellen derselben Familie (``getattr("book")``,
+``DATASET``, ``theta``, ``item_id``, ``sentiment_score``): der stille
+Fall ist immer der fehlende, und fehlend schreit nie.
+
+Siebte Regel (§5.4dh): **was kein Kriterium trägt, verfällt.** Eine
+Beobachtung ohne Schwelle wird gedruckt, gelesen und irgendwann nicht
+mehr gelesen. Weiche Schwelle statt Kriterium, wo ein Kriterium das
+Urteil unnötig rot machen würde.
 """
 
 from __future__ import annotations
@@ -607,7 +626,8 @@ def gate_telemetry_reconciliation(
             name="TELEMETRY_RECONCILIATION", status="RED",
             blocking="ledger",
             reason=f"(1) schreibseite: telemetry_rows={telemetry_rows} != "
-                   f"decision_seq-keyed={keyed} — Zeile ohne Schlüssel",
+                   f"decision_seq-keyed(run_id>={min_run_id})={keyed} — "
+                   f"Zeile ohne Schlüssel",
             detail=detail,
         )
     if keyed != distinct_pair or not pairs_ok:
@@ -1946,7 +1966,8 @@ def gate_snapshot(
             f"attributed={_ds.get('attributed')} · "
             f"unattributed={_ds.get('unattributed')} "
             f"(frühere Runs: {_ds.get('earlier_claims')}) · "
-            f"discarded={_ds.get('discarded')} · "
+            f"discarded={_ds.get('discarded')} "
+            f"(dispatched×discarded im Fenster) · "
             f"traffic_only={_ds.get('traffic_only')}  {_ok}"
         )
         print(

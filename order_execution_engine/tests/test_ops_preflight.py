@@ -276,3 +276,46 @@ def test_shipped_run_policy_matches_defaults_except_theta_is_explicit() -> None:
     assert shipped.snapshot() == defaulted.snapshot(), (
         "run_policy.json beschreibt eine andere Policy als der Default"
     )
+
+
+def test_handover_protocol_has_three_states_not_two() -> None:
+    """`☐ ja ☐ nein` ist kein Zustand, sondern ein Default (§5.4df).
+
+    Zwei leere Kaestchen heissen "niemand hat hingesehen" und sehen aus wie
+    "bewusst offengelassen". Der dritte Zustand ist der Unterschied
+    zwischen einem Protokoll und einem Formular.
+    """
+    path = (Path(__file__).resolve().parents[1] / "ops"
+            / "UEBERGABEPROTOKOLL.md")
+    assert path.exists()
+    text = path.read_text(encoding="utf-8")
+
+    assert text.count("☐ nicht entschieden") >= 4, (
+        "jedes Feld braucht den dritten Zustand"
+    )
+    assert "Grund:" in text, "nicht entschieden braucht einen Grund"
+    assert "Dies ist der Entwurf" in text, (
+        "der Entwurf muss sich als Entwurf ausweisen — sonst liest ihn "
+        "in vier Wochen jemand fuer die Entscheidung"
+    )
+    assert "UEBERGABEPROTOKOLL-YYYY-MM-DD.md" in text, (
+        "die unterschriebene Fassung braucht ein Datum im Namen"
+    )
+
+
+def test_sentiment_absence_never_logs_the_string_none() -> None:
+    """`str(None)` ist `"None"` — eine ID, die wie ein Wert aussieht (§5.4de).
+
+    Im Bestand 0 Zeilen (geprueft 17.10.), aber der Bestand entlastet die
+    Codestelle nicht: ohne Pruefung kann sie es erzeugen.
+    """
+    import inspect
+    from order_execution_engine import news_bridge
+
+    src = inspect.getsource(news_bridge)
+    assert "__no_item_id__" in src
+    i = src.index("absent_sentiment")
+    window = src[max(0, i - 700):i]
+    assert 'in ("", "None")' in window, (
+        "vor dem Log muss `None`/`''`/`'None'` abgefangen werden"
+    )
