@@ -802,6 +802,9 @@ def gate_snapshot(
         f"  verdict historical: {verdicts['historical']}  "
         f"(abgeschlossen, dokumentiert)"
     )
+    # Der Blob wird zur Laufzeit interpoliert, nie als Literal geschrieben:
+    # eine Datei, die ihren eigenen Hash enthält, hätte einen Fixpunkt, der
+    # nicht existiert — jede Korrektur änderte den Wert, den sie korrigiert.
     print(
         f"  blocking:           kein Aufrufer verdrahtet (Stand {_gate_blob['blob'][:12]})"
         " — wer diesen Befehl startet, blockiert; das Urteil selbst bricht nichts ab"

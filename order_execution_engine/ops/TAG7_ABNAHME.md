@@ -1,6 +1,6 @@
 # Tag-7-Abnahme — Shadow Execution Engine
 
-**Abnahme: Montag, 20.10.2025, 10:00** · Berichtstermin: Montag, 03.11.2025
+**Abnahme: Dienstag, 20.10.2026, 10:00** · Berichtstermin: Dienstag, 03.11.2026
 
 Stand: 17.10.2026. Dieses Dokument ist **vorab** festgeschrieben. Wird später
 etwas anders gelesen, gilt die hier stehende Nummer, nicht eine neue Lesart.
@@ -11,24 +11,42 @@ Das Kriterium beurteilt genau diesen Stand.
 
 ## 0. Termin
 
-**Tag 7 = Montag, 20.10.2025, 10:00.** Auflösung per Befehl, **Ausgaben
-eingefügt, nicht eingetippt** (`date -j -f "%Y-%m-%d" <datum> "+%A"`,
-17.10.2026, 17:27):
+**Tag 7 = Dienstag, 20.10.2026, 10:00.**
+
+**Jahrgang — vier Zeugen, die übereinstimmen müssen** (17.10.2026, 17:40:37):
+
+```
+date                2026-10-17T17:40:37+0200 (Saturday)
+git log -1 %cI      2026-10-17T17:38:19+02:00
+ps -o lstart= -p    Wed Oct 14 21:23:32 2026
+find -newermt       muß dieselben Treffer liefern wie `ps`-Start
+```
+
+Alle vier sagen **2026**. Bis sie übereinstimmen, keine Abnahme — das ist
+die erste Zeile des Protokolls, nicht eine Vorrede.
+
+**Auflösung per Befehl, Ausgaben eingefügt, nicht eingetippt:**
 
 | Datum | Ist-Ausgabe | Rolle |
 |---|---|---|
-| **2025-10-20** | `Monday` | **Tag 7 — Abnahme** (Code, entscheidbar) |
-| 2025-11-03 | `Monday` | **Berichtstermin Marktbeobachtung** |
-| 2025-11-01 | `Saturday` | **kein Termin** — Wochenende, niemand zuständig |
-| 2026-10-20 | `Tuesday` | **nicht** der Abnahmetag (Jahreszahl-Falle) |
+| **2026-10-20** | `Tuesday` | **Tag 7 — Abnahme** (Jahrgang des Prozesses) |
+| 2026-11-03 | `Tuesday` | Berichtstermin Marktbeobachtung |
+| 2026-10-17 | `Saturday` | dieser Arbeitsstand (nicht Freitag) |
+| 2026-10-14 | `Wednesday` | Prozessstart (`ps lstart`) |
+| 2025-10-20 | `Monday` | **nicht** der Abnahmetag — Jahreszahl-Falle |
 
-> Historische Notiz: Fassung `4fc93054` nannte „03.11." als Dienstag und
-> `bd241b1a` nannte „01.11.2026" als Samstag. Beides waren Etiketten:
-> 2025-11-03 ist ein **Montag**, 2026-11-01 ein **Sonntag**. Damit sind in
-> dieser Akte **vier** Kalenderangaben nachträglich aufgelöst worden, keine
-> davon beim ersten Schreiben. Die verbleibende Fehlerform: drei Zeilen waren
-> abgeschrieben, die vierte gerechnet — ein aufgelöstes Etikett, das
-> transkribiert statt eingefügt wird, ist wieder ein Etikett.
+> **Der Befund hinter dieser Tabelle:** Frühere Fassungen zertifizierten
+> `2025-10-20 → Monday`, während der Prozeszeuge `Wed Oct 14 2026` sagte.
+> Beides stimmt für sich — und zusammen heißt es: **Zeile 0 prüfte die
+> Wochentage von 2025, der Prozeß läuft seit 2026.** Eine Tabelle, die für
+> 2025 stimmt, ist kein Beleg für ein Dokument aus 2026. Das ist keine
+> Rechenungenauigkeit, sondern eine **nicht anwendbare Prüfung** — und sie
+> fällt nicht auf, weil jede Zeile für sich korrekt ist.
+>
+> In dieser Akte sind damit **fünf** Zeitangaben nachträglich aufgelöst
+> worden, keine beim ersten Schreiben. Die Fehlerform bleibt dieselbe: ein
+> Etikett, das nie gegen seinen Gegenstand gehalten wurde — hier gegen das
+> **Jahr**, das in keiner der früheren Tabellen stand.
 
 Das Datum ist **unbedingt**, nicht bedingt auf §5.1: Variante C ist
 synthetisch und hängt weder an Run 8/9 noch am Markt noch an
@@ -73,7 +91,7 @@ Kalenderangaben, nur heißt das Etikett diesmal Commit.
 > 31.10. 23:59 grün sind. Reale Fills bis 01.11. sind Beobachtung und gehen
 > nicht in das Urteil ein.
 
-**Frist: Montag, 20.10.2025, 10:00 — unbedingt.** Die frühere Fassung trug
+**Frist: Dienstag, 20.10.2026, 10:00 — unbedingt.** Die frühere Fassung trug
 diese Frist noch als „offen"; die Begründung dafür (Sorge um einen
 Handler-Umbau vor dem Periodenende) ist mit `01fdbb1d` entfallen, weil C
 synthetisch ist.
@@ -99,7 +117,7 @@ Fill-Handler sind unverändert — kein Mock der Entscheidungslogik.
 
 ## 2. Urteilstabelle (6 Zeilen, je Beobachtung ein Verdikt)
 
-**Abnahmeprotokoll Montag, 20.10.2025, 10:00** — jede Zeile hat Befehl,
+**Abnahmeprotokoll Dienstag, 20.10.2026, 10:00** — jede Zeile hat Befehl,
 **erwartete Ausgabe** und **Verdikt bei Abweichung**.
 
 **Regel für `NICHT ENTSCHEIDBAR`:** zulässig **nur** in Zeilen 5 und 6 —
@@ -110,7 +128,7 @@ Freifahrtschein für die einzige Zeile, die den Termin selbst trägt.
 
 | # | Befehl | Erwartete Ausgabe | Verdikt bei Abweichung |
 |---|---|---|---|
-| 0 | `date -j -f "%Y-%m-%d" 2025-10-20 "+%A"` | `Monday` (**Ist, eingefügt**) | **NICHT BESTANDEN** |
+| 0 | `date -j -f "%Y-%m-%d" 2026-10-20 "+%A"` | `Tuesday` (**Ist, eingefügt**) | **NICHT BESTANDEN** |
 | 1 | `pytest order_execution_engine/tests/` | `157 passed` | **NICHT BESTANDEN** |
 | 2a | `pytest -k test_c1_positive` | `1 passed, 2 deselected`; Fill im Spread | **NICHT BESTANDEN** |
 | 2b | `pytest -k test_c2_negative` | `1 passed, 2 deselected`; `INVALID_PRICE`, keine Metrik | **NICHT BESTANDEN** |
@@ -384,6 +402,19 @@ mtime-Sweep:
 find order_execution_engine -name '*.py' -newermt '2026-10-14 21:23:32'
 ```
 
+**Der Threshold ist der Prozeszeuge — nicht ein Datum der Akte.** Er muß
+denselben Jahrgang tragen wie `ps -o lstart= -p 962` (`Wed Oct 14 21:23:32
+2026`). Die Gegenprobe gehört dazu, weil ein zu weites Fenster mehr fängt
+und damit *nicht* widerlegt, was es prüfen soll:
+
+```
+find … -newermt '2026-10-14 21:23:32'  →  4 Treffer   (Prozessstart 2026)
+find … -newermt '2025-10-14 21:23:32'  → 26 Treffer   (Fenster ein Jahr zu weit)
+```
+
+Die 26 wären **kein** Befund über den geladenen Code — sie sind der Beweis,
+daß das Fenster den Start nicht beschreibt. Nur die 4 sind die Messung.
+
 **Ausgabe 17.10.2026 — nicht leer. Vier Treffer, einzeln verhandelt:**
 
 | Treffer | mtime | Befund | Tragweite |
@@ -626,6 +657,19 @@ einem einzigen toten Symbol genauso vereinbar wie mit zwanzig. Es gibt derzeit
 | `blocking: … (Stand <blob>)` | Werkzeug, datiert | Werkzeug selbst |
 | Kopfzeilen-Regel im pre-commit | Doku | **Hook** (nicht mehr von Hand) |
 | `git rev-parse <commit>:<path>` | Adressauflösung Doc↔Werkzeug | Mensch, bei Abnahme |
+
+**Die Handprüfung nach dem Commit war vakuum-grün.** `git diff | rg '^[-+]##'`
+vergleicht Arbeitsstand gegen Index — nach `git commit` sind beide identisch,
+und leer hat dann zwei Ursachen: sauber, oder nichts mehr zu prüfen. Die
+Form, die den Commit prüft:
+
+```
+git show <commit> -- <datei> | rg '^[-+]#{2} '
+```
+
+Das ist dieselbe Bauform wie `git diff --quiet` bei untracked (Runde 1): das
+Werkzeug stimmt, der Zeitpunkt war der falsche. Der Hook prüft `--cached` und
+greift dort richtig; die Handprüfung daneben tat es nicht.
 
 ## 8. Tests dieser Runde
 
