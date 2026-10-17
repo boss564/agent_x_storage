@@ -35,6 +35,20 @@ synthetisch und hängt weder an Run 8/9 noch am Markt noch an
 `integrate_news_index`. §5.1 entscheidet eine Zeile im Bericht
 („Basis: Run 8 / Run 8+9"), nicht das Urteil.
 
+**Basis-Zeile (Code je Run, nicht nur Run-Nummern):**
+
+| Gegenstand | Commit / Hash | Rolle |
+|---|---|---|
+| Run 8 + 9 (Daten) | `5c5bc364` · Runner `92338139e8…` | **erzeugt** von diesem Stand |
+| Gate (Urteil) | `preflight_check.py` `3dad796a…` | **neu**, beurteilt post hoc |
+| Gate im Betrieb | — | **kein Dienstbestandteil**, nur manueller Aufruf |
+| Ab `Run 10` | `e91916bd` (Runner identisch) | belastbare Basis des neuen Stands |
+
+> **„Run 8 + 9" ist richtig als Datengrundlage und falsch als
+> Codegrundlage.** Wer in drei Wochen Run 9 mit Run 11 vergleicht, vergleicht
+> Daten aus `5c5bc364` mit Daten aus `e91916bd` — bei identischem Runner, aber
+> neuem Prüfer. Ohne diese Zeile sieht das aus wie dasselbe Programm.
+
 ## 1. Festschreibung des Kriteriums (Variante C)
 
 > Tag 7 gilt als bestanden, wenn (a) der Replay-Positivfall einen Fill mit
@@ -105,6 +119,27 @@ weicht sie ab, ohne dass `NICHT ENTSCHEIDBAR` zulässig ist, ist die Zeile
 Diese drei gehören ins Protokoll, nicht in die Fußnote. Abnahme ist Code und
 heute entscheidbar; Beobachtung ist Markt und entscheidbar irgendwann. Ein
 Termin, der beides trägt, verschiebt das Entscheidbare auf das Unentscheidbare.
+
+## 2b. Ablauf am 20.10. — die Abfrage, die den Gegenstand vom Etikett trennt
+
+| Zeit | Schritt | Erwartung |
+|---|---|---|
+| 09:40 | `git diff 5c5bc364 e91916bd -- order_execution_engine/shadow_runner.py` | **Ist-Ausgabe ins Protokoll** (17.10. vorab: leer) |
+| 09:42 | `rg -n "preflight_check" --glob '!tests/**' --glob '!*.md' .` | **Ist-Ausgabe** (17.10. vorab: leer → Gate ist kein Dienstbestandteil) |
+| 09:50 | Preflight **manuell** aufrufen | `current:`/`historical:` vom Werkzeug, nicht vom Dienst |
+| 10:00 | Zeilen 0–6 | `Monday`, `157 passed`, `historical: RED`, Wurzel leer |
+| 10:05 | Basis-Zeile | Code je Run, nicht nur Run-Nummern |
+
+**Neustart: entfällt** — solange der Runner-Diff leer bleibt. Der Befund vom
+17.10. lautet: Runner byte-identisch, Gate nicht im Ladepfad. Die beiden
+Abfragen bleiben trotzdem im Protokoll, weil sie die einzigen sind, die den
+Abnahmegegenstand vom Etikett trennen. Fällt der Diff am 20.10. **nicht** leer
+aus, ist ein Neustart Vorbedingung und der Termin verschiebt sich — nicht die
+Messung, sondern das Urteil.
+
+**Die zwei Verdikte kommen aus einem manuellen Aufruf.** Das ist die
+Konstruktion (Daten durch Dienst, Urteil post hoc), aber es heißt: der Beleg
+ist eine vorzeigbare Terminalausgabe, kein Logauszug des Dienstes.
 
 ## 3. Nenner-Regel
 
@@ -232,11 +267,16 @@ fest, dass Run 8 dokumentiert und nicht blockierend erscheint.
 
 ### 5.4 mtime-Sweep — der Beweis für „Basis Run 8+9"
 
-`sha256(Tree) == HEAD` belegt den Tree von **heute**, nicht den von
+`sha256(Datei) == HEAD` belegt den Tree von **heute**, nicht den von
 `14.10. 21:23:32`. Zwischen beiden liegt genau das Fenster, in dem
 `integrate_news_index` im Tree gestanden haben könnte; `lsof` hilft nicht, weil
 es offene Dateien zählt, nicht geladene Module. Die Lücke schließt allein der
 mtime-Sweep:
+
+> **Korrektur (§5.4b):** Der richtige Referent ist nicht `HEAD`, sondern
+> `5c5bc364`. Der Satz oben muss heißen: „`sha256` **gegen `5c5bc364`**
+> belegt den Tree von damals, nicht den von heute." Gegen HEAD gemessen
+> beantwortet der Vergleich die falsche Frage.
 
 ```
 find order_execution_engine -name '*.py' -newermt '2026-10-14 21:23:32'
@@ -294,6 +334,72 @@ Neustart nötig, keine Neumessung.
 **Grenze:** Die Abfrage ist statisch. Ein dynamischer Import (`importlib`,
 `__import__`) wäre unsichtbar — im Runner gibt es keinen; das ist gelesen,
 nicht gesucht.
+
+### 5.4b Der Referent hat sich bewegt — Korrektur von §5.4a
+
+**§5.4a verglich gegen `HEAD` (= `e91916bd`), geladen wurde am 14.10. aber
+`5c5bc364`.** „Inhalt == HEAD" beweist „aktuellster Stand", nicht „geladener
+Stand". Die Abfrage mit dem richtigen Referenten (17.10.2026, 17:30):
+
+```
+git diff 5c5bc364 e91916bd -- order_execution_engine/shadow_runner.py
+  → leer
+```
+
+Belegt über Objekt-Hashes statt über die Arbeitsdatei:
+
+| Gegenstand | Wert |
+|---|---|
+| `5c5bc364:…/shadow_runner.py` | `92338139e8850f05a9a7334e8dc3d4ca599cd874` |
+| `e91916bd:…/shadow_runner.py` | `92338139e8850f05a9a7334e8dc3d4ca599cd874` |
+| `sha256` Arbeitsdatei | `1a71c15f…ac4` |
+
+**Was sich zwischen `5c5bc364` und `e91916bd` tatsächlich ändert:**
+
+```
+ops/TAG7_ABNAHME.md                         | 423 ++++
+ops/preflight_check.py                      | 344 +++-
+tests/test_fill_replay.py                   | 180 +++
+tests/test_telemetry_reconciliation.py      | 245 +++-
+```
+
+**Der Prüfer ist neu, die Daten sind alt** — `preflight_check.py`
+`af801db1…` → `3dad796a…`. Das ist zulässig (post-hoc-Beurteilung), aber es
+muss in der Basis-Zeile stehen, sonst wird Run 9 in drei Wochen für einen
+Lauf des neuen Prüfers gehalten.
+
+**Beschriftungsfehler (korrigiert):** In Runde 3 stand „`sha256` Tree == HEAD
+(`1a71c15f…ac4`)". Das war ein **Datei**-Hash (`shadow_runner.py`), kein
+Tree-Hash. Der Tree-Hash ist `5c5bc364` (die Commit-ID, kein Messwert).
+Werkzeug richtig, Etikett falsch — dieselbe Bauform wie `git diff --quiet`
+bei untracked Dateien.
+
+### 5.4c Das Gate ist kein Dienstbestandteil
+
+Die Plist `com.agentx.shadow-runner.plist` startet ausschließlich
+
+```
+.venv/bin/python3 -u -m order_execution_engine.shadow_runner --data-root … --tail-from-end
+```
+
+`rg preflight_check` über das Repo **ohne Tests und ohne Doku**: **null
+Treffer**. Es gibt keinen Aufrufer im Betrieb.
+
+| Aussage | Befund |
+|---|---|
+| Läuft das Gate im Dienst? | **nein, nie** |
+| Erzeugt der Dienst `current:`/`historical:`? | **nein** — diese Ausgabe kommt aus einem manuellen Aufruf |
+| Neustart nötig, um das Gate zu laden? | **nein** — es ist nicht im Ladepfad |
+| Neustart nötig für Run-8/9-Daten? | **nein** — Runner-Code identisch |
+
+**Kein Neustart.** Ein Neustart würde den Runner neu starten, um ein Werkzeug
+zu laden, das er nicht lädt — eine Nachbereitung ohne Gegenstand. Ein
+Neustart aus falschem Anlass ist derselbe Fehler wie eine Ausnahme ohne Fall.
+
+**Konsequenz für den 20.10.:** Die Trennung *Daten erzeugen* (Dienst) vs.
+*Daten beurteilen* (manuell) ist die Konstruktion, nicht ein Mangel. Sie macht
+aber den Aufrufer zum Prüfer — genau deshalb steht Zeile 5 im Protokoll und
+wird mit vorzeigbarer Ausgabe belegt.
 
 ### 5.5 Provenienz-Regel (Korrektur)
 
