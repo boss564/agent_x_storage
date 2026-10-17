@@ -18,14 +18,41 @@ from typing import Any, Optional
 
 REPO = Path(__file__).resolve().parents[2]
 
-# Die Dateien, in denen das Kriterium lebt (§5.4aq). Der Marker beobachtet
-# den Satz, nicht eine Datei: eine Regel, die in drei Dateien steht und nur
-# in einer überwacht wird, ist in den anderen zwei unsichtbar.
-CRITERION_FILES = (
-    "order_execution_engine/ops/preflight_check.py",
-    "order_execution_engine/ops/START.md",
-    "order_execution_engine/ops/TAG7_ABNAHME.md",
-)
+
+def _criterion_files() -> tuple:
+    """Die Dateien, die das Kriterium zitieren — abgeleitet, nicht gepflegt.
+
+    (§5.4au) Eine gepflegte Liste ist die, die veraltet: die vierte Datei,
+    die ein Etikett zitiert, steht in ``DERIVED``s Liste erst, wenn jemand
+    sie einträgt. Deshalb wird die Liste aus dem Bestand gelesen: jede
+    Produktionsdatei, die ein Gate-Etikett als Literal führt, gehört in den
+    Satz. Der Code selbst ist immer dabei.
+
+    Das ist billig (ein Dateidurchlauf, einmal pro Gate-Lauf) und wächst von
+    selbst: wer ein Etikett in eine neue Datei schreibt, macht sie damit
+    sichtbar — statt sie unsichtbar zu lassen, bis jemand daran denkt.
+    """
+    root = Path(__file__).resolve().parents[1]
+    marks = ("LEDGER_CONSISTENT", "PROVISIONAL_", "TELEMETRY_RECONCILIATION")
+    found = {Path(__file__).resolve()}
+    for p in root.rglob("*"):
+        if "__pycache__" in p.parts or p.parent.name == "tests":
+            continue
+        if p.suffix not in (".py", ".md"):
+            continue
+        if p.resolve() == Path(__file__).resolve():
+            continue
+        try:
+            txt = p.read_text(encoding="utf-8", errors="ignore")
+        except OSError:
+            continue
+        if any(m in txt for m in marks):
+            found.add(p.resolve())
+    return tuple(sorted(str(p.relative_to(REPO)) for p in found))
+
+
+# Rückwärtskompatibel für Zeugen, die die Liste als Konstante lesen.
+CRITERION_FILES = _criterion_files()
 OPS = Path(__file__).resolve().parent
 if str(REPO) not in sys.path:
     sys.path.insert(0, str(REPO))
@@ -260,7 +287,9 @@ def gate_telemetry_reconciliation(
     )
     run_closed = latest_run_is_closed(conn)
     # Alter des offenen Laufs — die zweite Hälfte der Aussage. Der Block
-    # ohne Zahl ist ein Zustand, der Block mit Zahl eine Beobachtung.
+    # ohne Zahl ist ein Zustand, der Block mit Zahl eine Beobachtung. Sie
+    # steht NEBEN dem Etikett (§5.4as), nicht darin: sie ändert sich
+    # stündlich, das Urteil nicht.
     open_hours = max(0.0, (time.time() - started_at) / 3600.0)
     # Geliefert = genehmigte Entscheidungen. Nicht zu verwechseln mit
     # dispatched (Angebote an die Bridge) und nicht mit classifiable
@@ -307,6 +336,7 @@ def gate_telemetry_reconciliation(
         "unattributed": unattributed,
         "orphan_rows": orphan_rows,
         "run_closed": run_closed,
+        "open_for_hours": round(open_hours, 1),
         "delivered": delivered,
         "delivered_since": delivered_since,
     }
@@ -376,14 +406,13 @@ def gate_telemetry_reconciliation(
         # keine Beobachtung, sondern ein Bruchstück. „PROVISIONAL" sagt, daß
         # die Zahl ein Stand ist und keine Tatsache — sie kann sich ändern,
         # ohne daß der Ledger sich verschlechtert hat.
-        # Ein offener Lauf trägt jetzt seine Dauer im Etikett (§5.4an):
-        # PROVISIONAL_LEDGER_CONSISTENT(open 13.0d). Ein Etikett, das immer
-        # gilt, unterscheidet nichts mehr — die Zahl macht aus dem Zustand
-        # eine Beobachtung.
-        status=(
-            "LEDGER_CONSISTENT" if run_closed
-            else f"PROVISIONAL_LEDGER_CONSISTENT(open {open_hours / 24:.1f}d)"
-        ),
+        # Der ZUSTAND, nicht die Anzeige (§5.4as): das Etikett ist wieder
+        # idempotent — solange nichts geschieht, ändert es sich nicht. Die
+        # Dauer steht daneben (open_for_hours), nicht darin. Ein Urteil, das
+        # sich ohne Zustandsänderung ändert, ist keine Aussage mehr, sondern
+        # eine Uhr.
+        status="LEDGER_CONSISTENT" if run_closed
+        else "PROVISIONAL_LEDGER_CONSISTENT",
         detail=detail,
     )
 
@@ -498,6 +527,30 @@ def dispatches_without_telemetry(
             (started_at, min_run_id),
         ).fetchone()[0]
     )
+
+
+def _blocking_callers() -> set:
+    """Wer ruft das Gate blockierend auf? (§5.4at)
+
+    Gesucht wird nach Importen des Gate-Moduls in Produktionscode — außer
+    der CLI selbst. Ein Import ist nicht automatisch ein Aufruf, aber er
+    ist die Vorbedingung: ohne Import kann niemand blocken. Was hier leer
+    zurückkommt, ist ein Text ohne Wirkung — und das ist eine Aussage, die
+    auf die Urteilszeile gehört, nicht in den Bericht.
+    """
+    root = Path(__file__).resolve().parents[1]
+    hits = set()
+    for py in root.rglob("*.py"):
+        if py.parent.name == "tests" or "__pycache__" in py.parts:
+            continue
+        if py.resolve() == Path(__file__).resolve():
+            continue
+        src = py.read_text(encoding="utf-8", errors="ignore")
+        if "preflight_check import" in src or (
+            "import preflight_check" in src and "ops" in src
+        ):
+            hits.add(py.name)
+    return hits
 
 
 def _print_process_age() -> None:
@@ -1163,6 +1216,21 @@ def gate_snapshot(
             f"  verdict:            {recon.status} "
             f"({d.get('telemetry_rows')} Zeilen, "
             f"{d.get('delivered')} Auslieferungen)"
+        )
+        print(f"  open_for:           {d.get('open_for_hours')} h"
+              f" ({d.get('open_for_hours', 0) / 24:.1f} d) — der Lauf, "
+              "nicht die Stille")
+        # Die Abnahme (§5.4at): sechzehn Runden Urteile, und keines hat je
+        # etwas angehalten. Ob dieses Etikett wirkt, entscheidet nicht der
+        # Satz im Terminal, sondern ein Aufrufer im Dienst. Solange keiner
+        # verdrahtet ist, ist das Urteil ein Text — und das steht hier.
+        wired = bool(_blocking_callers())
+        print(
+            "  wired:              "
+            + ("ja — " + ", ".join(sorted(_blocking_callers()))
+               if wired else
+               "nein — der 20.10. schaltet den ersten Aufrufer ein; "
+               "bis dahin wirkt dieses Urteil nicht")
         )
         cov = d.get("coverage_pct")
         print(

@@ -1773,3 +1773,158 @@ Was bleibt, ist die eine Ziffer, die keine Runde beheben kann: **0
 Auslieferungen sind 0.** Das Urteil stimmt, das Etikett ist ehrlich, das
 Etikett ist datiert — und der Dienst liefert nichts aus, weil der
 Mapping-Layer seit 13 Tagen taub ist. Kein Gate macht das anders.
+
+## 19. §5.4aw — Die Stundenticks machen es schlimmer, nicht besser
+
+Die Erwartung war: 336 Slots statt eines 3.848-Sekunden-Lochs, also
+Auflösung auf Stunden. Die Abfrage:
+
+```
+SELECT reason, count(*), datetime(min(discarded_at),...), datetime(max(...))
+FROM bridge_discards GROUP BY 1;
+```
+
+| Ursache | n | erster | letzter |
+|---|---|---|---|
+| `unresolved_asset` | 1 | 10-04 10:00:08 | 10-04 10:00:08 |
+| `no_book` | 124 | 10-04 12:00:10 | 10-17 09:00:08 |
+| `unresolved_asset:empty_list` | 66 | 10-04 15:00:06 | 10-17 17:00:06 |
+| `unresolved_asset:mapping_miss` | 201 | 10-04 16:00:07 | 10-17 18:00:08 |
+
+**Es gibt keinen Wechsel.** Alle drei Ursachen laufen ab dem 04.10.
+nebeneinander her, 13 Tage lang, gleichzeitig am selben Tag. Die Akte hat in
+Runde 14 („`unresolved_asset` → `no_book` → `mapping_miss`") und in §5.4aj
+(„die Auflösung steht") einen **stufenweisen Verfall** behauptet. Den gibt es
+nicht.
+
+`mapping_miss` begann 16:00:07 am 04.10. — **vier Stunden nach** `no_book`
+(12:00:10) und **eine Stunde nach** `empty_list` (15:00:06). Danach blieben
+alle drei in Betrieb. Was kippte, kippte in den ersten sechs Stunden des
+Laufs; die 13 Tage danach sind ein Gleichgewicht, kein Verfall.
+
+Und die 392-vs-360-Differenz ist erklärt:
+
+```
+66 Discards ohne Dispatch = die 66 empty_list-Zeilen (item_id nie dispatched)
+```
+
+Kein Zusatzverkehr, keine verwaisten Zeilen — `empty_list` wird verworfen,
+bevor es einen Dispatch gibt. `(3b) orphan_rows` prüft also korrekt.
+
+## 20. §5.4ax — Die 30 Zeilen in Run 8 sind keine Auslieferungen
+
+Die Akte behauptete ab §5.4ab: *„Run 8 startete 11:12:39 und erzeugte 30
+Entscheidungen in Sekunden (inkl. der einzigen `approved=1`)."* Geprüft:
+
+```
+run 8 start          2026-10-04 11:12:39
+erster Dispatch     2026-10-04 12:00:10   (+47 min, erster Stundentick)
+Dispatches bis 12:00   1   (10:00:08, unresolved_asset — vor dem Lauf)
+telemetry run 8        30   (seq 1..30, lückenlos)
+```
+
+`open_run()` schreibt **nur** den `telemetry_runs`-Eintrag
+(`persistence.py:531`), keine Telemetrie. Die 30 Zeilen stammen also nicht
+vom Laufstart — sie stammen aus 30 Engine-Entscheidungen ab 11:12:39, die
+**nicht** dispatchet wurden.
+
+Damit ist die Aussage „in Sekunden" unbelegt: das Entscheidungsfenster ist
+nicht gemessen, `telemetry` hat kein `ts`-Feld. Was gemessen ist: 30
+Entscheidungen, 0 Dispatches bis 12:00:10. Entscheidung und Dispatch sind
+entkoppelt.
+
+## 21. §5.4ay — `success` und `rows` zählen zwei verschiedene Dinge
+
+| Größe | Bedeutung | Wert |
+|---|---|---|
+| `telemetry_rows` | Entscheidungen der Engine | 34 |
+| `dispatched_success` | Dispatches ohne `bridge_discards`-Eintrag | 34 |
+| `approved = 1` | genehmigte Entscheidungen | **1** |
+| `delivered` | Fills, die das Portfolio erreicht haben | **0** |
+
+Die Gleichheit `rows == success` ist erfüllt — **weil beide Seiten dasselbe
+Maß benutzen**: eine Zeile pro Entscheidung, ein Dispatch pro Entscheidung,
+kein Discard ⇒ erfolgreich. Sie ist **kein** Beweis dafür, daß eine
+Entscheidung eine Auslieferung wurde.
+
+Das war in §5.4a richtig beschrieben und ist in den Etiketten
+`LEDGER_CONSISTENT`/`PROVISIONAL_LEDGER_CONSISTENT` verlorengegangen. Das
+Etikett spricht jetzt nur noch über den **Ledger**; die Zahl, die über den
+Dienst spricht, ist `delivered` und steht daneben.
+
+## 22. §5.4as — `open_for` neben dem Urteil
+
+Das Etikett trägt seine Dauer nicht mehr: `PROVISIONAL_LEDGER_CONSISTENT` ist
+wieder idempotent. Die Dauer steht daneben.
+
+```
+verdict:   PROVISIONAL_LEDGER_CONSISTENT (4 Zeilen, 0 Auslieferungen)
+open_for:  70.6 h (2.9 d) — der Lauf, nicht die Stille
+```
+
+Ein Urteil, das sich ohne Zustandsänderung ändert, ist eine Anzeige. Der
+Zeuge kann das Etikett jetzt wieder pinnen.
+
+## 23. §5.4at — `wired: nein` steht auf der Urteilszeile
+
+```
+wired:  nein — der 20.10. schaltet den ersten Aufrufer ein; bis dahin wirkt dieses Urteil nicht
+```
+
+`_blocking_callers()` sucht Importe des Gate-Moduls in Produktionscode
+(außer der CLI). Sechzehn Runden Urteile, und keines hat je etwas
+angehalten — der Unterschied zwischen `BLOCKED` (Runde 1) und `PROVISIONAL`
+(Runde 15) war nie ein operativer. **Das ist die eigentliche Abnahme des
+20.10.:** nicht ein Etikett abnehmen, sondern den ersten Aufrufer einschalten.
+Was er dann tut, steht bisher nirgends.
+
+## 24. §5.4au — `DERIVED`s Dateiliste wächst von selbst
+
+Statt `CRITERION_FILES` zu pflegen, wird sie gelesen: jede Produktionsdatei,
+die ein Gate-Etikett zitiert, gehört in den Satz. Heute dieselben drei; eine
+vierte macht sich beim Anlegen sichtbar, statt bis zum Eintragen unsichtbar
+zu bleiben. Der Marker nennt weiterhin, **welche** abweicht.
+
+## 25. §5.4av — Die vierte Gestalt, und ihre Grenze
+
+| Gestalt | Erkenner | gefangen |
+|---|---|---|
+| Konstante | Namensverbot | ✅ |
+| Kalenderwert | `[=!<>]= 20\d\d` | ✅ |
+| Literal | Etikett + Vergleich | ✅ |
+| Ableitung | rechte Seite = Term × oder ÷ | ✅ teilweise |
+
+**Die Grenze ist im Fixture festgehalten, nicht weggeredet:**
+`(n - 1) // 2` und `a < b / 2` erkennt der Wächter **nicht**. Regex kann
+einen Klammerausdruck nicht von einer Division unterscheiden. Der Wächter ist
+ein Filter, kein Beweis — und die beiden Zeilen stehen als
+`("Grenze (nicht erkannt)", ..., False)` in der Suite, damit die Lücke nicht
+wächst, ohne daß sie jemand liest.
+
+**Die historischen Zeilen sind Fixture, nicht Kommentar.** Alle drei alten
+Instanzen plus zwei Ableitungs-Formen plus drei Gegenproben. Der Wächter
+prüft jetzt Regression statt Zustand — der Satz der letzten Runde, angewandt.
+
+## 26. Tests dieser Runde
+
+| Zeuge | Aussage |
+|---|---|
+| `test_rule_constant_guard_catches_history` | 8 Fälle: 3 Gestalten erkannt, 1 teilweise, 2 Grenzen benannt, 3 Gegenproben |
+| `test_derived_observes_the_whole_criterion_set` | Dateiliste abgeleitet, nicht gepflegt |
+| `test_closed_at_schema_is_the_reason` | Schema ist der Grund |
+| `test_criterion_is_printed_in_the_same_order_as_the_red_branches` | (1) als Korollar |
+
+Suite: **181 passed**.
+
+## 27. Der Satz dieser Runde
+
+Die Stundenauflösung hat nicht den Wechsel gezeigt, sondern sein Fehlen:
+**alle drei Ursachen laufen seit dem 04.10. parallel.** Damit fällt die
+Erzählung vom stufenweisen Verfall, die diese Akte zwei Runden lang
+mitgetragen hat — sie war eine plausible Reihenfolge, keine Messung.
+
+Und der Befund, der größer ist als alle vier Buchungen:
+**`approved=1` ist 1, `delivered` ist 0, und `rows == success` ist trotzdem
+erfüllt.** Die Gleichung stimmt, weil sie zwei Dinge zählt, die dasselbe Maß
+haben. Das Etikett hat darüber nie gelogen — aber es hat auch nie darüber
+gesprochen.

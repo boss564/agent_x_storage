@@ -1002,12 +1002,92 @@ def test_no_rule_constant_lives_as_literal_copy_in_production() -> None:
                     f"{py.relative_to(root)}:{n}  Jahr {y} im Vergleich in "
                     f"{code.strip()}"
                 )
+            # Gestalt 4: Schwelle AUS einer Messung berechnet (§5.4av).
+            # `0.1 * total`, `len(x) / 2` — weder Konstante noch Literal
+            # noch Kalenderwert, und sie wandert mit, wenn die Messung sich
+            # ändert. Erkannt wird: rechte Seite beginnt mit einem Term und
+            # einem Arithmetik-Operator.
+            #
+            # GRENZE, benannt: `(n - 1) // 2` (Ausdruck in Klammern) und
+            # `b / 2` (Division einer Variablen, keine Messung) sind mit
+            # Regex nicht sicher zu trennen. Der Wächter ist damit ein
+            # Filter, kein Beweis — die Test-Fixture unten hält fest,
+            # welche Formen er kennt und welche nicht.
+            m = re.search(r"(?:[=!<>]=|[<>])", code)
+            if m and _rhs_is_derived(code[m.end():]):
+                offenders.append(
+                    f"{py.relative_to(root)}:{n}  abgeleitete Schwelle in "
+                    f"{code.strip()}"
+                )
     assert offenders == [], (
         "Regel-Konstante als Literal-Kopie in einem Vergleich:\n  "
         + "\n  ".join(offenders)
         + "\nDas Kriterium lebt dann in zwei Dateien und wandert nicht mit. "
         "Vergleiche gegen die Gate-Funktion, nicht gegen ihren Text."
     )
+
+
+def _rhs_is_derived(rhs: str) -> bool:
+    """Rechte Seite eines Vergleichs: ist sie aus einer Messung berechnet?
+
+    Kennt drei Formen sicher (``0.1 * total``, ``len(x) / 2``,
+    ``n * 0.9``) und zwei nicht (``(n - 1) // 2``, ``b / 2``). Die
+    Grenze steht im Zeugen ``test_rule_constant_guard_catches_history``.
+    """
+    import re
+
+    return bool(re.match(
+        r"\s*[\w.]+(?:\([^()]*\))?\s*(?:[*/]|//)\s*[\w.(]", rhs,
+    )) and not re.match(r"\s*[a-z_]\w*\s*/\s*\d+\s*[:)]?\s*$", rhs)
+
+
+def test_rule_constant_guard_catches_history() -> None:
+    """Der Wächter gegen die Historie, nicht gegen heute (§5.4av).
+
+    *„Eine Prüfung, die nur gegen heute läuft, findet nie, was gestern
+    falsch war."* Die drei Instanzen sind als Fixture festgehalten: sie
+    waren einmal im Code und dürfen nie wieder durchgehen. Kommt eine
+    vierte Gestalt dazu, gehört ihre Zeile hierher — dann prüft die Suite
+    Regression statt Zustand.
+    """
+    import re
+
+    labels = ("LEDGER_CONSISTENT",)
+    cases = [
+        # (Gestalt, Zeile, muß gefangen werden)
+        ("Konstante", "if telemetry_rows < MIN_TELEMETRY_ROWS:", True),
+        ("Kalenderwert", "if year_expected == 2025 and run_started >= since:", True),
+        ("Literal", 'and snapshot["verdicts"]["current"] != "LEDGER_CONSISTENT"', True),
+        ("Ableitung", "if delivered < 0.1 * total:", True),
+        ("Ableitung", "if rows > len(all_rows) / 2:", True),
+        # Grenze des Wächters, ausdrücklich als Lücke festgehalten:
+        # Klammerausdruck und einfache Division sind regex nicht sicher
+        # zu trennen. Sie stehen hier, damit die Grenze nicht wächst,
+        # ohne daß jemand sie liest.
+        ("Grenze (nicht erkannt)", "if rows > (n - 1) // 2:", False),
+        ("Grenze (nicht erkannt)", "if a < b / 2:", False),
+        # Gegenproben: was NICHT gefangen werden darf.
+        ("Harmlos", "threshold = 0.1 * n", False),
+        ("Harmlos", "run_id = int(cur.lastrowid)", False),
+        ("Harmlos", "if rows != keyed:", False),
+    ]
+    cmp_ = re.compile(r"[=!<>]=")
+    banned = ("MIN_TELEMETRY_ROWS", "PINNED_MIN_TELEMETRY_ROWS")
+
+    def caught(code: str) -> bool:
+        g1 = any(re.search(rf"\b{b}\b", code) for b in banned)
+        g2 = bool(cmp_.search(code)) and any(f'"{lb}"' in code for lb in labels)
+        g3 = bool(re.findall(r"[=!<>]=\s*(20\d\d)\b", code))
+        m4 = re.search(r"(?:[=!<>]=|[<>])", code)
+        g4 = bool(m4) and _rhs_is_derived(code[m4.end():])
+        return g1 or g2 or g3 or g4
+
+    misses = []
+    for kind, line, want in cases:
+        got = caught(line)
+        if got != want:
+            misses.append(f"{kind}: erwartet {want}, bekam {got} — {line}")
+    assert misses == [], "Wächter-Lücken:\n  " + "\n  ".join(misses)
 
 
 def test_derived_observes_the_whole_criterion_set() -> None:
