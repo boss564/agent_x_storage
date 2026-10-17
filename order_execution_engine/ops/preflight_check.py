@@ -7,6 +7,7 @@ Exit 0 = grün, Exit 1 = rot (Fail-closed für Messperioden-Start).
 from __future__ import annotations
 
 import argparse
+import datetime
 import json
 import sqlite3
 import subprocess
@@ -72,6 +73,12 @@ _DEFAULT_APP = Path.home() / "Library" / "Application Support" / "agentx"
 DEFAULT_DATA_ROOT = _DEFAULT_APP / "shadow_live"
 DEFAULT_NEWS_JSONL = _DEFAULT_APP / "news_scores.jsonl"
 DEFAULT_MIN_RUN_ID = 7
+# Wie alt darf der jüngste Fill sein, damit "DELIVERING" gilt? Der Dispatcher
+# taktet stündlich; zwei Takte ohne Fill heißt: der jüngste Beleg ist kein
+# Betrieb mehr. Nicht der Laufanfang ist der Maßstab, sondern die Gegenwart
+# (§5.4bg) — sonst gilt ein Fill von vor 11 Tagen als frisch, weil er innerhalb
+# des Lauf-Fensters liegt.
+FRESH_FILL_S = 2 * 3600.0
 
 # Keine Untergrenze mehr (§5.4v). Sie hieß MIN_TELEMETRY_ROWS = 4 und ihr
 # Wert stammte aus Run 9 — also aus 100 % einer gefilterten Menge. Sie war in
@@ -325,11 +332,34 @@ def gate_telemetry_reconciliation(
     # `fills` kann fehlen (ältere Schemata, Fixtures ohne Fill-Schicht).
     # Dann ist die vierte Stufe nicht gemessen — `None`, nicht `0`: eine
     # Null würde behaupten, es sei nichts geliefert worden.
+    #
+    # `fills` hat keine Statusspalte (§5.4be): Vollständigkeit steht nur in
+    # `telemetry.status`, und dort als Urteil des Ausführers. Der Fill kennt
+    # nur Mengen. Also rechnen wir — `sum(executed)/sum(requested)` ist die
+    # Zahl, die den Dienst beschreibt, nicht `COUNT(*)`. Bei seq 12: 5 von 5
+    # ausgeführt (Quotient 1,0), aber 5 von 100 angefragt (Quotient 0,05).
+    # Die Zeile sagte `PARTIALLY_FILLED`, obwohl der Fill voll war — und die
+    # Akte las daraus "1 Fills".
     try:
-        fills_total = int(conn.execute("SELECT COUNT(*) FROM fills").fetchone()[0])
+        _f = conn.execute(
+            "SELECT COUNT(*), SUM(CAST(executed_size AS REAL)),"
+            " SUM(CAST(requested_size AS REAL)) FROM fills"
+        ).fetchone()
+        fills_total = int(_f[0])
+        _ex, _rq = _f[1], _f[2]
+        fill_ratio = (round(_ex / _rq, 6)
+                      if _ex is not None and _rq else None)
+        # Voll / teilweise nach Urteil des Ausführers, wo vorhanden.
+        _v = conn.execute(
+            "SELECT SUM(CASE WHEN t.status = 'FILLED' THEN 1 ELSE 0 END),"
+            " SUM(CASE WHEN t.status = 'PARTIALLY_FILLED' THEN 1 ELSE 0 END)"
+            " FROM fills f JOIN telemetry t ON t.order_id = f.order_id"
+        ).fetchone()
+        fills_full, fills_partial = int(_v[0] or 0), int(_v[1] or 0)
         _fs = conn.execute("SELECT MAX(filled_at) FROM fills").fetchone()[0]
     except sqlite3.OperationalError:
-        fills_total, _fs = None, None
+        fills_total, fills_full, fills_partial = None, None, None
+        fill_ratio, _fs = None, None
     # Zeitformate sind heterogen (§5.4bc): dispatched_at/started_at = REAL
     # (unixepoch), fills.filled_at = TEXT ISO-8601, telemetry = gar keins.
     # Deshalb wird das Feld ausgegeben, wie es gespeichert ist — nicht in
@@ -342,17 +372,63 @@ def gate_telemetry_reconciliation(
     # steht, während der Ledger stimmt (§5.4ba). Das ist ein zweites
     # Etikett, kein sechstes Wort im ersten: ein Etikett kann nicht
     # gleichzeitig "konsistent" und "steht still" sagen.
-    if delivered > 0:
+    # Ein Etikett "DELIVERING" neben einem Fill von vor 11 Tagen sagt
+    # "läuft", während das Letzte, was lief, zwei Wochen alt ist. `delivered`
+    # ist ein Zähler, kein Datum — die Frage "liefert es jetzt?" entscheidet
+    # nur `last_fill` (§5.4be).
+    #
+    # Und die Grenze ist nicht der Laufanfang: das Fenster beginnt am 04.10.,
+    # der Fill liegt am 06.10. — 2,4 Tage NACH Fensterbeginn, also "frisch"
+    # im Vergleich, obwohl seither 11 Tage vergangen sind. Der Maßstab ist
+    # der Abstand zum letzten Erfolg, nicht zum ersten (§5.4bg).
+    _fresh_fill = False
+    if _fs is not None:
+        try:
+            _ts = float(_fs)
+        except (TypeError, ValueError):
+            # ISO-8601-Text, kein Epoch — der Typ-Bruch aus §5.4bc.
+            try:
+                _ts = datetime.datetime.fromisoformat(
+                    str(_fs).replace("Z", "+00:00")).timestamp()
+            except ValueError:
+                _ts = None
+        # Toleranz: eine Stunde (der Takt des Dispatchers) plus Beobachtungs-
+        # rest. Danach ist der jüngste Fill ein Beleg, kein Betrieb.
+        _fresh_fill = (_ts is not None
+                       and (time.time() - _ts) <= FRESH_FILL_S)
+
+    if delivered > 0 and _fresh_fill:
         delivery_label = "DELIVERING"
-    elif dispatched > 0:
+    elif delivered > 0 or dispatched > 0:
         # Es gab Erfolge, aber keine genehmigte Zeile im Fenster. Ob der
         # Dienst steht, entscheidet die vierte Stufe — nicht die Summe
         # aller Fills: ein Fill von vor 13 Tagen ist kein Betrieb, sondern
         # ein Beleg. (Erste Fassung prüfte `fills_total == 0` und nannte
         # Run 9 bei 1 Fill "NO_TRAFFIC" — falsch in beide Richtungen.)
-        delivery_label = "NO_DELIVERY_SINCE"
+        #
+        # Und ein TEILFILL ist kein Fill (§5.4be). 5 von 5 ausgeführt, aber
+        # 5 von 100 angefragt: die Order wurde zu 5 % bedient. Ein Etikett
+        # "NO_DELIVERY" neben "1 Fills" sagte "keine" und trug eine 1 —
+        # die Form, die diese Akte dreimal korrigiert hat.
+        delivery_label = "DELIVERY_STALLED_SINCE"
     else:
         delivery_label = "NO_TRAFFIC"
+    # Der Positivfall (§5.4bf): `order_id` ist der Fremdschlüssel, der
+    # existiert — aber nur in 8 von 34 Zeilen. `telemetry_seq` ist in allen
+    # 361 Dispatches NULL, also läuft die Zuordnung über `decision_seq`,
+    # eine Reihenfolge-Annahme über zwei Reihenfolgen. Der eine Fill zeigt,
+    # daß die Annahme an der Stelle falsch ist, an der sie zählt.
+    try:
+        fk = conn.execute(
+            "SELECT COUNT(*), COUNT(order_id) FROM telemetry"
+        ).fetchone()
+        fk_rows, fk_set = int(fk[0]), int(fk[1])
+        paired = int(conn.execute(
+            "SELECT COUNT(*) FROM fills f"
+            " JOIN telemetry t ON t.order_id = f.order_id"
+        ).fetchone()[0])
+    except sqlite3.OperationalError:
+        fk_rows, fk_set, paired = None, None, None
     detail = {
         "min_run_id": min_run_id,
         "started_at": started_at,
@@ -376,7 +452,13 @@ def gate_telemetry_reconciliation(
         "delivered_since": delivered_since,
         "delivery": delivery_label,
         "fills_total": fills_total,
+        "fills_full": fills_full,
+        "fills_partial": fills_partial,
+        "fill_ratio": fill_ratio,
         "last_fill": last_fill,
+        "fk_rows": fk_rows,
+        "fk_set": fk_set,
+        "fk_paired": paired,
     }
     # Null-Bedingung statt Untergrenze (§5.4v).
     #
@@ -1111,11 +1193,13 @@ def _gate_criterion(min_run_id: int) -> str:
         "(7) COVERAGE = telemetry_rows / dispatched_signals im Fenster "
         "(heute 4/61 = 6.6 %) — spricht über den Ausschnitt, nicht über "
         "den Dienst. "
-        "(8) DELIVERY = eigenes Etikett, NICHT dieses: "
-        "NO_DELIVERY_SINCE wenn dispatched_success > 0 und keine "
-        "genehmigte Zeile und kein Fill im Fenster. Zwei Etiketten, weil "
-        "ein Etikett nicht gleichzeitig 'konsistent' und 'steht still' "
-        "sagen kann."
+        "(8) DELIVERY = eigenes Etikett, NICHT dieses: DELIVERING nur "
+        "wenn ein Fill im Fenster UND jünger als FRESH_FILL_S (2 Takte); "
+        "DELIVERY_STALLED_SINCE wenn dispatched_success > 0, aber kein "
+        "frischer oder kein genehmigter Fill; NO_TRAFFIC ohne Erfolge. "
+        "Ein Teilfill zählt als Teilfill (fill_ratio), nicht als Fill. "
+        "Zwei Etiketten, weil ein Etikett nicht gleichzeitig "
+        "'konsistent' und 'steht still' sagen kann."
     )
 
 
@@ -1322,13 +1406,25 @@ def gate_snapshot(
                "nichts — kein Skript liest die Urteilszeile")
         )
         d = recon.detail
+        _ft = d.get("fills_total")
         print(
             f"  delivery:           {d.get('delivery')} "
             f"({d.get('dispatched_success')} Erfolge, "
             f"{d.get('delivered')} genehmigt, "
-            f"{d.get('fills_total')} Fills"
+            + (f"{_ft} Fills ({d.get('fills_full')} voll, "
+               f"{d.get('fills_partial')} teilweise, "
+               f"fillsumme {d.get('fill_ratio')})"
+               if _ft is not None else "Fills: nicht gemessen")
             + (f", letzter {d.get('last_fill')}" if d.get("last_fill") else "")
             + ")"
+        )
+        # Der Fremdschlüssel, den es gibt und den kaum jemand schreibt.
+        print(
+            f"  fk order_id:        {d.get('fk_set')}/{d.get('fk_rows')} "
+            f"Telemetriezeilen gesetzt, "
+            f"{d.get('fk_paired')} Fill(s) darüber gepaart — "
+            "telemetry_seq ist in allen Dispatches NULL, die Zuordnung "
+            "läuft über eine Reihenfolge-Annahme"
         )
         cov = d.get("coverage_pct")
         print(

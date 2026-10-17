@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import datetime
 import io
 import sqlite3
 import tempfile
@@ -43,7 +44,8 @@ def _schema(conn: sqlite3.Connection) -> None:
             reject_reason TEXT,
             status TEXT,
             run_id INTEGER,
-            decision_seq INTEGER
+            decision_seq INTEGER,
+            requested_size TEXT
         );
         CREATE TABLE dispatched_signals (
             item_id TEXT PRIMARY KEY,
@@ -1108,7 +1110,7 @@ def test_delivery_is_a_second_label_not_a_word_in_the_first() -> None:
     g = gate_telemetry_reconciliation(conn, min_run_id=9)
     conn.close()
     assert g.status.startswith("PROVISIONAL_LEDGER_CONSISTENT"), g.status
-    assert g.detail["delivery"] == "NO_DELIVERY_SINCE", g.detail["delivery"]
+    assert g.detail["delivery"] == "DELIVERY_STALLED_SINCE", g.detail["delivery"]
     assert g.detail["dispatched_success"] > 0
     assert g.detail["delivered"] == 0
     # Und das Ledger-Etikett darf NICHT rot sein, nur weil nichts
@@ -1431,3 +1433,107 @@ def test_latest_run_failure_blocks_even_when_called_with_old_min_run_id() -> Non
     assert snap["verdicts"]["current"].startswith(
             "PROVISIONAL_LEDGER_CONSISTENT")
     assert errors == [], errors
+
+
+# ---------------------------------------------------------------------------
+# §5.4be–bi — der Positivfall, der Teilfill, die Frische-Grenze, der FK
+# ---------------------------------------------------------------------------
+
+
+def _bridge_conn(filled_at: str, *, status: str = "PARTIALLY_FILLED",
+                 executed: str = "5", requested: str = "5") -> sqlite3.Connection:
+    """Run 1 komplett außerhalb des Fensters, ein Fill in `fills`.
+
+    Bildet den einen Positivfall der Akte nach (§5.4bf): `decision_seq=12`,
+    06.10. 18:00:06.993672Z, `PARTIALLY_FILLED`. Das Fenster beginnt am
+    04.10. — der Fill liegt *innerhalb* des Fensters, aber 11 Tage her.
+    """
+    conn = sqlite3.connect(":memory:")
+    _schema(conn)
+    conn.execute("CREATE TABLE fills (order_id TEXT, fill_idx INTEGER,"
+                 " executed_size TEXT, requested_size TEXT,"
+                 " filled_at TEXT, decision_seq INTEGER)")
+    t0 = time.time() - 13 * 86400.0     # Laufbeginn: 13 Tage her
+    conn.execute("INSERT INTO telemetry_runs VALUES (1, ?, 'x', '{}')", (t0,))
+    conn.execute(
+        "INSERT INTO telemetry (signal_id, order_id, latency_ms, approved,"
+        " reject_reason, status, run_id, decision_seq)"
+        " VALUES ('s12', 'ord-12', 1.0, 1, 'NONE', ?, 1, 12)", (status,))
+    conn.execute("INSERT INTO dispatched_signals VALUES ('i1', ?, NULL)",
+                 (t0 + 5,))
+    conn.execute("INSERT INTO fills VALUES ('ord-12', 0, ?, ?, ?, 12)",
+                 (executed, requested, filled_at))
+    conn.commit()
+    return conn
+
+
+def test_fill_after_window_start_but_old_is_not_delivering() -> None:
+    """Frische wird an der Gegenwart gemessen, nicht am Laufanfang (§5.4bg).
+
+    Erste Fassung: `_fresh_fill = _ts >= started_at`. Der Fill vom 06.10.
+    liegt 2,4 Tage *nach* dem Fensterbeginn (04.10.) — also „frisch", obwohl
+    seither 11 Tage vergangen sind. Das Etikett las sich `DELIVERING` neben
+    einem Beleg von vor zwei Wochen: genau die Form, die diese Akte dreimal
+    korrigiert hat. `FRESH_FILL_S` = zwei Dispatcher-Takte.
+    """
+    old = "2026-10-06T18:00:06.993672Z"
+    conn = _bridge_conn(old)
+    g = gate_telemetry_reconciliation(conn, min_run_id=1)
+    conn.close()
+    assert g.detail["delivery"] == "DELIVERY_STALLED_SINCE", g.detail
+    # … und der Grund steht daneben, nicht im Etikett.
+    assert g.detail["last_fill"] == old
+
+    # Ein Fill von jetzt ist Betrieb — nicht "nur ein Beleg".
+    conn = _bridge_conn(datetime.datetime.now(datetime.timezone.utc)
+                        .isoformat(timespec="microseconds")
+                        .replace("+00:00", "Z"))
+    g = gate_telemetry_reconciliation(conn, min_run_id=1)
+    conn.close()
+    assert g.detail["delivery"] == "DELIVERING", g.detail
+
+
+def test_partial_fill_is_counted_as_partial_not_as_a_fill() -> None:
+    """`1 Fills` neben `NO_DELIVERY` war dasselbe Muster (§5.4be).
+
+    `fills` hat keine Statusspalte — die Vollständigkeit steht nur in
+    `telemetry.status`, als Urteil des Ausführers. Bei seq 12: 5 von 5
+    ausgeführt (Quotient 1,0), aber 5 von 100 angefragt (0,05). Die Zeile
+    sagte `PARTIALLY_FILLED`, obwohl der Fill voll war. Zählte man nur
+    Zeilen, wären beide ununterscheidbar — deshalb Mengen, nicht Rows.
+    """
+    conn = _bridge_conn(datetime.datetime.now(datetime.timezone.utc)
+                        .isoformat(timespec="microseconds")
+                        .replace("+00:00", "Z"))
+    conn.execute("UPDATE telemetry SET requested_size = 100 WHERE decision_seq=12")
+    conn.execute("UPDATE fills SET requested_size = 100")
+    g = gate_telemetry_reconciliation(conn, min_run_id=1)
+    conn.close()
+    assert g.detail["fills_total"] == 1
+    assert g.detail["fills_full"] == 0
+    assert g.detail["fills_partial"] == 1
+    # Die Zahl, die den Dienst beschreibt: 5 von 100 bedient.
+    assert g.detail["fill_ratio"] == 0.05, g.detail["fill_ratio"]
+
+
+def test_order_id_is_reported_as_the_fk_that_was_hardly_written() -> None:
+    """Kardinalität ist nicht Identität (§5.4bi).
+
+    `telemetry_seq` ist in allen Dispatches NULL; die Zuordnung läuft über
+    `decision_seq` — eine Reihenfolge-Annahme über zwei Reihenfolgen.
+    `order_id` existiert als FK, ist aber nur in 8 von 34 Zeilen gesetzt.
+    Der Gate meldet beides, damit die Grenze sichtbar ist, statt still zu
+    bleiben: der Ledger kann grün sein und permutiert.
+    """
+    conn = _bridge_conn("2026-10-06T18:00:06.993672Z")
+    for i in range(2, 5):                     # drei Zeilen ohne order_id
+        conn.execute(
+            "INSERT INTO telemetry (signal_id, latency_ms, approved,"
+            " reject_reason, run_id, decision_seq)"
+            " VALUES (?, 1.0, 0, 'INVALID_PRICE', 1, ?)", (f"s{i}", i))
+    conn.commit()
+    g = gate_telemetry_reconciliation(conn, min_run_id=1)
+    conn.close()
+    assert g.detail["fk_rows"] == 4
+    assert g.detail["fk_set"] == 1
+    assert g.detail["fk_paired"] == 1

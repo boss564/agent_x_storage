@@ -1967,7 +1967,10 @@ Die Zeile „0 Auslieferungen" ist **korrekt über das Fenster** und **falsch
 erste da. `delivery` steht jetzt daneben:
 
 ```
-delivery:  NO_DELIVERY_SINCE (4 Erfolge, 0 genehmigt, 1 Fills, letzter 2026-10-06T18:00:06)
+delivery:  DELIVERY_STALLED_SINCE (4 Erfolge, 0 genehmigt, 1 Teilfill, letzter 2026-10-06T18:00:06)
+           # Überschrieben in §5.4bd — hier steht der Stand von Runde 18:
+           # "NO_DELIVERY_SINCE" sagte "nie" neben einer 1. Die Form, die
+           # diese Akte dreimal korrigiert hat.
 ```
 
 ### Die Kette, vier Stufen, drei Übergänge
@@ -1989,7 +1992,7 @@ Spalte, die antwortet.
 
 ```
 verdict:   PROVISIONAL_LEDGER_CONSISTENT   (der Ledger)
-delivery:  NO_DELIVERY_SINCE               (der Dienst)
+delivery:  DELIVERY_STALLED_SINCE          (der Dienst, §5.4bd)
 ```
 
 `(8)` blockt **nicht** — sie ist ein zweites Etikett, kein sechstes Wort im
@@ -2051,3 +2054,201 @@ taubste Stelle der Kette ist die, für die es keine Spalte gibt.
 Das Urteil ist damit vollständig, und vollständig heißt hier: es sagt über
 jede Stufe genau das, was gemessen ist — und nichts über die, die es nicht
 sieht.
+
+## 35. Runde 19 — der Positivfall, und die Korrektur an mir selbst
+
+### §5.4ay — Der vierte Grund ohne Namen: `unresolved_asset` (1)
+
+Neben `:empty_list` (66) und `:mapping_miss` (201 → **202** um 20:00:08;
+die Quelle lebt, s. Abfrage A) steht ein Treffer ohne Untertyp. Er ist der
+Warmup-Dispatch **vor jedem Fenster** — 08:00:08, der eine Aufruf, nach dem
+der Dispatcher in den Stundentakt fällt. Er liegt außerhalb jedes
+Beobachtungsfensters und wird bewußt unklassifiziert gelassen: ein Fall
+ohne Namen an einer Stelle ohne Fenster braucht keinen Untertyp, weil kein
+Fenster ihn je zählt. Die Zeile existiert nur, damit die Summe stimmt —
+`66 + 202 + 1 = 269` ist die vollständige Discard-Menge ohne Dispatch-Bezug
+(gesamt 393, davon 124 `no_book`).
+
+Das ist dieselbe Form wie die Approval-Lücke, eine Stufe früher: *ein
+Zähler ohne Spalte*. Der Unterschied ist, daß sie hier **gewollt** ist.
+
+**Und der Beweis, warum Abfragen ins Repo gehören:** der Satz „201
+`mapping_miss`" stand in dieser Akte seit Runde 14 und war bei der
+Niederschrift von Runde 19 bereits falsch. Die Abfrage hat es nicht
+gefunden, weil sie neu war — sie hat es gefunden, weil sie **gespeichert**
+ist und beim nächsten Lauf erneut läuft.
+
+Das ist dieselbe Form wie die Approval-Lücke, eine Stufe früher: *ein
+Zähler ohne Spalte*. Der Unterschied ist, daß sie hier **gewollt** ist.
+
+### §5.4bb — `decision_seq = 12`: der Positivfall mit Zeiger
+
+Die Akte hatte bis hierher 33 Zeugen für das, was fehlt, und keinen für
+das, was reicht. Er existiert:
+
+```
+run_id=8  decision_seq=12  approved=1  reject_reason=NONE
+status=PARTIALLY_FILLED    requested_size=100   latency=0.485 ms
+order_id=13630cce-9ad4-4ff8-baa1-012bcf8d9c95
+fill:    0.005 @ 5 / 5    2026-10-06T18:00:06.993672Z   BUY   fill_idx=0
+```
+
+Und die Nachbarn: `seq 10 = STALE_SNAPSHOT`, `seq 11 = INVALID_PRICE`,
+`seq 12 = approved`, `seq 13 = INVALID_PRICE`, `seq 14 = STALE_SNAPSHOT`.
+Die andere Frage — „welches Asset wurde aufgelöst und warum bei 11 und 13
+nicht" — ist damit beantwortet: **es war kein anderes Asset.** Seq 11 und
+13 fielen an `INVALID_PRICE`, und beide tragen `requested_size = NULL`,
+weil die Ablehnung *vor* der Ordererzeugung griff. Bei seq 12 existierte
+ein Preis, also entstand eine Order. Der Unterschied ist nicht das Asset,
+sondern ob ein Orderbuch-Snapshot vorlag.
+
+**Der Positivfall ist also kein Mapping-Erfolg, sondern ein Preis-Erfolg.**
+
+### §5.4bc — `PARTIALLY_FILLED` ist kein Fill, und der Quotient lügt nicht
+
+Die Zeile sagte `1 Fills` neben `NO_DELIVERY`. Zwei Fehler auf einmal:
+
+1. **`fills` hat keine Statusspalte.** Die Vollständigkeit steht nur in
+   `telemetry.status` — als *Urteil des Ausführers*, nicht als Messung.
+   Wer `COUNT(*)` zählt, zählt Zeilen, nicht Ausführungen.
+2. **Bei seq 12 widerspricht das Urteil der Menge.** `executed_size = 5`,
+   `fills.requested_size = 5` → der Fill war **vollständig** (Quotient
+   1,0). `telemetry.requested_size = 100` → die **Order** wurde zu 5 %
+   bedient (Quotient 0,05). `PARTIALLY_FILLED` bezieht sich auf die
+   Order, nicht auf den Fill. Beide Zahlen sind wahr, und sie beschreiben
+   verschiedene Dinge.
+
+Die Zahl, die den Dienst beschreibt, ist `sum(executed_size) /
+sum(requested_size)` über die **Fill**-Zeilen — bei seq 12: **1,0**. Der
+Gate gibt jetzt alle drei aus: `fills_total`, `fills_full`,
+`fills_partial`, `fill_ratio`. Eine Zeile ist kein Fill.
+
+### §5.4bd — `DELIVERY_STALLED_SINCE` statt `NO_DELIVERY`
+
+Drei Etiketten reichten nicht. Die vierte Stufe braucht ein Wort, das
+sagt: *es lief einmal, und seitdem nicht*. `DELIVERING` (falsch),
+`NO_DELIVERY_SINCE` (sagt „nie") und `NO_TRAFFIC` (sagt „nie gefragt")
+lassen den Fall „einmal, dann nie" aus.
+
+```
+delivery: DELIVERY_STALLED_SINCE
+```
+
+### §5.4be — Die Frische wird an der Gegenwart gemessen, nicht am Laufanfang
+
+Erste Fassung: `_fresh_fill = _ts >= started_at`. Ergebnis: `DELIVERING`
+neben einem Fill von vor **11 Tagen**. Der Grund war ein Denkfehler im
+Maßstab: das Fenster beginnt am 04.10., der Fill liegt am 06.10. — 2,4
+Tage **nach** Fensterbeginn, also „im Fenster", obwohl seither 11 Tage
+vergangen sind. Im Fenster heißt nicht frisch.
+
+Der Maßstab ist jetzt `FRESH_FILL_S = 2 × 3600 s` — zwei Dispatcher-Takte.
+Danach ist der jüngste Fill ein **Beleg**, kein **Betrieb**. Das ist die
+vierte Kopie desselben Musters in dieser Akte: ein Vergleich gegen die
+falsche Referenz, der plausibel aussieht, weil beide Zahlen stimmen.
+
+### §5.4bf — Der `unresolved_asset: 1` ist jetzt benannt
+
+Siehe §5.4ay. Er steht in der Abfrage `queries/2026-10-17T2020_seq12.sql`
+mit, damit die Discard-Menge vollständig bleibt.
+
+### §5.4bg — `status` statt Boolean: sieben Zustände, alle entschieden
+
+Die Vermutung war: `approved = 0` + `reject_reason IS NULL` = „nicht
+entschieden", 33 Stück, ohne Spalte. **Die Abfrage widerlegt sie.**
+
+```
+approved=0  reject_reason gesetzt  n=33   -> rejected
+approved=1  reject_reason gesetzt  n= 1   -> approved
+approved=0  reject_reason IS NULL  n= 0
+```
+
+Es gibt **null** unentschiedene Zeilen. Und das ist kein Zufall: der
+Validator `ExecutionReport._consistency` in `models.py` verlangt seit
+jeher, daß `approved=0` einen `reject_reason ≠ NONE` trägt — sonst
+`ValueError("Abgelehnt ohne reject_reason.")`. Die Approval-Stufe ist
+nicht taub. **Sie ist die einzige Stufe, die vollständig funktioniert
+hat:** 33 Ablehnungen, jede mit Grund, 26 davon *vor* der
+Ordererzeugung (`requested_size IS NULL`).
+
+Die Aufteilung nach Grund: `INVALID_PRICE` 26, `STALE_SNAPSHOT` 7.
+Beide sind Ablehnungen, keine Ausfälle.
+
+**Korrektur an dieser Akte:** §5.4ai–bc haben die 33 als „unentschieden"
+geführt. Das war eine Schlußfolgerung aus dem Schema, nicht aus den
+Daten. Die Daten sagen: 33 = 26 + 7, vollständig begründet. Der Fehler
+war nicht die taubere Stelle — er war die Annahme, eine taubere Stelle
+*sehen* zu können, ohne sie abzufragen.
+
+Damit ist die Kette nicht `361 → 34 → 1 → 1`, sondern:
+
+```
+361 dispatch → 34 (327 Discards)  →  34 approve/reject  →  1 approved  →  1 Fill
+                  voll benannt        volle Begründung        der Engpass
+```
+
+Der Engpass ist **nicht** die Genehmigung, sondern die **Preisverfügbarkeit**:
+von 34 erreichten Entscheidungen fielen 26 an `INVALID_PRICE`.
+
+### §5.4bh — Kardinalität ist nicht Identität: der FK, den es gibt
+
+`telemetry_seq` ist in **allen 361** Dispatches `NULL`. `rows == success`
+vergleicht also zwei unabhängige Sequenzen über `decision_seq` — eine
+Reihenfolge-Annahme über zwei Reihenfolgen. Eine Vertauschung bleibt
+unsichtbar.
+
+Aber: **`order_id` existiert**, und zwar als echtes Feld in beiden Tabellen:
+
+```
+telemetry.order_id gesetzt  :  8 / 34
+fills.join über order_id    :  1 / 1   (genau der Fill)
+```
+
+Und der Beweis, daß die Positionsannahme an der Stelle falsch ist, an der
+sie zählt:
+
+```
+fill   decision_seq=12   →  06.10. 18:00:06
+rn=12  (12. nicht-discardeter Dispatch)  →  06.10. 20:00:06   (+2 h)
+```
+
+Der 12. erfolgreiche Dispatch ist **nicht** die 12. Entscheidung. Die
+Zuordnung über `decision_seq` ist damit nicht nur ungeprüft, sie ist an
+genau einem Punkt nachweislich falsch. Der Gate gibt `fk_rows`, `fk_set`,
+`fk_paired` aus, damit diese Grenze sichtbar bleibt statt still zu sein:
+**der Ledger kann grün sein und permutiert.**
+
+### §5.4bi — Abfragen mit Zeitstempel
+
+`queries/2026-10-17T2020_seq12.sql` — die Abfrage, nicht das Ergebnis.
+Der Stand steht im Kopf (20:20, +1 Dispatch/Stunde), damit jede
+Fortschreibung der Quelle eine *dokumentierte Differenz* wird statt einer
+stillen Korrektur. Und der Typ-Bruch aus §5.4bc (REAL vs. TEXT vs. keine
+Spalte) ist in jeder gespeicherten Abfrage als Kommentar vermerkt, weil
+ein `WHERE` auf einer `REAL`-Spalte mit einem String still `0` liefert —
+ununterscheidbar von einem echten „nichts da".
+
+## 36. Tests dieser Runde
+
+| Zeuge | Aussage |
+|---|---|
+| `test_fill_after_window_start_but_old_is_not_delivering` | Frische an der Gegenwart, nicht am Laufanfang |
+| `test_partial_fill_is_counted_as_partial_not_as_a_fill` | Mengen statt Zeilen: 5/100 = 0,05 |
+| `test_order_id_is_reported_as_the_fk_that_was_hardly_written` | 1/4 gesetzt, 1 gepaart — sichtbar, nicht still |
+
+Suite: **187 passed**.
+
+## 37. Der Satz dieser Runde
+
+Die Runde, die den Fehler im eigenen Werkzeug fand, hat auch den einzigen
+Erfolg gefunden — und den Erfolg dann umgeschrieben: er ist kein
+Mapping-Erfolg, sondern ein Preis-Erfolg. 26 von 34 scheiterten an einem
+fehlenden Orderbuch, nicht an einem fehlenden Namen. Und die Stelle, die
+diese Akte für taub hielt — die Genehmigung — war die einzige, die
+vollständig funktioniert hat: 33 Nein, jedes mit Grund, 26 davon bevor
+eine Order entstand.
+
+Was am 20.10. abgenommen wird, ist ein Urteil über 9,4 % des Verkehrs, mit
+einem benannten Positivfall und einer widerlegten Annahme. Und der FK,
+der die Fundstelle schließen würde, existiert: `order_id`, gesetzt in 8
+von 34 Zeilen. Es fehlt kein Feld — es fehlt, daß es gefüllt wird.

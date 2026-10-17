@@ -105,7 +105,9 @@ PYTHONPATH=. python3 order_execution_engine/ops/preflight_check.py --after-start
 | `unresolved_asset:mapping_miss` | Stillverlierer — News liefert Asset, Freeze kennt es nicht |
 | `STALE_SNAPSHOT` | ≈ 0 |
 | `TELEMETRY_RECONCILIATION` | `PROVISIONAL_LEDGER_CONSISTENT` solange der Lauf offen ist (0) — **nicht blockierend**, weil das Schema kein `closed_at` hat und der Fall damit immer gilt; sonst `LEDGER_CONSISTENT`: (0) Verkehr vorhanden ⇒ (1) `telemetry_rows == decision_seq-keyed` (Korollar aus (3)+(3b)), (3) `unattributed == 0` (Erfolg ohne Zeile), (3b) `orphan_rows == 0` (Zeile ohne Erfolg — die Überbehauptung), (4) `dispatched_success == Σ reject_reasons` (sonst RED). `delivered == 0` ist Warnung, kein Blocker. |
-| `DELIVERY` (zweites Etikett, eigenes Feld) | `NO_DELIVERY_SINCE`: `dispatched_success > 0`, `delivered == 0`, kein Fill im Fenster. Spricht über den **Dienst**, nicht über den Ledger — deshalb nicht im Ledger-Etikett. Daneben: `wired` (Import in Produktionscode) und `read_by` (Skript, das die Urteilszeile liest). |
+| `DELIVERY` (zweites Etikett, eigenes Feld) | `DELIVERING` nur wenn ein Fill im Fenster **und** jünger als `FRESH_FILL_S` (2 Takte) · `DELIVERY_STALLED_SINCE`: `dispatched_success > 0`, aber kein frischer oder kein genehmigter Fill · `NO_TRAFFIC`: keine Erfolge. Spricht über den **Dienst**, nicht über den Ledger — deshalb nicht im Ledger-Etikett. Daneben: `wired` (Import in Produktionscode) und `read_by` (Skript, das die Urteilszeile liest). |
+| `fills_total` / `fill_ratio` | `fills` hat **keine Statusspalte** — Vollständigkeit steht nur in `telemetry.status`. `fill_ratio = sum(executed)/sum(requested)` über Fill-Zeilen: die Zahl, die den Dienst beschreibt, nicht `COUNT(*)`. Bei seq 12: fill_ratio 1,0 (5 von 5), Order-Anteil 0,05 (5 von 100). |
+| `fk order_id` | `telemetry_seq` ist in allen 361 Dispatches `NULL`; die Zuordnung läuft über `decision_seq` — eine Reihenfolge-Annahme über zwei Reihenfolgen. `order_id` paart als echter FK, ist aber nur in 8/34 Zeilen gesetzt. **Der Ledger kann grün sein und permutiert.** |
 | `telemetry_fill_metrics` | bei Fills |
 | Dedup | 0 Doppel-`item_id` |
 

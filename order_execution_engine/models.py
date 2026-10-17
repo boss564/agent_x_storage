@@ -440,6 +440,16 @@ class ExecutionReport(BaseModel):
     def _consistency(self) -> "ExecutionReport":
         if not self.approved and self.reject_reason is RejectReason.NONE:
             raise ValueError("Abgelehnt ohne reject_reason.")
+        if not self.approved and self.status is not OrderStatus.REJECTED_BY_RISK:
+            # Drei Zustände auf zwei Spalten gehen nicht (§5.4bh): `approved`
+            # ist ein Boolean, `reject_reason` trägt nur den Grund. Ein
+            # dritter Zustand "nicht entschieden" hätte keinen Platz —
+            # deshalb wird er hier ausgeschlossen statt stillschweigend
+            # in `approved=0` zu fallen. `approved=0` heißt von jetzt an
+            # immer: es wurde entschieden, und zwar dagegen.
+            raise ValueError(
+                "approved=0 erfordert status=REJECTED_BY_RISK — "
+                "'nicht entschieden' hat kein Feld und ist kein Zustand.")
         if self.status is OrderStatus.RESTING and self.remaining_size <= 0:
             raise ValueError("RESTING erfordert remaining_size > 0.")
         return self
