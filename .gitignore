@@ -118,3 +118,6 @@ artifacts/
 # Vorlauf des Pruefers liegt in .git/ (Runde 30, A-NC: Ort per
 # git rev-parse --git-common-dir, damit Hook-Export und Arbeitsbaum
 # denselben Stand sehen). Datei hier nur fuer repo-lose Laeufe.
+
+# eingebettetes Repo (Runde 62): nicht als Gitlink committen
+/forensik/
