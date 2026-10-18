@@ -1,6 +1,6 @@
 # Rundenbericht — feste Feldliste (§71.74, Leser in Runde 67)
 
-**Commit:** ac83343e (Runde 66) → Commit dieser Runde folgt unten
+**Commit:** `3ea986c1` (Runde 68) → `8b3a902b` (Runde 69)
 **Zustand:** 4/8 Meßblöcke scheiterbar · 3 Blöcke seit letztem · Deckel 5 ⇒ unter · 213 Blöcke · 4 : 213 Gegenläufe · 1/2 quittiert · R→F 0/letzte 0/Prüfer · 8 Felder
 **EXIT:** Selbsttest 0 · Hauptlauf 0
 **offen:** 0 · **quittiert:** 1 · **frisch:** 1 (_self_test_prozent)
