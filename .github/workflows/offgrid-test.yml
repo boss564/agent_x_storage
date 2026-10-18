@@ -300,6 +300,22 @@ jobs:
           set -euo pipefail
           python3 scripts/_ci_stdonly_probe.py
 
+      - name: F8a — Selbsttest zuerst (übergibt den Stand)
+        # §A-ZZZZ91 (Runde 72): **die Reihenfolge ist die Korrektur.**
+        #
+        # Der Hauptlauf liest `.selftest-exit` — die Übergabe des
+        # Selbsttests. Die Datei ist gitignored, existiert in CI also
+        # nicht, und der Hauptlauf meldete `unbekannt`, was nach §71.74
+        # rot ist. Der Job wäre **auf ewig rot** gewesen: nicht weil
+        # etwas kaputt ist, sondern weil niemand übergeben hatte.
+        #
+        # In Runde 71 lief der Selbsttest **nach** dem Hauptlauf, im
+        # selben Step. Die Reihenfolge war die Ursache.
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/check_claude_md.py --self-test
+
       - name: F8 — CLAUDE.md Consistency
         # §A-ZZZZ82: explizites `shell:` — Default ist `bash -e` ohne
         # `pipefail`. Bricht der erste Befehl ab, ja; fängt es ein später
@@ -308,10 +324,6 @@ jobs:
         run: |
           set -euo pipefail
           python3 scripts/check_claude_md.py
-          # §A-J: der Selbsttest lief nie in CI. Ein Test, der nur auf
-          # einer Maschine laeuft, ist eine Zusage ueber eine Maschine.
-          # Er prueft im tmpdir, ist also ortsunabhaengig.
-          python3 scripts/check_claude_md.py --self-test
         continue-on-error: false
 
   formal-invariants:

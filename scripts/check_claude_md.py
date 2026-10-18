@@ -8524,8 +8524,28 @@ PROSA_BILANZ: list[str] = ["nicht gemessen"]
 # Hauptlauf in `BERICHT.md` einsetzt. Zwei Prozesse, ein Übergabeort: der
 # Selbsttest schreibt, der Hauptlauf liest. Fehlt die Datei, sagt der
 # Hauptlauf `unbekannt` — statt zu raten, was Runde 65 getan hat.
+#
+# §A-ZZZZ91 (Runde 72): **die Übergabedatei war gitignored — und damit in
+# CI dauerhaft leer.** Lokal schreibt der Entwickler sie beim Selbsttest,
+# in CI hat sie nie jemand geschrieben, weil dort der Selbsttest im
+# **selben** Job nach dem Hauptlauf lief. Ergebnis: der Prüfer-Job wäre
+# ab dem ersten echten Lauf **auf ewig rot** — nicht weil etwas kaputt
+# ist, sondern weil die Übergabe fehlt. Die Gegenklasse zu „grün, weil nie
+# gelaufen": rot, weil nie übergeben.
+#
+# Zwei Ausgänge, und die Reihenfolge ist wichtig:
+#   1. IN CI (`GITHUB_ACTIONS`) läuft der Selbsttest **vor** dem Hauptlauf,
+#      im selben Job — dann liegt der Stand vor, wenn er gebraucht wird.
+#   2. Lokal bleibt die Datei ein Zwischenstand und gitignored.
+# Die Reihenfolge ist im Workflow festgelegt, nicht hier.
 def _selftest_stand_pfad() -> Path:
     return Path(__file__).resolve().parent.parent / ".selftest-exit"
+
+
+def _in_ci() -> bool:
+    """Läuft der Prüfer in einer CI-Umgebung?"""
+    import os
+    return os.environ.get("GITHUB_ACTIONS") == "true"
 
 
 _ST_EXIT: list[str] = ["unbekannt"]
