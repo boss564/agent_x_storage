@@ -130,13 +130,18 @@ def lese_strom(p: Path) -> list[tuple[str, str]]:
     except OSError as e:
         raise StreamUnlesbar(f"Stream nicht lesbar: {e}") from e
     out: list[tuple[str, str]] = []
-    skip = {"json": 0, "kurz": 0, "envelope": 0}
+    skip: dict = {"json": 0, "kurz": 0, "envelope": 0, "json_pos": []}
+    # §A-ZZZZ139 (Runde 84): **die unparsbare Zeile hat eine Position.**
+    # Sie war ein blosser Zaehler. Ein Konsument, der eine Zeile nicht
+    # pruefen konnte, muss sie markieren koennen — dafuer braucht er die
+    # Zeilennummer, nicht die Summe.
     with f:
-        for line in f:
+        for nr, line in enumerate(f, start=1):
             try:
                 o = json.loads(line)
             except ValueError:
                 skip["json"] += 1
+                skip["json_pos"].append(nr)
                 continue
             if o.get("role") != "user":
                 continue
@@ -160,6 +165,11 @@ def lese_strom(p: Path) -> list[tuple[str, str]]:
 LESESTAT: dict[str, int] = {"json": 0, "kurz": 0, "envelope": 0}
 
 
+def _unparsbar_zeilen() -> list[str]:
+    """§A-ZZZZ139: Meldungszeilen, die nicht pruefbar waren — als Zeilen."""
+    return [f"ZEILE {n} UNGEPRUEFT;" for n in LESESTAT.get("json_pos", [])]  # type: ignore[arg-type]
+
+
 def pruefe_strom(strom: list[tuple[str, str]]) -> tuple[int, int, list[str]]:
     """Liefert (paare, kanal_duplikate, bericht).
 
@@ -168,6 +178,11 @@ def pruefe_strom(strom: list[tuple[str, str]]) -> tuple[int, int, list[str]]:
     Unterscheidung ist der eigentliche Befund — wer beides in einen
     Topf wirft, kann die Ursache nicht mehr benennen.
     """
+    # §A-ZZZZ138 (Runde 84): **Zaehler sind keine Zeiger.**
+    # Der Vertrag sagt "Duplikat -> verwerfen". `KANAL-DUPLIKAT=37` sagt
+    # WIEVIELE, nicht WELCHE. Ein Konsument konnte die Aktion nicht
+    # ausfuehren. Jetzt traegt jede Zeile ihr Urteil: `ZEILE <n> <urteil>`
+    # auf derselben Messachse, mit 1-basierten Positionen wie im Bericht.
     seen: dict[str, int] = {}
     bericht: list[str] = []
     paare = kanal = 0
@@ -188,11 +203,22 @@ def pruefe_strom(strom: list[tuple[str, str]]) -> tuple[int, int, list[str]]:
             gleich_ts = strom[j][0] == ts
             kanal += gleich_ts
             art = "KANAL-DUPLIKAT" if gleich_ts else "WIEDERHOLUNG"
-            bericht.append(f"  {art} #{j + 1} == #{i + 1}"
+            # §A-ZZZZ142 (Runde 84): **die Detailzeile faellt aus der
+            # Messachse heraus.** Vorher hing sie mit `  KANAL-DUPLIKAT #1
+            # == #2` an derselben Zeile — ein Konsument, der per `;`
+            # trennt, sah `  KANAL-DUPLIKAT #1 == #2` als Schluessel ohne
+            # `=`. Jetzt: Marke auf der Messachse, Prosa auf eigener Zeile
+            # mit Praefix `#` — grammatisch kein Paar.
+            bericht.append(f"ZEILE {i + 1} VERWERFEN;")
+            bericht.append(f"  # {art} #{j + 1} == #{i + 1}"
                            f"  Δ={i - j}"
                            f"  {'(gleicher Zeitstempel)' if gleich_ts else '(anderer Zeitstempel)'}"
                            f"  sha {h[:12]}")
+        else:
+            bericht.append(f"ZEILE {i + 1} ZUSTELLEN;")
         seen[h] = i
+    # Die unparsbaren Zeilen tragen ihr Urteil, ohne Inhalt zu haben.
+    bericht[:0] = [z for z in _unparsbar_zeilen()]
     return paare, kanal, bericht
 
 
@@ -214,11 +240,21 @@ def pruefe_strom(strom: list[tuple[str, str]]) -> tuple[int, int, list[str]]:
 # 4 ist das strengere Urteil. Wer `exit > 1` vergleicht, baut falsch.
 # Deshalb ist die Rangfolge hier als Tabelle hinterlegt, und genau eine
 # Funktion entscheidet — jeder zweite Vergleichsort waere ein Fehler.
-_SCHWERE = {0: 0, 1: 1, 4: 2, 3: 3, 2: 4}
+_SCHWERE = {0: 0, 1: 1, 4: 2, 3: 3}
 
 
 def aggregiere(*kandidaten: int) -> int:
-    """Der strengste Urteils-Exit gewinnt. Reihenfolge sonst irrelevant."""
+    """Der strengste Inhalts-Exit gewinnt. Reihenfolge sonst irrelevant.
+
+    §A-ZZZZ140 (Runde 84): **Exit 2 ist eine eigene Achse.**
+    Ein Aufruffehler ist ein Meta-Fehler — das Werkzeug konnte nicht
+    laufen — und kein Urteil ueber den Inhalt. Bis R83 stand 2 als
+    Schwere 4 in derselben Skala wie 0/1/3/4 und war damit das
+    schaerfste Inhalts-Urteil, ohne je eines zu sein. Jetzt terminiert
+    2: es gibt kein Inhalts-Urteil, also wird nicht aggregiert.
+    """
+    if 2 in kandidaten:
+        return 2
     return max(kandidaten, key=lambda c: _SCHWERE.get(c, 9))
 
 
@@ -309,7 +345,11 @@ def main(argv: list[str]) -> int:
         # (`WIEDERHOLUNG: 1`) und rechts, klar abgesetzt, die
         # Interpretation, die ein Mensch später einträgt.
         _us = ""
-        _ue = sum(LESESTAT.values())
+        # §A-ZZZZ139b: json_pos ist eine Liste, nicht ein Zaehler. Wer
+        # alle Werte summiert, zaehlt Listen mit — die Summe ist dann
+        # ein Typfehler statt einer Zahl.
+        _ue = (LESESTAT["json"] + LESESTAT["kurz"]
+               + LESESTAT["envelope"])
         if _ue:
             _us = (f";uebersprungen={_ue};json={LESESTAT['json']};"
                    f"kurz={LESESTAT['kurz']};"

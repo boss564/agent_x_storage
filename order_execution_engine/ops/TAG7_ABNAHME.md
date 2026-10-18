@@ -9674,3 +9674,184 @@ unbeobachtbar, solange nur ein Fixture sie verlangt — und eine Prüfung,
 die existiert und ins Leere läuft, meldet 0 Befunde und ist damit
 schlimmer als keine.
 
+
+## Runde 84 — Zeiger statt Zähler
+
+### 0. Der Befund, den ich nicht bestellt hatte
+
+> „Der Exit-Code ist Strom-Aggregat, die Aktionen sind Zeilen-Aktionen,
+> und nichts identifiziert, welche Zeile verworfen werden soll."
+
+`KANAL-DUPLIKAT=37` sagt **wie viele**, nicht **welche**. Ein
+Konsument konnte die vertraglich zugesagte Aktion nicht ausführen.
+
+Ich habe den Test **vor** der Reparatur geschrieben. Erster Lauf:
+
+```
+gemischter Strom: exit=4  (unvollstaendig)
+FAIL Zeilen-Identitaet        0/5 Zeilen tragen ein Urteil
+FAIL Urteil je Zeile          soll={1: 'ZUSTELLEN', 2: 'VERWERFEN', ...}  ist={}
+FAIL Zustell-Liste            [] erwartet [1, 3, 5]
+
+1/4 Zeilen-Identitaets-Faelle gruen
+```
+
+Das ist der Bringschuld-Nachweis: ein Fall, der rot sein **musste**.
+
+Jetzt:
+
+```
+ok  Zeilen-Identitaet        5/5 Zeilen tragen ein Urteil
+ok  Urteil je Zeile          {5: UNGEPRUEFT, 1: ZUSTELLEN, 2: VERWERFEN, 3: ZUSTELLEN, 4: VERWERFEN}
+ok  Zustell-Liste            [1, 3, 5]
+```
+
+Jede Zeile trägt `ZEILE <n> <urteil>`. Der Strom-Exit bleibt das
+Gesamturteil; die Aktionen werden **je Zeile** ausgeführt.
+
+### 1. Drei Selbst-Fänge beim Bauen
+
+| # | Fehler | Wie gefunden |
+|---|---|---|
+| 1 | `json_pos` als Liste in `LESESTAT` → `sum()` wirft TypeError | Lauf |
+| 2 | `skip`-Dict ohne `json_pos` → KeyError | Lauf |
+| 3 | Detailzeile `  KANAL-DUPLIKAT #1` als Schlüssel ohne `=` gelesen | Konformitätstest |
+
+Der dritte ist der interessante: mein neuer Konformitätstest meldete
+einen **Grammar-Verstoß**, den ich beim Schreiben nicht gesehen hatte —
+die Prosa hing an derselben Messzeile. Jetzt: Marke auf der Achse,
+Prosa mit `#`-Präfix auf eigener Zeile.
+
+### 2. Exit 4 driftete — Ebenen verwechselt
+
+| Quelle | sagte | Ebene |
+|---|---|---|
+| v2 | „zustellen, markiert, alarmieren" | **Strom** |
+| R83 | „blockieren+marke" | **Einwurf-Entscheid** |
+
+Beides war richtig auf **verschiedenen Ebenen** und wurde als
+Widerspruch gelesen. v4 trennt sie explizit: Exit 4 ist ein
+**Strom-Urteil**, nie eine Strom-Aktion. Wer es als „alles blockieren"
+liest, verliert 7265 geprüfte Zeilen; wer es als „alles zustellen"
+liest, lässt 37 Duplikate durch. Beides ist falsch — **der Konsument
+liest die Zeilen-Urteile.**
+
+### 3. Exit 2 war kein Schwere-Grad
+
+`_SCHWERE = {…, 2: 4}` machte den Aufruffehler zum **schärfsten
+Inhalts-Urteil** — ohne je eines zu sein. Ein Meta-Fehler sagt „das
+Werkzeug konnte nicht laufen", nicht „der Inhalt ist X".
+
+```
+def aggregiere(*k):
+    if 2 in k: return 2      # terminiert: kein Inhalts-Urteil
+    return max(k, key=_SCHWERE.get)
+```
+
+Zwei Achsen, getrennt. Ein Strom kann nie gleichzeitig 2 und ein
+Inhalts-Urteil haben.
+
+### 4. „Nominal, nicht ordinal" war selbst widersprüchlich
+
+`_SCHWERE` **ist** ordinal über nominale Codes. Präzisiert: kein
+numerischer Vergleich der Codes; die Präzedenz wird aus der Tabelle
+**gelesen**, nie abgeleitet. `exit > 1` bleibt Defekt, `SCHWERE[exit]`
+ist Vorschrift.
+
+### 5. Bringschuld-Zähler korrigiert — er log
+
+R83 buchte „R83: keiner", obwohl der Konstanten-Mutant ein
+nachgewiesener blinder Fleck war. Der Zähler zählte nur
+**Vertragsfall**-Flecken. Das schuf den Anreiz, jeden Fleck mit einer
+neuen Test-Ebene zu stopfen statt mit einem Vertragsfall — der Zähler
+blieb bei null, die Architektur wuchs seitwärts.
+
+Jetzt zählt **jeder** nachgewiesene Fleck:
+
+| Runde | Fleck | gefixt mit | zählt |
+|---|---|---|---|
+| 82 | `uebersprung` exit=0 grün | Vertragsfall | ja |
+| 83 | Konstanten-Mutant bestand 10/10 | Probe | **ja (korrigiert)** |
+| 84 | Zähler sind keine Zeiger | Zeilen-Identität | ja |
+| 84 | `LESESTAT`-Summe über Liste | explizite Summe | ja |
+| 84 | Regex ohne Bindestrich | Grammatik-Test | ja |
+
+**Die Orakel-Lücke bleibt:** ein blinder Fleck ist nur nachweisbar,
+wenn ein unabhängiges Orakel sagt „das hätte rot sein müssen". Der
+Konstanten-Mutant wurde nur sichtbar, weil **Sie** ihn vorhersagten.
+Die Bringschuld verlagert die Beweislast, erzeugt aber kein Orakel.
+
+### 6. Ausgabe-Grammatik statt Schlüssel-Liste
+
+Der Bindestrich-Fund war schwerer als gebucht: **alle 7/7
+Konsumenten-Tests liefen grün, während der vertragliche Schlüssel nie
+gelesen wurde** — Code und Mock teilten denselben Parser-Fehler, der
+Vertrag wurde von keinem gelesen.
+
+```
+schluessel_zeichen: [A-Za-z_][A-Za-z0-9_-]*
+wert_typ:           nicht-negative Ganzzahl
+paar_trenner:       ;
+```
+
+`test_konformitaet.py` liest die Grammatik **aus dem Vertrag** und
+sucht jeden Schlüssel **wörtlich** in der Ausgabe. Ein
+Bindestrich-Schlüssel mit Parser ohne Bindestrich wird hier rot.
+
+### 7. Der Zaun: Enumeration, generierte Baseline, Meta-Test
+
+| Vorher | Nachher |
+|---|---|
+| `count("/") == 2` → 0 Dateien gesehen | `os.walk` → 278 Dateien |
+| Präfix-Muster → 162 → 91 → … Befunde | Baseline aus dem Baum generiert |
+| Probe nach dem Fix | **Meta-Test mit 5 synthetischen Bäumen** |
+
+`scripts/test_zaun_meta.py` baut Bäume in `tempfile` und prüft den
+Zaun gegen sich selbst:
+
+| Fall | Erwartung | Ergebnis |
+|---|---|---|
+| A leerer Baum | „zaun sieht zu wenig" | ok — **hätte den Slash-Bug gefangen** |
+| B 60 baselined | 0 Befunde | ok |
+| C verschachtelt | tiefe Datei gemeldet | ok |
+| D neue Datei | gemeldet | ok |
+| E Baseline respektiert | 0 Befunde | ok |
+
+### 8. Die Normalisierungs-Grenze ist gemessen, nicht begründet
+
+Sie hatten recht: **ein Test beweist Verhalten, nicht Richtigkeit.**
+Trailing Spaces sind in Markdown ein harter Zeilenumbruch — also
+**Inhalt**. Die Kollision bleibt, steht aber jetzt als **akzeptiertes
+Restrisiko** im Vertrag, nicht als „gewollte Kollision":
+
+> Annahme: die Quelle normalisiert Trailing Whitespace upstream.
+> **NICHT belegt.** Status: akzeptiertes Risiko, dokumentiert. R86.
+
+Und die Flanken sind operational definiert, nicht als Namen:
+
+| Flanke | Definition | Schaden |
+|---|---|---|
+| 1 | gleicher Inhalt ⇒ **verschiedener** Hash | Redundanz |
+| 2 | verschiedener Inhalt ⇒ **gleicher** Hash | **Inhalt, irreversibel** |
+
+### 9. Stand
+
+| Größe | Wert |
+|---|---|
+| Vertragsfälle | 10/10 |
+| Mutationen | 6/6 |
+| Hash-Eingang | 6/6 |
+| Konsument | 7/7 |
+| Konstanten | 3/3 |
+| Normalisierung | 8/8 |
+| **Zeilen-Identität** | **4/4** |
+| **Konformität** | **8/8** |
+| **Zaun-Meta** | **5/5** |
+| Skripte ohne Korb | 0 (Enumeration 278) |
+| Vertrag | **v4** |
+
+**Der Satz der Runde:** Ein Test, der vor der Reparatur rot war, ist
+mehr wert als zehn, die immer grün waren — und die Bringschuld, die nur
+Vertragsfall-Flecken zählt, hat den einen Fleck, den sie finden sollte,
+in „keiner" verwandelt.
+

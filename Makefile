@@ -82,6 +82,18 @@ werktest:
 	@echo "🧭 NORMALISIERUNG — beide Flanken"
 	@echo "================================="
 	@python3 scripts/test_normalisierung.py
+	@echo ""
+	@echo "🎯 ZEILEN — Zähler sind keine Zeiger"
+	@echo "===================================="
+	@python3 scripts/test_zeilen_identitaet.py
+	@echo ""
+	@echo "📐 KONFORMITÄT — Ausgabe gegen Vertrags-Grammatik"
+	@echo "================================================="
+	@python3 scripts/test_konformitaet.py
+	@echo ""
+	@echo "🚧 ZAUN-META — die Prüfung prüft sich selbst"
+	@echo "============================================"
+	@python3 scripts/test_zaun_meta.py
 
 compile:
 	@echo "🔨 COMPILE — Foundry-Baum"

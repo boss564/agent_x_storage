@@ -200,6 +200,9 @@ NO_TEST_SUMMARY: set[str] = {
     "scripts/mock_ingestion.py",           # 7/7 Konsument (Exit→Aktion, alle Zweige)
     "scripts/test_konstanten.py",          # 3/3 abweichende Soll-Werte (Konstanten)
     "scripts/test_normalisierung.py",      # 8/8 Normalisierungs-Grenze (2 Flanken)
+    "scripts/test_zeilen_identitaet.py",   # 4/4 Zeilen-Identitaet (Zaehler vs Zeiger)
+    "scripts/test_konformitaet.py",        # 8/8 Ausgabe gegen Vertrags-Grammatik
+    "scripts/test_zaun_meta.py",           # 5/5 Zaun prueft sich selbst
     "scripts/test_gaeb_reference.py",  # X83-Fixtures gitignore; TMP-checkout ohne Referenzdaten
     "scripts/test_bvbs_pruefdatei.py",     # braucht externe Pruefdatei
     "scripts/export_backtest_signals.py",  # Daten-Exporter, kein Test
@@ -5839,24 +5842,42 @@ SKRIPT_OHNE_LAUF: set[str] = set()
 
 
 def check_undocumented_tests(root: Path, rep: Report) -> None:
-    """Jede .py unter scripts/ muss in einem der drei Koerbe liegen."""
-    on_disk = sorted(
-        p.relative_to(root).as_posix()
-        for p in root.rglob("*.py")
-        if "__pycache__" not in p.parts
-    )
+    """Jede .py unter scripts/ muss in genau einem Korb liegen.
+
+    §A-ZZZZ143 (Runde 84): **Enumeration statt Muster.**
+
+    Die erste Fassung filterte auf `count("/") == 2` und lief ins Leere
+    (0 Befunde bei 162 Skripten). Die zweite ersetzte das durch eine
+    Praefix-Musterliste und erzeugte 162 -> 91 -> ... Befunde: jedes
+    Muster deckte ein Praefix und liess das naechste durch. Beides ist
+    Muster-Heuristik.
+
+    Jetzt: **os.walk ueber den Baum**, Pfad relativ zu `scripts/`,
+    KEIN Filter auf Tiefe oder Praefix. Die Baseline ist die Menge der
+    Dateien, die beim Anlegen existierten — sie wird aus dem Baum
+    GENERIERT, nicht von Hand gepflegt.
+    """
+    import os as _os
+    sd = root / "scripts"
+    on_disk: list[str] = []
+    for dirpath, dirnames, filenames in _os.walk(sd):
+        dirnames[:] = [d for d in dirnames if d != "__pycache__"]
+        for fn in filenames:
+            if fn.endswith(".py"):
+                full = Path(dirpath) / fn
+                on_disk.append(full.relative_to(root).as_posix())
+    on_disk.sort()
     known = ({t[0] for t in TEST_SCRIPTS} | NO_TEST_SUMMARY
              | SKRIPT_OHNE_LAUF | _lade_baseline(root))
-    # Nur der Wurzelordner scripts/ — Unterordner haben eigene Strukturen.
-    # §A-ZZZZ135b: `scripts/x.py` hat EINEN Schraegstrich, nicht zwei.
-    # Die erste Fassung filterte auf count("/")==2 und lief ins Leere —
-    # eine Pruefung, die existiert und nicht greift, ist schlimmer als
-    # keine: sie meldet 0 Befunde. Gefunden durch Nachzaehlen der Liste,
-    # nicht durch Lesen.
-    on_disk = [s for s in on_disk
-               if s.startswith("scripts/") and s.count("/") == 1]
+    # §A-ZZZZ143b: **der Zen-Test des Zauns.** Eine Pruefung, die 0
+    # Dateien sieht, meldet 0 Befunde und ist schlimmer als keine.
+    if len(on_disk) < 50:
+        rep.fail(None, "Zaun sieht zu wenig",
+                 f"{len(on_disk)} Dateien unter scripts/",
+                 "Enumeration defekt — 0 Befunde waeren bedeutungslos")
+        return
     for script in on_disk:
-        if script in known or _ist_werkzeug(script):
+        if script in known:
             continue
         rep.fail(None, "Skript ohne Korb",
                  script, "weder Test noch Werkzeug — Korb fehlt")
@@ -9770,7 +9791,16 @@ def main() -> int:
                      "Konstanten"),
                     ("test_normalisierung.py",
                      r"(\d+)/(\d+) Normalisierungs-Grenzen gruen",
-                     "Normalisierung")):
+                     "Normalisierung"),
+                    ("test_zeilen_identitaet.py",
+                     r"(\d+)/(\d+) Zeilen-Identitaets-Faelle gruen",
+                     "Zeilen-Identitaet"),
+                    ("test_konformitaet.py",
+                     r"(\d+)/(\d+) Konformitaets-Pruefungen gruen",
+                     "Konformitaet"),
+                    ("test_zaun_meta.py",
+                     r"(\d+)/(\d+) Zaun-Meta-Faelle gruen",
+                     "Zaun-Meta")):
                 try:
                     _r = subprocess.run(
                         [sys.executable, str(root / "scripts" / _sk)],

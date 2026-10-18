@@ -1,7 +1,7 @@
 {
-  "_version": 3,
+  "_version": 4,
   "_zweck": "Maschinenlesbarer Vertrag des Einwurf-Waechters. Single source of truth fuer Repo und externe Ingestion. Wer hier eine Zeile aendert, aendert das Tor ausserhalb dieses Repos mit.",
-  "_stand": "Runde 83 (2026-10-18)",
+  "_stand": "Runde 84 (2026-10-18)",
   "_geltung": "Der Runner (scripts/vertrags_runner.py) importiert diese Datei; die externe Ingestion MUSS sie einlesen. Solange sie es nicht tut, zertifiziert N/N einen Vertrag, den draussen niemand benutzt.",
   "exit_codes": {
     "0": {
@@ -29,10 +29,11 @@
     },
     "4": {
       "urteil": "unvollstaendig_geprueft",
-      "aktion": "nicht ungeprueft zustellen — Inhalt enthalten, aber mindestens eine Zeile war unparsbar",
-      "beschreibung": "Mindestens JSON_SCHWELLE Zeilen waren kein gueltiges JSON. Die gueltigen Zeilen wurden geprueft (Duplikat-Urteil gilt), das Gesamturteil ist aber unvollstaendig.",
-      "unterschied_zu_3": "3 = gar nicht geprueft (Stream unlesbar). 4 = geprueft, aber unvollstaendig. Wer beide als 'zustellen' behandelt, macht 4 sinnlos.",
-      "begruendung": "Bis Runde 81 war die Schwelle stderr-only bei Exit 0. Ein Tor, das nur den Exit liest, stellte zu und sah die Warnung nie. Der Code gehoert in die Messachse, nicht ins Log."
+      "semantik": "STROM-Urteil, nicht Zeilen-Aktion",
+      "aktion": "Zeilen-Urteile ausfuehren; Zeilen mit UNGEPRUEFT markiert zustellen; Alarm",
+      "aktion_nicht": "Der Strom wird NICHT als Ganzes blockiert und NICHT als Ganzes zugestellt. Wer Exit 4 als eine Strom-Aktion liest, hat die Granularitaet verfehlt.",
+      "unterschied_zu_3": "3 = gar keine Zeile geprueft (Stream unlesbar). 4 = Zeilen geprueft, mindestens eine Luecke.",
+      "drift_runde_82_83": "v2 sagte 'zustellen, markiert'; R83 sagte 'blockieren+marke' fuer den Einwurf-Zweig. Beides war richtig auf VERSCHIEDENEN Ebenen (Strom vs. Einwurf-Entscheid) und wurde als Widerspruch gelesen. R84 trennt die Ebenen explizit."
     }
   },
   "etiketten": {
@@ -258,7 +259,8 @@
   "nominal_nicht_ordinal": {
     "regel": "Exit-Codes sind Namen, keine Rangzahlen. `exit > 1` ist ein Defekt, nicht eine Abkuerzung.",
     "konsument_muss": "Exit-Code als Schluessel nachschlagen (dict), nicht vergleichen.",
-    "geprueft_durch": "scripts/mock_ingestion.py — jede Zahl einzeln abgebildet, kein Vergleich"
+    "geprueft_durch": "scripts/mock_ingestion.py — jede Zahl einzeln abgebildet, kein Vergleich",
+    "praezisierung": "Kein numerischer Vergleich der Exit-Codes. Die Praezedenz steht in der Tabelle `_SCHWERE` im Vertrag und wird GELESEN, nie aus dem Zahlenwert abgeleitet. `exit > 1` ist ein Defekt; `SCHWERE[exit]` ist die Vorschrift."
   },
   "unbekannter_exit": {
     "regel": "Ein Exit-Code, den der Konsument nicht kennt, ist fail-closed zu behandeln: verwerfen + alarmieren.",
@@ -344,7 +346,26 @@
       "eigner": "Betreiber",
       "faellig": "R85",
       "problem": "NFC und NFD desselben Wortes haben verschiedene Hashes -> dasselbe Wort gilt als neu. Das ist Flanke 1, nicht Flanke 2, also Redundanz statt Verlust — deshalb nicht blockierend."
-    }
+    },
+    "flanken_definition": {
+      "flanke_1": "gleicher Inhalt => VERSCHIEDENER Hash (Duplikat durchgelassen). Schaden: Redundanz.",
+      "flanke_2": "verschiedener Inhalt => GLEICHER Hash (falsches Duplikat). Schaden: Inhalt, irreversibel.",
+      "regel": "Die Namen 'Flanke 1/2' sind durch diese operationalen Saetze ersetzt. Wo immer von Flanken die Rede ist, gilt diese Definition."
+    },
+    "begruendung_statt_behauptung": {
+      "befund_runde_84": "R83 hat 'gewollte Kollision' geschrieben, ohne zu begruenden. Trailing Spaces sind klassischer Content-Verlust: in Markdown sind zwei Leerzeichen am Zeilenende ein harter Zeilenumbruch — also Inhalt, nicht Formatierung.",
+      "entscheidung": "Die Kollision bleibt, wird aber als AKZEPTIERTES RESTRISIKO benannt, nicht als 'gewollt'.",
+      "restrisiko": {
+        "fall": "Zwei Meldungen unterscheiden sich nur um Trailing Spaces.",
+        "wirkung": "werden als Duplikat behandelt, die zweite verworfen",
+        "annahme": "Die Quelle normalisiert Trailing Whitespace upstream. NICHT belegt — siehe status.",
+        "status": "UNBELEGT. Solange nicht belegt: akzeptiertes Risiko, dokumentiert.",
+        "eigner": "Betreiber",
+        "faellig": "R86"
+      },
+      "konsequenz_fuer_tests": "test_normalisierung.py beweist, dass der Code die Grenze einhaelt — es beweist NICHT, dass die Grenze richtig liegt. Der Test ist Verhaltens-, kein Richtigkeitsnachweis."
+    },
+    "tests_beweisen": "Verhalten, nicht Richtigkeit der Grenze. Das steht hier, damit es nicht als Nachweis gelesen wird."
   },
   "vertragsfaelle_sperre": {
     "stand": "Runde 83 — die Sperre war eine Pause, kein Zaun.",
@@ -381,5 +402,115 @@
       "Beweis, dass ein Dritter den Vertrag ohne Autor liest"
     ],
     "einziger_externer_validator": "ING (echte Ingestion, noch keine Zeile gelesen)"
+  },
+  "granularitaet": {
+    "befund_runde_84": "Exit-Code aggregiert den STROM, die Aktion gilt je ZEILE. `KANAL-DUPLIKAT=37` sagte WIEVIELE, nicht WELCHE — der Konsument konnte die vertragliche Aktion nicht ausfuehren.",
+    "loesung": "Jede Zeile traegt ihr Urteil: `ZEILE <n> <urteil>` mit 1-basierter Position.",
+    "urteile_je_zeile": {
+      "ZUSTELLEN": "Hash nicht im Strom, Zeile geprueft",
+      "VERWERFEN": "Duplikat, Zeile geprueft",
+      "UNGEPRUEFT": "Zeile nicht parsebar — markiert zustellen"
+    },
+    "strom_exit": "bleibt das Gesamturteil; Aktionen werden JE ZEILE ausgefuehrt, nicht je Strom.",
+    "gemischter_strom": "Der Normalfall. Exit 4 sagt 'mindestens eine Zeile ungeprueft' — er sagt NICHT 'alles blockieren' und nicht 'alles zustellen'. Der Konsument liest `ZEILE n <urteil>` und handelt zeilenweise.",
+    "geprueft_durch": "scripts/test_zeilen_identitaet.py (4/4, gemischter Strom)"
+  },
+  "meta_fehler_achse": {
+    "befund": "Exit 2 stand in _SCHWERE an hoechster Stelle, ohne Urteil/Aktion fuer den Inhalt. Ein Aufruffehler ist ein META-Fehler: das Werkzeug konnte nicht laufen. Er ist kein Urteil ueber die Meldung und gehoert nicht in dieselbe Schwere-Skala wie 0/1/3/4.",
+    "regel": "Exit 2 ist eine EIGENE Achse. Er wird vor jeder Inhaltsauswertung geprueft: laeuft das Werkzeug? Wenn nein, gibt es kein Inhalts-Urteil. Die Aggregationsfunktion behandelt 2 deshalb als Abbruch, nicht als Maximum.",
+    "implementiert_in": "aggregiere(): 2 wird vor der Schwere-Skala geprueft",
+    "folge": "Ein Strom kann nie gleichzeitig 2 und ein Inhalts-Urteil haben — 2 terminiert."
+  },
+  "aktion_versionierung": {
+    "regel": "Eine Aenderung der AKTION eines Exit-Codes ist ein Versionssprung, genau wie eine Schluessel-Aenderung. R82->R83 hat die Aktion von 4 (auf Einwurf-Ebene) geaendert, ohne Versionssprung zu nennen — der Sprung v2->v3 war da, aber die Aenderung war nicht als breaking markiert. R84 holt das nach: v4 nennt sie.",
+    "breaking_in_v4": [
+      "Exit 4: Strom-Semantik explizit statt implizit",
+      "Zeilen-Urteile neu (nur additiv)",
+      "Exit 2: eigene Achse statt Schwere-Maximum (breaking fuer Aggregations-Nachbauer)"
+    ],
+    "degradation": {
+      "v1_kennt": [
+        0,
+        1,
+        3
+      ],
+      "v2_kennt": [
+        0,
+        1,
+        2,
+        3,
+        4
+      ],
+      "v3_kennt": [
+        0,
+        1,
+        2,
+        3,
+        4
+      ],
+      "unbekannter_exit": "fail-closed: verwerfen + alarmieren",
+      "v2_konsument_trifft_v3_zeilen": "ignoriert die ZEILE-Marken — verliert die Zeilen-Identitaet, aber kein Verhalten bricht (additiv)"
+    }
+  },
+  "bringschuld": {
+    "regel": "Ein neuer Vertragsfall ist zulaessig, wenn ein BLINDER FLECK NACHGEWIESEN ist.",
+    "zaehlachse": "ALLE nachgewiesenen blinden Flecken, nicht nur die mit Vertragsfall.",
+    "nachweise": [
+      {
+        "runde": 82,
+        "fleck": "uebersprung war exit=0 gruen (Ausgang nicht geprueft)",
+        "gefixt_mit": "Vertragsfall",
+        "zaehlt": true
+      },
+      {
+        "runde": 83,
+        "fleck": "Konstanten-Mutant bestand 10/10 (unbeobachtbar)",
+        "gefixt_mit": "Probe test_konstanten.py",
+        "zaehlt": true,
+        "korrektur": "R83 hatte diesen Fleck als 'keiner' gebucht — falsch. Der Zaehler zaehlte nur Vertragsfaelle."
+      },
+      {
+        "runde": 84,
+        "fleck": "Zaehler sind keine Zeiger (Exit war Strom-, Aktion Zeilen-Granularitaet)",
+        "gefixt_mit": "Zeilen-Identitaet + Test",
+        "zaehlt": true
+      },
+      {
+        "runde": 84,
+        "fleck": "LESESTAT-Summe ueber eine Liste (TypeError)",
+        "gefixt_mit": "explizite Summe",
+        "zaehlt": true
+      },
+      {
+        "runde": 84,
+        "fleck": "Regex ohne Bindestrich — Schluessel nie gelesen",
+        "gefixt_mit": "Grammatik-Test",
+        "zaehlt": true
+      }
+    ],
+    "orakel_luecke": "Ein blinder Fleck ist nur nachweisbar, wenn ein unabhaengiges Orakel sagt 'das haette rot sein muessen'. Der Konstanten-Mutant wurde nur sichtbar, weil der Betreiber ihn vorhersagte. Die Bringschuld verlagert die Beweislast, erzeugt aber kein Orakel. ING bleibt das einzige externe Orakel.",
+    "definition_offen": "Wenn nur Vertragsfaelle zaehlen, ist die Bringschuld Buchhaltung, keine Wache. Entschieden R84: alle Flecken zaehlen."
+  },
+  "orakel": {
+    "befund": "Die Konstanten-Probe 0/1/2 beweist Anti-Hardcoding, nicht Zaehl-Richtigkeit. Sie zeigt, dass der Code nicht 37 ausgibt — nicht, dass 0 richtig IST.",
+    "was_fehlt": "Ein annotierter Korpus mit unabhaengig gezaehlten Soll-Werten.",
+    "status": "offen, Eigner Betreiber, faellig R86",
+    "warum_nicht_schnell": "Ein Korpus, den der Autor annotiert, ist dasselbe Orakel wie der Code."
+  },
+  "ausgabe_grammatik": {
+    "schluessel_zeichen": "[A-Za-z_][A-Za-z0-9_-]*",
+    "wert_typ": "nicht-negative Ganzzahl",
+    "paar_trenner": ";",
+    "paar_form": "<schluessel>=<wert>",
+    "zeilen_marke": "ZEILE <position> <urteil>   (position 1-basiert, urteil in ZUSTELLEN|VERWERFEN|UNGEPRUEFT)",
+    "messachse": [
+      "Paare",
+      "KANAL-DUPLIKAT",
+      "WIEDERHOLUNG",
+      "uebersprungen",
+      "json"
+    ],
+    "regel": "Die Grammatik ist Vertrag. Ein Konsument parst per Grammatik, nicht per Positions-Annahme. Der Bindestrich ist erlaubt — R83 hatte ihn erzeugt und der Parser ihn zerlegt.",
+    "geprueft_durch": "scripts/test_konformitaet.py — liest die Grammatik HIER, nicht im Test"
   }
 }
