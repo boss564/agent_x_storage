@@ -2913,6 +2913,7 @@ def calibration_card(root: Path | None = None) -> str:
             f"⇒ {'ÜBER' if _seit > DECKEL_MEASURE else 'unter'} · "
             f"{len(_bl)} Blöcke · {_sch} : {len(_bl)} Gegenläufe · "
             f"{QUITTUNGEN}/{DECKEL_CIT} quittiert · R→F {REPARATUR_ZU_FUND}")
+
     lines.append(f"Bezug: root={base}, CLAUDE.md sha256:{sha}, "
                  f"Baum {_tree_ref(base)}")
     return "\n".join(lines)
@@ -3496,14 +3497,27 @@ def _self_test_count_delta() -> list[str]:
                 self_checks += 1
         measured |= {self_checks}
         hist = re.compile(r"(Runde \d+|\bv\d\b|\d{4}-\d{2}-\d{2}|\bHEAD\b|\b[0-9a-f]{7,}\b)")
+        # §A-ZZZZ61 (Runde 66): **eine Fundzahl ohne Nenner ist ein Erfolg,
+        # der nicht scheitern kann.** `2 gefunden` heißt nichts ohne
+        # `von wie vielen`. Hier zählt jeder Treffer im Text: geprüft
+        # (Herkunft nachweisbar), whitelisted (Klasse mit Grund), offen.
+        # Eine Regel, die bei jedem Block anschlägt, wird nach drei
+        # Runden stummgeschaltet — und eine stummgeschaltete Prüfung ist
+        # schlechter als keine, weil sie wie Deckung aussieht.
+        _prosa_geprueft = _prosa_offen = 0
         for text_, lineno in prose:
             bare = re.sub(r"`[^`]*`", "", text_)        # Zitate raus
             bare = hist.sub("", bare)                    # Historie raus
             for num in re.findall(r"(?<![\w.])\d+(?![\w.])", bare):
+                _prosa_geprueft += 1
                 if int(num) not in measured:
+                    _prosa_offen += 1
                     failures.append(
                         f"Zahl {num} ohne Herkunft in Prosa (Zeile {lineno}): "
                         f"{text_.strip()[:70]!r}")
+        # Der Nenner gehört in die Ausgabe, nicht in den Befund: sonst
+        # erscheint er nur, wenn etwas rot ist.
+        PROSA_BILANZ[0] = f"{_prosa_offen} von {_prosa_geprueft} Zahlen ohne Herkunft"
         # 8. Der Nenner: geprueft und ausgeschlossen sind disjunkt (§A-NE).
         #    Ohne diese Pruefung sind `N geprueft` und `M ausgeschlossen`
         #    zwei Zahlen ohne Verhaeltnis. Geprueft wird an der Stelle, an
@@ -7777,12 +7791,18 @@ QUITTUNGEN_STAND: tuple[tuple[str, str], ...] = (
      "Vergleich als Selbstbezug — strukturelle Grenze, nicht Formfehler"),
 )
 REPARATUR_ZU_FUND_STAND: tuple[tuple[str, int, str], ...] = (
-    # (Reparatur, Runden bis Fund, wo gefunden) — chronologisch, ältester zuerst
-    ("Runde 9 safe_clip → NullClip", 9, "Fund in Runde 18"),
-    ("Runde 58 SKIP_HOOKS", 4, "Fund in Runde 62"),
-    ("Runde 62 FileNotFoundError ⇒ ok()", 1, "Fund in Runde 63"),
-    ("Runde 62 Zustandszeile → drei Kopien", 1, "Fund in Runde 63"),
+    # (Reparatur, Runden bis Fund, Quelle je Fund) — Quellen:
+    # eigen (Selbstfund), Maschine (Prüfer im Repo), Prüfer (Review)
+    ("Runde 9 safe_clip → NullClip", 9, "eigen"),
+    ("Runde 58 SKIP_HOOKS", 4, "eigen"),
+    ("Runde 62 FileNotFoundError ⇒ ok()", 1, "eigen"),
+    ("Runde 62 Zustandszeile → drei Kopien", 1, "Prüfer"),
+    # Runde 66: der vierte Eintrag oben (drei Kopien) wurde vom **Prüfer**
+    # gefunden, nicht von mir. Bis Runde 65 war die Quelle nicht deklariert
+    # — drei Lesarten (alle / eigen / Maschine) standen alle bei 1 und
+    # wären bei der ersten Abweichung auseinandergelaufen.
 )
+REPARATUR_QUELLEN = ("eigen", "Maschine", "Prüfer")
 # §A-ZZZZ55 (Runde 65): **ein Rekord ist keine Messung.** Runde 64 baute
 # `R→F` als `min()` ein — ein Minimum fällt monoton und kann nur besser
 # werden, nie schlechter. Es hätte in jeder künftigen Runde noch bei 1
@@ -7795,7 +7815,8 @@ REPARATUR_ZU_FUND_STAND: tuple[tuple[str, int, str], ...] = (
 # ist eine Bilanz, keine Messung.
 REPARATUR_REKORD = min(r for _, r, _ in REPARATUR_ZU_FUND_STAND)
 REPARATUR_LETZTE = REPARATUR_ZU_FUND_STAND[-1][1]
-REPARATUR_ZU_FUND = f"{REPARATUR_REKORD}/letzte {REPARATUR_LETZTE}"
+REPARATUR_ZU_FUND = (f"{REPARATUR_REKORD}/letzte {REPARATUR_LETZTE}"
+                     f"/{REPARATUR_ZU_FUND_STAND[-1][2]}")
 QUITTUNGEN = len(QUITTUNGEN_STAND)
 DECKEL_CIT = 2
 
@@ -7836,10 +7857,13 @@ def pruefe_zustandszeile(zeile: str) -> list[str]:
             f"— fehlt eins, ist es kein Zusatz")
     rep = [t for t in teile if t.startswith("R→F")]
     if rep:
-        m = re.search(r"/letzte (\d+)$", rep[0])
+        m = re.search(r"/letzte (\d+)(?:/(\w+))?$", rep[0])
         if not m:
             out.append("Zustandszeile: R→F trägt keinen letzten Wert "
                        "(nur Rekord = Bilanz)")
+        elif not m.group(2) or m.group(2) not in REPARATUR_QUELLEN:
+            out.append(f"Zustandszeile: R→F ohne Quelle "
+                       f"(erwartet eine von {REPARATUR_QUELLEN})")
     return out
 
 # §A-ZZZZ57 (Runde 65): **eine Quittung rendert als Quittung, nie als
@@ -7853,6 +7877,21 @@ def pruefe_zustandszeile(zeile: str) -> list[str]:
 # dann: hier ist etwas offen.
 QUITTUNG_TESTS = ("_self_test_prozent",)
 
+# §A-ZZZZ61 (Runde 66): der Nenner des Prosa-Prüfers. Eine Liste, weil die
+# Funktion ihn füllt und `main` ihn druckt — ein Wert, kein Befund.
+PROSA_BILANZ: list[str] = ["nicht gemessen"]
+
+# §A-ZZZZ59 (Runde 66): **der dritte Ausgang — Frische, nicht Befund.**
+# `Akte-Block: der committete Block weicht heute vom Messlauf ab` ist
+# **wahr**, sobald ein Block committet ist: die Akte wuchs danach, also
+# stimmt der Block nicht mehr. Das ist der Zweck (ein Block, der sich
+# selbst trägt, kann nicht stimmen) — und trotzdem machte es den
+# Selbsttest nach jedem Commit rot und `EXIT=1`, während der Hauptlauf
+# `EXIT=0` meldete. Genau die Zeile aus Runde 61 mit echten Zähnen.
+# Der Ausgang heißt **FRISCH**: nicht grün (er hat etwas gefunden), nicht
+# FAIL (es ist offen), sondern **erwartet** — und damit zählbar.
+FRISCHE_TESTS = ("Akte-Block",)
+
 
 def _self_test_zustandsfelder() -> list[str]:
     """§A-ZZZZ58 (Runde 65): **Gleichheit, nicht Obermenge.**
@@ -7865,9 +7904,9 @@ def _self_test_zustandsfelder() -> list[str]:
     out: list[str] = []
     voll = ("4/8 Meßblöcke scheiterbar · 0 Blöcke seit letztem · "
             "Deckel 5 ⇒ unter · 210 Blöcke · 4 : 210 Gegenläufe · "
-            "1/2 quittiert · R→F 1/letzte 1")
+            "1/2 quittiert · R→F 1/letzte 1/Prüfer")
     fehlt = "4/8 Meßblöcke scheiterbar · 0 Blöcke seit letztem · Deckel 5 ⇒ unter · 210 Blöcke · 4 : 210 Gegenläufe · 1/2 quittiert"
-    zuviel = "4/8 Meßblöcke scheiterbar · 0 Blöcke seit letztem · Deckel 5 ⇒ unter · 210 Blöcke · 4 : 210 Gegenläufe · 1/2 quittiert · R→F 1/letzte 1 · Reserve 0"
+    zuviel = "4/8 Meßblöcke scheiterbar · 0 Blöcke seit letztem · Deckel 5 ⇒ unter · 210 Blöcke · 4 : 210 Gegenläufe · 1/2 quittiert · R→F 1/letzte 1/Prüfer · Reserve 0"
     if pruefe_zustandszeile(voll):
         out.append("Akte-Zustandsfelder: vollständige Zeile gilt als Befund")
     if not pruefe_zustandszeile(fehlt):
@@ -7877,12 +7916,15 @@ def _self_test_zustandsfelder() -> list[str]:
     # §71.73: das Feld muß einen schlechten Wert **tragen** können. Der
     # schlechte Wert ist hier nicht ein Befund, sondern ein Zustand —
     # geprüft wird, daß er nicht als Formatfehler verworfen wird.
-    if pruefe_zustandszeile(voll.replace("R→F 1/letzte 1", "R→F 1/letzte 9")):
+    if pruefe_zustandszeile(voll.replace("R→F 1/letzte 1/Prüfer", "R→F 1/letzte 9/Prüfer")):
         out.append("Akte-Zustandsfelder: R→F kann den schlechten Wert nicht "
                    "tragen — Rekord statt Messung")
     # Und die reine Rekordform (ohne `letzte`) muß fallen.
-    if not pruefe_zustandszeile(voll.replace("R→F 1/letzte 1", "R→F 1")):
+    if not pruefe_zustandszeile(voll.replace("R→F 1/letzte 1/Prüfer", "R→F 1")):
         out.append("Akte-Zustandsfelder: reine Rekordform schlägt nicht an")
+    # Und ohne Quelle muß sie fallen — §A-ZZZZ62 (Runde 66).
+    if not pruefe_zustandszeile(voll.replace("/Prüfer", "")):
+        out.append("Akte-Zustandsfelder: R→F ohne Quelle schlägt nicht an")
     return out
 
 
@@ -8284,19 +8326,28 @@ def main() -> int:
             # Jeder Befund, dessen Testname in `QUITTUNG_TESTS` steht, ist
             # eine Quittung — er wird nicht versteckt, er wird **anders
             # beschriftet**, und ein FAIL heißt dann: hier ist etwas offen.
-            quittiert, offen = [], []
+            quittiert, frisch, offen = [], [], []
             for f in fails:
                 name = f.split(":", 1)[0].strip()
-                (quittiert if name in QUITTUNG_TESTS else offen).append(f)
+                ziel = (quittiert if name in QUITTUNG_TESTS
+                        else frisch if name in FRISCHE_TESTS else offen)
+                ziel.append(f)
             for f in quittiert:
                 print(f"  QUITTIERT: {f}")
+            for f in frisch:
+                print(f"  FRISCH: {f}")
             if offen:
                 print(f"check_counts self-test: {len(offen)} FAIL")
                 for f in offen:
                     print(f"  {f}")
                 return 1
+            # §A-ZZZZ60 (Runde 66): die Zähler stehen **im Ausgang**, nicht
+            # im Bericht. `offen=0 quittiert=1 frisch=1` ist prüfbar;
+            # „1 FAIL und der Lauf ist grün" war es nicht.
             print(f"check_counts self-test: "
-                  f"{_SELF_TEST_SCOPE[0]} ({len(quittiert)} quittiert)")
+                  f"{_SELF_TEST_SCOPE[0]} · offen={len(offen)} "
+                  f"quittiert={len(quittiert)} frisch={len(frisch)} · "
+                  f"Prosa {PROSA_BILANZ[0]}")
             return 0
         print(f"check_counts self-test: {_SELF_TEST_SCOPE[0]}")
         return 0
@@ -8451,6 +8502,10 @@ def main() -> int:
     dl = _delta_line(rep.checked, root)
     if dl:
         status += "\n" + dl
+    # §A-ZZZZ61 (Runde 66): der Nenner des Prosa-Prüfers steht in **jeder**
+    # Ausgabe. `2 gefunden` ist ein Erfolg, der nicht scheitern kann;
+    # `0 von 98` ist ein Meßwert.
+    status += f"\nProsa: {PROSA_BILANZ[0]}"
     print(f"\n{status}\n")
 
     # §A-NA (Nicht-Abwesenheit): `0 Abweichungen` heisst, dass alles

@@ -7936,3 +7936,54 @@ Meßblöcke / 8 Meßblöcke) · 7 Felder (6 Trenner + 1) = 7 Einträge in
 `ZUSTAND_FELDER` · R→F 1/letzte 1 (rek = min{9,4,1,1}; letzte = 2.62
 „drei Kopien") · 1/2 quittiert (1 Eintrag / Deckel 2) · 1 QUITTIERT ·
 0 offene FAIL außer dem Block, der diesen Text trägt · EXIT=0.**
+
+### §71.75 — Runde 66: der Bericht, der keine Feldliste hatte
+
+**Commit:** (folgt) · **Zustand:** siehe Karte · **EXIT:**
+`SELFTEST_EXIT=0` · `MAIN_EXIT=0` · **offen 0 · quittiert 1 · frisch 1**
+· **Nicht getan:** die 12.
+
+**Berichtigung §71.74 (Runde 65, Erzählung falsch):** „`R→F` war das
+achte Feld" ist falsch. Die Zeile hatte sechs Trenner und damit sieben
+Felder; `R→F 1` stand da, und der Prüfer hatte sieben gezählt. Nicht
+sichtbar war, daß `ZUSTAND_FELDER` **sechs** Einträge hatte. Das achte
+Feld entstand in Runde 65 aus dem Trenner **im** Feld. Die Korrektur
+war richtig, die Geschichte über sie nicht.
+
+**§A-ZZZZ59/60: der dritte Ausgang, und er war rot.** Runde 65 endete
+mit `SELFTEST_EXIT=1` und `MAIN_EXIT=0` — nicht als Auslassung,
+sondern gemessen. Der einzige Befund war `Akte-Block weicht vom
+Messlauf ab`: **wahr** nach jedem Commit, weil der Block die Akte
+nicht mehr beschreibt, sobald sie wächst. Das ist der Zweck. Aber er
+machte den Selbsttest nach jedem Commit rot, und Rot wird zur Tapete.
+Der Ausgang heißt jetzt `FRISCH` — nicht grün (er hat gefunden), nicht
+FAIL (es ist offen). Die Antwort auf die Frage dieser Runde: **ein
+`FAIL` im Dokumentationsblock ist weder rot noch Modus, er ist der
+falsche Ausgang.**
+
+⇒ Die Ausgabe trägt die Zähler selbst: `offen=0 quittiert=1 frisch=1`.
+Runde 65 konnte `EXIT` und `offen` weglassen, weil sie im Bericht
+standen und nicht im Lauf. **Ein Feld, das man weglassen kann, ist
+kein Feld.**
+
+**§A-ZZZZ61: der Nenner.** `2 gefunden` ist ein Erfolg, der nicht
+scheitern kann. `0 von 98 Zahlen ohne Herkunft` ist ein Meßwert. Die
+Bilanz steht in jeder Selbsttest-Ausgabe, auch wenn nichts rot ist.
+Whitelist bleibt offen — die Klasse ist benannt (Zeilennummer, Datum,
+Commit, Schwelle, Index, Deckel), sie ist noch nicht geschrieben.
+
+**§A-ZZZZ62: `R→F` mit Quelle.** Die vier Einträge nach Fundart:
+eigen, eigen, eigen, **Prüfer**. Alle drei Lesarten (alle / eigen /
+Maschine) stehen bei 1 — **im Moment**. Sobald ein Fund später kommt,
+laufen sie auseinander. Die Quelle steht jetzt im Feld:
+`R→F 1/letzte 1/Prüfer`. Ohne Quelle ist die Zeile rot (Gegenlauf).
+
+**Ihre Hypothese, richtig getrennt.** Meine war „Zahlen mit Ausdruck
+⇒ weniger Prüferfehler" (n = 1, 0 Fehler — unauffällig, nicht
+getestet). Die geprüfte ist stärker: **ohne Ausdruck sind Zahlen
+maschinell findbar.** Erzwingbar statt gut gemeint.
+
+Gezählt: **212 Blöcke (211 + 1) · 4/8 scheiterbar · 7 Felder (6
+Trenner + 1, Zeile und Liste gleich) · R→F 1/letzte 1/Prüfer (rek =
+min{9,4,1,1}, letzte = Eintrag **drei Kopien**, Quelle = Prüfer) ·
+1/2 quittiert · Prosa 0 von 98 · offen 0 · EXIT 0/0.**
