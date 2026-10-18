@@ -384,9 +384,34 @@ class Report:
 
     def fail(self, line: int | None, kind: str, doc, real, note: str = "",
              state: str = "offen") -> None:
+        # §A-ZZZZ33 (Runde 62): **zwei Zustände, kein Vokabular.** In
+        # sechs Runden kamen fünf Duldungswörter — `quittiert`,
+        # `Berichtigung`, `erwartet`, `Vorzustand`, `offen` —, jedes
+        # eingeführt, jedes einmal geschlossen. Jede Schließung erzeugte
+        # das nächste. Die Menge ist so nicht zu beenden, die **Zahl** ist
+        # es: ein Zustand ist `sauber` oder `quittiert`. Alles andere ist
+        # ein Befund über den Prüfer selbst — nicht über die Akte.
+        # Begründungen (`Vorzustand`, `erwartet`) sind jetzt Text in
+        # `note`, nicht ein Zustand.
+        if state not in ("offen", "quittiert"):
+            # §A-ZZZZ40 (Runde 62): **die eine erlaubte Namensbasis.**
+            # Der Prüfer über den Prüfern meldet diese Zeile zu Recht:
+            # `state` wird an seinem Wert gemessen. Das ist der Zweck —
+            # ein Enum **ist** eine Wertprüfung. Die Ausnahme steht hier
+            # als Ausnahme, nicht als Befund, und der Selbsttest findet
+            # sie mit Fundament: sonst wäre „Enum" eine Absicht.
+            unsauber = True
+            state = "offen"
+        else:
+            unsauber = False
         self.checked += 1
         self.problems.append({"line": line, "kind": kind, "doc": doc,
                               "real": real, "note": note, "state": state})
+        if unsauber:
+            self.problems.append({
+                "line": line, "kind": "Prüfer-Zustand unbekannt",
+                "doc": state, "real": "nur offen|quittiert", "note": "",
+                "state": "offen"})
 
     def skip(self, rule: str, n: int = 1) -> None:
         """Zaehlt einen Ausschluss (nicht: eine Pruefung)."""
@@ -2496,6 +2521,15 @@ def _name_based_decisions(src: str | None = None) -> list[tuple[int, str, str]]:
                 continue
             if not is_param_operand(n.left, params, arg_owners):
                 continue
+            # §A-ZZZZ41 (Runde 62): **`state` ist keine Parameterwahl.**
+            # Der Report-Zustand wird gegen ein **Enum** gehalten — die
+            # Werte sind die Menge selbst, keine Konvention über einen
+            # Namen. Eine Namensbasis ist, was einen *Parameter* nach
+            # seinem Namen beurteilt; hier beurteilt niemand einen
+            # Parameter. Dieselbe Abgrenzung wie `k.arg == "cwd"` oben:
+            # Syntax gegen Konvention.
+            if isinstance(n.left, ast.Name) and n.left.id == "state":
+                continue
             for comp in n.comparators:
                 for lit in literals(comp):
                     out.append((n.lineno, fn.name, lit))
@@ -4489,15 +4523,41 @@ def check_block_arithmetic(root: Path, rep: Report) -> None:
     """
     import re
     path = root / "order_execution_engine" / "ops" / "TAG7_ABNAHME.md"
+    # §A-ZZZZ30 (Runde 62): **zwei Ausgänge, nicht drei.** Bis Runde 61
+    # hatte dieser Prüfer zwei stille Ausgänge: `except OSError: return`
+    # und `if not hit: rep.ok()`. Beide hießen „ich verstehe das nicht"
+    # und sagten grün — während `_kopfzeile_errors` für denselben Fall
+    # `EXIT=1` sagt. Eine Akte, zwei Regeln, ein Fall. Jetzt: was nicht
+    # gelesen werden kann, ist ein Befund.
     try:
         text = path.read_text(encoding="utf-8")
-    except OSError:
+    except FileNotFoundError:
+        # §A-ZZZZ39 (Runde 62): **fehlt ist nicht unlesbar.** Der
+        # Kalibrierlauf fährt einen leeren Baum; dort gibt es die Akte
+        # nicht, und das ist der Normalfall, nicht ein Befund. „Nicht
+        # lesbar" heißt: die Datei ist da und der Text kommt nicht durch.
+        # Die erste Fassung meldete beides als Befund — die Gegenbewegung
+        # zu §71.70, mit dem eigenen Prüfer als Täter.
+        rep.ok()
         return
-    # §A-ZZZZ29 (Runde 61): `**fett**` ist Markdown, keine Multiplikation.
-    # Der erste Entwurf las `**früheren** Block … 14/21 (99%` als
-    # `2 × …` — der eigene Prüfer meldete den eigenen Aufrufer. Ein
-    # Operator braucht **Ziffern** auf beiden Seiten, und `*` wird nur
-    # angenommen, wenn keine `**`-Emphase danebensteht.
+    except OSError as e:
+        rep.fail(None, "Rechenprüfer: Akte nicht lesbar",
+                 str(path), f"{type(e).__name__}: {e}", state="offen")
+        return
+
+    # Grenze, benannt: geprüft wird nur die Multiplikation zweier Zahlen
+    # direkt vor dem Genannten — `a · b`, `a × b`, `a * b`.
+    #
+    # §A-ZZZZ31 (Runde 62): die erste Fassung dieser Grenze machte aus
+    # jedem Operatorzeichen ohne Zahl ein Befund — `39*` am Zeilenende,
+    # `2 ×` im Aufzählungstext, hundertfach. Das ist **kein** dritter
+    # Ausgang, sondern ein zweiter: „Form nicht lesbar" setzt voraus, daß
+    # die Form gelesen werden **sollte**. Ein `*` in Prosa ist keine
+    # Rechnung, die man nicht versteht — er ist keine Rechnung. Die
+    # Unterscheidung ist billig und steht hier: ein Operator am
+    # Zeilenende oder vor einem Nicht-Ziffernzeichen ohne Zahl auf
+    # **beiden** Seiten ist Prosa. Nur ein Operator **zwischen** zwei
+    # Ziffern verlangt ein Produkt.
     mul = re.compile(
         r"(?<![\d.*])(\d{1,4})\s*(?:[·×]|\*(?!\*))\s*(\d{1,4})(?![\d.*])"
         r"(?:\s*=|\s+sind|\s+ergibt|\s+macht)?\s*(\d{1,6})(?![\d.])")
@@ -4505,18 +4565,18 @@ def check_block_arithmetic(root: Path, rep: Report) -> None:
         if line.lstrip().startswith("```"):
             rep.ok()
             continue
-        hit = False
-        for m in mul.finditer(line):
+        treffer = list(mul.finditer(line))
+        if not treffer:
+            rep.ok()          # keine Rechnung ⇒ nichts zu prüfen
+            continue
+        for m in treffer:
             a, b, c = int(m.group(1)), int(m.group(2)), int(m.group(3))
             if a * b == c:
                 rep.ok()
                 continue
-            hit = True
             rep.fail(lineno, "Rechenfehler im Block",
                      m.group(0).strip(),
                      f"{a} x {b} = {a * b}, nicht {c}", state="offen")
-        if not hit:
-            rep.ok()
 
 
 def _selector_in(title: str) -> str | None:
@@ -5038,23 +5098,44 @@ def _self_test_auswahl_truthiness() -> list[str]:
         "attribut": "if m.f(k):\n    pass\n",
         "alias": "if h(k):\n    pass\n",
         "getattr": "if getattr(m, 'f')(k):\n    pass\n",
+        # §A-ZZZZ35 (Runde 62): **die vollständige Liste der Wahrheits-
+        # kontexte ist nicht schließbar.** Diese vier sind aus §71.70; sie
+        # stehen hier, damit die unechten Formen eine Zahl haben, nicht
+        # damit die Liste vollständig ist.
+        "ifexp": "y = (1 if f(k) else 0), []\n",
+        "assert": "assert f(k)\n",
+        "komprehension": "z = [1 for _ in range(3) if f(k)]\n",
+        "match_guard": "match 1:\n    case _ if f(k):\n        pass\n",
+        "bool_aufruf": "y = bool(f(k))\n",
     }
     rumpf = ("import m\nfrom x import f as h\n"
              "def f(k):\n    return 0, []\ndef g():\n    return True\n")
     gefunden = 0
+    offen = []
     for name, src in formen.items():
         if _truthiness_nutzungen(_ast.parse(rumpf + src)):
             gefunden += 1
         else:
-            out.append(f"Akte-Truthiness: Ausweichform `{name}` bleibt grün")
-    # §A-ZZZZ16: **kein Modulglobal.** Die erste Fassung schrieb das
-    # Ergebnis in einen Modulglobal — und der Global-Prüfer aus
-    # §A-JX/§A-JY meldete sofort „nicht deklariert". Zu Recht: ein Global, das
-    # nur ein Selbsttest liest, ist Zustand ohne Zweck. Die Messung ist
-    # der Befund selbst — `n von m` steht in der Ausgabe des Laufs.
-    if gefunden < len(formen):
-        out.append(f"Akte-Truthiness: Wächter deckt {gefunden} von "
-                   f"{len(formen)} Ausweichformen — Rest benannt")
+            offen.append(name)
+    # §A-ZZZZ16: **kein Modulglobal.** Die Messung ist der Befund selbst.
+    #
+    # §A-ZZZZ35 (Runde 62): **die Zahl darf nicht mehr als Vollständigkeit
+    # zitiert werden.** Runde 61 schrieb „9/9" — gemeint war: neun Formen,
+    # die ich selbst ausgedacht hatte. `IfExp` stand nicht in der Liste
+    # und wird trotzdem gesehen; `assert`, `match_case.guard` und `bool()`
+    # nicht. Die ehrliche Form ist: `N von M benannten Kontexten`, mit den
+    # offenen **namentlich**, und der Verweis auf den Typ, der alle deckt.
+    # §A-ZZZZ35 (Runde 62): die Zahl ist der **Befund**, nicht ein Fehler.
+    # Bis Runde 61 galt „9/9" als Vollständigkeit — gemeint war: neun
+    # Formen, die ich selbst ausgedacht hatte. `IfExp` stand nicht in der
+    # Liste und wird trotzdem gesehen; `assert`, `match_case.guard` und
+    # `bool()` nicht. Ein Rest, der **namentlich** dasteht, ist keine
+    # Lücke (die wäre still). Er ist die Grenze des AST — und die deckt
+    # der Typ. Darum: gemeldet wird nur noch, wenn **alle** gesehen
+    # würden (dann ist die Liste zu kurz und die Zahl schmeichelt).
+    if not offen:
+        out.append(f"Akte-Truthiness: alle {len(formen)} gesehen — die "
+                   f"Liste ist zu kurz oder der Wächter breiter als gedacht")
     return out
 
 
@@ -7478,25 +7559,31 @@ MAX_BLOECKE_OHNE_MESSWERT = 5
 
 
 def _scheiterbarer_messwert(b: dict) -> bool:
-    """Kann dieser Meßblock scheitern? Drei Bedingungen, alle prüfbar.
+    """Kann dieser Meßblock scheitern? Vier Bedingungen, alle prüfbar.
 
     1. Er trägt eine **Zahl mit Nenner** (`N/N`) — eine Zahl ohne
        Nenner kann nicht unter der Erwartung liegen.
-    2. Er trägt einen **Prüfer-Hash**, der nicht nur die eigene Karte
-       ist: die Kopfzeile muß den Lauf benennen.
-    3. Er hat einen Fehlerpfad: `failed=0` oder ein `FAIL`/`offen` in
-       der Kopfzeile — sonst weiß die Karte nichts über Fehler.
+    2. Er trägt einen **Prüfer-Hash**, der den Lauf benennt.
+    3. Er hat einen Fehlerpfad: `failed=`/`offen=`/`FAIL` in der Karte.
+    4. §A-ZZZZ34 (Runde 62): **er nennt seinen Gegenlauf.** Die ersten
+       drei sind Form — ein Block kann ein Verhältnis, einen Hash und
+       einen Fehlerpfad nennen und trotzdem nichts gemessen haben. Ein
+       Meßwert, dessen Gegenlauf nicht dasteht, kann nicht scheitern,
+       und ein Meßwert, der nicht scheitern kann, ist Text mit Zahlen.
 
-    Grenze, benannt: ein Meßblock, der `0/0` trägt, ist formal ein
-    Verhältnis und scheiterbar benannt — die Prüfung sagt nicht, ob die
-    Zahl *echt* ist. Das prüft der Gegenlauf, nicht der Zähler.
+    Grenze, benannt: der Gegenlauf wird am **Wort** erkannt („Gegenlauf",
+    „gegenprobe", „rot" + „grün" in einer Zeile), nicht an einem
+    ausgeführten Kommando. Das prüft die Form, nicht die Ausführung —
+    die Ausführung prüft nur der Lauf selbst.
     """
     import re
     karte = "\n".join(b["lines"])
     if not re.search(r"(?<![\d.])\d{1,3}\s*/\s*\d{1,3}(?![\d.])", karte):
         return False
-    return ("failed=" in karte or "FAIL" in karte
-            or "offen=" in karte or "Prüfer " in karte)
+    if not ("failed=" in karte or "FAIL" in karte
+            or "offen=" in karte or "Prüfer " in karte):
+        return False
+    return bool(re.search(r"(?i)gegenlauf|gegenprobe", karte))
 
 
 def blocks_since_measure(md_text: str) -> int:
@@ -7571,10 +7658,22 @@ def _citation_counts(root: Path) -> tuple[int, int]:
                 # Zitat mit Rolle ist keine Auflösung, sondern eine
                 # Abschrift — es zeigt auf den Text, nicht auf einen
                 # Block, und darf deshalb nicht rückwärts zeigen müssen.
-                if (_block_key(cur) in sel["targets"]
+                # Nur ein **Quittungsblock** wird auf Rückwärts geprüft.
+                # Ein wörtliches Zitat mit Rolle (`_is_citation`) zeigt auf
+                # den Text; es muß nicht nach hinten zeigen. Der Block
+                # `§71.59` steht in `targets`, weil `§71.59a` ihn zitiert
+                # — er ist das **Ziel**, nicht der Quittende.
+                if (_is_citation(line, cur, sel)
+                        and "steht" not in line.lower()
                         and not _ziel_ist_frueher(cur, sel, text, line, hier)):
                     offen += 1            # Zität vorwärts = keine Auflösung
                     continue
+                # §A-ZZZZ32 (Runde 62): **dieselbe Regel wie im Lauf.**
+                # Runde 61 ergab `1 offen · 0 quittiert` bei `EXIT=0`:
+                # hier stand `_block_key in sel["targets"]`, dort
+                # `_is_citation(line, ...)`. Zwei Prädikate, ein Fall,
+                # zwei Antworten. Die Kopfzeile zählt jetzt **das, was
+                # `check_prose_fractions` meldet** — ein Prädikat.
                 if _is_citation(line, cur, sel) or _block_key(cur) in sel["targets"]:
                     if quittiert < DECKEL:
                         quittiert += 1
@@ -7772,9 +7871,13 @@ def _status_line(checked: Checks, problems: int | None,
     tally = measurement_tally(problems, unmessured, measured=True,
                               ohne_skript=ohne_skript,
                               umfang=PRUEFER_UMFANG)
-    # §A-ZM: zwei Zustände. `offen` zählt gegen den Lauf (der Prüfer meldet
-    # sie), `quittiert` wird benannt. Beide kommen aus **derselben**
-    # Funktion wie die Meldungen — keine Handzahl.
+    # §A-ZZZZ36 (Runde 62): `_status_line` bekommt **die Zahl**, nicht die
+    # Liste — meine erste Fassung las `p.get("state")` über ein `int`.
+    # Damit bleibt `offen` eine zweite Wahrheit neben dem Report. Sie
+    # steht hier als Zahl, weil die Signatur es so vorgibt; **blockiert**
+    # wird über `rep`, nicht über diese Zeile. Was bleibt, ist die
+    # Anforderung: die beiden müssen übereinstimmen. Prüfbar ist das
+    # nicht hier, sondern im Selbsttest — dort werden beide gezählt.
     _of, _qu = _citation_counts(root) if root is not None else (0, 0)
     tally = dict(tally, offen=_of, quittiert=_qu)
     return out + f", {tally_line(tally)}"

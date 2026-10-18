@@ -6326,7 +6326,8 @@ Prosa.** `check_prose_fractions` liest `Z/N (P%)` und rechnet. Toleranz:
 eine Prozentstelle (`floor` und `round` sind beide üblich). Grenze, benannt:
 zwei Prozentzahlen ohne ihre Brüche daneben sieht er nicht — und kann es
 nicht, weil die Operanden fehlen. Der Selbsttest ist die **Negativprobe**:
-`14/21 (99%)` rot, `7/21 (33%)` grün, `14/21 (67%)` grün.
+`14/21` mit Prozent `99` — rot; `7/21` mit `33` — grün;
+`14/21` mit `67` — grün.
 
 **3. Vier Prüfer, ein Fehler: sie schauten auf das, was sie kannten, nicht
 auf das, was sie meinten.** `HEAD~1` statt `HEAD`, die Methode `"w"` statt
@@ -7590,9 +7591,92 @@ ergibt 25,75 und wird **nicht** hingeschrieben — eine Kennzahl, die
 nicht wirkt, zitieren ist Dekoration. 1:80 bleibt Fernziel.
 
 
+### §71.70 — Sieben stille Ausgänge, elf von vierzehn Kontexte, null offen
+
+**Runde 62. Erst gezählt, dann geändert.**
+
+**1. `IfExp` wird gesehen — Ihre Frage war die falsche.** `(1 if r else 0)`
+ist ein `IfExp`, und der Wächter sieht ihn. Gemessen an **vierzehn**
+benannten Kontexten — nicht neun:
+
+| Kontext | gesehen |
+|---|---|
+| `if`, `while`, `elif`, `not`, `and`, `or`, `!=` | ja |
+| Attribut, Alias, `getattr`, `IfExp`, Komprehension | ja |
+| `assert`, `match_case.guard`, `bool(...)` | **nein** |
+
+**11 von 14.** 9/9 war nie Vollständigkeit; es waren neun Formen, die ich
+ausgedacht hatte. Die drei offenen stehen ab jetzt **namentlich** im
+Selbsttest, und der Satz daneben sagt, wer sie deckt: `Auswahl.__bool__`,
+nicht der AST.
+
+**2. Die dritten Ausgänge: sieben, nicht sechs bis zehn — aber aus
+einem anderen Grund.** Gezählt wurden `bare return` im Funktionskörper,
+die verlassen, ohne daß ein `rep.ok()`/`rep.fail()` folgt: **7**.
+`continue` in einer Schleife ist **kein** dritter Ausgang — es zählt
+eine Zeile und die Schleife endet mit `rep.ok()`. Vierundvierzig
+`continue` standen zur Debatte; keiner ist stumm.
+
+**3. Drei Prüfer, drei Meinungen zu „verstehe ich nicht".** In dieser
+Runde umgesetzt:
+
+| Stelle | vorher | jetzt |
+|---|---|---|
+| `check_block_arithmetic` | `except: return`, `if not hit: ok()` | fehlt ⇒ geprüft; unlesbar ⇒ Befund |
+| `_kopfzeile_errors` | Befund (Runde 59) | unverändert — das war richtig |
+| `check_block_arithmetic` (Form) | `**fett**` als `2 ×` | Emphase ist kein Operator |
+
+Und die Gegenbewegung, sofort: „fehlt" ist nicht „unlesbar". Der
+leere Kalibrierbaum ist der Normalfall. `FileNotFoundError ⇒ ok()`,
+`OSError ⇒ Befund`. Die erste Fassung hatte beides als Befund — der
+eigene Prüfer als Täter derselben Klasse, eine Stunde nach ihrer
+Benennung.
+
+**4. `1 offen` bei `EXIT=0` ist aufgelöst — durch Löschen, nicht durch
+Zählen.** Der Befund war echt falsch: in `§71.59` stand „`14/21 (99%)`
+rot" als Negativprobe, und die **richtige** Prozentzahl ist 67. Die
+Zeile nannte eine Ableitung, die sie selbst widerlegt. Runde 61 hatte
+die Stelle in `§71.59a` berichtigt und diese stehen lassen. Jetzt:
+`14/21` mit `99` **rot erwartet**, mit `67` **grün** — eine Aussage
+ohne falschen Operanden. Stand: **0 offen · 0 quittiert**.
+
+**5. Der Zustand ist ein Enum.** Fünf Duldungswörter in sechs Runden,
+jedes geschlossen, jedes durch ein neues ersetzt. `Report.fail` nimmt
+nur noch `offen` oder `quittiert`; alles andere wird **umgebogen auf
+`offen`** und als eigener Befund gemeldet („Prüfer-Zustand unbekannt").
+Begründungen sind Text in `note`, nicht ein Zustand. Die Menge der
+Duldungen ist damit durch die Zahl `DECKEL` begrenzt, nicht durch ein
+Vokabular.
+
+**6. Der Reset braucht den Gegenlauf — und die Karte hat keinen.**
+`blocks_since_measure` verlangt jetzt eine vierte Eigenschaft: den
+genannten Gegenlauf (`gegenlauf|gegenprobe` im Block). Der Kalibrierblock
+nennt keinen. **Stand: 0 scheiterbare Meßwerte in der Karte.** Das ist
+kein Fehler des Zählers — es ist die Wahrheit über die Karte: sie ist
+eine Momentaufnahme, kein Gegenlauf.
+
+**7. Die Fehlerzählung braucht eine Konvention: Instanz = Zeile.**
+Runde 61 nannte sieben Fehler. Davon sind, nach Zeile gezählt, **sechs**
+Instanzen — `split("=",1)[1]` steht in Runde 60 und 61 wortgleich.
+Und die Quote, die etwas sagt:
+
+| | Anzahl |
+|---|---|
+| vom **Prüfer** gefunden | 4 |
+| von **mir** gefunden (im Gegenlauf) | 1 |
+| beim **Schreiben** entstanden, sofort gesehen | 1 |
+| **Prüfer-Differenz** — kein Prüfer, kein Gegenlauf | **0** |
+
+Die letzte Zeile ist die neue Zahl: seit Runde 59 ist **kein** Fehler
+in den Commit gegangen, ohne daß ein Prüfer oder ein Gegenlauf ihn
+gefunden hätte. Die absolute Zahl sagt, wieviel gebaut wurde; diese
+sagt, ob es hält.
+
+**8. Verhältnis.** 207 Blöcke, 75 mit `§71.`-Titel. 207 / 9 = 23,
+nicht hingeschrieben.
+
 ```
-total=1 chain_total=0 reported=1 unclassified=-1 unchecked=0 unclassified_checkers=0
-  Fließtext-Brüche: 1
+total=0 chain_total=0 reported=0 unclassified=0 unchecked=0 unclassified_checkers=0
   Zeilen: 0
   Referenzen: 0
   Wellen: 0
@@ -7600,7 +7684,8 @@ total=1 chain_total=0 reported=1 unclassified=-1 unchecked=0 unclassified_checke
   Inventare: 0
   Testpfade: 0
   Schreibmodus: 0
-kopfzeile: 9 gemessen · 0 nicht gemessen · 0 ohne Skript (12 entfernt) · Prüfer a89da8d21327
-Karte: f1093ce205af
-Bezug: root=/Volumes/THX_OS_ULTRA/Users/olivermueller/agent_x_storage, CLAUDE.md sha256:50fff349a031, Baum 583a471e+dirty
+  Fließtext-Brüche: 0
+kopfzeile: 9 gemessen · 0 nicht gemessen · 0 ohne Skript (12 entfernt) · Prüfer 414fc7366e09
+Karte: 09445e7f0985
+Bezug: root=/Volumes/THX_OS_ULTRA/Users/olivermueller/agent_x_storage, CLAUDE.md sha256:50fff349a031, Baum fef96653+dirty
 ```
