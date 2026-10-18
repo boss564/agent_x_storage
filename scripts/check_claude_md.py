@@ -450,7 +450,10 @@ def check_dead_refs(text: str, root: Path, rep: Report) -> None:
 
 
 def check_counts(text: str, waves: list[str], per: int | None, rep: Report,
-                 root: Path | None = None) -> None:
+                 root: Path | None = None,
+                 wave_index: dict[str, str] | None = None,
+                 wave_ctx: str | None = None,
+                 claims_rep: Report | None = None) -> None:
     """Jede '<N> agents'/'<N> waves'-Angabe gegen die Tabelle.
 
     ×9-Summe (243) ist der Default. Steht „total“/„insgesamt“ im Kontextfenster
@@ -481,13 +484,28 @@ def check_counts(text: str, waves: list[str], per: int | None, rep: Report,
     # Pruefer bisher nicht — und genau das ist der stille Fall.
     suite_row = re.compile(
         r"(\d+)\s*/\s*(\d+)\s+(?:tests?\s+passed|Tests)")
+    # §A-NP: der Wellenindex wird **einmal** gebaut, nicht pro Zeile —
+    # dann ist `check_counts` weiter zeilenlokal (§A-NE), weil die Zahl
+    # pro Zeile nur von der Zeile und diesem Index abhaengt, nicht von
+    # den Nachbarzeilen.
+    _wave_scripts = wave_index if wave_index is not None else _wave_script_index(text)
+    _wave_ctx: str | None = None
+    # §A-NM (Runde 51): Zusagen landen in `claims_rep`, wenn der Aufrufer
+    # einen eigenen Report uebergibt. `rep` traegt dann nur die **Befunde**
+    # — die Kopfzeile zaehlt Zusagen und Abweichungen getrennt (§A-NI).
+    _cl = claims_rep if claims_rep is not None else rep
     for lineno, raw in enumerate(text.splitlines(), 1):
+        _hm = re.match(r"^#{1,6}\s*(?:§[\d.]+\s*)?(?:Wave|Welle)\s*(\d+(?:\.\d+)?)", raw)
+        if _hm:
+            _wave_ctx = _hm.group(1)
+        if _wave_ctx is None:
+            _wave_ctx = wave_ctx
         refs = re.findall(r"`(scripts/test_[\w/]+\.py)`", raw)
         for m in suite_row.finditer(raw):
             passed, total = int(m.group(1)), int(m.group(2))
             if refs:
                 for ref in refs:
-                    rep.claim(f"suite:{ref}", total, lineno, raw)
+                    _cl.claim(f"suite:{ref}", total, lineno, raw)
                     # §A-NL (Runde 50): `root is None` hiess bisher
                     # „Pruefung aus" — und das war genau dann der Fall, wenn
                     # geprueft werden sollte (erster Lauf in fremder
@@ -506,10 +524,24 @@ def check_counts(text: str, waves: list[str], per: int | None, rep: Report,
                     else:
                         rep.ok()
             elif total >= 20:
-                # Wellentabelle: Zahl ohne Skript — die Zusage steht, der
-                # Bezug fehlt. Gezaehlt, nicht bewertet.
-                rep.claim("suite:ohne-skript", total, lineno, raw)
-                rep.skip("tests_ohne_skript")
+                # §A-NP (Runde 51): „ohne Skript" war ein Satzmerkmal, kein
+                # Dateimerkmal. Elf der zwoelf Zusagen haben ein Skript —
+                # es steht nur in einer anderen Zeile. Also: Bezug aus der
+                # **ganzen Datei**, mit Wellenpaarung. Die Zwölf sind
+                # gemessen, nicht behauptet: `test_wave15_public_portal.py`
+                # existiert nicht (die Suite steht unter
+                # `scripts/test_public_portal.py`).
+                cand = _suite_ref_for(raw, _wave_ctx, _wave_scripts)
+                if cand:
+                    _cl.claim(f"suite:{cand}", total, lineno, raw)
+                    if not (root / cand).exists():
+                        rep.fail(lineno, "Suite zugesagt, Skript fehlt",
+                                 f"{passed}/{total} ({cand})", "nicht vorhanden")
+                    else:
+                        rep.ok()
+                else:
+                    _cl.claim("suite:ohne-skript", total, lineno, raw)
+                    _cl.skip("tests_ohne_skript")
         # §A-NA: ein `N/N` vor `waves` ist der Umfang **eines Skripts**,
         # nicht die Wellenzahl der Architektur. Der Bruch wird vor der
         # Zaehlung aus der Zeile entfernt — sonst meldet der Pruefer 11
@@ -601,6 +633,10 @@ def self_test_check_counts() -> list[str]:
     # ein Literal. Ohne diesen Test ist `28` in Runde 44 ein Literal, das
     # niemand mehr herleiten kann.
     failures.extend(_self_test_claim_count())
+    # §A-NM/§A-NN (Runde 51): die zwei neuen Pruefer brauchen einen
+    # nachweislich roten Lauf (vierter Punkt) — sonst sagt ihre Null nichts.
+    failures.extend(_self_test_status_line_none())
+    failures.extend(_self_test_ignored_test_paths())
     failures.extend(_self_test_root_counts())
     failures.extend(_self_test_literal_errors())
     failures.extend(_self_test_calibration_classes())
@@ -609,6 +645,7 @@ def self_test_check_counts() -> list[str]:
     failures.extend(_self_test_default_root())
     failures.extend(_self_test_gitlink())
     failures.extend(_self_test_akt_block())
+    failures.extend(_self_test_tally_numbers())
     failures.extend(_self_test_cwd_readers())
     failures.extend(_self_test_reader_calls())
     failures.extend(_self_test_wirkung())
@@ -621,11 +658,13 @@ def self_test_check_counts() -> list[str]:
     # und muessen hier erscheinen — ein Selbsttest, der nicht in der
     # Kopfzeile steht, ist ein Selbsttest, den niemand bucht. Die Summe
     # steht in der Ausgabe, nicht im Kommentar.
-    _SELF_TEST_SCOPE[0] = ("34/34 (5 Zaehlung + 5 Bezugsraum + 14 "
+    _SELF_TEST_SCOPE[0] = ("35/35 (5 Zaehlung + 5 Bezugsraum + 14 "
                            "Differenz/Nenner/Ort/Einheit/Zwillingspfad"
                            " + 1 root-Zaehlung + 1 Literal-Regel"
                            " + 1 Klassenliste + 1 Selbstprobe"
-                           " + 1 Lesepfad + 1 Default-Ort + 1 Gitlink + 1 Akte-Block + 1 CWD-Rollen + 1 Leser-Aufruf, 28 Zusagen live)")
+                           " + 1 Lesepfad + 1 Default-Ort + 1 Gitlink + 1 Akte-Block"
+                           " + 1 Tally-Zahlen + 1 CWD-Rollen + 1 Leser-Aufruf, "
+                           "28 Zusagen live)")
 
 
 def _self_test_root_counts() -> list[str]:
@@ -900,6 +939,7 @@ def calibration_run(root: Path, text: str | None = None,
     doc = text if text is not None else (root / "CLAUDE.md").read_text(
         encoding="utf-8")
     waves, per = parse_waves(doc)
+    _claims_rep = Report()
     classes: list[tuple[str, int]] = []
     reported: list[Report] = []
 
@@ -909,12 +949,13 @@ def calibration_run(root: Path, text: str | None = None,
         classes.append((name, len(rep.problems)))
         reported.append(rep)
 
-    def run_kw(name: str, fn, *args, **kw) -> None:  # type: ignore[no-untyped-def]
+    def run_kw(name: str, fn, *args, **kw) -> Report:  # type: ignore[no-untyped-def]
         """Fuer Pruefer, deren `rep` **nicht** der letzte Parameter ist."""
         rep = Report()
         fn(*args, rep, **kw)
         classes.append((name, len(rep.problems)))
         reported.append(rep)
+        return rep
 
     run("Zeilen", check_line_counts, doc, root)
     run("Referenzen", check_dead_refs, doc, root)
@@ -922,19 +963,40 @@ def calibration_run(root: Path, text: str | None = None,
     # `root` andere Befunde (im Klon: keine statt sechzehn) — die Zahl
     # haengt sonst vom Aufrufweg ab, und genau das war der Fehler, den
     # `_git_callers_without_cwd` in Runde 41 fand.
-    run_kw("Wellen", check_counts, doc, waves, per, root=root)
+    run_kw("Wellen", check_counts, doc, waves, per, root=root,
+           claims_rep=_claims_rep)
     run("Tests ohne Skript", check_undocumented_tests, root)
     run("Inventare", check_doc_inventories, root)
+    # §A-NN (Runde 51): derselbe Pruefer wie in `main` — sonst kennt
+    # `main` eine Pruefung, die der Kalibrierlauf nicht sieht, und die
+    # Differenz ist genau die Luecke, die §A-MT meldet.
+    # §A-NW: **direkt** mit eigenem Report, nicht ueber `run(...)`.
+    # `_checker_gap` liest den AST nach `check_*`-Calls; `run("Name", fn,
+    # root)` ist ein `Name`-Argument und damit fuer den Pruefer unsichtbar.
+    # Die Umhuellung ist Komfort, kein Grund, den Pruefer blind zu machen.
+    _tp = Report()
+    check_test_paths_ignored(root, _tp)
+    classes.append(("Testpfade", len(_tp.problems)))
+    reported.append(_tp)
     if with_tests:
         run("Testsuite", check_tests, doc, root)
 
     chain_rep = Report()
     chain(chain_rep)
     total = sum(n for _, n in classes)
+    # §A-NM (Runde 51): `unclassified` kann **nicht negativ** sein. Ein
+    # negativer Wert heisst, dass ein Pruefer in einer Klasse zaehlt und in
+    # der Kette nicht — `total > chain_total`. Das ist derselbe Fehler wie
+    # ein unclassified > 0, nur mit dem Vorzeichen vertauscht; vor Runde 51
+    # lief er als `-1` durch und wurde von keiner Zusicherung gefangen.
+    _raw = len(chain_rep.problems) - total
     return {
         "total": total,
         "classes": sorted(classes, key=lambda kv: -kv[1]),
-        "unclassified": len(chain_rep.problems) - total,
+        # Ein negativer Wert bleibt sichtbar (er ist ein Fehler, kein
+        # Rundungsrest) — aber die Kopfzeile nennt ihn als **Zaehlfehler**,
+        # nicht als Abweichung.
+        "unclassified": _raw,
         "chain_total": len(chain_rep.problems),
         # §A-MR (Runde 45): `sum(classes) + unclassified == chain_total`
         # haelt per Konstruktion zusammen, was aus derselben Zahl gebaut
@@ -953,6 +1015,10 @@ def calibration_run(root: Path, text: str | None = None,
         # Richtungen, nicht eine.
         "unchecked": _checker_gap("main", "calibration_run"),
         "unclassified_checkers": _checker_gap("calibration_run", "main"),
+        # §A-NM (Runde 51): die Zusagen ohne Skript sind Zahlen der
+        # Kopfzeile. Ein Generator, der sie nur im Fliesstext kennt,
+        # wiederholt den Klammer-Fehler.
+        "claims": list(_claims_rep.claims),
     }
 
 
@@ -1267,6 +1333,32 @@ def _akt_block_mismatch(root: Path | None = None,
     return _compare_block(blocks[-1].strip(), calibration_card(root))
 
 
+def _tally_line_of(root: Path | None = None) -> str:
+    """Die Kopfzeile des echten Laufs — drei Zahlen, keine Fußnote (§A-NM)."""
+    return tally_line(measurement_tally(None, [], measured=False))
+
+
+def _require_int_tally(tally: dict[str, object], where: str) -> list[str]:
+    """Verlangt, dass `abweichungen` eine ganze Zahl ist — oder `None` (§A-NM).
+
+    Der Vertrag aus §71.56: eine Akte, die eine Zahl zitiert, verlangt eine
+    Zahl. Kommt `None`, ist der Lauf kein Messlauf — und der Zitierende muß
+    das als **Fehler** sehen, nicht als `0` lesen. Ein `bool` ist keine Zahl
+    (`isinstance(True, int)` ist wahr, aber `True` ist keine Messung).
+    """
+    aw = tally.get("abweichungen")
+    if aw is None:
+        return [f"{where}: abweichungen ist None — kein Messlauf, "
+                "keine Zahl zitierbar"]
+    if not isinstance(aw, int) or isinstance(aw, bool) or aw < 0:
+        return [f"{where}: abweichungen={aw!r} ist keine ganze Zahl >= 0"]
+    for k in ("nicht_gemessen", "ohne_skript"):
+        v = tally.get(k)
+        if not isinstance(v, int) or isinstance(v, bool) or v < 0:
+            return [f"{where}: {k}={v!r} ist keine ganze Zahl >= 0"]
+    return []
+
+
 def _compare_block(cited: str, card: str) -> list[str]:
     out: list[str] = []
     want, got = card.splitlines(), cited.splitlines()
@@ -1335,6 +1427,56 @@ def _self_test_akt_block() -> list[str]:
     if _compare_block(card, card):
         out.append("Akte-Block: identischer Block wird als abweichend "
                    "gemeldet")
+    return out
+
+
+def _self_test_tally_numbers() -> list[str]:
+    """Trägt die Kopfzeile drei Zahlen — und keine Fußnote? (§A-NM)
+
+    Der Fehlschlag der letzten Runde: `0 Abweichungen (kein .git/ — keine
+    Differenzmessung) · 12 ohne Skript`. Drei Einschränkungen, eine Null,
+    die wie eine Summe aussieht. Fünf Behauptungen:
+
+      A. Ohne Differenzmessung ist `abweichungen` **None**, nie 0.
+      B. Die Tally rendert `unvollstaendig`, nicht `0 gemessen`.
+      C. `ohne_skript` steht als **eigene** Zahl, nicht in Klammern.
+      D. Ein Messlauf mit Abweichungen nennt sie als ganze Zahl.
+      E. `_require_int_tally` lehnt `None`, `bool` und negative Werte ab.
+    """
+    out: list[str] = []
+    blind = measurement_tally(None, ["a", "b"], measured=False,
+                              ohne_skript=["c"])
+    if blind["abweichungen"] is not None:
+        out.append(f"Tally: ohne Messung gibt abweichungen={blind['abweichungen']!r} "
+                   "statt None")
+    # §A-NM: `nicht_gemessen` = 2 Pruefer + 1 fehlende Differenz; die
+    # Zusage ohne Skript ist **eine eigene** Zahl und zaehlt hier nicht mit.
+    if blind["nicht_gemessen"] != 3:
+        out.append(f"Tally: nicht_gemessen={blind['nicht_gemessen']} "
+                   "statt 3 (2 unmessured + 1 Differenz)")
+    if blind["ohne_skript"] != 1:
+        out.append(f"Tally: ohne_skript={blind['ohne_skript']} statt 1")
+    rendered = tally_line(blind)
+    if "gemessen" not in rendered or not rendered.startswith("unvollstaendig"):
+        out.append(f"Tally: Rendering {rendered!r} beginnt nicht mit "
+                   "`unvollstaendig`")
+    if "0 gemessen" in rendered:
+        out.append("Tally: Rendering enthält `0 gemessen` — die Footnote "
+                   "ist zurück")
+    ok = measurement_tally(0, [], measured=True)
+    if ok["abweichungen"] != 0:
+        out.append(f"Tally: Messlauf gibt {ok['abweichungen']!r} statt 0")
+    if not tally_line(ok).startswith("0 gemessen · 0 nicht gemessen"):
+        out.append(f"Tally: Messlauf rendert {tally_line(ok)!r}")
+    # E: der Vertrag, an dem die Akte scheitern soll
+    for bad, why in ((None, "None"), (True, "bool"), (-1, "negativ"),
+                     ("0", "str")):
+        if not _require_int_tally({"abweichungen": bad,
+                                   "nicht_gemessen": 0,
+                                   "ohne_skript": 0}, "Probe"):
+            out.append(f"Tally: _require_int_tally akzeptiert {why}")
+    if _require_int_tally(ok, "Probe"):
+        out.append("Tally: _require_int_tally lehnt den Messlauf ab")
     return out
 
 
@@ -2354,6 +2496,15 @@ def calibration_card(root: Path | None = None) -> str:
              f"unclassified_checkers={rep['unclassified_checkers']}"]
     for name, n in rep["classes"]:
         lines.append(f"  {name}: {n}")
+    # §A-NM (Runde 51): die drei Zahlen gehören **in** den Block. Ein Block,
+    # der nur `total=` zitiert und die Einschränkung dem Fließtext überlässt,
+    # wiederholt genau den Kopfzeilen-Fehler eine Ebene tiefer.
+    _unref = [c for c in rep["claims"] if c[0] == "suite:ohne-skript"]
+    _measured = repo_measurement_available(base)
+    tally = measurement_tally(int(rep["total"]) if _measured else None,
+                              measured=_measured,
+                              ohne_skript=[c[0] for c in _unref])
+    lines.append(f"kopfzeile: {tally_line(tally)}")
     lines.append(f"Bezug: root={base}, CLAUDE.md sha256:{sha}, "
                  f"Baum {_tree_ref(base)}")
     return "\n".join(lines)
@@ -2392,15 +2543,17 @@ def _self_test_calibration_classes() -> list[str]:
         names = sorted(n for n, _ in base["classes"])
         # Erwartung als Literal mit Herkunft: `main` ruft
         # `check_line_counts`, `check_dead_refs`, `check_counts`,
-        # `check_undocumented_tests`, `check_doc_inventories` (und
-        # `check_tests` nur unter `--run-tests`). Ohne `with_tests` sind
-        # das **fuenf** Klassen.
+        # `check_undocumented_tests`, `check_doc_inventories` und
+        # `check_test_paths_ignored` (Runde 51; `check_tests` nur unter
+        # `--run-tests`). Ohne `with_tests` sind das **sechs** Klassen —
+        # die Sechszahl selbst wird vom `_checker_gap`-Test gegen `main`
+        # gemessen, nicht hier vertraut.
         if names != sorted(["Zeilen", "Referenzen", "Wellen",
-                            "Tests ohne Skript", "Inventare"]):
-            out.append(f"Kalibrierlauf nennt nicht die fuenf der Kette: {names}")
-        if len(base["classes"]) != 5:
+                            "Tests ohne Skript", "Inventare", "Testpfade"]):
+            out.append(f"Kalibrierlauf nennt nicht die sechs der Kette: {names}")
+        if len(base["classes"]) != 6:
             out.append(f"Kalibrierlauf hat {len(base['classes'])} Klassen, "
-                       f"erwartet 5")
+                       f"erwartet 6")
         # (2) Die harte Zeile: total ist die Summe der Klassen — und die
         #     Kette ist Summe plus Luecke. Beide Gleichungen, nicht eine.
         s = sum(n for _, n in base["classes"])
@@ -2954,9 +3107,21 @@ def _self_test_count_delta() -> list[str]:
             # nicht die Zeile. Gemessen: die Zahl der Pruefungen pro Zeile
             # ist genau die Zahl der Fundstellen ohne skip.
             per_line_checked = per_line_skips = 0
+            _line_ctx: str | None = None
             for raw in text_doc.splitlines():
+                _hm = re.match(r"^#{1,6}\s*(?:§[\d.]+\s*)?(?:Wave|Welle)\s*(\d+(?:\.\d+)?)", raw)
+                if _hm:
+                    _line_ctx = _hm.group(1)
                 one = Report()
-                check_counts(raw, w_doc, p_doc, one, root_repo)
+                # §A-NE: die Zeile **plus** der Wellenindex der Datei.
+                # Der Index ist Teil des Pruefbereichs, nicht Nachbartext:
+                # er enthaelt nur `Wave N -> testpfad`-Paare, und die
+                # Zaehlung je Zeile haengt seither nicht mehr an den
+                # Nachbarzeilen — sonst waere `check_counts` nicht
+                # mehr zeilenlokal und der Nenner wanderte.
+                check_counts(raw, w_doc, p_doc, one, root_repo,
+                             wave_index=_wave_script_index(text_doc),
+                             wave_ctx=_line_ctx)
                 per_line_checked += one.checked
                 per_line_skips += sum(one.skips.values())
             if per_line_checked != rep.checked:
@@ -2969,9 +3134,21 @@ def _self_test_count_delta() -> list[str]:
             # nicht zaehlt, laesst die Nennerzeile auf 0 stehen — und 0
             # sieht in der Ausgabe aus wie "nichts ausgeschlossen", nicht
             # wie "Zaehlung entfernt" (Mutation ueberlebte vorher).
-            for rule in ("waves", "agents<50", "tests_ohne_skript"):
+            # §A-NP (Runde 51): `tests_ohne_skript` darf **legitim** 0 sein,
+            # wenn jede Suite-Zusage einen Skriptbezug hat — das ist der
+            # Zielzustand, nicht ein Defekt. Die beiden anderen Regeln
+            # duerfen nie 0 sein (jede Datei hat Wellen und Agentenzahlen).
+            for rule in ("waves", "agents<50"):
                 if rep.skips.get(rule, 0) == 0:
                     failures.append(f"Ausschlussregel {rule!r} zaehlt 0")
+            _unref = [c for c in rep.claims if c[0] == "suite:ohne-skript"]
+            if rep.skips.get("tests_ohne_skript", 0) != len(_unref):
+                failures.append(
+                    "Ausschlussregel 'tests_ohne_skript' zaehlt "
+                    f"{rep.skips.get('tests_ohne_skript', 0)}, Zusagen "
+                    f"ohne Skript: {len(_unref)}")
+            if _unref and "tests_ohne_skript" not in rep.skips:
+                failures.append("Zusagen ohne Skript, aber kein Skip — still")
             if rep.checked and rep.claims and not rep.skips:
                 failures.append("Ausgeschlossene fehlen: skip-Zweig zaehlt nicht")
 
@@ -3002,11 +3179,12 @@ def _self_test_count_delta() -> list[str]:
         #     nicht beide nur "geprueft" heissen. Geprueft wird die
         #     Ausgabeform selbst — sie ist die Stelle, an der zwei
         #     Einheiten ein Wort teilten.
-        line = _status_line(Checks(223, 210, 0), 0)
-        # §A-NL (Runde 50): die Form *ohne* Baum muss den Mangel nennen.
-        # Vorher fehlte die Zeile — der stille Skip im Text.
-        if "KEIN BAUM" not in line:
-            failures.append("Kopfzeile ohne root verschweigt den fehlenden Baum")
+        line = _status_line(Checks(223, 210, 0), 0, Path("/tmp/_einheit"))
+        # §A-NM (Runde 51): ohne Baum gibt es **keine Zahl** — nicht den
+        # Text „KEIN BAUM" mit einer Null daneben. `None` ist die
+        # Reparatur; ein besserer Kommentar war die alte Falle (R47).
+        if _status_line(Checks(223, 210, 0), 0, None) is not None:
+            failures.append("Kopfzeile ohne root liefert eine Zahl statt None")
         # §A-MF (Runde 43): die Formprobe braucht ihren **Partner**. Der
         # Beweis, dass `root` wirkt, ist das Paar, nicht die Haelfte: ohne
         # `root` steht kein Bezug in der Zeile, mit `root` steht er da.
@@ -3017,7 +3195,12 @@ def _self_test_count_delta() -> list[str]:
         # Kette — zweimal gezaehlt, einmal eigener Baum, einmal Klon.
         # Der Name des Tests sagt jetzt, was er prueft.
         line_pair = _status_line(Checks(223, 210, 0), 0, Path("/tmp/_paar"))
-        if "Bezug: root=" in line:
+        line_noroot = _status_line(Checks(223, 210, 0), 0, None)
+        # Der Zwilling muss den Bezug **haben**, der Andere darf weder
+        # Zahl noch Bezug tragen. Vorher pruefte diese Zeile `line`
+        # (die Form **mit** root) gegen "ohne root" — ein Fehlalarm.
+        if line_noroot is not None or (line_pair is None
+                                       or "Bezug: root=" not in line_pair):
             failures.append("Kopfzeile ohne root nennt einen Bezug")
         if "Bezug: root=/tmp/_paar" not in line_pair:
             failures.append("Kopfzeile mit root nennt ihn nicht")
@@ -3323,7 +3506,7 @@ def _self_test_count_delta() -> list[str]:
                 f"claim() veraendert total nicht: {c_no.total} vs {c_all.total}")
         if c_no.measured != c_all.measured:
             failures.append("claim() veraendert measured — falscher Eimer")
-        line_all = _status_line(c_all, 0)
+        line_all = _status_line(c_all, 0, Path("/tmp/_all"))
         for need in ("2 Angaben geprueft", "6 Angaben gezaehlt",
                      "5 gemessen", "1 Zusagen"):
             if need not in line_all:
@@ -3331,7 +3514,7 @@ def _self_test_count_delta() -> list[str]:
         # Ohne Zusagen: die Klammer nennt `0 Zusagen` — das ist eine Zahl,
         # keine Behauptung. Verboten ist nur der Zusatz **ausserhalb** der
         # Klammer, der eine vierte Einheit vortaeuscht (§A-KX).
-        line_no = _status_line(c_no, 0)
+        line_no = _status_line(c_no, 0, Path("/tmp/_no"))
         if "0 Zusagen" not in line_no or line_no.count("Zusagen") != 1:
             failures.append(f"Zeile verschweigt null Zusagen: {line_no!r}")
 
@@ -3595,12 +3778,12 @@ def _self_test_count_delta() -> list[str]:
             failures.append("Aufteilung nicht im Objekt: gleiche Summe, gleicher Wert")
         if Checks(5, 1) == Checks(5, 2):
             failures.append("__eq__ ignoriert excluded")
-        line_ident = _status_line(c1, 0)
+        line_ident = _status_line(c1, 0, Path("/tmp/_i1"))
         if "21 Angaben geprueft" not in line_ident or \
                 "231 Angaben gezaehlt" not in line_ident or \
                 "210 ausgeschlossen" not in line_ident:
             failures.append(f"Zeile rechnet nicht aus dem Typ: {line_ident!r}")
-        line_ident3 = _status_line(c3, 0)
+        line_ident3 = _status_line(c3, 0, Path("/tmp/_i3"))
         if "11 Angaben gezaehlt" not in line_ident3:
             failures.append(f"Zeile rechnet nicht (zweites Paar): {line_ident3!r}")
         try:
@@ -3837,6 +4020,94 @@ def _skip_inventory_backtick_ref(ref: str) -> bool:
     if ref.startswith(("logs/", "data/")):
         return True
     return False
+
+
+def _self_test_status_line_none() -> list[str]:
+    """§A-NM (Runde 51): sagt die Kopfzeile `None` statt `0`?
+
+    Vierter Punkt der Runde 51: ein Prüfer, der `0` sagt, ist nur glaubwürdig, wenn
+    dieselbe Regel **einmal rot war**. Für die Kopfzeile heißt rot:
+    `problems=None` (keine Differenzmessung, kein `.git/`) darf **keine
+    Zahl** ergeben — weder `0` noch eine gerenderte Klammer-Fußnote.
+    Der Lauf in Runde 51 hat das gemessen: der Staging-Baum schrieb
+    `, 0 Abweichungen` und den Grund in Klammern darunter.
+    """
+    out: list[str] = []
+    c = Checks(223, 210, 0)
+    got = _status_line(c, None, Path("/tmp/_none"))
+    if got is not None:
+        out.append(f"_status_line(problems=None) gibt {got!r} statt None")
+    if _status_line(c, 0, Path("/tmp/_ok")) is None:
+        out.append("_status_line(problems=0) gibt None — der gesunde Fall "
+                   "ist verloren")
+    # Kein Baum: gar keine Zahl.
+    if _status_line(c, 0, None) is not None:
+        out.append("_status_line(root=None) gibt eine Zahl — kein Baum "
+                   "heißt nicht gemessen")
+    # Gemessene 0 mit zweiter Zahl: die drei Zahlen stehen getrennt da
+    # (§A-NM) — `0 gemessen`, die nicht gemessenen, die ohne Skript. Die
+    # alte Form `0 Abweichungen` mit Fussnote ist verboten: sie sieht aus
+    # wie eine Summe ueber alles.
+    line = _status_line(c, 0, Path("/tmp/_x"), unmessured=["a", "b"],
+                        ohne_skript=["s1", "s2"])
+    if line is None or "0 gemessen · 2 nicht gemessen · 2 ohne Skript" not in line:
+        out.append(f"gemessene 0 fehlt: {line!r}")
+    elif "Abweichungen" in line:
+        out.append(f"alte Fussnotenform in der Kopfzeile: {line!r}")
+    return out
+
+
+def _self_test_ignored_test_paths() -> list[str]:
+    """§A-NN (Runde 51): meldet der `.gitignore`-Pruefer **und** schweigt
+    er im heilen Fall? (roter Lauf vor grünem.)
+
+    Zwei Bäume, gleicher Prüfer: einer mit einem Test, der eine ignorierte
+    Datei **vorfindet** (muß rot sein), einer mit einem Test, der sie
+    **erzeugt** (muß grün sein). Ohne den roten Lauf wäre `0` eine
+    Behauptung — dieselbe Form wie `_checker_gap` in Runde 48.
+    """
+    import tempfile
+    out: list[str] = []
+    for label, gitignore, body, expect in (
+        ("vorgefunden", "data/\n*.jsonl\n",
+         'p = _ROOT / "data" / "x" / "feat.jsonl"\n'
+         'if not p.is_file():\n    raise SystemExit(1)\n', 1),
+        ("erzeugt", "data/\n*.jsonl\n",
+         'p = _ROOT / "data" / "x" / "feat.jsonl"\np.unlink()\n'
+         'p.write_text("{}")\n', 0),
+        # §A-NM: Verzeichnismuster mit Unterpfad — der Fall aus Runde 50,
+        # den die alte Fassung **nie** gesehen hat (`fnmatch` gegen `data/`).
+        ("dir-muster", "data/synthetic/\n",
+         'import json\njson.load(open("data/synthetic/f.jsonl"))\n', 1),
+        # §A-NM: dasselbe Muster, aber als Verbotsliste — gewollt, grün.
+        ("verbotsliste", "data/\n",
+         '_FORBIDDEN = ("/data/raas/worm",)\n'
+         'def test_a():\n    assert "/data/raas/worm" in _FORBIDDEN\n', 0),
+    ):
+        root = Path(tempfile.mkdtemp(prefix="gi_"))
+        (root / ".gitignore").write_text(gitignore, encoding="utf-8")
+        (root / "scripts").mkdir()
+        (root / "scripts" / "test_x.py").write_text(
+            "_ROOT = __import__('pathlib').Path('.')\n" + body,
+            encoding="utf-8")
+        rep = Report()
+        # Index: leer — `data/` ist ausgeschlossen, nichts dort ist im Index.
+        _in_index._cache = {"README.md"}  # type: ignore[attr-defined]
+        check_test_paths_ignored(root, rep)
+        got = len(rep.problems)
+        if got != expect:
+            out.append(f"gitignore-Pruefer ({label}): {got} Meldungen, "
+                       f"erwartet {expect}")
+        if expect == 0 and rep.checked == 0:
+            out.append("gitignore-Pruefer: heiler Baum wurde nicht geprueft "
+                       "(0 Angaben — still statt gruen)")
+    # §A-NM: und das Muster selbst — der Fall, der blind war.
+    if _gitignore_hit("data/synthetic/f.jsonl", ["data/synthetic/"]) is None:
+        out.append("gitignore-Muster `dir/` trifft keinen Unterpfad — "
+                   "der Pruefer ist blind fuer Verzeichnismuster")
+    if _gitignore_hit("docs/f.jsonl", ["data/"]) is not None:
+        out.append("gitignore-Muster `data/` trifft `docs/` — Praefix zu weit")
+    return out
 
 
 def _self_test_probe_anchors_self() -> list[str]:
@@ -4787,6 +5058,29 @@ def _reset_root_cache() -> None:
     _SNAPSHOT_CACHE.clear()
 
 
+def repo_measurement_available(root: Path | None = None) -> bool:
+    """Findet der Pruefer in **diesem** Baum ein Repo? (§A-NM, Runde 51)
+
+    `repo_root` gibt ohne Repo die Projektwurzel zurueck — richtig fuer
+    Dateizugriffe, falsch fuer die Frage „kann ich messen". Die beiden
+    Zustaende sind:
+
+      Repo vorhanden     → Differenz gegen Vorlauf messbar
+      kein `.git/`       → **nicht** messbar (Hook-Staging-Export)
+
+    Ohne diese Unterscheidung schrieb die Kopfzeile `0 Abweichungen`
+    und den Grund in Klammern — die Null war die Summe der gemessenen
+    Abweichungen und sah aus wie die Summe ueber alles.
+    """
+    try:
+        r = subprocess.run(["git", "rev-parse", "--git-common-dir"],
+                           cwd=str(repo_root(root)),
+                           capture_output=True, text=True, timeout=5)
+        return r.returncode == 0 and bool(r.stdout.strip())
+    except (OSError, subprocess.SubprocessError):
+        return False
+
+
 def _snapshot_path(root: Path | None = None) -> Path:
     """Ort des Vorlaufs: **ein** Ort, nicht „neben dem Pruefer" (§A-NC).
 
@@ -5074,9 +5368,413 @@ class Checks:
         return hash(("Checks", self.n, self.excluded, self.claims))
 
 
-def _status_line(checked: Checks, problems: int,
-                 root: Path | None = None) -> str:
+def _gitignore_patterns(root: Path) -> list[str]:
+    """Die Muster aus `.gitignore`, ohne Kommentare und Leerzeilen (§A-NN).
+
+    §3 der Runde 51: `.gitignore` **ist** ein Prüfer, der schon im Repo
+    steht — er wird nur nicht gelesen. Ein Fixture, das von einer Datei
+    abhängt, die dort ausgeschlossen ist, ist per Definition keines.
+    """
+    gi = root / ".gitignore"
+    if not gi.exists():
+        return []
+    out: list[str] = []
+    for raw in gi.read_text(encoding="utf-8").splitlines():
+        s = raw.strip()
+        if not s or s.startswith("#") or s.startswith("!"):
+            continue
+        out.append(s)
+    return out
+
+
+def _fnmatch_pattern(pat: str) -> str:
+    """`.gitignore`-Muster → `fnmatch`-Muster (Anker-Slash entfernen)."""
+    p = pat.lstrip("/")
+    return p
+
+
+def _gitignore_hit(lit: str, pats: list[str]) -> str | None:
+    """Trifft `lit` ein `.gitignore`-Muster? (§A-NM, Runde 51)
+
+    Drei Formen, und die dritte fehlte: `data/synthetic/` ist ein
+    **Verzeichnismuster**. `fnmatch("data/synthetic/f.jsonl",
+    "data/synthetic/")` ist `False` — das Muster endet auf `/`, der Pfad
+    nicht. Der Prüfer hat deshalb genau den Fall nicht gesehen, für den er
+    gebaut wurde (Runde 50: `fixture_resolved_pools()` las unter `data/`).
+    Roter Lauf vor grünem: belegt in `_self_test_ignored_test_paths`.
+
+      `*.log`            → Endungsmuster, matcht den Dateinamen
+      `data/`            → Verzeichnismuster, matcht per Präfix
+      `build/output.json`→ Pfadmuster, matcht per `fnmatch`
+    """
+    import fnmatch
+    base = lit.rsplit("/", 1)[-1]
+    for p in pats:
+        if not p:
+            continue
+        if p.endswith("/"):
+            if lit.lstrip("/").startswith(p.lstrip("./")):
+                return p
+            continue
+        if "/" in p:
+            if fnmatch.fnmatch(lit.lstrip("./"), p.lstrip("./")):
+                return p
+            continue
+        if fnmatch.fnmatch(base, p) or fnmatch.fnmatch(lit, p):
+            return p
+    return None
+
+
+def check_test_paths_ignored(root: Path, rep: Report) -> None:
+    """Zeigt ein Testpfad auf etwas, das `.gitignore` ausschließt? (§A-NN)
+
+    Runde 50: `fixture_resolved_pools()` las eine Datei, die
+    `.gitignore:81` ausschließt und die nie im Index stand. Im Arbeitsbaum
+    lag sie zufällig — im Hook-Staging-Baum nicht. Der Fehlschlag dort war
+    die korrekte Antwort, und niemand hatte danach gefragt.
+
+    **Zusicherung:** ein Pfad-Literal in `scripts/test_*.py`, das auf ein
+    `.gitignore`-Muster paßt, ist rot — **außer** der Test erzeugt ihn
+    (der Pfad entsteht unter `tmp_path`, `mkdtemp` oder `TemporaryDirectory`).
+    „Erzeugt, nicht vorgefunden" ist die Regel; „kein Pfad aus
+    `.gitignore`" wäre zu streng (Temp-Verzeichnisse sind legitim).
+
+    Nebenwirkung, benannt: Muster wie `*.log` oder `__pycache__` sind
+    keine Testpfade. Der Prüfer meldet sie trotzdem, wenn ein Test sie
+    pinnt — das ist gewollt: ein Test, der eine ignorierte Datei
+    vorfindet, ist derselbe Fehler in kleiner.
+    """
+    import ast
+    import fnmatch
+    pats = [_fnmatch_pattern(p) for p in _gitignore_patterns(root)]
+    if not pats:
+        return
+    tests_dir = root / "scripts"
+    if not tests_dir.exists():
+        return
+    for py in sorted(tests_dir.glob("test_*.py")):
+        try:
+            tree = ast.parse(py.read_text(encoding="utf-8"))
+        except SyntaxError:
+            continue
+        rel = py.relative_to(root)
+        for n in ast.walk(tree):
+            if not (isinstance(n, ast.Constant) and isinstance(n.value, str)):
+                continue
+            lit = n.value
+            # Nur Pfadform: Endung oder Slash, keine Prosa.
+            if not ("/" in lit or lit.endswith((".json", ".jsonl", ".log",
+                                                ".sqlite", ".db", ".csv"))):
+                continue
+            # §A-NN (Runde 51): min. 2 Zeichen, kein reiner Slash, kein
+            # Fragment aus einer Prosa (`.jsonl`-Text in einem Satz).
+            if len(lit) < 2 or lit.strip("/") == "":
+                continue
+            base = lit.rsplit("/", 1)[-1]
+            if not base or base in (".", ".."):
+                continue
+            # Ein Pfad beginnt an einem Verzeichnis oder hat eine Endung
+            # mit Namen davor — `d_suite…jsonl` war ein Satzfragment.
+            if "/" not in lit and not re.match(r"^[\w.\-]+\.[A-Za-z0-9]+$", lit):
+                continue
+            hit = _gitignore_hit(lit, pats)
+            if hit is None:
+                continue
+            # §A-NN: „gehört in den Index" ist die Zusicherung, nicht
+            # „paßt auf ein Muster". `data/` ist ein Verzeichnismuster —
+            # die Frage ist, ob **dieser** Pfad im Index steht.
+            if _in_index(root, lit):
+                rep.ok()
+                continue
+            if _path_created_by_test(tree, lit):
+                rep.ok()
+                continue
+            # §A-NM (Runde 51): die dritte Kategorie — ein Literal in einer
+            # Verbotsliste ist eine **Behauptung über** einen Pfad, kein
+            # Lesezugriff auf ihn. Ohne diese Unterscheidung meldet der
+            # Prüfer im echten Baum drei Rauschtreffer, und der nächste
+            # Leser schaltet ihn ab.
+            if _path_is_asserted_not_read(tree, lit):
+                rep.ok()
+                continue
+            rep.fail(n.lineno, f"{rel}: Pfad aus .gitignore",
+                     f"{lit} (Muster `{hit}`)",
+                     "nicht im Index — Test muss ihn erzeugen")
+
+
+def _path_is_asserted_not_read(tree: object, lit: str) -> bool:
+    """Steht das Literal in einer **Verbotsliste**, statt gelesen zu werden? (§A-NM)
+
+    Runde 51 hat drei Treffer im echten Baum gefunden — alle drei sind
+    gewollt: `_FORBIDDEN_MOUNT_HINTS = ("/data/raas/worm", …)` und
+    `write_path="data/raas/sandbox/…"` sind Werte, die der Test
+    **behauptet**, nicht Dateien, die er öffnet. Ein Prüfer, der beides
+    gleich behandelt, meldet Rauschen und wird deshalb abgeschaltet — und
+    dann ist er wieder blind.
+
+    Zwei Formen:
+      - Zuweisung an eine Modul-/Klassenkonstante (`NAME = (...)` mit
+        Großbuchstaben), deren Wert ein Tupel/Liste/String ist.
+      - Keyword-Argument an einen Aufruf (`write_path=…`) — der Wert wird
+        weitergereicht, nicht geöffnet.
+      - Vergleich (`"data/…" in str(sp)`, `== "data/…"`, `startswith`)
+        — eine **Erwartung** an einen Pfad, kein Zugriff auf ihn.
+    Eine Form, die **nicht** zählt: `open("data/x.json")`, `read_text()`,
+    `json.load(...)`, `Path("data/x")` — das sind Lesezugriffe.
+    """
+    import ast
+    for n in ast.walk(tree):
+        # (a) Konstante in Großbuchstaben mit dem Literal im Wert
+        if isinstance(n, ast.Assign):
+            for t in n.targets:
+                if isinstance(t, ast.Name) and t.id.isupper():
+                    if any(isinstance(c, ast.Constant) and c.value == lit
+                           for c in ast.walk(n.value)):
+                        return True
+        # (b) Keyword-Argument: `write_path="data/…"`
+        if isinstance(n, ast.keyword) and isinstance(n.value, ast.Constant):
+            if n.value.value == lit:
+                return True
+        # (c) Vergleich: `"data/…" in x`, `x == "data/…"`, `.startswith(…)`
+        if isinstance(n, ast.Compare):
+            operands = [n.left, *n.comparators]
+            for i, op in enumerate(n.ops):
+                pair = (operands[i], operands[i + 1])
+                for a, b in (pair, pair[::-1]):
+                    if (isinstance(a, ast.Constant) and a.value == lit
+                            and isinstance(op, (ast.In, ast.NotIn, ast.Eq,
+                                                ast.NotEq))):
+                        return True
+        if (isinstance(n, ast.Call)
+                and getattr(n.func, "attr", None) in ("startswith", "endswith")
+                and n.args and isinstance(n.args[0], ast.Constant)
+                and n.args[0].value == lit):
+            return True
+    return False
+
+
+def _in_index(root: Path, lit: str) -> bool:
+    """Steht irgendein Pfad dieses Literals im Index? (§A-NN)
+
+    `git ls-files --error-unmatch` pro Literal waere O(n) Subprozesse.
+    Bei allen Literalen ist das noch tragbar, aber der Pruefer laeuft im
+    Hook — also einmal alles lesen und im Speicher suchen.
+    """
+    if not hasattr(_in_index, "_cache"):
+        try:
+            r = subprocess.run(["git", "ls-files", "-z"], cwd=str(root),
+                               capture_output=True, text=True, timeout=20)
+            _in_index._cache = set(r.stdout.split("\0")) if r.returncode == 0 else set()
+        except (OSError, subprocess.SubprocessError):
+            _in_index._cache = set()
+    idx: set[str] = _in_index._cache  # type: ignore[attr-defined]
+    if not idx:
+        return False
+    needle = lit.lstrip("/")
+    return any(p == needle or p.endswith("/" + needle) for p in idx)
+
+
+def _path_created_by_test(tree: object, lit: str) -> bool:
+    """Legt der Test diesen Pfad **an**? (§A-NN)
+
+    Vier Formen zaehlen, alle im AST messbar: `mkdtemp`, `TemporaryDirectory`,
+    `tmp_path` und ein `write_text`/`write_bytes`/`open(..., "w")` auf
+    denselben Pfad. „Erzeugt" heisst: der Test schreibt, bevor er liest.
+    """
+    import ast
+    writes: set[str] = set()
+    # §A-NN: der Pfad steht oft in einer Zuweisung (`p = _ROOT / "a" /
+    # "b.jsonl"`), nicht im Aufruf (`p.unlink()`). Also erst die lokalen
+    # Namen sammeln, dann Aufrufe auf `Name` auflösen — sonst sieht der
+    # Prüfer eine Erzeugung, die zwei Zeilen weiter oben steht.
+    locals_: dict[str, object] = {}
+    for n in ast.walk(tree):
+        if isinstance(n, ast.Assign):
+            for t in n.targets:
+                if isinstance(t, ast.Name):
+                    locals_[t.id] = n.value
+    for n in ast.walk(tree):
+        if isinstance(n, ast.Call):
+            f = n.func
+            name = getattr(f, "id", None) or getattr(f, "attr", None) or ""
+            if name in ("mkdtemp", "TemporaryDirectory"):
+                return True
+            if name in ("write_text", "write_bytes", "touch", "mkdir",
+                        "unlink"):
+                # §A-NN: `unlink` ist die **stärkste** Form von „erzeugt" —
+                # der Test entfernt den Pfad und legt ihn neu an. Der
+                # Aufrufer muss den Pfad also besitzen, nicht vorfinden.
+                for a in n.args:
+                    if isinstance(a, ast.Constant) and isinstance(a.value, str):
+                        writes.add(a.value)
+                if name == "unlink" and isinstance(f, ast.Attribute):
+                    if _binop_has_literal(f.value, lit, locals_):
+                        return True
+            if name == "open":
+                mode = next((a.value for a in n.args[1:2]
+                             if isinstance(a, ast.Constant)), "")
+                if isinstance(mode, str) and any(c in mode for c in "wax"):
+                    return True
+    return lit in writes
+
+
+def _binop_has_literal(node: object, lit: str,
+                       locals_: dict[str, object] | None = None) -> bool:
+    """Kommt `lit` in der `/`-Kette vor — auch über einen lokalen Namen? (§A-NN)"""
+    import ast
+    if isinstance(node, ast.Constant):
+        return node.value == lit
+    if isinstance(node, ast.Name):
+        return (locals_ is not None and node.id in locals_
+                and _binop_has_literal(locals_[node.id], lit, locals_))
+    if isinstance(node, ast.BinOp):
+        return (_binop_has_literal(node.left, lit, locals_)
+                or _binop_has_literal(node.right, lit, locals_))
+    return False
+    return lit in writes
+
+
+def _wave_script_index(text: str) -> dict[str, str]:
+    """`{wellennummer: testpfad}` — einmal je Datei (§A-NP).
+
+    Zwei Formen im Dokument, ein Index: die Wellentabelle
+    (`| 35 | … 199/199 Tests (`scripts/test_simchain.py`) |`) und Prosa
+    (`- **Wave 20 …:** 164/164 tests passed (`scripts/test_wave20_…`)`).
+
+    Der Index haengt von **anderen Zeilen** ab — deshalb darf er nicht
+    in `check_counts` stecken, sondern wird vom Aufrufer uebergeben.
+    Die Zaehlung bleibt zeilenlokal, weil `_suite_ref_for` eine reine
+    Funktion von `(raw, wave_ctx, index)` ist (§A-NE).
+    """
+    import re
+    out: dict[str, str] = {}
+    for raw in text.splitlines():
+        refs = re.findall(r"`([\w/]*test_[\w/]*\.py)`", raw)
+        if not refs:
+            continue
+        m = (re.match(r"^\|\s*(\d+(?:\.\d+)?)\s*\|", raw)
+             or re.search(r"(?:Wave|Welle)\s*(\d+(?:\.\d+)?)", raw))
+        if m:
+            out.setdefault(m.group(1), refs[0])
+    return out
+
+
+def _suite_ref_for(raw: str, wave_ctx: str | None = None,
+                  index: dict[str, str] | None = None) -> str | None:
+    """Welches Skript gehoert zu dieser Suite-Zusage? (§A-NP, Runde 51)
+
+    **Reine Zeilenfunktion** (§A-NE): sie sieht `raw`, eine Wellennummer
+    und einen vorberechneten Index — nichts sonst. Damit bleibt
+    `check_counts` zeilenlokal, auch wenn der Bezug aus einer anderen
+    Zeile stammt.
+
+    Drei Quellen, in dieser Reihenfolge:
+
+      1. dieselbe Zeile — `199/199 tests passed (`scripts/test_x.py`)`
+      2. `Wave N` im selben Satz
+      3. der **Abschnitt** (`### Wave 27 …`), in dem die Zeile steht
+
+    Rueckgabe `None` heisst „kein Bezug ableitbar" — dann bleibt die
+    Zusage als `suite:ohne-skript` stehen, und das ist dann wahr.
+    """
+    refs = re.findall(r"`([\w/]*test_[\w/]+\.py)`", raw)
+    if refs:
+        return refs[0]
+    wm = re.search(r"(?:Wave|Welle)\s*(\d+(?:\.\d+)?)", raw)
+    num = wm.group(1) if wm else wave_ctx
+    if num is None:
+        return None
+    tm = re.search(r"^\|\s*(\d+(?:\.\d+)?)\s*\|", raw)
+    if tm is not None:
+        # Tabellenzeile: der Index kennt das Skript zur Wellennummer.
+        return (index or {}).get(tm.group(1))
+    # Wellennummer im Pfad (`test_wave27_x.py`). Der Praefix-Suchende
+    # muss sie im **selben** Satz nennen — sonst waere es geraten.
+    return (index or {}).get(num)
+
+
+def _all_test_scripts(text: str) -> list[str]:
+    """Alle `test_*.py`-Pfade, die in der Doku genannt sind (§A-NP).
+
+    Zwei Formen: `scripts/test_x.py` (der Normalfall) und
+    `shadow_contract_pilot/test_lifecycle.py` (Paket-Test). Beide sind
+    Testskripte; die zweite fehlte im Prüfer und wurde deshalb als
+    „ohne Skript" gezählt — obwohl der Pfad **dasteht**.
+    """
+    import re
+    names = set(re.findall(r"([\w/]*test_[\w/]+\.py)", text))
+    return sorted(n for n in names if "/" in n)
+
+
+def measurement_tally(problems: int | None,
+                      unmessured: list[str] | None = None,
+                      measured: bool | None = None,
+                      ohne_skript: list[str] | None = None) -> dict[str, int | None]:
+    """Die Klammer als Rückgabewert — drei Zahlen, keine Fußnote (§A-NM).
+
+    §A-NM (Runde 51): `0 Abweichungen` war die Summe der **gemessenen**
+    Abweichungen und sah aus wie eine Summe über alles. Die Einschränkungen
+    standen in Klammern darunter. Ein Befund in Klammern ist eine Fußnote;
+    die Akte zitiert Zahlen. Deshalb steht die Abweichungszahl ab jetzt
+    in einem Dict:
+
+      `abweichungen` — `None`, wenn die Differenzmessung fehlte (`kein
+        .git/`). **Nicht** 0: eine Null wäre eine Aussage über den Baum,
+        die niemand treffen konnte.
+      `nicht_gemessen` — Zahl der Prüfer, die in diesem Baum nicht laufen
+        konnten (`unmessured`), plus 1, wenn die Differenz fehlt.
+      `ohne_skript` — Zusagen ohne Skriptpfad (§71.56). Sie laufen im Klon
+        nicht; benannt ist nicht geprüft.
+
+    `measured=False` erzwingt `abweichungen=None` unabhängig von `problems`
+    — der Aufrufer darf sich nicht darauf verlassen, dass er `None` übergibt.
+    """
+    um = list(unmessured or [])
+    os_ = list(ohne_skript or [])
+    diff_missing = measured is False or (measured is None and problems is None)
+    return {
+        "abweichungen": None if diff_missing else int(problems or 0),
+        "nicht_gemessen": len(um) + (1 if diff_missing else 0),
+        "ohne_skript": len(os_),
+    }
+
+
+def tally_line(tally: dict[str, int | None]) -> str:
+    """`0 gemessen · 1 nicht gemessen · 12 ohne Skript` — reiner Text.
+
+    Die drei Zahlen tragen ihre Einheit im Wort; `abweichungen=None` rendert
+    als `unvollständig` und nie als `0`. Die drei Zahlen sind disjunkt:
+    `ohne_skript` steckt in `nicht_gemessen`, ist aber separat ausgewiesen,
+    weil die Akte beide zitieren muß (§71.56).
+    """
+    aw = tally["abweichungen"]
+    first = "unvollstaendig" if aw is None else f"{aw} gemessen"
+    return (f"{first} · {tally['nicht_gemessen']} nicht gemessen"
+            f" · {tally['ohne_skript']} ohne Skript")
+
+
+def _status_line(checked: Checks, problems: int | None,
+                 root: Path | None = None,
+                 unmessured: list[str] | None = None,
+                 ohne_skript: list[str] | None = None) -> str | None:
     """Die Kopfzeile: **jede Zahl mit ihrer Einheit** (§A-NI/§A-KH).
+
+    §A-NM (Runde 51): `problems=None` heisst **nicht gemessen**, und dann
+    gibt es **keine Zahl** — nicht `0`. Die Zeile kehrt dann `None`
+    zurueck, und der Aufrufer rendert `unvollstaendig`. Ein Text in
+    Klammern („keine Differenzmessung") war eine Nachricht an Menschen;
+    wer die Zahl weiterverarbeitet, sah `0` und den Text nicht. Dieselbe
+    Reparatur wie Runde 47: `None`, nicht ein besserer Kommentar.
+
+    `unmessured` ist die Liste der Pruefer, die in diesem Baum **nicht
+    laufen konnten**. Sie steht als **eigene Zahl** neben der gemessenen,
+    nicht als Fussnote darunter: `0 gemessen · 12 ohne Skript`.
+
+    `ohne_skript` kommt **getrennt** von `unmessured` herein (§A-NM): die
+    Zusagen ohne Skriptpfad sind eine Aussage über die **Zusage**, die
+    fehlenden Pruefer eine über den **Lauf**. In einer Zahl summiert wären
+    sie nicht unterscheidbar — und `unvollstaendig · 9` sagte, was `8`
+    schon sagt.
 
     `checked` kommt als `Checks` herein und bringt Wort, Zahl und die
     Identitaet `total = checked + excluded + claims` mit. Die Zeile rechnet
@@ -5118,21 +5816,37 @@ def _status_line(checked: Checks, problems: int,
     # Problemzaehler gilt fuer **diese** Datei, nicht fuer den Namen
     # `CLAUDE.md`, den beide Reports tragen.
     if root is None:
-        # §A-NL (Runde 50): „ohne Baum" ist ein **Zustand**, den die Zeile
-        # aussprechen muss. Frueher fiel die Bezugszeile einfach weg — und
-        # ein weggelassener Satz sieht aus wie eine erfuellte Bedingung.
-        # Diese Zeile ist die einzige Stelle, die es noch darf: sie ist
-        # Text, nicht Pruefung. Jede **Pruefung** faellt oben hart.
-        out += "\nBezug: KEIN BAUM (root=None — Zahl unspezifiziert)"
-        return out + f", {problems} Abweichungen"
+        # §A-NM (Runde 51): `root=None` ist **nicht gemessen** — und
+        # dann gibt es keine Zahl. Frueher stand `, 0 Abweichungen` da
+        # und der Grund in Klammern: eine Null, die wie eine Summe
+        # aussieht, mit einem Fussnotenhinweis. Wer sie weiterverarbeitet,
+        # sieht die Klammer nicht. Rückgabe `None`, nicht 0.
+        return None
     out += f"\nBezug: root={root}"
     doc = root / "CLAUDE.md"
     try:
+        # §A-NQ (Runde 51): der Hash steht **in** der Datei, die er
+        # hasht — der zitierte Wert ist zwangsläufig der von **vorher**
+        # (bzw. der von **nachher**, je nachdem, wann geschrieben wird).
+        # Das muss dastehen, sonst sieht es in sechs Runden wie ein
+        # Fehler aus. Brauchbar als Baum-Referenz ist er deshalb nur im
+        # **naechsten** Block, nicht im eigenen.
         out += (f", CLAUDE.md sha256:"
-                f"{hashlib.sha256(doc.read_bytes()).hexdigest()[:12]}")
+                f"{hashlib.sha256(doc.read_bytes()).hexdigest()[:12]}"
+                " (Vorzustand — nicht selbstbezueglich)")
     except OSError:
         out += ", CLAUDE.md nicht lesbar"
-    return out + f", {problems} Abweichungen"
+    if problems is None:
+        # §A-NM: gemessen wurde nur ein Teil — oder gar nichts. Dann gibt
+        # es keine Zahl. `0 gemessen` waere eine Aussage ueber den Lauf,
+        # die wie eine ueber den Baum aussieht (genau der Fehler oben).
+        return None
+    # §A-NM: die Zahl steht **mit ihren Einschränkungen** in einer Zeile:
+    # `0 gemessen · 1 nicht gemessen · 12 ohne Skript`. Drei Zahlen, keine
+    # davon in Klammern darunter.
+    tally = measurement_tally(problems, unmessured, measured=True,
+                              ohne_skript=ohne_skript)
+    return out + f", {tally_line(tally)}"
 
 
 def _counting_signature() -> str:
@@ -5260,6 +5974,10 @@ def main() -> int:
     check_counts(text, waves, per, rep, root)
     check_undocumented_tests(root, rep)
     check_doc_inventories(root, rep)
+    # §A-NN (Runde 51): `.gitignore` als Prüfer — ein Testpfad, der auf
+    # etwas zeigt, was nicht im Index steht und nicht erzeugt wird, ist
+    # derselbe Defekt wie `fixture_resolved_pools()` in Runde 50.
+    check_test_paths_ignored(root, rep)
     # §A-NC: --write-count schreibt den Stand mit Grund fort.
     if "--write-count" in sys.argv:
         _save_count_snapshot(rep.checked, _count_reason(sys.argv), root=root)
@@ -5306,8 +6024,23 @@ def main() -> int:
     # §A-NI: `checked` heisst im Report "Pruefungen", in der Ausgabe
     # "Angaben" — zwei Einheiten, ein Wort. Die Einheit gehoert an die
     # Zahl; keine Zahl dieser Zeile ist mehr ambivalent.
+    # §A-NM (Runde 51): `None`, wenn nicht gemessen — und dann **keine
+    # Zahl**. Die zwölf Zusagen ohne Skriptpfad sind keine Fussnote mehr:
+    # sie stehen als eigene Zahl **in** der Kopfzeile.
+    _unref = [c for c in rep.claims if c[0] == "suite:ohne-skript"]
+    _measured = repo_measurement_available(root)
     status = _status_line(Checks(rep.checked, sum(rep.skips.values()),
-                                 len(rep.claims)), len(rep.problems), root)
+                                 len(rep.claims)),
+                          len(rep.problems) if _measured else None,
+                          root, unmessured=[],
+                          ohne_skript=[c[0] for c in _unref])
+    # §A-NM: die Kopfzeile und der Satz darunter sind **eine** Aussage —
+    # `_status_line` gibt `None` zurueck, wenn der Baum fehlt, und dann
+    # liefert `tally_line` die drei Zahlen ohne `root`/`sha`-Bezug (die
+    # waeren hier eine Behauptung). Kein zweiter Satz mit demselben Grund.
+    if status is None:
+        status = tally_line(measurement_tally(
+            None, measured=False, ohne_skript=[c[0] for c in _unref]))
     if skipped:
         status += f", {skipped} uebersprungen (Umgebung)"
     # §A-NC: die Zahl, die sich aendert, nennt den Grund. Ohne diese Zeile
@@ -5381,7 +6114,20 @@ def main() -> int:
               + (f"   ({p['note']})" if p["note"] else ""))
 
     if not rep.problems and not skipped:
-        print("  Keine Abweichungen.")
+        # §A-NM (Runde 51): ohne Differenzmessung ist „keine Abweichungen"
+        # keine Aussage ueber den Baum, sondern eine ueber den Lauf.
+        if repo_measurement_available(root):
+            print("  Keine Abweichungen.")
+        else:
+            print("  Unvollstaendig: kein .git/ — Abweichungen nicht "
+                  "gemessen, keine Differenz.")
+        # §A-NM: und die **dritte** Einschraenkung, unabhaengig vom Baum:
+        # Zusagen ohne Skript laufen hier nicht. Sie standen als Fussnote
+        # in §71.56 und gar nicht in der Ausgabe dieses Laufs.
+        _noref = [c for c in rep.claims if c[0] == "suite:ohne-skript"]
+        if _noref:
+            print(f"  {len(_noref)} Zusagen ohne Skript — im Klon nicht "
+                  "gelaufen (benannt, nicht geprueft).")
     return 1 if rep.problems else 0
 
 

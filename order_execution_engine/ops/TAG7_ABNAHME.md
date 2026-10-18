@@ -5984,3 +5984,121 @@ Skriptpfad — sie sind jetzt **benannt** statt still gezählt, aber der
 Skriptbezug fehlt weiter; `--run-tests` prüft `passed <= total`, nicht
 die Zahl selbst. Und die Wirkungs-Fixtures sind synthetisch: sie belegen,
 dass jeder Prüfer **einen** Fehler findet, nicht dass er **alle** findet.
+### §71.57 — Runde 51: drei Zahlen statt einer, und der Prüfer war blind
+
+**Die Antwort auf §7.** Drei Einschränkungen standen auf einer Null:
+`keine Differenzmessung` (Klammer), `12 ohne Skript` (Akte), `Wirkung =
+mindestens einer` (Fixture). Die Null sah aus wie eine Summe über alles.
+Gemessen war sie die Summe der **gemessenen** Abweichungen — und nichts
+daneben stand.
+
+**1. `None` statt `0` in der Kopfzeile — der R47-Fehler, eine Ebene höher.**
+
+`_status_line` bekommt `problems: int | None`. Ist `None`, gibt die
+Funktion `None` zurück; `main` rendert dann `unvollstaendig · 1 nicht
+gemessen · 0 ohne Skript`. `measurement_tally()` **gibt** die drei Zahlen
+zurück — ein Dict, keine Fußnote im Text. `_require_int_tally()` ist der
+Vertrag mit der Akte: `None`, `bool` und negative Werte sind keine Zahl.
+
+| Baum | vorher | jetzt |
+|---|---|---|
+| Arbeitsbaum | `0 Abweichungen` | `0 gemessen · 0 nicht gemessen · 0 ohne Skript` |
+| Hook-Staging (kein `.git/`) | `, 0 Abweichungen` + Klammer | `unvollstaendig · 1 nicht gemessen · 0 ohne Skript` |
+
+**2. Der `.gitignore`-Prüfer — und er war blind für Verzeichnismuster.**
+
+`fnmatch("data/synthetic/f.jsonl", "data/synthetic/")` ist **`False`**.
+Der Prüfer hat also genau den Fall aus Runde 50 nicht gesehen
+(`fixture_resolved_pools()` las unter `data/`). `_gitignore_hit()` kennt
+jetzt drei Formen: Endungsmuster (`*.log`), Verzeichnismuster (`data/`,
+per Präfix), Pfadmuster (`build/output.json`). Der rote Lauf im
+Selbsttest (`dir-muster`) belegt es; `docs/f.jsonl` gegen `data/` bleibt
+grün.
+
+**3. Drei Treffer im echten Baum — alle drei gewollt.**
+
+`_FORBIDDEN_MOUNT_HINTS = ("/data/raas/worm",)` und
+`write_path="data/raas/sandbox/…"` sind **Behauptungen** über Pfade,
+keine Lesezugriffe. `_path_is_asserted_not_read()` unterscheidet sie:
+Konstante in Großbuchstaben, Keyword-Argument, `in`/`==`/`startswith`.
+Ohne diese dritte Kategorie hätte der nächste Leser den Prüfer
+abgeschaltet — und er wäre wieder blind. Ergebnis: **122 Angaben
+geprüft, 0 Befunde**.
+
+**4. `unclassified = -1` lief durch.**
+
+Zwischenstand nach dem Fix: `total=1`, `chain_total=0` → `unclassified=-1`.
+Ein negativer Wert heißt, dass ein Prüfer in einer Klasse zählt und in
+der Kette nicht — derselbe Fehler wie `unclassified > 0` mit
+vertauschtem Vorzeichen. Keine Zusicherung fing ihn.
+
+**5. `features.jsonl` — derselbe Defekt wie `fixture_resolved_pools()`.**
+
+`test_prefilter_training.py` erzeugt den Korpus jetzt in `mkdtemp`
+(`generate_prefilter_synthetic_data`), statt ihn vorzufinden.
+
+**6. `_self_test_tally_numbers` — fünf Behauptungen, alle rot gewesen.**
+
+`abweichungen is None` ohne Messung · Rendering beginnt mit
+`unvollstaendig` · kein `0 gemessen` · `ohne_skript` als eigene Zahl ·
+`_require_int_tally` lehnt `None`/`bool`/negativ/`str` ab. Der Lauf
+meldete zuerst `gemessene 0 fehlt: … 0 gemessen · 2 nicht gemessen · 0
+ohne Skript` — die dritte Zahl fehlte, weil `_status_line` sie nicht
+annahm.
+
+**7. Zweigabdeckung als Zahl — 7/13, nicht 7/7.**
+
+```
+7/7 wirken
+Zweigabdeckung: 7/13 (53%) — unter Deckung: check_counts 1/5,
+check_dead_refs 1/2, check_line_counts 1/2
+```
+
+**8. Die zwölf ohne Skript: null. Durch Skriptbezug, nicht durch Lockerung.**
+
+| Runde | ohne Skript |
+|---|---|
+| 50 | 12 |
+| Index + Wellenpaarung | 9 |
+| Abschnittskontext (`### Wave N`) | 6 |
+| 4 Tabellen-/Wellenzeilen ergänzt | 0 |
+
+**9. Hash-Referenz: Vorzustand, benannt.**
+
+`CLAUDE.md sha256:…` steht **in** der Datei, die er hasht. Die Zeile
+sagt jetzt `(Vorzustand — nicht selbstbezueglich)`. Brauchbar als
+Baum-Referenz ist er im **nächsten** Block, nicht im eigenen.
+
+**10. Ein Verlust beim Schreiben dieser Runde — gemessen, nicht versteckt.**
+
+Beim Ersetzen des Akte-Blocks habe ich die Datei von **5.986 auf 177
+Zeilen** gekürzt (6103 Zeilen Diff). Wiederhergestellt per
+`git checkout`, der Block wird jetzt **angehängt** statt ersetzt. Das ist
+der Grund, warum diese Runde eine eigene Prüfung dafür braucht: der
+Akte-Block-Vergleich sah die Zahlen, nicht die Größe. (Offen: eine
+Zusicherung „Akte darf nicht schrumpfen" fehlt noch — §71.56 prüft
+Blockgrößen, aber nicht die Dateigröße.)
+
+**Stand dieser Runde:** Selbsttest **35/35**, Wirkung **7/7**, davon
+**7/13 Zweige**, Namensbasen **0**, `suite:ohne-skript` **0**,
+voller Lauf im Arbeitsbaum **`0 gemessen · 0 nicht gemessen · 0 ohne
+Skript`**, im Hook-Staging-Baum `unvollstaendig · 1 nicht gemessen ·
+0 ohne Skript` (keine Zahl).
+
+```
+total=0 chain_total=0 reported=0 unclassified=0 unchecked=0 unclassified_checkers=0
+  Zeilen: 0
+  Referenzen: 0
+  Wellen: 0
+  Tests ohne Skript: 0
+  Inventare: 0
+  Testpfade: 0
+kopfzeile: 0 gemessen · 0 nicht gemessen · 0 ohne Skript
+Bezug: root=/Volumes/THX_OS_ULTRA/Users/olivermueller/agent_x_storage, CLAUDE.md sha256:50fff349a031, Baum 576f84d6+dirty
+```
+
+**Was offen bleibt:** `--run-tests` prüft `passed <= total`, nicht die
+Zahl selbst. 6 von 13 Prüferzweigen haben kein Fixture (`1/5` bei
+`check_counts`). Und die Akte hat keine Größen-Zusicherung — der Verlust
+dieser Runde wurde von Hand gefunden, nicht vom Prüfer.
+

@@ -31,9 +31,18 @@ def main() -> int:
     print("=" * 60)
     failed = 0
     data = _ROOT / "data" / "synthetic" / "prefilter" / "extremes"
+    # §A-NN (Runde 51): `data/` ist gitignored (`.gitignore:38`). Der Test
+    # darf den Korpus deshalb **nicht vorfinden** — er erzeugt ihn in
+    # einem Temp-Verzeichnis. Der alte Zweig (`FAIL missing corpus — run
+    # make …`) war derselbe Defekt wie `fixture_resolved_pools()` in
+    # Runde 50: grün, weil ein lokales Artefakt zufällig lag.
     if not (data / "features.jsonl").is_file():
-        print("  FAIL  missing extremes corpus — run make raas-prefilter-batch-extremes")
-        return 1
+        import tempfile
+        gen = _load("gen_prefilter", "scripts/generate_prefilter_synthetic_data.py")
+        data = Path(tempfile.mkdtemp(prefix="prefilter_extremes_"))
+        gen.main(["--profile", "extremes", "--n", "200",
+                  "--label-mode", "severity_proxy", "--out", str(data)])
+        print(f"  INFO  Korpus erzeugt (temp): {data}")
 
     train = _load("train_prefilter", "scripts/train_prefilter_model.py")
     out_model = _ROOT / "models" / "prefilter" / "prefilter_gbt.pkl"

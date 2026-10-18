@@ -256,6 +256,63 @@ FIXTURES: dict[str, Callable[[bool], int]] = {
 }
 
 
+def fixtured_branches() -> dict[str, int]:
+    """Wie viele **verschiedene** Fehlerklassen hat jeder Pruefer? (§A-NO)
+
+    §7 der Runde 51: „Wirkung" war bisher `broken > clean` — ein Bool als
+    Zahl. Die Frage, die das nicht beantwortet: **wie viele Zweige hat
+    der Pruefer, wie viele deckt das Fixture ab?** `1/6` ist eine Zahl,
+    „mindestens einer" ist keine.
+
+    Gemessen wird am Quelltext, nicht angenommen: jeder `rep.fail(...)`
+    mit **verschiedenem Nachrichtentext** ist eine Fehlerklasse. Wer
+    zwei `fail`-Aufrufe mit demselben Text hat, hat eine Klasse.
+    """
+    src = (Path(__file__).resolve().parent / "check_claude_md.py").read_text(
+        encoding="utf-8")
+    import re
+    out: dict[str, int] = {}
+    for name in FIXTURES:
+        # Rumpf der Funktion (bis zur naechsten Top-Level-`def`).
+        m = re.search(rf"^def {re.escape(name)}\(.*?(?=^def |\Z)",
+                      src, re.DOTALL | re.MULTILINE)
+        if not m:
+            out[name] = 0
+            continue
+        msgs = re.findall(r"rep\.fail\([^,]+,\s*[\"']([^\"']+)[\"']", m.group(0))
+        out[name] = len(set(msgs)) or 1
+    return out
+
+
+def branch_coverage() -> dict[str, tuple[int, int]]:
+    """`{name: (gedeckt, gesamt)}` — Zweigabdeckung als Zahl (§A-NO).
+
+    „Gedeckt" heisst: das Fixture leistet **mindestens** die nachweisbare
+    Wirkung. Ein Fixture, das zwei Meldungen erzeugt, deckt zwei Klassen.
+    Das ist eine untere Schranke je Fixture — die ehrliche Form, weil
+    ein Fixture nicht sagen kann, *welche* Klasse es getroffen hat, ohne
+    die Meldungsposition zu vergleichen.
+    """
+    total = fixtured_branches()
+    out: dict[str, tuple[int, int]] = {}
+    for name, (broken, clean) in measure().items():
+        n = total.get(name, 0) or 1
+        out[name] = (min(broken, n) if clean == 0 else 0, n)
+    return out
+
+
+def coverage_line() -> str:
+    """Die Zeile fuer die Ausgabe: `Zweigabdeckung: 9/14 (64%)`."""
+    cov = branch_coverage()
+    got = sum(c for c, _ in cov.values())
+    all_ = sum(n for _, n in cov.values())
+    pct = 100 * got // all_ if all_ else 0
+    low = ", ".join(f"{n} {c}/{t}" for n, (c, t) in sorted(cov.items())
+                    if c < t)
+    return (f"Zweigabdeckung: {got}/{all_} ({pct}%)"
+            + (f" — unter Deckung: {low}" if low else ""))
+
+
 def carries_case(broken: int, clean: int) -> str | None:
     """Traegt das Fixture seinen Fall? — §A-NL (Runde 50).
 
@@ -317,3 +374,7 @@ if __name__ == "__main__":
     bad = defects()
     print(f"\n{len(FIXTURES) - len(bad)}/{len(FIXTURES)} wirken"
           + (f" — stumm: {bad}" if bad else ""))
+    # §A-NO (Runde 51): „wirken" ist ein Bool. Die Zahl daneben sagt,
+    # wie viel des Pruefers das Fixture trifft — 7/13 hiess bisher „7/7".
+    print(coverage_line())
+    raise SystemExit(1 if bad else 0)

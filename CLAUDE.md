@@ -113,7 +113,7 @@ agent_x_storage/
 │   │                               # ValhallaVerifier, ProtoGalaxyVerifier
 │   ├── backend/pilot_backend.py    # 7 REST-Routen, Mock + Live-Modus
 │   ├── dashboard/index.html        # Echtzeit-Dashboard (5s Polling)
-│   └── test_lifecycle.py           # 25/25 Tests (Fund→Release→Retention)
+│   └── test_lifecycle.py           # 25/25 Tests (Fund→Release→Retention), `shadow_contract_pilot/test_lifecycle.py`
 ├── foundry.toml                   # Foundry/Anvil Config (OpenZeppelin v5)
 ├── lib/openzeppelin-contracts/    # OpenZeppelin v5.0.0 (via Forge)
 ├── charts/agent-x/               # Helm-Chart: KEDA Autoscaling + SGX Limits (9 Dateien)
@@ -314,13 +314,13 @@ Welle 3.5 (VOB/B Disput) ist eine Unterwelle von Welle 3 (Execution) und wird ni
 
 | Welle | Name | Agenten | Modul | Fokus |
 |-------|------|---------|-------|-------|
-| 34 | Finale Veredelung (Pitch & Go-Live) | 1+3 | `finale/finale_orchestrator.py` | Dashboard (Streamlit+Plotly), GoBD-Audit-Trail, Realtime-Monitor, Z3-Live-Integration, Pitch-Summary — 1.876 lines, 21/21 Tests |
-| 35 | SimChain Multi-Chain Economy | 9+27 | `simchain/economic_orchestrator_multi.py` | 3 Chains × 3 Agents, DePIN (1000 TPS), VOB/B Settlement (Z3-Proof), Liquidity (Token/Staking/Burn), Cross-Chain-Bridge, Friktion 5.6% (Burns+Fees), Staking separat, value_conserved verifiziert, drei getrennte Chain-Bücher, BHO Δ=0, 199/199 Tests — 2.200+ lines |
-| 36 | MultiChain Sovereign Appchains | 9+27 | `multichain/chain_orchestrator.py` | 4 Chain Layers × 9 Sovereign Appchains, Merkle-Proof-Bridge, Identity Chain (SSI/ZK), Cross-Chain-Latenz, 113/113 Tests — 1.800+ lines |
+| 34 | Finale Veredelung (Pitch & Go-Live) | 1+3 | `finale/finale_orchestrator.py` | Dashboard (Streamlit+Plotly), GoBD-Audit-Trail, Realtime-Monitor, Z3-Live-Integration, Pitch-Summary — 1.876 lines, 21/21 Tests (`scripts/test_finale.py`) |
+| 35 | SimChain Multi-Chain Economy | 9+27 | `simchain/economic_orchestrator_multi.py` | 3 Chains × 3 Agents, DePIN (1000 TPS), VOB/B Settlement (Z3-Proof), Liquidity (Token/Staking/Burn), Cross-Chain-Bridge, Friktion 5.6% (Burns+Fees), Staking separat, value_conserved verifiziert, drei getrennte Chain-Bücher, BHO Δ=0, 199/199 Tests (`scripts/test_simchain.py`) — 2.200+ lines |
+| 36 | MultiChain Sovereign Appchains | 9+27 | `multichain/chain_orchestrator.py` | 4 Chain Layers × 9 Sovereign Appchains, Merkle-Proof-Bridge, Identity Chain (SSI/ZK), Cross-Chain-Latenz, 113/113 Tests (`scripts/test_multichain.py`) — 1.800+ lines |
 | 37 | Demo Pipeline (Pitch & Investoren) | 9+27 | `demo/demo_orchestrator.py` | 3 Akte × 9 Agenten, Differenzierte Transformationsprofile, 8 einzigartige Friktions-Raten, Live-Proof-Mode, BHO Δ=0 — Pitch-fertig |
 | 38 | Causal Audit & Signal Guard (Diagnostic) | 9+ | `diagnostic/` | Live-Pre-Reg, Capture→CTE→Gatekeeper, Occupancy/Permutation/FDR, GoBD+EventBus — 281 Checks; live-90d unter ethischer Aufsicht; **Post-MEV** (`diagnostic/post_mev/`, keine neue Hauptwelle): PM1–PM3 nach `mev_tail_completed`, Pre-Reg-Freeze, 27/27 |
-| 39 | Ethical Boundary (Vierfach-Sperre) | 9+81 | `ethical_boundary/` | PreReg→Scope→Assertion→Audit→Charter→Integrity→Reporter→Certifier; Hook vor Wave-38-Gatekeeper; `CERTIFIED`/`certificate_id`; Spec §5.4 — 82/82 Tests |
-| 40 | Execution Resilience & Risk Shield | 9+81 | `resilience/` | 4-Quadrant-Pipeline (Infra/MEV/Modell/Operativ): Reorg, RPC-Failover, MEV-Shield, Gas-Budget, Confounder, Black-Swan, Fiscal, Forensic-WORM — 105/105 Tests |
+| 39 | Ethical Boundary (Vierfach-Sperre) | 9+81 | `ethical_boundary/` | PreReg→Scope→Assertion→Audit→Charter→Integrity→Reporter→Certifier; Hook vor Wave-38-Gatekeeper; `CERTIFIED`/`certificate_id`; Spec §5.4 — 82/82 Tests (`scripts/test_wave39_ethical_boundary.py`) |
+| 40 | Execution Resilience & Risk Shield | 9+81 | `resilience/` | 4-Quadrant-Pipeline (Infra/MEV/Modell/Operativ): Reorg, RPC-Failover, MEV-Shield, Gas-Budget, Confounder, Black-Swan, Fiscal, Forensic-WORM — 105/105 Tests (`scripts/test_wave40_resilience.py`) |
 
 ### B2G Module Structure
 
@@ -686,8 +686,8 @@ GoBD → Ledger (BHO Δ=0,00€) → Chain-Hash → XRechnung → PoPW-Coverage 
 - **Compliance Module:** 23 subagents + 2 orchestrators, Vergabekammer PDF + RPA PDF
 - **GAEB DA XML 3.3:** X83 parsing (8 positions, 4.2M €), X84 generation validated
 - **GoBD Integrity:** PASSED (hash chains verified), BHO Zero-Sum Δ=0.00€
-- **Wave 15 Public Portal:** 68/68 tests passed (QR generation SVG/PNG, batch, municipality, tenant isolation, fast-track, DSGVO shield, blockchain verification, open data export)
-- **Wave 16 SEPA Bridge:** 43/43 tests passed (Mint/Burn, IBAN/BZSt/MOD97/Blacklist, GoBD audit, OAuth2/CircuitBreaker/HALF_OPEN, ERC-4337 Paymaster + sponsor_tx, Δ=0.00€ reconciliation, SEPA polling/timeout, MiCAR compliance)
+- **Wave 15 Public Portal:** 68/68 tests passed (`scripts/test_public_portal.py`; QR generation SVG/PNG, batch, municipality, tenant isolation, fast-track, DSGVO shield, blockchain verification, open data export)
+- **Wave 16 SEPA Bridge:** 43/43 tests passed (`scripts/test_wave16_bridge.py`; Mint/Burn, IBAN/BZSt/MOD97/Blacklist, GoBD audit, OAuth2/CircuitBreaker/HALF_OPEN, ERC-4337 Paymaster + sponsor_tx, Δ=0.00€ reconciliation, SEPA polling/timeout, MiCAR compliance)
 - **Wave 17 MacroEconomy:** 8/8 E2E passed (`scripts/test_wave17_macro.py`), MEHI 0.74 Grade B, all 8 pipeline stages green, cartel patterns detected, balance sheet Δ=0.00€
 - **Wave 18 Shadow Contract:** 14/14 phases passed, Ledger Δ=0.00€, 21.600× speedup, 99.85% reliability, Atomic Settlement Δ=0.00€, Shadow Contract Lifecycle 25/25 passed (`shadow_contract_pilot/test_lifecycle.py`), VOB_Shadow_Escrow.sol compiled (OZ v5, Foundry), deployed on Anvil local node
 - **Wave 19 Ecosystem:** 5/5 stakeholder roles onboarded, 100% conversion rate, ecosystem health dashboard active
@@ -1425,7 +1425,7 @@ Accumulator → Bilateral → Multilateral → Priority → Dispatch → Verify 
 
 Aktive, lernende Abwehr gegen externe Bedrohungen. Schwarm-Erkennung, Perimeter-Schutz, Honeypot-Fallen und selbstlernende KI-Abwehr.
 
-**8-Stufen-Defense-Pipeline (E2E: 105/105 tests passed):**
+**8-Stufen-Defense-Pipeline (E2E: 105/105 tests passed, `scripts/test_wave28_defense.py`):**
 ```
 Perimeter → Radar → Classifier → Response → Honeypot → Learning → Intel → Dashboard
   Gateway    Swarm    Threat     Counter    Deception    Model    External   KPI
