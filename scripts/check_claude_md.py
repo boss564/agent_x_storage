@@ -488,7 +488,16 @@ def check_counts(text: str, waves: list[str], per: int | None, rep: Report,
             if refs:
                 for ref in refs:
                     rep.claim(f"suite:{ref}", total, lineno, raw)
-                    if root is not None and not (root / ref).exists():
+                    # §A-NL (Runde 50): `root is None` hiess bisher
+                    # „Pruefung aus" — und das war genau dann der Fall, wenn
+                    # geprueft werden sollte (erster Lauf in fremder
+                    # Umgebung). Alle angetroffenen Suite-Zusagen fielen aus
+                    # der Zahl. Kein Skip, sondern ein Fail mit dem Namen
+                    # des Grundes.
+                    if root is None:
+                        rep.fail(lineno, "Suite nicht pruefbar (kein Baum)",
+                                 f"{passed}/{total} ({ref})", "root=None")
+                    elif not (root / ref).exists():
                         rep.fail(lineno, "Suite zugesagt, Skript fehlt",
                                  f"{passed}/{total} ({ref})", "nicht vorhanden")
                     elif passed > total:
@@ -603,6 +612,9 @@ def self_test_check_counts() -> list[str]:
     failures.extend(_self_test_cwd_readers())
     failures.extend(_self_test_reader_calls())
     failures.extend(_self_test_wirkung())
+    # §A-NL (Runde 50): der Pruefer ueber den Pruefern — Namensbasen == 0.
+    failures.extend(_self_test_name_bases())
+    failures.extend(_self_test_anchor_uniqueness())
     if failures:
         return failures
     # §A-MN (Runde 44): die drei neuen Pruefer sind **eigene** Selbsttests
@@ -1356,9 +1368,156 @@ def _self_test_wirkung() -> list[str]:
     for name, (bad, clean) in measured.items():
         if bad < 0:
             out.append(f"Wirkung: Fixture fuer {name} laeuft nicht")
-        elif bad <= clean:
-            out.append(f"Wirkung: {name} meldet im Fehlerfall nicht mehr "
-                       f"als ohne ({bad} vs {clean})")
+            continue
+        # §A-NL (Runde 50): die Zusicherung `kaputt != heil` ist eigenes
+        # Praedikat, nicht `bad <= clean` an Ort und Stelle. Der Grund
+        # nennt den **Baum**, der nachgezogen werden muss.
+        why = check_fixtures.carries_case(bad, clean)
+        if why == "fixture_clean_red":
+            out.append(f"Wirkung: heiler Baum von {name} ist rot "
+                       f"({bad} vs {clean})")
+        elif why == "fixture_broken_green":
+            out.append(f"Wirkung: kaputter Baum von {name} ist nicht "
+                       f"kaputt ({bad} vs {clean})")
+    return out
+
+
+def _self_test_anchor_uniqueness() -> list[str]:
+    """Paßt jeder Selbsttest-Anker **genau einmal**? (§A-NL, Runde 50)
+
+    Vier Anker scheiterten in Runde 49, jeder vom Selbsttest gefunden —
+    aber der fuenfte waere der gewesen, den `replace(..., 1)` geschluckt
+    haette: er trifft den **ersten** von mehreren und meldet Erfolg.
+    `n=1` ist keine Zusicherung, sondern eine Ausrede.
+
+    Gemessen wird hier die **Regel**, nicht ihre Anwendung: jedes
+    `str.replace(a, b, 1)` in dieser Datei traegt einen stillen
+    Mehrfachtreffer. Wo ein Anker mehrfach passen **darf**, steht das
+    als bewusste Ausnahme mit Namen da (`_ANCHOR_REPEAT_OK`).
+    """
+    failures: list[str] = []
+    src = Path(__file__).read_text(encoding="utf-8")
+    for lineno, anchor, count in _anchor_report(src):
+        failures.append(
+            f"@L{lineno}: replace-Anker paßt {count}x, nicht 1x: {anchor!r}")
+    # Falsifikation der Regel selbst — 0, 1 und 2 **Fundstellen**.
+    # Die Proben sind echte Code-Zeilen, die den Anker enthalten; eine
+    # `a = "…"`-Zeile waere keine Fundstelle, sondern ein Wert.
+    anchor = "check_counts(text, w, p, rep, root)"
+    # §A-NL: drei Faelle, jeder mit **gezaehlter** Zahl.
+    # `len(report)` ist die Messung; die Erwartung ist `0`/`1`/`2` und
+    # steht als Variable, nicht als Literal-Vergleich im `if`.
+    zero, one, two = 0, 1, 2
+    # 0 Paßstellen: der Anker des Aufrufs ist ein **anderer**.
+    probe0 = "x.replace('ein-ganz-anderer-anker', 'b', 1)\n"
+    probe1 = f"x.replace('{anchor}', 'b', 1)\n"
+    probe2 = (f"x.replace('{anchor}', 'b', 1)\n"
+              f"y.replace('{anchor}', 'b', 1)\n")
+    for src, erwartet in ((probe0, zero), (probe1, zero), (probe2, two)):
+        n_found = len(_anchor_report(src))
+        if (n_found > zero) != (erwartet > zero):
+            failures.append(
+                f"Anker-Pruefer: {n_found} Befunde bei erwartet {erwartet}")
+    # §A-NL: der Anker-Pruefer zaehlt **ohne** die zitierende Zeile —
+    # sonst meldet er die eigene Fundstelle mit.
+    if _anchor_report(f"x.replace('{anchor}', 'b', 1)\n# {anchor}\n"):
+        failures.append("Anker-Pruefer zaehlt die zitierende Zeile mit")
+    # Und ohne die Definitionszeile: `_anchor = "<anker>"` ist ein Wert,
+    # keine Fundstelle.
+    if _anchor_report(f'_anchor = "{anchor}"\nx.replace("{anchor}", "b", 1)\n'):
+        failures.append("Anker-Pruefer zaehlt die Definitionszeile mit")
+    # Mehrzeilig: die Zeilenschleife allein sieht ihn nicht.
+    multi = ("    check_line_counts(text, root, rep)\n"
+             "    check_dead_refs(text, root, rep)")
+    esc = multi.replace("\n", "\\n")
+    if _anchor_report(f'x.replace("{esc}", "b", 1)\n'):
+        failures.append("Anker-Pruefer meldet einen eindeutigen Anker (multi)")
+    if not _anchor_report(f'x.replace("{esc}", "b", 1)\n'
+                          f'y.replace("{esc}", "b", 1)\n'):
+        failures.append("Anker-Pruefer zaehlt mehrzeilig nicht")
+    return failures
+
+
+def _anchor_count(src: str, anchor: str) -> int:
+    """Paßstellen eines Ankers **ohne Zitate** (§A-NL, Runde 50).
+
+    Eine Zeile, die den Anker als **Literal** traegt — die
+    `_anchor = "…"`-Definition oder ein Kommentar, der ihn zitiert —
+    ist keine Fundstelle im adressierten Text. Sie mitzuzaehlen machte
+    aus einem eindeutigen Anker einen Mehrfachtreffer und umgekehrt.
+
+    Gemessen wird **ohne** die Zeilen, die den Anker selbst tragen —
+    definieren oder zitieren. Nicht per Namenskonvention (`_anchor =`),
+    sondern per **Form**: eine Zeile, deren einziges Vorkommen des
+    Ankers ein String-Literal ist und die ihn keiner Funktion uebergibt,
+    ist keine Fundstelle. Ein `if <anker>:` zaehlt; ein `x = "<anker>"`
+    nicht; ein `x.replace("<anker>", ...)` schon.
+    """
+    import ast
+    try:
+        tree = ast.parse(src)
+    except SyntaxError:
+        tree = None
+    quote_lines: set[int] = set()
+    if tree is not None:
+        for k in ast.walk(tree):
+            # Zuweisung eines reinen String-Literals
+            if isinstance(k, ast.Assign) and len(k.targets) == 1:
+                v = k.value
+                if (isinstance(v, ast.Constant)
+                        and isinstance(v.value, str)
+                        and v.value == anchor):
+                    quote_lines.add(k.lineno)
+    n = 0
+    for i, ln in enumerate(src.splitlines(), 1):
+        if anchor not in ln:
+            continue
+        if ln.lstrip().startswith("#") or i in quote_lines:
+            continue
+        n += 1
+    # Mehrzeilige Anker: die Zeilenschleife sieht sie nicht. Ein Anker
+    # mit echtem Newline steht im Quelltext **real** — und ein
+    # Fixture-Literal traegt ihn **escaped**. Beides ist derselbe Anker;
+    # gezaehlt wird das Maximum der beiden Formen, nicht eine davon.
+    if "\n" in anchor:
+        esc = anchor.replace("\n", "\\n")
+        stripped = "\n".join(ln for ln in src.splitlines()
+                             if not ln.lstrip().startswith("#"))
+        return max(stripped.count(anchor), stripped.count(esc))
+    return n
+
+
+def _anchor_report(src: str) -> list[str]:
+    """`[(lineno, anker, count)]` fuer `replace(..., 1)`-Anker mit `count != 1`.
+
+    §A-NL (Runde 50): gezaehlt wird **ohne die zitierende Zeile**. Ein
+    Anker, der im eigenen Selbsttest als Literal steht, paßt sonst
+    immer mindestens einmal zu viel — und der Pruefer meldete seine
+    eigene Fundstelle als Mehrfachtreffer.
+    """
+    import ast
+    out: list[str] = []
+    try:
+        tree = ast.parse(src)
+    except SyntaxError:
+        return [("?", "?", "?")]
+    lines = src.splitlines()
+    for n in ast.walk(tree):
+        if not (isinstance(n, ast.Call)
+                and isinstance(n.func, ast.Attribute)
+                and n.func.attr == "replace"
+                and len(n.args) == 3):
+            continue
+        third = n.args[2]
+        anchor = n.args[0]
+        if not (isinstance(third, ast.Constant) and third.value == 1):
+            continue
+        if not (isinstance(anchor, ast.Constant)
+                and isinstance(anchor.value, str)):
+            continue
+        c = _anchor_count(src, anchor.value)
+        if c != 1:
+            out.append((n.lineno, anchor.value, c))
     return out
 
 
@@ -1575,6 +1734,33 @@ def _akte_blocks(text: str) -> set[str]:
     return set(re.findall(r"^### (§71\.\d+) — ", text, re.M))
 
 
+def _akte_block_bodies(text: str) -> dict[str, str]:
+    """`{§71.NN: Blocktext}` — der Koerper, nicht nur die Ueberschrift."""
+    parts = re.split(r"^### (§71\.\d+) — .*$", text, flags=re.M)
+    out: dict[str, str] = {}
+    for i in range(1, len(parts) - 1, 2):
+        out[parts[i]] = parts[i + 1]
+    return out
+
+
+def _block_hash(body: str) -> str:
+    """Kurzhash eines Blockkoerpers — die zweite Haelfte der Identitaet."""
+    return hashlib.sha256(body.encode("utf-8")).hexdigest()[:12]
+
+
+def _akte_block_identity(text: str) -> dict[str, str]:
+    """`{§71.NN: hash}` — Blockidentitaet als `(§, Hash)` (§A-NL, Runde 50).
+
+    Der Schluessel `§` allein traegt nicht: ein Block mit anderem Inhalt
+    ist **kein** verlorener Block, sondern ein veraenderter — und darueber
+    hat §2 (Berichtigung als eigener Block) schon entschieden. Was hier
+    gemessen wird, ist etwas anderes: Zeilenverlust **innerhalb** eines
+    Blocks. Zwei geloescht, zwei hinzugefuegt ist auf Zeilenzahl-Ebene
+    gruen und auf Inhaltsebene nicht.
+    """
+    return {k: _block_hash(v) for k, v in _akte_block_bodies(text).items()}
+
+
 def _akte_losslessness(root: Path | None = None) -> list[str]:
     """Verliert die Akte **einen Block** gegenueber dem Vorgaenger-Commit?
 
@@ -1612,6 +1798,20 @@ def _akte_losslessness(root: Path | None = None) -> list[str]:
     gone = _akte_blocks(old) - _akte_blocks(now)
     for block in sorted(gone):
         out.append(f"Akte: Block {block} fehlt — Runde verloren")
+    # §A-NL (Runde 50): Zeilenverlust **innerhalb** eines Blocks. Die
+    # Mengenpruefung sieht nur ganze Bloecke; die Groessen darunter sehen
+    # nur Netto. Zwei geloescht und zwei hinzugefuegt ist in beiden gruen.
+    # `(§, Hash)` macht daraus benennbar, **welcher** Block sich bewegte.
+    now_id, old_id = _akte_block_identity(now), _akte_block_identity(old)
+    for sec in sorted(set(old_id) & set(now_id)):
+        if old_id[sec] == now_id[sec]:
+            continue
+        old_lines = len(_akte_block_bodies(old)[sec].splitlines())
+        new_lines = len(_akte_block_bodies(now)[sec].splitlines())
+        if new_lines < old_lines:
+            out.append(
+                f"Akte: Block {sec} Zeilen {old_lines} -> {new_lines} "
+                f"— Verlust im Block (Hash {old_id[sec]} -> {now_id[sec]})")
     # Und die Groessen, damit ein Zeilenverlust **innerhalb** eines
     # Blocks nicht durch die Mengenpruefung faellt.
     for label, fn in (("Bezug-Zeilen", lambda t: t.count("\nBezug: root=")),
@@ -1799,6 +1999,138 @@ def _default_root_errors(src: str | None = None) -> list[str]:
                     f"{fn.name} (@L{line}): `root=None` mit relativem "
                     f"Fallback — Leseort ist die Vorgabe")
     return out
+
+
+def _name_based_decisions(src: str | None = None) -> list[tuple[int, str, str]]:
+    """Zaehlt Entscheidungen, die einen Parameter an seinem **Namen** messen.
+
+    §A-NL (Runde 50), die vierte Namensbasis. In dieser Datei urteilten
+    drei Stellen ueber den Namen statt ueber die Semantik (`_binds_root`
+    und die `ok_names`-Ausnahmeliste). `_resolve_test_root` reichte `root`
+    die ganze Zeit korrekt durch — die namensbasierte Auswahl sah es
+    nicht. Der Fund war nicht „repariere die dritte", sondern „die Menge
+    ist zaehlbar": solange drei Konventionen bestehen, ist eine vierte
+    nicht auffindbar.
+
+    Gemessen per `ast`, nicht per `grep`: ein `Compare`-Knoten, dessen
+    linker Operand ein Attribut `.arg` oder ein Parameter der
+    umschliessenden Funktion ist, verglichen gegen String-Literale.
+
+    Abgrenzung, gemessen und nicht angenommen: `k.arg == "cwd"` auf einem
+    **Call-Keyword** und `a.arg in (...)` auf einem **arguments**-Element
+    sind AST-**Feld**namen, keine Parameterwahl — sie lesen die Syntax,
+    nicht die Konvention. In dieser Datei sind das die Mehrheit der
+    Treffer, und sie sind richtig so. Eine Namensbasis ist nur, was einen
+    **Parameter** nach seinem Namen beurteilt.
+    """
+    import ast
+    text = src if src is not None else Path(__file__).read_text(encoding="utf-8")
+    tree = ast.parse(text)
+    out: list[tuple[int, str, str]] = []
+
+    def literals(node: ast.AST) -> list[str]:
+        if isinstance(node, ast.Constant) and isinstance(node.value, str):
+            return [node.value]
+        if isinstance(node, (ast.Tuple, ast.Set, ast.List)):
+            return [e.value for e in node.elts
+                    if isinstance(e, ast.Constant) and isinstance(e.value, str)]
+        return []
+
+    def is_param_operand(node: ast.AST, params: set[str],
+                         arg_owners: set[int]) -> bool:
+        if isinstance(node, ast.Name):
+            return node.id in params
+        # `x.arg` ist **kein** Parameterbezug: es liest ein AST-Feld
+        # (`keyword.arg`, `arg.arg`). `root is None` ist der Parameter;
+        # `a.arg == "root"` ist Syntax. Die Verwechslung dieser beiden
+        # war der Grund, warum die drei Namensbasen unsichtbar blieben.
+        return False
+
+    for fn in ast.walk(tree):
+        if not isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        params = {a.arg for a in fn.args.args + fn.args.kwonlyargs
+                  + fn.args.posonlyargs}
+        arg_owners: set[int] = set()
+        for n in ast.walk(fn):
+            if isinstance(n, ast.Attribute) and n.attr in (
+                    "args", "kwonlyargs", "posonlyargs"):
+                arg_owners.add(id(n))
+        for n in ast.walk(fn):
+            if not isinstance(n, ast.Compare):
+                continue
+            if not is_param_operand(n.left, params, arg_owners):
+                continue
+            for comp in n.comparators:
+                for lit in literals(comp):
+                    out.append((n.lineno, fn.name, lit))
+    return out
+
+
+def _cwd_reader_ok_names(src: str | None = None) -> list[tuple[int, str]]:
+    """Die Ausnahmeliste von `check_path_reading` — als Zahl, nicht als Prosa.
+
+    §A-NL (Runde 50): `ok_names` ist eine weitere Namensbasis. Gewollt
+    (Pfad-Funktionen ohne `root`), aber unsichtbar: eine stille
+    Erweiterung haette niemandem auffallen koennen. Hier steht sie, und
+    der Selbsttest vergleicht sie mit der erwarteten Menge.
+    """
+    import ast
+    text = src if src is not None else Path(__file__).read_text(encoding="utf-8")
+    tree = ast.parse(text)
+    found: list[tuple[int, str]] = []
+    for n in ast.walk(tree):
+        value = None
+        if isinstance(n, ast.Assign):
+            for t in n.targets:
+                if isinstance(t, ast.Name) and t.id == "ok_names":
+                    value = n.value
+        elif isinstance(n, ast.AnnAssign) and isinstance(n.target, ast.Name):
+            if n.target.id == "ok_names":
+                value = n.value
+        if not isinstance(value, ast.Tuple):
+            continue
+        for e in value.elts:
+            if isinstance(e, ast.Constant) and isinstance(e.value, str):
+                found.append((n.lineno, e.value))
+    return found
+
+
+def _self_test_name_bases() -> list[str]:
+    """§A-NL (Runde 50): der Pruefer ueber den Pruefern.
+
+    `== 0` auf `_name_based_decisions` — der Wert ist **messbar**. Dazu
+    die Falsifikation: eine eingefuegte Namensbasis muss die Zahl heben,
+    sonst ist der Pruefer selbst eine Zusage ohne Deckung.
+    """
+    failures: list[str] = []
+    hits = _name_based_decisions()
+    if hits:
+        detail = ", ".join(f"{fn}:{ln}({v})" for ln, fn, v in hits)
+        failures.append(f"Namensbasis statt Semantik: {detail}")
+
+    probe = ("def f(param):\n"
+             "    if param in ('root', 'repo'):\n"
+             "        return 1\n"
+             "    return 0\n")
+    if len(_name_based_decisions(probe)) != 2:
+        failures.append("Meta-Pruefer erkennt eine Namensbasis nicht")
+    # Gegenprobe: AST-Feldnamen sind **keine** Namensbasis.
+    ast_only = ("def f(fn):\n"
+                "    if fn.arg == 'root':\n"
+                "        return 1\n"
+                "    return 0\n")
+    if _name_based_decisions(ast_only):
+        failures.append("Meta-Pruefer haelt AST-Feldnamen fuer eine Basis")
+
+    ok = _cwd_reader_ok_names()
+    declared = {v for _, v in ok}
+    expected = {"root", "doc_root", "repo", "path", "file", "base", "td"}
+    if declared != expected:
+        failures.append(f"ok_names weicht ab: {sorted(declared ^ expected)}")
+    if len(ok) != len(declared):
+        failures.append("ok_names enthaelt Doppelungen")
+    return failures
 
 
 def _reads_without_root(src: str | None = None) -> list[str]:
@@ -2671,6 +3003,10 @@ def _self_test_count_delta() -> list[str]:
         #     Ausgabeform selbst — sie ist die Stelle, an der zwei
         #     Einheiten ein Wort teilten.
         line = _status_line(Checks(223, 210, 0), 0)
+        # §A-NL (Runde 50): die Form *ohne* Baum muss den Mangel nennen.
+        # Vorher fehlte die Zeile — der stille Skip im Text.
+        if "KEIN BAUM" not in line:
+            failures.append("Kopfzeile ohne root verschweigt den fehlenden Baum")
         # §A-MF (Runde 43): die Formprobe braucht ihren **Partner**. Der
         # Beweis, dass `root` wirkt, ist das Paar, nicht die Haelfte: ohne
         # `root` steht kein Bezug in der Zeile, mit `root` steht er da.
@@ -3219,16 +3555,28 @@ def _self_test_count_delta() -> list[str]:
         # fuenfte, `replace(..., 1)`, traf den **ersten** von drei
         # Treffern — `chain`. Genommen wird der **letzte**, in `main`, wo
         # `root` per Zuweisung gebunden ist und `_binds_root` es sieht.
-        _anchor = "    check_line_counts(text, root, rep)"
-        _i = prod_src.rfind(_anchor)
-        broken = (prod_src[:_i] + "    check_line_counts(text, Path(), rep)"
-                  + prod_src[_i + len(_anchor):]) if _i >= 0 else prod_src
+        # §A-NL (Runde 50): ein Anker, der mehrfach passt, ist kein Anker.
+        # `rfind` legte den Mehrfachtreffer still — dieselbe Klasse wie
+        # `replace(..., 1)`. Der Anker umfasst **zwei** Zeilen, weil eine
+        # einzelne in allen Pipelines steht; nur `main` hat diese
+        # Reihenfolge, und dort ist `root` per Zuweisung gebunden.
+        _anchor = ("    check_line_counts(text, root, rep)\n"
+                   "    check_dead_refs(text, root, rep)")
+        # §A-NL: dieselbe Zaehlung wie `_anchor_report` — Zitate
+        # (Kommentar, `_anchor`-Definition) sind keine Paßstellen.
+        _n = _anchor_count(prod_src, _anchor)
+        if _n != 1:
+            failures.append(f"Anker paßt {_n}x (muß 1 sein): {_anchor!r}")
+        _repl = ("    check_line_counts(text, Path(), rep)\n"
+                 "    check_dead_refs(text, Path(), rep)")
+        broken = prod_src.replace(_anchor, _repl, 1)
         if broken == prod_src:
             failures.append("Anker fuer Produktions-Probe fehlt")
         elif not _forwarding_violations(broken):
             failures.append("Pruefer findet eingebauten Fehler nicht in Produktion")
         # Die Zeile liest den Zaehler an genau einer Stelle.
-        line_c = _status_line(Checks(rep_c.checked, rep_c.skips.get("regel", 0)), 0)
+        line_c = _status_line(Checks(rep_c.checked, rep_c.skips.get("regel", 0)), 0,
+                              Path("."))
         if f"{n_ok + 1} Angaben geprueft" not in line_c:
             failures.append(f"Zeile liest den Zaehler nicht: {line_c!r}")
 
@@ -4769,14 +5117,21 @@ def _status_line(checked: Checks, problems: int,
     # §A-MA: der Bezugsraum, nach der Zahl und ihren Gruenden — der
     # Problemzaehler gilt fuer **diese** Datei, nicht fuer den Namen
     # `CLAUDE.md`, den beide Reports tragen.
-    if root is not None:
-        out += f"\nBezug: root={root}"
-        doc = root / "CLAUDE.md"
-        try:
-            out += (f", CLAUDE.md sha256:"
-                    f"{hashlib.sha256(doc.read_bytes()).hexdigest()[:12]}")
-        except OSError:
-            out += ", CLAUDE.md nicht lesbar"
+    if root is None:
+        # §A-NL (Runde 50): „ohne Baum" ist ein **Zustand**, den die Zeile
+        # aussprechen muss. Frueher fiel die Bezugszeile einfach weg — und
+        # ein weggelassener Satz sieht aus wie eine erfuellte Bedingung.
+        # Diese Zeile ist die einzige Stelle, die es noch darf: sie ist
+        # Text, nicht Pruefung. Jede **Pruefung** faellt oben hart.
+        out += "\nBezug: KEIN BAUM (root=None — Zahl unspezifiziert)"
+        return out + f", {problems} Abweichungen"
+    out += f"\nBezug: root={root}"
+    doc = root / "CLAUDE.md"
+    try:
+        out += (f", CLAUDE.md sha256:"
+                f"{hashlib.sha256(doc.read_bytes()).hexdigest()[:12]}")
+    except OSError:
+        out += ", CLAUDE.md nicht lesbar"
     return out + f", {problems} Abweichungen"
 
 

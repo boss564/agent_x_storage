@@ -5886,3 +5886,101 @@ Bezug: root=/Volumes/THX_OS_ULTRA/Users/olivermueller/agent_x_storage, CLAUDE.md
 Funktion, die einen Pfad **nicht** annotiert, aber zurückgibt, fällt
 durch. Und die Wirkungs-Fixtures sind synthetisch: sie belegen, dass
 jeder Prüfer **einen** Fehler findet, nicht dass er **alle** findet.
+
+### §71.56 — Runde 50: sechzehn, und der Hook hatte recht
+
+**Die Antwort auf die Frage der letzten Runde.** §71.55 fragte, ob der
+fehlende `root` je eine Zahl geändert hat. Die Antwort ist nicht „nein":
+`if root is not None and not (root / ref).exists()` schaltete die
+Suite-Prüfung **ab**, sobald kein Baum da war — also genau beim ersten
+Lauf in einer Umgebung, die der Autor nicht hatte. Gemessen: **0 statt 16
+Suite-Zusagen** im Klon. Der Verstoß mit der kleinsten Zeile war der
+wirksamste der Datei.
+
+**1. In welchem Baum laufen die Tests? — gemessen, nicht behauptet.**
+
+Der Pre-Commit-Hook exportiert den **Index** nach `mktemp -d` und ruft
+den Prüfer gegen diesen Export. Dieser Baum hat **kein `.git/`**. Der
+Unterschied ist nicht kosmetisch:
+
+| Baum | `.git/` | `_resolve_test_root` | `test_wave38_diagnostic` |
+|---|---|---|---|
+| Arbeitsbaum | ja | Arbeitsbaum | **281/281** |
+| Hook-Staging (`checkout-index`) | nein | der Export selbst | **172/184** |
+
+Die 281/281 der Runden 40–49 waren eine Aussage über den **Arbeitsbaum**
+— der einzige Baum, in dem sie jemals galten. Im Staging-Baum waren
+**neun** Tests rot, und keiner davon war „der Test ist kaputt".
+
+**2. Was der Hook wirklich gefunden hat.** `fixture_resolved_pools()`
+heißt „Offline copy" und las `bridge_stufe_a_v3_liquidation_resolved.json`
+aus der Projektwurzel — eine Datei, die `.gitignore:81` ausschließt und
+nie im Index stand. Dasselbe für `fixture_intent_resolved()` und
+`fixture_stable_resolved()`. Im Arbeitsbaum lagen sie zufällig aus einem
+Bridge-Lauf; im Klon sind sie nicht vorhanden. **Ein Fixture, das von
+einem Laufzeit-Artefakt abhängt, ist kein Fixture.** Die Adressen sind
+konstant (RESOLVED, plausibility pass) und stehen jetzt im Modul.
+
+Folge: `172/184` → `191/200` (nach `liquidation`) → **`281/281`** (nach
+`intent_stable`), im Arbeitsbaum **und** im Staging-Baum.
+
+**3. `--no-verify` zurückgenommen.** Der Bypass aus Runde 49 war nicht
+falsch dokumentiert, sondern falsch **begründet**: er verschob die Frage
+in den nächsten Commit. Der Hook läuft jetzt mit, und der volle Pfad
+(`--run-tests`) ist im Staging-Baum grün — gemessen, nicht angenommen.
+
+**4. `root=None` ist kein Skip mehr.** Drei Formen, jetzt eine:
+
+| Form | vorher | jetzt |
+|---|---|---|
+| `if root is not None and …` | still übersprungen | **`rep.fail`** „Suite nicht prüfbar (kein Baum)" |
+| `_status_line(root=None)` | Bezugszeile fiel weg | „KEIN BAUM (root=None — Zahl unspezifiziert)" |
+| Selbsttest ohne `root` | still | **rot**, Selbsttest angepasst |
+
+Ein weggelassener Satz sieht aus wie eine erfüllte Bedingung. Die
+Kopfzeile darf den Mangel noch aussprechen — sie ist Text, nicht
+Prüfung; jede **Prüfung** fällt hart.
+
+**5. Wirkungs-Fixture: `kaputt != heil` als eigene Zusicherung.** Runde
+46 formulierte sie, Runde 49 stellte fest, dass 4/7 sie nicht erfüllten —
+gefunden **von Hand**. Jetzt ist sie ein Prädikat mit drei benannten
+Zuständen (`fixture_clean_red`, `fixture_broken_green`, wirkt). Der erste
+Lauf der Zusicherung fand sofort einen **fünften**: `check_doc_inventories`
+war im heilen Baum rot (3 vs 2), weil dem Fixture `generated_at`,
+`SWARM_RUNTIME` und ein importierbares `swarm_health.py` fehlten — genau
+der Zustand, den Runde 49 manuell nachziehen musste. Nach der Reparatur:
+**7/7**, erzwungen.
+
+**6. Der Prüfer über den Prüfern.** `_name_based_decisions` zählt per
+`ast` jeden Vergleich, der einen **Parameter** an seinem Namen misst.
+Gemessene Zahl im Produktionscode: **0**. Die dreizehn Treffer des ersten
+Laufs waren AST-**Feld**namen (`k.arg`, `a.arg`) — Syntax, keine
+Konvention; der Prüfer unterscheidet sie jetzt und **falsifiziert sich
+selbst** (eingefügte Namensbasis muss zählen, AST-Feldname darf nicht).
+`ok_names` ist als erwartete Menge deklariert — stille Erweiterung = rot.
+
+**7. Blockidentität `(§, Hash)`.** Die Mengenprüfung sieht ganze Blöcke;
+die Größenzahlen darunter sehen nur Netto. Jetzt trägt jeder Block einen
+Kurzhash, und ein **Zeilenverlust innerhalb** eines Blocks wird benannt:
+`Akte: Block §71.55 Zeilen 120 -> 118 — Verlust im Block (Hash … -> …)`.
+Ein Block mit anderem Hash ist kein verlorener Block, sondern ein
+veränderter — die Entscheidung fällt wie in §2: Berichtigung als eigener
+Block.
+
+**8. Anker-Paßhäufigkeit = 1.** `rfind` legte den Mehrfachtreffer still —
+vier Anker scheiterten in Runde 49, der fünfte wäre geschluckt worden.
+`_anchor_report` zählt `replace(..., 1)`-Anker und verlangt genau einen
+Treffer, **ohne** Zitate (Kommentar, `_anchor`-Definition) und über
+beide Formen mehrzeiliger Anker (real und escaped). Der erste Lauf fand
+den Anker der Produktionsprobe **3x** — er traf Produktion, Testkörper
+und sich selbst.
+
+**Stand dieser Runde:** Selbsttest **34/34**, Wirkung **7/7**, Namensbasen
+**0**, voller Lauf **0 Abweichungen** im Arbeitsbaum **und** im
+Hook-Staging-Baum, `--run-tests` im Staging-Baum **0 Abweichungen**.
+
+**Was offen bleibt:** `suite:ohne-skript` zählt **12** Zusagen ohne
+Skriptpfad — sie sind jetzt **benannt** statt still gezählt, aber der
+Skriptbezug fehlt weiter; `--run-tests` prüft `passed <= total`, nicht
+die Zahl selbst. Und die Wirkungs-Fixtures sind synthetisch: sie belegen,
+dass jeder Prüfer **einen** Fehler findet, nicht dass er **alle** findet.

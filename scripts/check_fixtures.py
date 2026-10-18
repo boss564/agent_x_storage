@@ -110,19 +110,57 @@ def _doc_inventories(broken: bool) -> int:
     allen deklarierten Dateien.
     """
     from check_claude_md import check_doc_inventories, Report, DOC_INVENTORY_FILES
+    from datetime import datetime, timezone
     specs = list(DOC_INVENTORY_FILES)
 
     def body(spec: dict) -> str:
-        """Pflichtabschnitte, -erwaehnungen und -pfade — die Spec sagt, was."""
+        """Pflichtabschnitte, -erwaehnungen und -pfade — die Spec sagt, was.
+
+        §A-NL (Runde 50): zwei Zusagen fehlten hier, und das Fixture war
+        deshalb schon im **heilen** Baum rot (3 vs 2) — genau der Zustand,
+        den Runde 49 von Hand finden musste. Der Laufzeit-Block braucht
+        `generated_at` (frisch, sonst „veraltet") und `SWARM_RUNTIME`,
+        sonst gibt es keinen Abschnitt, den der Schema-Check sehen kann.
+        """
+        now = datetime.now(timezone.utc).isoformat()
         parts = ["# " + spec["path"]]
         parts += [s for s in spec.get("required_sections", [])]
         parts += [m for m in spec.get("required_mentions", [])]
+        # §A-NL (Runde 50): der Laufzeit-Block war hier zweimal drin —
+        # einmal leer als Ankündigung, einmal gefüllt darunter. Der
+        # Pruefer nimmt den **ersten** Match, also den leeren: „fehlt".
+        # Ein Dokument mit zwei Blöcken ist kein Fixture, sondern ein
+        # Fund. Genau **einer**, mit Inhalt.
+        parts.append(f"<!-- generated_at: {now} -->")
+        parts.append("<!-- SWARM_RUNTIME_BEGIN -->")
+        parts.append("| Komponente | Schicht | Rolle | Signal |")
+        parts.append("|---|---|---|---|")
+        parts.append("| fixture | script | worker | ok |")
+        parts.append("<!-- SWARM_RUNTIME_END -->")
         return "\n".join(parts) + "\n"
 
     files = {spec["path"]: body(spec) for spec in specs}
     for spec in specs:
         for artefact in spec.get("required_paths_exist", []):
-            files.setdefault(artefact, "x\n")
+            # §A-NL (Runde 50): der Laufzeit-Check **laedt** das Skript
+            # (`_load_swarm_health`) und ruft zwei Funktionen. Ein
+            # Platzhalter `x` ergibt `name 'x' is not defined`; ein Stub,
+            # der `''` liefert, ergibt „SWARM_RUNTIME fehlt" — beide rot
+            # im **heilen** Baum. Das Fixture traegt die Semantik: der
+            # Block-Body wird geschnitten, das Schema ist erfuellt.
+            if artefact.endswith(".py"):
+                files.setdefault(artefact,
+                                 "import re\n"
+                                 "_B = '<!-- SWARM_RUNTIME_BEGIN -->'\n"
+                                 "_E = '<!-- SWARM_RUNTIME_END -->'\n"
+                                 "def _runtime_block_body(t):\n"
+                                 "    m = re.search(re.escape(_B) + r'(.*?)'\n"
+                                 "                  + re.escape(_E), t, re.DOTALL)\n"
+                                 "    return m.group(1) if m else ''\n"
+                                 "def check_runtime_schema(t):\n"
+                                 "    return []\n")
+            else:
+                files.setdefault(artefact, "x\n")
     targets = [t for spec in specs
                for t in (spec.get("makefile_target"),
                          spec.get("sync_makefile_target")) if t]
@@ -218,6 +256,29 @@ FIXTURES: dict[str, Callable[[bool], int]] = {
 }
 
 
+def carries_case(broken: int, clean: int) -> str | None:
+    """Traegt das Fixture seinen Fall? — §A-NL (Runde 50).
+
+    Runde 46 formulierte die Zusicherung `reported != total`, Runde 49
+    stellte fest, dass vier von sieben Fixtures sie nicht erfuellten —
+    gefunden **von Hand**, weil nichts sie pruefte. Diese Funktion ist die
+    Zusicherung selbst: drei Zustaende, alle mit eigenem Namen.
+
+        clean == 0, broken > 0   -> wirkt        (None)
+        clean > 0,  broken > 0   -> heiler Baum kaputt  ("fixture_clean_red")
+        broken <= clean, == 0    -> kaputter Baum nicht kaputt
+                                                    ("fixture_broken_green")
+
+    Der Fehlername nennt den **Baum**, nicht den Pruefer: wer den Text
+    liest, weiss, welchen Teil er nachziehen muss.
+    """
+    if clean != 0:
+        return "fixture_clean_red"
+    if broken <= 0:
+        return "fixture_broken_green"
+    return None
+
+
 def measure() -> dict[str, tuple[int, int]]:
     """`{name: (broken, clean)}` fuer jeden deklarierten Pruefer."""
     out: dict[str, tuple[int, int]] = {}
@@ -234,14 +295,25 @@ def measure() -> dict[str, tuple[int, int]]:
 
 def ineffective() -> list[str]:
     """Pruefer, deren `broken`-Zahl die `clean`-Zahl nicht uebersteigt."""
-    return [n for n, (a, b) in measure().items() if a <= b]
+    return [n for n, (a, b) in measure().items() if carries_case(a, b)]
+
+
+def defects() -> dict[str, str]:
+    """`{name: grund}` fuer jedes Fixture, das seinen Fall nicht traegt."""
+    out: dict[str, str] = {}
+    for name, (a, b) in measure().items():
+        why = carries_case(a, b)
+        if why:
+            out[name] = why
+    return out
 
 
 if __name__ == "__main__":
     print("Wirkung je Pruefer (broken / clean):")
     for name, (a, b) in measure().items():
-        verdict = "wirkt" if a > b else "STUMM"
+        why = carries_case(a, b)
+        verdict = f"STUMM ({why})" if why else "wirkt"
         print(f"  {name:24s} {a:3d} / {b:3d}   {verdict}")
-    bad = ineffective()
+    bad = defects()
     print(f"\n{len(FIXTURES) - len(bad)}/{len(FIXTURES)} wirken"
           + (f" — stumm: {bad}" if bad else ""))

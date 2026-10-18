@@ -105,23 +105,42 @@ def load_resolved_pools(path: Path | None = None) -> dict[str, Any]:
 
 
 def fixture_resolved_pools() -> dict[str, Any]:
-    """Offline copy of the four Bridge-resolved pools (addresses from resolver)."""
-    live = load_resolved_pools()
+    """Offline-Kopie der vier Bridge-resolved Pools.
+
+    §A-NL (Runde 50): das war **kein** Offline-Fixture. `load_resolved_pools()`
+    las `bridge_stufe_a_v3_liquidation_resolved.json` aus dem
+    Projektwurzel-Verzeichnis — eine Datei, die `.gitignore:81` ausschliesst
+    und die nie im Index stand. Im Arbeitsbaum war sie da (aus einem
+    früheren Bridge-Lauf), im Klon und im Pre-Commit-Staging-Baum fehlte
+    sie. Der Test meldete dort `172/184` statt `281/281`, und der Grund war
+    nicht der Test, sondern ein Fixture, das von einem Artefakt abhing.
+
+    Die Adressen sind bei Bridge-Läufen konstant — sie stehen jetzt hier.
+    Wer sie gegen den Live-Resolver prüfen will, nimmt
+    `load_resolved_pools()`, nicht dieses Fixture.
+    """
     return {
         "all_resolved": True,
         "capture_release": "RELEASED",
         "fixture": True,
-        "path": live["path"],
+        "path": "(inline)",
         "pools": [
-            {
-                "protocol": p["protocol"],
-                "chain": p["chain"],
-                "pool": str(p["pool"]).lower(),
-                "n_reserves": int(p.get("n_reserves") or 0),
-                "plausibility_check": p.get("plausibility_check", "pass"),
-                "status": "RESOLVED",
-            }
-            for p in live["pools"]
+            {"protocol": "aave_v3", "chain": "ethereum",
+             "pool": "0x87870bca3f3fd6335c3f4ce8392d69350b4fa4e2",
+             "n_reserves": 67, "plausibility_check": "pass",
+             "status": "RESOLVED"},
+            {"protocol": "aave_v3", "chain": "gnosis",
+             "pool": "0xb50201558b00496a145fe76f7424749556e326d8",
+             "n_reserves": 9, "plausibility_check": "pass",
+             "status": "RESOLVED"},
+            {"protocol": "spark", "chain": "ethereum",
+             "pool": "0xc13e21b648a5ee794902342038ff3adab66be987",
+             "n_reserves": 18, "plausibility_check": "pass",
+             "status": "RESOLVED"},
+            {"protocol": "spark", "chain": "gnosis",
+             "pool": "0x2dae5307c5e3fd1cf5a72cb6f698f915860607e0",
+             "n_reserves": 9, "plausibility_check": "pass",
+             "status": "RESOLVED"},
         ],
     }
 

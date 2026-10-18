@@ -120,43 +120,79 @@ def load_stable_resolved(path: Path | None = None) -> dict[str, Any]:
     return _load_resolved(path or DEFAULT_STABLE_RESOLVED)
 
 
+# §A-NL (Runde 50): Die vier Adressen sind bei Bridge-Läufen konstant
+# (RESOLVED, plausibility pass). Sie standen nur in einer
+# `.gitignore`-Datei, nie im Index — der Staging-Baum des Pre-Commit-Hooks
+# hatte sie nicht, und `test_wave38_diagnostic` fiel dort auf 172/184.
+# Ein Fixture liest keine Laufzeit-Artefakte.
+_FIXTURE_INTENT_CONTRACTS: list[dict[str, Any]] = [
+    {
+        "protocol": "across", "chain": "ethereum", "role": "spoke_pool",
+        "address": "0x5c7bcd6e7de5423a257d81b442095a1a6ced35c5",
+        "events": ["across_filled_relay", "across_filled_v3_relay"],
+        "status": "RESOLVED", "plausibility_check": "pass",
+    },
+    {
+        "protocol": "cow", "chain": "ethereum", "role": "gpv2_settlement",
+        "address": "0x9008d19f58aabd9ed0d60971565aa8510560ab41",
+        "events": ["cow_trade"],
+        "status": "RESOLVED", "plausibility_check": "pass",
+    },
+    {
+        "protocol": "cow", "chain": "gnosis", "role": "gpv2_settlement",
+        "address": "0x9008d19f58aabd9ed0d60971565aa8510560ab41",
+        "events": ["cow_trade"],
+        "status": "RESOLVED", "plausibility_check": "pass",
+    },
+]
+
+_FIXTURE_STABLE_CONTRACTS: list[dict[str, Any]] = [
+    {
+        "protocol": "lite_psm", "chain": "ethereum", "role": "psm",
+        "address": "0xf6e72db5454dd049d0788e411b06cfaf16853042",
+        "events": ["psm_buy_gem", "psm_sell_gem"],
+        "status": "RESOLVED", "plausibility_check": "pass",
+    },
+    {
+        "protocol": "classic_psm", "chain": "ethereum", "role": "psm",
+        "address": "0x89b78cfa322f6c5de0abceecab66aee45393cc5a",
+        "events": ["psm_buy_gem", "psm_sell_gem"],
+        "status": "RESOLVED", "plausibility_check": "pass",
+    },
+    {
+        "protocol": "cctp_v1", "chain": "ethereum", "role": "token_messenger",
+        "address": "0xbd3fa81b58ba92a82136038b25adec7066af3155",
+        "events": ["cctp_v1_deposit_for_burn", "cctp_v1_mint_and_withdraw"],
+        "status": "RESOLVED", "plausibility_check": "pass",
+    },
+    {
+        "protocol": "cctp_v2", "chain": "ethereum", "role": "token_messenger",
+        "address": "0x28b5a0e9c621a5badaa536219b3a228c8168cf5d",
+        "events": ["cctp_v2_deposit_for_burn", "cctp_v2_mint_and_withdraw"],
+        "status": "RESOLVED", "plausibility_check": "pass",
+    },
+]
+
+
 def fixture_intent_resolved() -> dict[str, Any]:
-    live = load_intent_resolved()
+    """Offline-Fixture — keine Laufzeit-Datei (Runde 50, §A-NL)."""
     return {
-        **live,
+        "all_resolved": True,
+        "capture_release": "RELEASED",
         "fixture": True,
-        "contracts": [
-            {
-                "protocol": c["protocol"],
-                "chain": c["chain"],
-                "role": c.get("role"),
-                "address": str(c["address"]).lower(),
-                "events": list(c.get("events") or []),
-                "status": "RESOLVED",
-                "plausibility_check": c.get("plausibility_check", "pass"),
-            }
-            for c in live["contracts"]
-        ],
+        "path": "(inline)",
+        "contracts": [dict(c) for c in _FIXTURE_INTENT_CONTRACTS],
     }
 
 
 def fixture_stable_resolved() -> dict[str, Any]:
-    live = load_stable_resolved()
+    """Offline-Fixture — keine Laufzeit-Datei (Runde 50, §A-NL)."""
     return {
-        **live,
+        "all_resolved": True,
+        "capture_release": "RELEASED",
         "fixture": True,
-        "contracts": [
-            {
-                "protocol": c["protocol"],
-                "chain": c["chain"],
-                "role": c.get("role"),
-                "address": str(c["address"]).lower(),
-                "events": list(c.get("events") or []),
-                "status": "RESOLVED",
-                "plausibility_check": c.get("plausibility_check", "pass"),
-            }
-            for c in live["contracts"]
-        ],
+        "path": "(inline)",
+        "contracts": [dict(c) for c in _FIXTURE_STABLE_CONTRACTS],
     }
 
 
