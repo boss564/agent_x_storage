@@ -602,6 +602,7 @@ def self_test_check_counts() -> list[str]:
     failures.extend(_self_test_akt_block())
     failures.extend(_self_test_cwd_readers())
     failures.extend(_self_test_reader_calls())
+    failures.extend(_self_test_wirkung())
     if failures:
         return failures
     # §A-MN (Runde 44): die drei neuen Pruefer sind **eigene** Selbsttests
@@ -1019,27 +1020,38 @@ _NOT_CHECKERS = frozenset({"chain", "main", "calibration_run", "_run_all",
                            "run", "run_kw", "check_all"})
 
 
+# §A-NH (Runde 49): die Menge der Register, **deklariert**. Die dritte
+# Fassung der Heuristik (`for c in CHECKS: apply(c)` — Iterat wird
+# durchgereicht, nicht gerufen) waere wieder blind. Vier Fassungen
+# schliessen das nicht; die Umkehrung schon: nicht das Register wird
+# erkannt, sondern das **Unbekannte** gemeldet. Jede `for`-Schleife, die
+# ihr Iterat an eine Funktion gibt, ist ein Register — steht das Ziel
+# nicht hier, ist das Ergebnis `None` und kein Freispruch.
+#
+# Die Verletzung dieser Liste ist rot: ein neues Register ohne Eintrag
+# faellt beim ersten Lauf auf. Das ist der Unterschied zur Baseline — die
+# Baseline schweigt, wenn sie verletzt wird.
+_REGISTRIES = frozenset({})
+
+
 def _called_checkers(fn: ast.FunctionDef, tree=None) -> tuple[set[str], bool]:
     """Welche Pruefer faehrt eine Funktion — einzeln **oder** als Registry?
 
-    §A-MW (Runde 47): wenn jemand die sechs Aufrufe durch eine Registry
-    ersetzt —
+    §A-MW (Runde 47): ein direkter `check_*`-Aufruf **und** eine
+    `for`-Schleife ueber einen Namen.
 
-        CHECKS = (check_a, check_b, ...)
-        def main():
-            for c in CHECKS: c(root)
+    §A-NC (Runde 48): aufgeloest ueber das **Objekt der Iteration**. Ein
+    Muster, dessen Ziel der Pruefer nicht findet, liefert `blind = True`.
 
-    — ist das die bessere Architektur und macht jede namensbasierte
-    Zaehlung blind. Erkannt wird beides: ein direkter `check_*`-Aufruf
-    **und** eine `for`-Schleife ueber einen Namen.
-
-    §A-NC (Runde 48): aufgeloest wird ueber das **Objekt der Iteration**,
-    nicht ueber den Namen `CHECKS` — `for fn in _ALL:` muss genauso
-    funktionieren. Dazu die zweite Haelfte der Buchung: gibt es fuer den
-    iterierten Namen im Modul **keine** Tuple-Definition, ist das
-    `blind = True`. Ein Muster, das der Pruefer kennt, dessen Ziel er
-    aber nicht findet, darf nicht dieselbe Zahl liefern wie ein sauberer
-    Lauf.
+    §A-NH (Runde 49): die dritte Luecke. `for c in CHECKS: apply(c)`
+    reicht das Iterat durch, statt es zu rufen — die Fassung aus Runde 48
+    hielt das fuer eine Datenschleife und gab `0` (gruen). Jetzt gilt:
+    jede `for`-Schleife, die ihr Iterat **irgendwo als Argument** gibt,
+    ist ein Register. Ist das Ziel statisch aufloesbar, wird gezaehlt;
+    sonst `blind`. Und ist der Name nicht in `_REGISTRIES` deklariert,
+    ebenso `blind` — auch wenn er aufloesbar waere. Damit ist die Liste
+    die einzige Stelle, an der ein Register stehen darf, und ihr Fehlen
+    ist laut.
 
     Rueckgabe: `(Menge, blind)`.
     """
@@ -1052,22 +1064,44 @@ def _called_checkers(fn: ast.FunctionDef, tree=None) -> tuple[set[str], bool]:
         if isinstance(c, ast.Call) and isinstance(c.func, ast.Name):
             if c.func.id.startswith("check_"):
                 got.add(c.func.id)
-        # `for c in <etwas>: c(root)` → nur wenn das Iterat **als
-        # Funktion gerufen** wird, ist es ein Register. `for c in
-        # rep.problems:` ist eine Schleife ueber Daten. Diese
-        # Unterscheidung ist der Unterschied zwischen „Objekt der
-        # Iteration" und „jede Schleife im Rumpf" — ohne sie meldet der
-        # Pruefer `blind` fuer jede Aufzaehlung.
-        if isinstance(c, ast.For) and isinstance(c.target, ast.Name):
-            var = c.target.id
-            if not _calls_var(c.body, var):
-                continue
-            target = c.iter
-            if isinstance(target, ast.Name) and target.id in registry:
-                got |= registry[target.id]
-            else:
-                blind = True        # Muster gesehen, Ziel unbekannt
+        if not isinstance(c, ast.For) or not isinstance(c.target, ast.Name):
+            continue
+        var = c.target.id
+        if not (_calls_var(c.body, var) or _passes_var(c.body, var)):
+            continue        # reine Datenschleife: `for p in rep.problems:`
+        target = c.iter
+        if not isinstance(target, ast.Name):
+            blind = True
+            continue
+        if target.id not in _REGISTRIES:
+            blind = True    # Register nicht deklariert: laut, nicht still
+            continue
+        if target.id in registry:
+            got |= registry[target.id]
+        else:
+            blind = True    # deklariert, aber dynamisch gebaut
     return got, blind
+
+
+def _passes_var(body: list[ast.AST], var: str) -> bool:
+    """Wird `var` im Rumpf **als Argument an eine Funktion** gegeben?
+
+    §A-NH: der Testfall ist `apply(c, root)` — ein freier Name. Ein
+    **Methodenaufruf** wie `positional.append(a)` bindet `a` an eine
+    Liste, nicht an eine Funktion; das ist kein Register. Die Unterscheidung
+    ist dieselbe wie ueberall in dieser Datei: die Form, nicht der Name.
+    """
+    for n in body:
+        for c in ast.walk(n):
+            if not (isinstance(c, ast.Call)
+                    and isinstance(c.func, ast.Name)):
+                continue
+            if any(isinstance(a, ast.Name) and a.id == var for a in c.args):
+                return True
+            if any(isinstance(k.value, ast.Name) and k.value.id == var
+                   for k in c.keywords):
+                return True
+    return False
 
 
 def _calls_var(body: list[ast.AST], var: str) -> bool:
@@ -1292,6 +1326,42 @@ def _self_test_akt_block() -> list[str]:
     return out
 
 
+def _self_test_wirkung() -> list[str]:
+    """Meldet jeder Pruefer, wenn ein Fehler da ist? (§A-NK, Runde 49)
+
+    Die vierte Stufe. `unchecked` sieht die **Registrierung**,
+    `unclassified` das **Auftauchen** im Kalibrierlauf. Beide sind blind
+    fuer den Fall, dass ein Pruefer laeuft und nichts findet. Diese Stufe
+    zaehlt die Wirkung: je Pruefer ein Fixture mit Fehler und eines ohne.
+    Meldet er in beiden gleich, ist er wirkungslos — und das ist eine Zahl.
+
+    Die Fixtures liegen in `check_fixtures` (eigene Rolle, eigener Ort),
+    nicht als Kommentar im Produktionscode. Fehlt das Modul, ist das
+    **rot**, nicht still: ein Pruefer ohne Gegenprobe ist eine Behauptung.
+    """
+    out: list[str] = []
+    try:
+        import check_fixtures
+    except ImportError:
+        return ["Wirkung: `check_fixtures` fehlt — kein Pruefer hat eine "
+                "Gegenprobe"]
+    measured = check_fixtures.measure()
+    declared = set(check_fixtures.FIXTURES)
+    # Jeder registrierte Pruefer braucht ein Paar — die Liste steht in
+    # `check_fixtures`, nicht hier. Ein Pruefer ohne Fixture ist eine
+    # Zahl ohne Wirkung; er wird nicht stillschweigend ausgelassen.
+    if len(declared) < 7:
+        out.append(f"Wirkung: nur {len(declared)} Fixtures deklariert "
+                   f"(erwartet 7)")
+    for name, (bad, clean) in measured.items():
+        if bad < 0:
+            out.append(f"Wirkung: Fixture fuer {name} laeuft nicht")
+        elif bad <= clean:
+            out.append(f"Wirkung: {name} meldet im Fehlerfall nicht mehr "
+                       f"als ohne ({bad} vs {clean})")
+    return out
+
+
 def _self_test_reader_calls() -> list[str]:
     """Findet der Pruefer den **Aufruf** ohne `root`? (§A-NE)
 
@@ -1312,14 +1382,20 @@ def _self_test_reader_calls() -> list[str]:
         "    load_thing()\n"
         "    load_thing(Path('/tmp'))\n"
         "    not_a_reader()\n"
-        "    load_thing()  # §A-KR-ANCHOR bewusst: Default\n"
+        "    load_thing()\n"
     )
     got = _reader_calls_without_root(probe)
     out: list[str] = []
-    if len(got) != 1:
-        out.append(f"Leser-Aufruf: {len(got)} Meldungen, erwartet 1")
-    elif "@L6" not in got[0]:
-        out.append(f"Leser-Aufruf: Meldung zeigt nicht auf @L6: {got[0]}")
+    # §A-NI (Runde 49): zwei Aufrufe ohne `root` stehen im Fixture, nicht
+    # einer — die Erwartung war eine Zaehlung, die nie stimmte. Jetzt eine
+    # Mengenaussage: **beide** Stellen sind gemeldet, die mit `Path`
+    # nicht, der Nicht-Leser nicht.
+    if sorted(got) != [
+            "load_thing(...) @L6: Leser ohne `root` gerufen — "
+            "Leseort ist der Default",
+            "load_thing(...) @L9: Leser ohne `root` gerufen — "
+            "Leseort ist der Default"]:
+        out.append(f"Leser-Aufruf: {got} statt der beiden Stellen L6/L9")
     # Und die eigene Datei: keine Leser-Aufrufe ohne root.
     mine = _reader_calls_without_root()
     if mine:
@@ -1432,9 +1508,29 @@ def _reader_calls_without_root(src: str | None = None) -> list[str]:
             src_line = lines[n.lineno - 1] if n.lineno <= len(lines) else ""
             if _KR_ANCHOR in src_line:
                 continue
+            # §A-NI (Runde 49): die Rolle statt des Markers. Ein Aufruf in
+            # einem **Selbsttest** prueft den Default-Zweig; der Fund ist
+            # dort das Ziel. Dieselbe Bewegung wie bei `_CWD_READERS`:
+            # von zehn Markern im Code auf eine Regel.
+            if _in_self_test(n.lineno, tree):
+                continue
             out.append(f"{n.func.id}(...) @L{n.lineno}: Leser ohne "
                        f"`root` gerufen — Leseort ist der Default")
     return out
+
+
+def _in_self_test(lineno: int, tree) -> bool:
+    """Liegt `lineno` in einer Funktion mit `_self_test`-Praefix?"""
+    import ast as _a
+    for fn in tree.body:
+        if not isinstance(fn, _a.FunctionDef):
+            continue
+        if not fn.name.startswith(("_self_test", "self_test")):
+            continue
+        end = getattr(fn, "end_lineno", fn.lineno) or fn.lineno
+        if fn.lineno <= lineno <= end:
+            return True
+    return False
 
 
 # §A-NE: Markierung fuer einen Aufruf, der den Default **absichtlich**
@@ -1467,29 +1563,39 @@ def _uses_root_as_path(fn: ast.AST, name: str) -> bool:
     return False
 
 
+def _akte_blocks(text: str) -> set[str]:
+    """Identitaet jedes Rundenblocks — `§71.NN`, nicht seine Position.
+
+    §A-NG (Runde 49): `count(Bezug) >= count_prev(Bezug)` vergleicht
+    **Groessen**. Ein Tausch — ein Block geloescht, ein anderer
+    hinzugefuegt — bleibt bei gleicher Zahl und ist gruen. Verlustfreiheit
+    ist Mengeninklusion, und die braucht eine Identitaet. Sie steht schon
+    in der Datei: jede Runde beginnt mit einem Paragraphentitel.
+    """
+    return set(re.findall(r"^### (§71\.\d+) — ", text, re.M))
+
+
 def _akte_losslessness(root: Path | None = None) -> list[str]:
-    """Verliert die Akte Bloecke gegenueber dem Vorgaenger-Commit? (§A-NF)
+    """Verliert die Akte **einen Block** gegenueber dem Vorgaenger-Commit?
 
-    §71.53 hat gesagt: „ein Vergleich ueber alle Bloecke verlangt eine
-    Aussage ueber die Historie, die diese Datei nicht fuehrt". Die
-    Diagnose stimmt, die Schlussfolgerung war zu stark. Zwei Fragen, und
-    nur die zweite ist heute pruefbar:
+    §A-NF (Runde 48) verglich Groessen: `Bezug`-Zeilen, Zeilen,
+    `total=`-Bloecke monoton. §A-NG (Runde 49): das ist Nettoverlust —
+    ein Tausch geht als Verlustfreiheit durch, und wer in Runde 50 die
+    Akte liest, erfaehrt nicht, **welche** Runde fehlt.
 
-      War der alte Block **richtig**?        braucht Interpretation  ✗
-      Ist der alte Block noch **da**?        braucht die Datei       ✓
+    Jetzt Mengeninklusion ueber die Identitaet der Ueberschrift:
 
-    Eine Sammlung, die nichts verliert, **ist** eine Historie. Die eine
-    Eigenschaft, die sie ohne Interpretation belegen kann, ist
-    Verlustfreiheit — und genau die fehlte. Drei monotone Groessen gegen
-    `HEAD~1`:
+        bloecke(heute)  ⊇  bloecke(HEAD~1)
 
-      Bezug-Zeilen  >=  Vorgaenger
-      Zeilen        >=  Vorgaenger
-      `total=`-Bloecke >= Vorgaenger
+    Meldung nennt die **fehlende Runde**, nicht die Differenz zweier
+    Zahlen.
 
-    **Nebenwirkung, gewollt:** der Test wird rot, wenn die Akte bewusst
-    gekuerzt oder umstrukturiert wird. Darum gehoert er nicht in den
-    normalen Lauf, sondern an den Commit (`--akte-monoton`).
+    **Nebenwirkung, gewollt:** wer einen Block **berichtigt**, wird rot —
+    ausser er fuehrt die Berichtigung als eigenen Block (`§71.53a`).
+    Das ist die Entscheidung: die Akte waechst monoton, oder sie
+    erzaehlt. Die Groessenpruefung bleibt daneben stehen: eine geloeschte
+    Zeile in einem Block, die keinen Blockverlust erzeugt, faellt sonst
+    durch.
     """
     base = root or Path(__file__).resolve().parent.parent
     rel = "order_execution_engine/ops/TAG7_ABNAHME.md"
@@ -1503,13 +1609,92 @@ def _akte_losslessness(root: Path | None = None) -> list[str]:
         return []       # erster Commit der Datei: nichts zu vergleichen
     old = prev.stdout
     out: list[str] = []
+    gone = _akte_blocks(old) - _akte_blocks(now)
+    for block in sorted(gone):
+        out.append(f"Akte: Block {block} fehlt — Runde verloren")
+    # Und die Groessen, damit ein Zeilenverlust **innerhalb** eines
+    # Blocks nicht durch die Mengenpruefung faellt.
     for label, fn in (("Bezug-Zeilen", lambda t: t.count("\nBezug: root=")),
                       ("Zeilen", lambda t: len(t.splitlines())),
                       ("`total=`-Bloecke", lambda t: t.count("```\ntotal="))):
         a, b = fn(now), fn(old)
         if a < b:
-            out.append(f"Akte: {label} {b} -> {a} — Block verloren")
+            out.append(f"Akte: {label} {b} -> {a} — verloren")
     return out
+
+
+def _self_test_root_probes() -> list[str]:
+    """Sind die `root=None`-Proben **an der Rolle** erkennbar? (§A-NI)
+
+    §A-NE (Runde 48) liess den Marker `§A-KR-ANCHOR` aus der **Zeile des
+    Fundes** lesen. Zehn solcher Marker sind zehn `# noqa` in der Datei,
+    die eine Rollenliste erfunden hat, um genau das abzuschaffen.
+
+    Die Rolle ist „Negativtest", und sie ist am **Testkoerper** erkennbar:
+    ein Default-Zweig wird nur in einer Funktion mit `_self_test`-Praefix
+    gerufen, und der Fund ist dort das Ziel, nicht der Verstoss. Diese
+    Funktion ist der Ort, an dem die Rolle deklariert ist — eine Stelle,
+    reviewbar, statt zehn Kommentare am Fund.
+
+    Geprueft wird beides: in den Testkoerpern wird der Marker **nicht
+    mehr gebraucht**, im Produktionscode ist keiner.
+    """
+    out: list[str] = []
+    src = Path(__file__).read_text(encoding="utf-8")
+    lines = src.splitlines()
+    # (a) kein Marker ausserhalb eines Selbsttests
+    import ast
+    tree = ast.parse(src)
+    owner: dict[int, str] = {}
+    for fn in tree.body:
+        if isinstance(fn, ast.FunctionDef):
+            for n in ast.walk(fn):
+                if hasattr(n, "lineno"):
+                    owner[n.lineno] = fn.name
+            owner[fn.lineno] = fn.name
+    stray = [i for i, ln in enumerate(lines, 1)
+             if _KR_ANCHOR in ln and not owner.get(i, "").startswith(
+                 ("_self_test", "self_test"))]
+    # docstring-Zeilen sind keine Fundstellen
+    stray = [i for i in stray if not lines[i - 1].strip().startswith(("#", '"'))]
+    # §A-NI: und Zeilen, die von einem Docstring **umschlossen** sind.
+    stray = [i for i in stray if not _inside_docstring(tree, i)]
+    # Und die Zeile, die den Marker **definiert** — sie nennt ihn, sie
+    # traegt ihn nicht.
+    stray = [i for i in stray if not lines[i - 1].startswith("_KR_ANCHOR")]
+    if stray:
+        out.append(f"Root-Probe: Marker `{_KR_ANCHOR}` ausserhalb eines "
+                   f"Selbsttests @L{stray[0]}")
+    # (b) die Rolle wird erkannt: ein Default-Zweig im Testkoerper ist still,
+    #     derselbe Aufruf im Produktionscode nicht.
+    probe = (
+        "def load_thing(root=None):\n"
+        "    return (root / 'x').read_text()\n"
+        "def _self_test_x():\n"
+        "    load_thing()\n"
+        "def production():\n"
+        "    load_thing()\n"
+    )
+    got = _reader_calls_without_root(probe)
+    if len(got) != 1 or "@L6" not in got[0]:
+        out.append(f"Root-Probe: Rolle nicht erkannt — {got}")
+    return out
+
+
+def _inside_docstring(tree, lineno: int) -> bool:
+    """Liegt `lineno` in einem String-Literal, das ein Docstring ist?"""
+    import ast as _a
+    for n in ast.walk(tree):
+        if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef,
+                          ast.Module)):
+            body = getattr(n, "body", [])
+            if (body and isinstance(body[0], ast.Expr)
+                    and isinstance(body[0].value, ast.Constant)
+                    and isinstance(body[0].value.value, str)):
+                d = body[0]
+                if d.lineno <= lineno <= (getattr(d, "end_lineno", d.lineno) or d.lineno):
+                    return True
+    return False
 
 
 def _default_root_errors(src: str | None = None) -> list[str]:
@@ -1988,9 +2173,43 @@ def _self_test_calibration_classes() -> list[str]:
         out.append("Pruefer-Differenz: der Kalibrierlauf ruft einen Pruefer, "
                    "den main nicht faehrt")
     # Und die Gegenprobe: ein **dynamisches** Register liefert `None`.
+    global _REGISTRIES
+    _REGISTRIES = frozenset({"CHECKS"})
     dyn = ("CHECKS = tuple(c for c in (check_a, check_b))\n"
            "def main():\n    for c in CHECKS:\n        c(root)\n"
            "def calibration_run():\n    check_a(root)\n")
+    # §A-NH (Runde 49): das Iterat **durchgereicht** statt gerufen. Erwartet
+    # ist die Differenz eins: `CHECKS` traegt zwei Pruefer, der
+    # Kalibrierlauf einen (2 − 1). Das Fixture steht als Literalverkettung
+    # da, damit die Herkunft der Zahl in der Zeile lesbar bleibt.
+    passed = (
+        "CHECKS = (check_a, check_b)\n"
+        "def main():\n"
+        "    for c in CHECKS:\n"
+        "        apply(c, root)\n"
+        "def calibration_run():\n"
+        "    check_a(root)\n"
+    )
+    expect = 1   # CHECKS carries two checkers, calibration_run one
+    if _checker_gap("main", "calibration_run", passed) != expect:
+        out.append("Pruefer-Differenz: `for c in CHECKS: apply(c)` gilt "
+                   "als Daten-Schleife — blind und gruen sehen gleich aus")
+    # Und `append` ist kein Register: eine Methode bindet, sie reicht nicht.
+    app = ("def main():\n    for a in raw:\n        out.append(a)\n"
+           "def calibration_run():\n    check_a(root)\n")
+    if _checker_gap("main", "calibration_run", app) is None:
+        out.append("Pruefer-Differenz: `out.append(a)` gilt als Register")
+    reg = ("CHECKS = (check_a, check_b)\n"
+           "def main():\n    for c in CHECKS:\n        c(root)\n"
+           "def calibration_run():\n    check_a(root)\n")
+    # Und die Umkehrung: ein **nicht deklariertes** Register ist laut.
+    _REGISTRIES = frozenset()
+    try:
+        if _checker_gap("main", "calibration_run", reg) is not None:
+            out.append("Pruefer-Differenz: nicht deklariertes Register "
+                       "liefert eine Zahl statt None")
+    finally:
+        _REGISTRIES = frozenset({"CHECKS"})
     if _checker_gap("main", "calibration_run", dyn) is not None:
         out.append("Pruefer-Differenz: dynamisches Register liefert eine "
                    "Zahl statt None — blind und gruen sehen gleich aus")
@@ -2003,14 +2222,8 @@ def _self_test_calibration_classes() -> list[str]:
     # §A-MW (Runde 47): die Registry. Ersetzt jemand die sechs Aufrufe
     # durch `for c in CHECKS`, darf der Pruefer nicht blind werden. Die
     # Probe ist die bessere Architektur — der Pruefer muss sie lesen.
-    reg = (
-        "CHECKS = (check_a, check_b)\n"
-        "def main():\n"
-        "    for c in CHECKS:\n"
-        "        c(root)\n"
-        "def calibration_run():\n"
-        "    check_a(root)\n"
-    )
+    # §A-NH: die dritte Luecke — Iterat **durchgereicht** statt gerufen.
+    passed = reg.replace("c(root)", "apply(c, root)")
     if _checker_gap("main", "calibration_run", reg) != 1:
         out.append("Pruefer-Differenz: die Registry macht den Pruefer blind "
                    "(`check_b` ueber `CHECKS` nicht gezaehlt)")
@@ -2401,7 +2614,7 @@ def _self_test_count_delta() -> list[str]:
             text_doc = doc.read_text(encoding="utf-8")
             w_doc, p_doc = parse_waves(text_doc)
             rep = Report()
-            check_counts(text_doc, w_doc, p_doc, rep, root_repo)  # §A-KR-ANCHOR bewusst: Doku-Ort
+            check_counts(text_doc, w_doc, p_doc, rep, root_repo)
             # disjunkt heisst: **je Fundstelle** entweder geprueft oder
             # ausgeschlossen, nie beides. Eine Zeile darf beides enthalten
             # (`27 Waves x 9 Agents`: Architekturzahl geprueft, ein Bruch
@@ -2411,7 +2624,7 @@ def _self_test_count_delta() -> list[str]:
             per_line_checked = per_line_skips = 0
             for raw in text_doc.splitlines():
                 one = Report()
-                check_counts(raw, w_doc, p_doc, one, root_repo)  # §A-KR-ANCHOR bewusst: Doku-Ort
+                check_counts(raw, w_doc, p_doc, one, root_repo)
                 per_line_checked += one.checked
                 per_line_skips += sum(one.skips.values())
             if per_line_checked != rep.checked:
@@ -2457,7 +2670,7 @@ def _self_test_count_delta() -> list[str]:
         #     nicht beide nur "geprueft" heissen. Geprueft wird die
         #     Ausgabeform selbst — sie ist die Stelle, an der zwei
         #     Einheiten ein Wort teilten.
-        line = _status_line(Checks(223, 210, 0), 0)  # §A-KR-ANCHOR bewusst: Formprobe
+        line = _status_line(Checks(223, 210, 0), 0)
         # §A-MF (Runde 43): die Formprobe braucht ihren **Partner**. Der
         # Beweis, dass `root` wirkt, ist das Paar, nicht die Haelfte: ohne
         # `root` steht kein Bezug in der Zeile, mit `root` steht er da.
@@ -2467,7 +2680,7 @@ def _self_test_count_delta() -> list[str]:
         # Abhaengigkeit von `root` zaehlt, ist die **gezaehlte** aus der
         # Kette — zweimal gezaehlt, einmal eigener Baum, einmal Klon.
         # Der Name des Tests sagt jetzt, was er prueft.
-        line_pair = _status_line(Checks(223, 210, 0), 0, Path("/tmp/_paar"))  # §A-KR-ANCHOR Formprobe-Partner
+        line_pair = _status_line(Checks(223, 210, 0), 0, Path("/tmp/_paar"))
         if "Bezug: root=" in line:
             failures.append("Kopfzeile ohne root nennt einen Bezug")
         if "Bezug: root=/tmp/_paar" not in line_pair:
@@ -2548,7 +2761,7 @@ def _self_test_count_delta() -> list[str]:
                     f"reset_all() hat die Referenz verschoben: {_START_CWD}")
         try:
             os.chdir(other)                    # cwd != Repo
-            got = _snapshot_path()             # §A-KR-ANCHOR root=None
+            got = _snapshot_path()
         finally:
             os.chdir(prev_cwd)
         if got.parent.resolve() != (here / "sub" / ".git").resolve() and \
@@ -2615,8 +2828,8 @@ def _self_test_count_delta() -> list[str]:
             "_save_count_snapshot": None,
         }
         no_root = {
-            "_snapshot_path": _snapshot_path(),   # §A-KR-ANCHOR bewusst: Default-Zweig
-            "_delta_line": _delta_line(1),        # §A-KR-ANCHOR bewusst: Vorlauf-sha
+            "_snapshot_path": _snapshot_path(),
+            "_delta_line": _delta_line(1),
         }
         # ohne root zeigt der Ort auf **dieses** Repo, nicht auf `root`
         here = Path(__file__).resolve().parent.parent
@@ -2652,7 +2865,7 @@ def _self_test_count_delta() -> list[str]:
         #     zweiter Fall denselben Wert liefert, sieht keinen Unterschied
         #     — die vierte Annahme. Gegenprobe an der Stelle, an der sie
         #     sich schon einmal geraeumt hat: `root` gegen `root=None`.
-        if _snapshot_path(root) == _snapshot_path():  # §A-KR-ANCHOR Zwillingspfad
+        if _snapshot_path(root) == _snapshot_path():
             failures.append("Gegenprobe fehlt: root und root=None gleich")
         if Checks(21).n == Checks(22).n:
             failures.append("Checks traegt die Zahl nicht")
@@ -2774,7 +2987,7 @@ def _self_test_count_delta() -> list[str]:
                 f"claim() veraendert total nicht: {c_no.total} vs {c_all.total}")
         if c_no.measured != c_all.measured:
             failures.append("claim() veraendert measured — falscher Eimer")
-        line_all = _status_line(c_all, 0)  # §A-KR-ANCHOR root=None
+        line_all = _status_line(c_all, 0)
         for need in ("2 Angaben geprueft", "6 Angaben gezaehlt",
                      "5 gemessen", "1 Zusagen"):
             if need not in line_all:
@@ -2782,7 +2995,7 @@ def _self_test_count_delta() -> list[str]:
         # Ohne Zusagen: die Klammer nennt `0 Zusagen` — das ist eine Zahl,
         # keine Behauptung. Verboten ist nur der Zusatz **ausserhalb** der
         # Klammer, der eine vierte Einheit vortaeuscht (§A-KX).
-        line_no = _status_line(c_no, 0)  # §A-KR-ANCHOR root=None
+        line_no = _status_line(c_no, 0)
         if "0 Zusagen" not in line_no or line_no.count("Zusagen") != 1:
             failures.append(f"Zeile verschweigt null Zusagen: {line_no!r}")
 
@@ -2827,9 +3040,11 @@ def _self_test_count_delta() -> list[str]:
         viol = _root_forwarding_violations()
         if viol:
             failures.append(f"root nicht durchgereicht: {viol[:3]}")
-        bad_probes = _default_probe_lines_valid()
-        if bad_probes:
-            failures.append(f"Default-Ausnahmen ungueltig: {bad_probes}")
+        # §A-NI (Runde 49): die 18er-Erwartung war eine **Baseline** —
+        # eine Zahl, die den Zustand festschreibt und jede echte
+        # Reparatur falsch macht. Ersetzt durch die Rolle: ein
+        # Default-Zweig in einem Selbsttest ist kein Verstoss, einer im
+        # Produktionscode schon. Die Zahl faellt weg, nicht die Pruefung.
         # 28b. Die Kette (§A-LJ/§A-LK). Der Glieder-Pruefer oben sieht nur
         #      Funktionen mit `root`. `_resolve_test_root` hiess `doc_root`
         #      und rief `git rev-parse` ohne `cwd` — `check_claude_md.py
@@ -2886,10 +3101,10 @@ def _self_test_count_delta() -> list[str]:
                 "import subprocess\nsubprocess.run(['git','x'])\n") == []:
             failures.append("_git_callers_without_cwd findet den Zwilling nicht")
         #     Und der Report: zwei roots, zwei Bezugszeilen (§A-MA).
-        line_own = _status_line(Checks(1), 0, Path("/tmp/a"))  # §A-KR-ANCHOR root=fremd
+        line_own = _status_line(Checks(1), 0, Path("/tmp/a"))
         #                          ^ Zwillingsprobe: zaehlt den Bezug
         #                          nicht als Ausnahme (siehe unten)
-        line_two = _status_line(Checks(1), 0, Path("/tmp/b"))  # §A-KR-ANCHOR root=fremd
+        line_two = _status_line(Checks(1), 0, Path("/tmp/b"))
         if "/tmp/a" not in line_own or "/tmp/b" not in line_two:
             failures.append(f"Kopfzeile nennt den Bezug nicht: {line_own!r}")
         if line_own == line_two:
@@ -2899,30 +3114,45 @@ def _self_test_count_delta() -> list[str]:
         # Preset je Fehlerklasse**, nicht fuenf insgesamt (§A-LB): die
         # fuenf Loecher in Runde 39 waren verschieden, und ein Preset,
         # das zwei zugleich trifft, verdeckt beim naechsten Umbau eins.
+        # §A-NJ (Runde 49): `_binds_root` fragt jetzt nach dem **Lesepfad**,
+        # nicht nach dem Namen. Die Presets muessen also ein `root` zeigen,
+        # das wirklich gelesen wird — sonst hat die Funktion nichts zu
+        # reichen, und „kein Verstoss" ist die richtige Antwort. `rd` ist
+        # dieser Leseort: `(root / 'x').read_text()`.
+        _RD = "    rd = (root / 'x').read_text()\n"
         pairs = [
             # K1: `Path.cwd()` statt `root` (Ausdruck statt Name)
-            ("def f(root):\n    return g(Path.cwd())\n"
+            ("def f(root):\n" + _RD + "    return g(Path.cwd())\n"
              "def g(root):\n    return root\n", True, "K1 cwd als Argument"),
             # K2: gar kein Argument
-            ("def f(root):\n    return g()\n"
+            ("def f(root):\n" + _RD + "    return g()\n"
              "def g(root):\n    return root\n", True, "K2 fehlendes Argument"),
             # K3: Argument an falscher Position (root ist Parameter 2)
-            ("def f(root):\n    return g(1)\n"
+            ("def f(root):\n" + _RD + "    return g(1)\n"
              "def g(x, root):\n    return root\n", True, "K3 falsche Position"),
             # K4: Aufruf in verschachteltem def darf NICHT als Verstoss
             #     der Elternfunktion gelten
-            ("def f(root):\n    def inner():\n        return g()\n"
+            ("def f(root):\n" + _RD + "    def inner():\n        return g()\n"
              "    return g(root)\n"
              "def g(root):\n    return root\n", False, "K4 Kind-def"),
             # K5: Alias einer **Fremdquelle** ist kein root
-            ("def f(root):\n    r = Path.cwd()\n    return g(r)\n"
+            ("def f(root):\n" + _RD + "    r = Path.cwd()\n    return g(r)\n"
              "def g(root):\n    return root\n", True, "K5 Fremd-Alias"),
             # K6: Alias von root ist Uebergabe
-            ("def f(root):\n    r = root\n    return g(r)\n"
+            ("def f(root):\n" + _RD + "    r = root\n    return g(r)\n"
              "def g(root):\n    return root\n", False, "K6 root-Alias"),
             # K7: echte Uebergabe
-            ("def f(root):\n    return g(root)\n"
+            ("def f(root):\n" + _RD + "    return g(root)\n"
              "def g(root):\n    return root\n", False, "K7 korrekt"),
+            # K8 (§A-NJ): die Eigenschaft ist der Lesepfad, nicht der Name.
+            #     `root_` traegt denselben Wert und wird ignoriert.
+            ("def f(root_):\n    rd = (root_ / 'x').read_text()\n"
+             "    return g()\n"
+             "def g(root):\n    return root\n", True, "K8 anderer Name, gelesen"),
+            # K9 (§A-NJ): umgekehrt — `root` heisst `root`, wird aber nie
+            #     als Pfad gelesen. Dann hat die Funktion nichts zu reichen.
+            ("def f(root):\n    return g()\n"
+             "def g(root):\n    return root\n", False, "K9 Name ohne Lesepfad"),
         ]
         for src, expect_bad, label in pairs:
             got = _forwarding_violations(src)
@@ -2963,25 +3193,42 @@ def _self_test_count_delta() -> list[str]:
             failures.append(f"_doc_tracked(clone) nicht committet: {doc_clone}")
         if doc_clone == _doc_tracked(root) and _doc_tracked(root).startswith("committet"):
             failures.append("_doc_tracked nennt fuer beide Repos denselben sha")
-        blind_probe = ("def f(root):\n    return g()\n"
+        # §A-NJ (Runde 49): der stille Zwilling muss ein **gelesenes**
+        # `root` tragen. `def f(root): return g()` hat nichts zu reichen —
+        # seit die Eigenschaft der Lesepfad ist, ist `[]` dort die richtige
+        # Antwort (K9 unten). Der Zwilling ist K2 mit einer Lesezeile.
+        blind_probe = ("def f(root):\n"
+                       "    rd = (root / 'x').read_text()\n"
+                       "    return g()\n"
                        "def g(root):\n    return root\n")
         if not _forwarding_violations(blind_probe):
-            failures.append("Pruefer ist stillgruen (K2 liefert [])")
+            failures.append("Pruefer ist stillgruen (Zwilling mit gelesenem "
+                            "root liefert [])")
         # §A-LH: aber die Presets oben sind **eigene** Quellen. Die Frage
         # "findet er es in *dieser* Datei?" braucht dieselbe Antwort:
         # eine Kopie der Produktionsdatei mit einem eingebauten Fehler
         # muss anschlagen. Ein Pruefer, der nur auf Fixtures reagiert,
         # ist ein Fixture-Pruefer.
         prod_src = Path(__file__).read_text(encoding="utf-8")
-        broken = prod_src.replace(
-            "        if _load_count_snapshot(root) is None:",
-            "        if _load_count_snapshot() is None:", 1)
+        # §A-NI (Runde 49): der Anker ist **Produktionscode** und die
+        # richtige Funktion. Vier Anker scheiterten vorher, jeder an einer
+        # anderen Bedingung — alle vom Selbsttest gefunden, keiner vom
+        # Hinsehen: `_self_test_count_delta` (Rolle greift), `main` als
+        # `_delta_line`-Stelle (kein `root`-Parameter), `chain` (Closure,
+        # kein Parameter), `run(...)` (Referenz statt Aufruf). Und der
+        # fuenfte, `replace(..., 1)`, traf den **ersten** von drei
+        # Treffern — `chain`. Genommen wird der **letzte**, in `main`, wo
+        # `root` per Zuweisung gebunden ist und `_binds_root` es sieht.
+        _anchor = "    check_line_counts(text, root, rep)"
+        _i = prod_src.rfind(_anchor)
+        broken = (prod_src[:_i] + "    check_line_counts(text, Path(), rep)"
+                  + prod_src[_i + len(_anchor):]) if _i >= 0 else prod_src
         if broken == prod_src:
             failures.append("Anker fuer Produktions-Probe fehlt")
         elif not _forwarding_violations(broken):
             failures.append("Pruefer findet eingebauten Fehler nicht in Produktion")
         # Die Zeile liest den Zaehler an genau einer Stelle.
-        line_c = _status_line(Checks(rep_c.checked, rep_c.skips.get("regel", 0)), 0)  # §A-KR-ANCHOR root=None
+        line_c = _status_line(Checks(rep_c.checked, rep_c.skips.get("regel", 0)), 0)
         if f"{n_ok + 1} Angaben geprueft" not in line_c:
             failures.append(f"Zeile liest den Zaehler nicht: {line_c!r}")
 
@@ -3000,12 +3247,12 @@ def _self_test_count_delta() -> list[str]:
             failures.append("Aufteilung nicht im Objekt: gleiche Summe, gleicher Wert")
         if Checks(5, 1) == Checks(5, 2):
             failures.append("__eq__ ignoriert excluded")
-        line_ident = _status_line(c1, 0)  # §A-KR-ANCHOR root=None
+        line_ident = _status_line(c1, 0)
         if "21 Angaben geprueft" not in line_ident or \
                 "231 Angaben gezaehlt" not in line_ident or \
                 "210 ausgeschlossen" not in line_ident:
             failures.append(f"Zeile rechnet nicht aus dem Typ: {line_ident!r}")
-        line_ident3 = _status_line(c3, 0)  # §A-KR-ANCHOR root=None
+        line_ident3 = _status_line(c3, 0)
         if "11 Angaben gezaehlt" not in line_ident3:
             failures.append(f"Zeile rechnet nicht (zweites Paar): {line_ident3!r}")
         try:
@@ -3031,8 +3278,8 @@ def _self_test_count_delta() -> list[str]:
         except AttributeError:
             pass
         # und die Funktion selbst: `repo_root()` ist der eine Weg
-        if repo_root(None) != here:  # §A-KR-ANCHOR bewusst: Default-Zweig
-            failures.append(f"repo_root(None) != Dateiort: {repo_root(None)}")  # §A-KR-ANCHOR bewusst: Default-Zweig
+        if repo_root(None) != here:
+            failures.append(f"repo_root(None) != Dateiort: {repo_root(None)}")
         if repo_root(root) != root.resolve():
             failures.append("repo_root(root) loest nicht auf root auf")
         # Cache: zweiter Aufruf darf keinen neuen Subprozess kosten
@@ -3079,7 +3326,7 @@ def _self_test_count_delta() -> list[str]:
         if "21 Angaben" not in str(demo):
             failures.append(f"Checks bringt die Zahl nicht mit: {demo!r}")
         try:
-            _status_line(21, 0)  # §A-KR-ANCHOR root=None  # type: ignore[arg-type]
+            _status_line(21, 0)  # type: ignore[arg-type]
             failures.append("_status_line akzeptiert int — die Einheit fehlt")
         except TypeError:
             pass
@@ -3549,7 +3796,7 @@ def _forwarding_violations(src: str) -> list[str]:
                 if isinstance(child, ast.FunctionDef):
                     # Kind: eigener Scope, eigene Bindung, eigene Meldung.
                     # §A-LD: nur wenn das Kind `root` **selbst bindet**.
-                    if _binds_root(child):
+                    if _binds_root(child, tree):
                         found.extend(calls_without_root(child, child.name))
                     continue
                 if isinstance(child, (ast.AsyncFunctionDef, ast.Lambda)):
@@ -3568,7 +3815,7 @@ def _forwarding_violations(src: str) -> list[str]:
                         if len(child.args) > pos:
                             arg = child.args[pos]
                             passed = (isinstance(arg, ast.Name)
-                                      and arg.id in _root_aliases(node_fn, child))
+                                      and arg.id in _root_aliases(node_fn, child, tree))
                         else:
                             passed = False
                         if not has_kw and not passed:
@@ -3580,9 +3827,14 @@ def _forwarding_violations(src: str) -> list[str]:
                             # `root` (Parameter, Zuweisung, with-as). Ein
                             # Kind, das `root` nur als Closure sieht,
                             # uebergibt nichts — es hat nichts zu uebergeben.
-                            if _binds_root(node_fn) and \
-                                    child.lineno not in _DEFAULT_PROBE_LINES \
-                                    and not _marked(child.lineno):
+                            # §A-NI (Runde 49): die Rolle statt der
+                            # Markerliste. Ein Aufruf in einem
+                            # Selbsttest prueft den Default-Zweig; der
+                            # Fund ist dort das Ziel. Dieselbe Bewegung
+                            # wie bei `_CWD_READERS`: von vielen Ausnahmen
+                            # auf eine Regel.
+                            if _binds_root(node_fn, tree) and \
+                                    not _in_self_test(child.lineno, tree):
                                 found.append(
                                     f"{label or fn.name} -> {name}() @L{child.lineno}")
                 visit(child, node_fn)
@@ -3594,7 +3846,7 @@ def _forwarding_violations(src: str) -> list[str]:
             # Kind mit eigener `root`-Bindung wird eigenstaendig geprueft,
             # eines ohne wird nicht betreten.
             if isinstance(stmt, ast.FunctionDef):
-                if _binds_root(stmt):
+                if _binds_root(stmt, tree):
                     found.extend(calls_without_root(stmt, stmt.name))
                 continue
             if isinstance(stmt, (ast.AsyncFunctionDef, ast.Lambda)):
@@ -3615,7 +3867,7 @@ def _forwarding_violations(src: str) -> list[str]:
         # einmal als Wurzel (falsch, Closure als Bindung). Gefragt ist
         # `_binds_root`: hat **diese** Funktion `root`, oder sieht sie es
         # nur?
-        if _binds_root(n):
+        if _binds_root(n, tree):
             out.extend(calls_without_root(n))
     return out
 
@@ -3766,7 +4018,6 @@ def _probe_anchors(src: str | None = None) -> tuple[str, ...]:
             pass
     out: list[str] = []
     # §A-MJ (Runde 44): "Code-Zeile" hiess bisher "faengt nicht mit `#` an".
-    # Dann ist `x = "# §A-KR-ANCHOR"` ein Anker — und das eigene
     # Blind-Fixture, das den Marker als String baut, zaehlt sich mit.
     # Genau dieser Fall war in Runde 41 der Fehler (`10 statt 8`), nur mit
     # dem alten Marker. **Ein Kommentar ist, was `tokenize` als COMMENT
@@ -3843,7 +4094,6 @@ def _default_probe_lines_valid() -> list[str]:
     if len(set(anchors)) != len(anchors):
         out.append(f"{len(anchors) - len(set(anchors))} doppelte Ausnahme(n)")
     # Jede Markierung muss einen Grund tragen: mehr als das blosse
-    # `§A-KR-ANCHOR`. Ein Marker allein sagt *dass* es erlaubt ist,
     # nicht *warum*.
     for ln in lines:
         if ("§A" + "-KR-ANCHOR") in ln:
@@ -3910,43 +4160,160 @@ def _git_callers_without_cwd(src: str) -> list[str]:
     return out
 
 
-def _binds_root(fn: object) -> bool:
-    """Bindet **diese** Funktion `root` — oder sieht sie es nur von aussen?
+def _binds_root(fn: object, tree: object = None) -> bool:
+    """Bindet **diese** Funktion einen Pfad, der in den Lesepfad eingeht?
 
-    §A-LE: der Scope-Resolver in `_names_in_scope` laeuft ueber den ganzen
-    Funktionsbaum und findet `root` auch, wenn es ein Closure der
-    Elternfunktion ist. Fuer die Frage "haette sie `root` weiterreichen
-    koennen" ist das zu grosszuegig: ein Kind ohne eigenen Parameter hat
-    nichts zu reichen. Bindungen sind Parameter, Zuweisungen, `with ... as`
-    und `for`-Ziele — im **eigenen** Rumpf, ohne Kind-`def`s.
+    §A-LE (Runde 45): der Scope-Resolver in `_names_in_scope` laeuft ueber
+    den ganzen Funktionsbaum und findet `root` auch als Closure der
+    Elternfunktion. Fuer die Frage „haette sie `root` weiterreichen
+    koennen" ist das zu grosszuegig.
+
+    §A-NJ (Runde 49): und der Name `root` ist die falsche Eigenschaft.
+    Drei Anlaeufe der vorigen Probe scheiterten daran — eine Zuweisung galt,
+    ein abweichender Name nicht, ein ungenutzter Parameter galt auch.
+    Gefragt ist nicht **wie** die Variable heisst, sondern **was mit ihr
+    passiert**: bindet die Funktion einen Namen, dessen Wert in einen
+    Lesepfad eingeht?
+
+        Parameter / Zuweisung / with-as
+          → benutzt in `Path(x)`, `x / ...`, `x.glob()`, `open(x)`,
+            `(x / ...).read_text()`, als `cwd=`/`root=`-Argument
+
+    `root_` zaehlt. Ein `root`-Parameter, der nie gelesen wird, zaehlt
+    **nicht** — er haette nichts zu reichen. Die Rolle bleibt dieselbe:
+    ein Kind ohne Pfadbindung hat nichts zu uebergeben.
     """
     import ast
-    if any(a.arg == "root" for a in getattr(fn, "args", ast.arguments(
-            posonlyargs=[], args=[], kwonlyargs=[], kw_defaults=[], defaults=[])).args):
-        return True
+    args = getattr(fn, "args", None)
+    if args is None:
+        return False
+    bound: set[str] = {a.arg for a in (*getattr(args, "posonlyargs", []),
+                                       *args.args, *args.kwonlyargs)
+                       if a.arg not in ("self", "cls")}
+    for node in ast.iter_child_nodes(fn):  # type: ignore[arg-type]
+        for child in ast.walk(node):
+            if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef,
+                                  ast.Lambda)):
+                continue        # Kind-`def`s binden fuer sich
+            if isinstance(child, ast.Assign):
+                for t in child.targets:
+                    if isinstance(t, ast.Name):
+                        bound.add(t.id)
+            if isinstance(child, (ast.With, ast.AsyncWith)):
+                for item in child.items:
+                    if isinstance(item.optional_vars, ast.Name):
+                        bound.add(item.optional_vars.id)
+    if not bound:
+        return False
+    return _used_as_path(fn, bound, tree)
 
-    def walk(node: ast.AST) -> bool:
-        for child in ast.iter_child_nodes(node):
-            if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
+
+_PATH_CALLS = frozenset({"Path", "PurePath", "open", "listdir", "scandir"})
+_PATH_METHODS = frozenset({"glob", "rglob", "exists", "is_dir", "is_file",
+                           "iterdir", "read_text", "read_bytes", "open",
+                           "resolve", "stat", "mkdir", "unlink", "walk"})
+
+
+def _path_returning(tree: object) -> set[str]:
+    """Funktionen der Datei, die einen **Pfad** nehmen und einen geben.
+
+    §A-NJ: `repo_root(root: Path | None = None) -> Path` ist der Fall.
+    Eine Handliste waere wieder eine Liste, die veraltet — die Eigenschaft
+    steht in der Signatur: Parameter mit `Path`-Annotation, Rueckgabe
+    `Path`.
+    """
+    import ast
+    if tree is None:
+        return set()
+    out: set[str] = set()
+    for n in getattr(tree, "body", []):
+        if not isinstance(n, ast.FunctionDef):
+            continue
+        ret = n.returns
+        if not (isinstance(ret, ast.Name) and ret.id == "Path"):
+            continue
+        if any(any(isinstance(x, ast.Name) and x.id == "Path"
+                   for x in ast.walk(a)) for a in n.args.args):
+            out.add(n.name)
+    return out
+
+
+def _path_names(fn: object, tree: object = None) -> set[str]:
+    """Alle gebundenen Namen, deren Wert in einen Lesepfad eingeht.
+
+    §A-NJ: dieselbe Eigenschaft wie in `_binds_root`, aber als **Menge** —
+    `_root_aliases` braucht die Wurzel, von der aus Aliasse aufgeloest
+    werden, und die heisst nicht immer `root`.
+    """
+    import ast
+    args = getattr(fn, "args", None)
+    if args is None:
+        return set()
+    bound: set[str] = {a.arg for a in (*getattr(args, "posonlyargs", []),
+                                       *args.args, *args.kwonlyargs)
+                       if a.arg not in ("self", "cls")}
+    for node in ast.iter_child_nodes(fn):  # type: ignore[arg-type]
+        for child in ast.walk(node):
+            if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef,
+                                  ast.Lambda)):
                 continue
             if isinstance(child, ast.Assign):
-                if any(isinstance(t, ast.Name) and t.id == "root"
-                       for t in child.targets):
-                    return True
+                for t in child.targets:
+                    if isinstance(t, ast.Name):
+                        bound.add(t.id)
             if isinstance(child, (ast.With, ast.AsyncWith)):
-                if any(item.optional_vars is not None
-                       and isinstance(item.optional_vars, ast.Name)
-                       and item.optional_vars.id == "root"
-                       for item in child.items):
+                for item in child.items:
+                    if isinstance(item.optional_vars, ast.Name):
+                        bound.add(item.optional_vars.id)
+    return {n for n in bound if _used_as_path(fn, {n}, tree)}
+
+
+def _used_as_path(fn: object, names: set[str],
+                  tree: object = None) -> bool:
+    """Geht einer der Namen in einen Lesepfad ein?
+
+    Vier Formen, alle im AST sichtbar:
+
+        Path(x)            Konstruktor
+        x / "..."          Div auf einem Namen
+        x.glob(...)        Pfadmethode
+        f(cwd=x)           Schlüsselwort an einen Aufruf
+
+    Und die fuenfte (§A-NJ): `g(x)` an eine Funktion dieser Datei, die
+    `Path` nimmt und `Path` gibt — `repo_root(doc_root)` ist
+    Durchreichung, nicht Fremdquelle.
+    """
+    import ast
+    path_fns = _path_returning(tree)
+    for node in ast.iter_child_nodes(fn):  # type: ignore[arg-type]
+        for child in ast.walk(node):
+            if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef,
+                                  ast.Lambda)):
+                continue
+            if isinstance(child, ast.Call):
+                if (isinstance(child.func, ast.Name)
+                        and (child.func.id in _PATH_CALLS
+                             or child.func.id in path_fns)):
+                    if any(isinstance(a, ast.Name) and a.id in names
+                           for a in child.args):
+                        return True
+                if (isinstance(child.func, ast.Attribute)
+                        and child.func.attr in _PATH_METHODS
+                        and isinstance(child.func.value, ast.Name)
+                        and child.func.value.id in names):
                     return True
-            if walk(child):
-                return True
-        return False
+                if any(isinstance(k.value, ast.Name) and k.value.id in names
+                       for k in child.keywords):
+                    return True
+            if isinstance(child, ast.BinOp) and isinstance(child.op, ast.Div):
+                if any(isinstance(s, ast.Name) and s.id in names
+                       for s in (child.left, child.right)):
+                    return True
+    return False
 
-    return walk(fn)  # type: ignore[arg-type]
 
-
-def _root_aliases(fn: object, at: object) -> set[str]:
+def _root_aliases(fn: object, at: object,
+                  tree: object = None) -> set[str]:
     """Namen, die **denselben Wert** tragen wie `root` (§A-KT).
 
     `root_repo = root`, `case = root / ...`, `other_root = root / ...` —
@@ -3963,7 +4330,23 @@ def _root_aliases(fn: object, at: object) -> set[str]:
     import ast
     limit = 10 ** 9 if at is None else getattr(at, "lineno", 10 ** 9)
     seeds = _names_in_scope(fn, None)
-    aliases = {"root"} if "root" in seeds else set()
+    # §A-NJ (Runde 49): die Wurzel ist nicht der Name `root`, sondern der
+    # **gebundene Pfad** — wie bei `_binds_root`. `_resolve_test_root`
+    # traegt `doc_root` und reicht es korrekt durch; die namensbasierte
+    # Wurzel meldete das als Verstoss. Dieselbe Eigenschaft wie dort:
+    # welcher Name geht in einen Lesepfad ein?
+    # §A-NJ: die Wurzel ist der **Pfadparameter** — der Parameter, dessen
+    # Wert in einen Lesepfad eingeht. `_resolve_test_root(doc_root)` und
+    # `_akt_block_mismatch(root)` sind derselbe Fall mit zwei Namen.
+    # `base = root or ...` wird darueber transitiv als Alias erkannt.
+    params = {a.arg for a in (*getattr(getattr(fn, "args", None),
+                                       "posonlyargs", []),
+                              *getattr(getattr(fn, "args", None),
+                                       "args", []),
+                              *getattr(getattr(fn, "args", None),
+                                       "kwonlyargs", []))}
+    roots = (_path_names(fn, tree if tree is not None else fn) & params)
+    aliases = roots & seeds if roots else ({"root"} & seeds)
     changed = True
     while changed:
         changed = False

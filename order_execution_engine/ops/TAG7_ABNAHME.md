@@ -5757,3 +5757,132 @@ eigenen Baum `0`, weil `main` und `calibration_run` dieselben sechs
 Prüfer fahren. Das ist heute wahr und morgen nicht mehr geprüft — ein
 Prüfer, der nur im Kalibrierlauf steht, wird erst sichtbar, wenn er dort
 **meldet**. Der Zähler sieht die Registrierung, nicht die Wirkung.
+
+### §71.55 — Runde 49: die Menge statt der Zahl, und vier Anker, die sich selbst fanden
+
+**Die Buchung.** §71.54 hat Verlustfreiheit als **Zählung** eingeführt
+und gleich die Schwäche genannt. Der Leser hat sie genauer benannt:
+`3 >= 3` ist grün, wenn Block 45 gelöscht und Block 48 hinzugefügt wird.
+Das ist Nettoverlust, nicht Verlustfreiheit.
+
+**1. Verlustfreiheit als Mengeninklusion.** Die Identität stand schon in
+der Datei: jeder Block beginnt mit `### §71.NN — Runde M`.
+
+```
+bloecke(heute)  ⊇  bloecke(HEAD~1)
+```
+
+Meldung nennt die **fehlende Runde**, nicht die Differenz zweier Zahlen.
+Gegenprobe: Block §71.52 entfernt, `git`-Lauf gegen `HEAD~1` ⇒
+`Akte: Block §71.52 fehlt — Runde verloren`. Die Größenprüfung bleibt
+daneben — ein Zeilenverlust **innerhalb** eines Blocks erzeugt keinen
+Blockverlust.
+
+**Nebenwirkung, gewollt:** eine Berichtigung, die den Hash ändert, wird
+rot. Das ist die Entscheidung: die Akte wächst monoton, oder sie erzählt.
+
+**2. `check_counts` — hat der fehlende `root` je eine Zahl geändert?**
+
+```
+Repo:         ohne root  0 Probleme   mit root  0 Probleme
+Frischer Klon: ohne root  0 Probleme   mit root 16 Probleme
+```
+
+**Ja — und deutlicher als gedacht.** Die Zeile war
+
+```
+if root is not None and not (root / ref).exists():
+```
+
+Ohne `root` wurde die Prüfung **komplett übersprungen**: nicht
+fehlbefunden, sondern nicht stattgefunden. Sechzehn Zusagen waren im
+Klon stumm. Der Runde-44-Fehler war vierundvierzig Runden lang kein
+Formverstoß ohne Wirkung — er war der Unterschied zwischen 0 und 16.
+
+**3. `§A-KR-ANCHOR` ist ersetzt.** Die zehn Marker waren `# noqa` mit
+Etikett, im Produktionscode. Die Rolle „Negativtest" ist jetzt am
+**Testkörper** erkennbar: ein Default-Aufruf in einer `_self_test`-
+Funktion prüft den Default-Zweig, einer im Produktionscode ist der
+Verstoß. Fünfundneunzehn Inline-Marker entfernt, zwei Kommentarzeilen.
+Der Anker wurde zur Konstante, deren Definition sich selbst ausschließt.
+
+Dieselbe Bewegung wie `_CWD_READERS`: von vielen Ausnahmen auf eine
+Regel. Die 18er-Baseline in `_default_probe_lines_valid` fiel mit — eine
+Zahl, die den Zustand festschreibt, macht jede echte Reparatur falsch.
+
+**4. `_REGISTRIES` deklariert.** Die vierte Fassung der Heuristik wäre
+die nächste Lücke gewesen. Jetzt: jede `for`-Schleife, die ihr Iterat
+**als Argument** gibt, ist ein Register; steht der Name nicht in
+`_REGISTRIES`, ist das Ergebnis `None`. Vier Formen geprüft — gerufen,
+durchgereicht, Daten, `append` gemeldet.
+
+| Form | Runde 48 | Runde 49 |
+|---|---|---|
+| `for c in CHECKS: c(root)` | 0 | 0, deklariert ✓ |
+| `for c in CHECKS: apply(c)` | **0 (grün)** | **None (laut)** |
+| `for a in raw: out.append(a)` | Daten | Daten ✓ |
+
+**5. `_binds_root` über den Lesepfad.** Die Eigenschaft ist nicht der
+Name, sondern der Gebrauch: `Path(x)`, `x / ...`, `x.glob()`, `cwd=x`,
+oder `g(x)` an eine Funktion der Datei, die `Path` nimmt und `Path`
+gibt — `_path_returning` liest das aus der Signatur.
+
+Sieben Fixtures: `root=Path` ✓, `root_` ✓, `base` ✓, ungenutztes
+`root` ✗, `cwd=` ✓, `glob` ✓, Datum ✗.
+
+**Der ehrliche Fund:** die neue Regel machte `_resolve_test_root`
+sichtbar — `doc_root` reicht korrekt durch, der alte Namensprüfer sah
+es nicht. Drei Namensbasen in einer Datei (`_binds_root`,
+`_root_aliases`, Ankerlisten), alle mit demselben Fehler.
+
+**6. Wirkungs-Fixture pro Prüfer.** `scripts/check_fixtures.py`:
+sieben Prüfer, je ein kaputtes und ein sauberes Fixture.
+
+```
+check_line_counts      1 / 0    wirkt
+check_dead_refs        1 / 0    wirkt
+check_counts           1 / 0    wirkt
+check_doc_inventories  3 / 2    wirkt
+_gitlink_errors        1 / 0    wirkt
+_akt_block_mismatch    1 / 0    wirkt
+_akte_losslessness     1 / 0    wirkt
+7/7 wirken
+```
+
+Erste Messung war **3/7** — vier Fixtures trugen den Fall nicht
+(Tabelle fehlte, Clean-Fall war der kaputtere, `git`-Repo fehlte,
+Null-SHA wurde von git abgelehnt). Jede Reparatur war ein Fund des
+Fixtures, keiner des Hinsehens.
+
+**7. Vier Anker, vier Fehlschläge — alle vom Selbsttest.** Der
+Produktionsanker der Durchreichungsprobe wanderte durch vier Stellen:
+
+| Versuch | Stelle | Warum kein Fund |
+|---|---|---|
+| 1 | `_self_test_count_delta` | Rolle schluckt Testcode |
+| 2 | `main`, `_delta_line` | `root` ist Zuweisung, kein Parameter |
+| 3 | `chain` | Closure, kein Parameter |
+| 4 | `calibration_run`, `run(...)` | Referenz statt Aufruf |
+| 5 | `main`, `check_line_counts(text, root, rep)` | drei Treffer, `replace(…,1)` traf den ersten |
+
+Der fünfte ist der Beweis: `replace(…, 1)` gegen einen mehrfach
+vorkommenden Text ist dieselbe Form wie „erster Treffer" — ein Prüfer,
+der den Ort nicht benennt, prüft den falschen.
+
+**Stand:** Selbsttest **34/34**, `--akte-monoton` **keine
+Blockverluste**, voller Lauf **0 Abweichungen**, Wirkung **7/7**.
+
+```
+total=0 chain_total=0 reported=0 unclassified=0 unchecked=0 unclassified_checkers=0
+  Zeilen: 0
+  Referenzen: 0
+  Wellen: 0
+  Tests ohne Skript: 0
+  Inventare: 0
+Bezug: root=/Volumes/THX_OS_ULTRA/Users/olivermueller/agent_x_storage, CLAUDE.md sha256:69159540db89, Baum 9cbc4178+dirty
+```
+
+**Was offen bleibt:** `_path_returning` liest `Path`-Signaturen — eine
+Funktion, die einen Pfad **nicht** annotiert, aber zurückgibt, fällt
+durch. Und die Wirkungs-Fixtures sind synthetisch: sie belegen, dass
+jeder Prüfer **einen** Fehler findet, nicht dass er **alle** findet.
