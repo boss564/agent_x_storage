@@ -8113,3 +8113,90 @@ nicht bei besserem Code. `MESSBEREICH["blockzahl"]` zeigt jetzt auf `scripts/`.
 **Bilanz:** 13 Regeln, 13 Gegenläufe, 8 Felder, `EXIT` 0/0, `offen 0`, `R→F`
 0/med 1/n 5. **CI-Auslöser: 2 von 2 behoben.** Neu offen: F8 unter
 `formal-invariants`, `pytest-timeout`, `openzeppelin-contracts-upgradeable`.
+
+## Runde 72 — das fünfte Glied, und die Waage im selben Raum
+
+**Der Beweis-Run bewies den Auslöser, nicht die Wache.** Run 39142099847
+startete, `pruefer`-Step erreichte F8 nie: `formal-invariants` hat
+`needs: [unit-tests]` und starb an `openzeppelin-contracts-upgradeable`.
+`continue-on-error: false` schützt nur, was erreicht wird.
+
+### Fünf Glieder, jedes einmal ausgefallen
+
+| Glied | Befund | Runde |
+|---|---|---|
+| Name → `def` | `ast.FunctionDef` statt Name | 68 |
+| `def` → Aufruf | `_self_test_prozent` nie gerufen | 69 |
+| Aufruf → Lauf | `mv .selftest-exit` ⇒ TypeError | 69 |
+| Lauf → Auslöser | `paths` nannte die Datei nicht | 71 |
+| Auslöser → Job | `formal-invariants` stirbt vor F8 | 72 |
+
+Kein Glied wurde ohne Gegenlauf gefunden. Der Gegenlauf ist nicht die
+Ausnahme im Verfahren — er ist das Verfahren.
+
+### §A-ZZZZ85 — F8 in eigenem Job
+
+`pruefer` mit `needs: []`, nur Python-Stdlib, mit vorgeschaltetem
+Entkopplungs-Beweis (`_ci_stdonly_probe.py`). Der Beweis fand sofort
+etwas, das kein Prüfer je gefunden hat: der Prüfer importiert
+`akte_guard` und `check_fixtures` — Repo-Nachbarn, beide stdlib.
+Keine Installation nötig, also ist die Entkopplung tragfähig. Der
+Probe unterscheidet Nachbarmodul von Fremdpaket; sonst wäre er ein
+Fehlalarm, der beim ersten Mal abgeschaltet wird.
+
+### §A-ZZZZ84 — die Waage stand im selben Raum
+
+Runde 71 hat `MESSBEREICH["blockzahl"]` umgehängt und die Zeile
+`Protokollblöcke` genannt — **der Zähler las weiter die Akte.** Eine
+Umbenennung, die eine andere Messung behauptet als sie ausführt, ist
+schlimmer als die alte Zahl. Jetzt `_zaehle_codebloecke()`:
+**2525 `def`/`class` in `scripts/`, ohne `check_claude_md.py`** (233
+Definitionen des Prüfers sind draußen — sonst wüchse der Nenner mit
+jeder neuen Regel und jeder Gegenlauf sähe wie Stillstand aus).
+
+### §A-ZZZZ87 — die Ausnahme verrottet auch
+
+Die zweite Richtung fehlte: existiert jeder `AUSGENOMMEN`-Eintrag
+noch? Ein `rm` einer gelisteten Datei macht den Eintrag zur Leerstelle,
+und nichts wurde rot. Jetzt geprüft, Gegenlauf im Selbsttest.
+
+### §A-ZZZZ88 — „ohne Bereich" ist keine Kategorie
+
+283 Dateien in einem Topf setzten `openzeppelin` und `Makefile` gleich —
+und genau das hat den CI-Fund verschleiert. Getrennt gezählt:
+**175 CODE_UNBEWERTET / 92 TEST_UNBEWERTET / 16 CONFIG.** Die erste
+Zahl ist die offene Position; die anderen sind benannte Ausnahmen.
+
+**Der Prüfer hat sich in dieser Runde selbst gefangen:** das neue
+`_ci_stdonly_probe.py` war eine ungemessene Datei, und die Bilanz
+sprang von 282 auf 283 — genau der Zuwachs, gegen den er gebaut ist.
+Zugewiesen als `workflow_wache`.
+
+### §A-ZZZZ89 — Rotation statt Löschung
+
+Runde 71: Deckel ÜBER → Protokoll kürzen → `L[0:H]=[]` → fast
+Datenverlust. Der Bug war kein Zufall, er war der vorprogrammierte
+Unfall eines Designs, das Umschreiben erzwingt. Jetzt:
+`rotiere_protokoll()` verschiebt den ältesten **Abschnitt** nach
+`TAG7_ABNAHME.archive.md`, ab `ROTATION_AB = 240`. Getestet im tmpdir:
+3 Abschnitte, Rotation → 2 im Fenster, 1 im Archiv, **kein Zeilenverlust**.
+Der Deckel `DECKEL_CODE = 3000` gilt Code-Blöcken, nicht dem Protokoll —
+ein Deckel, der Schreiben verbietet, verbietet die Akte.
+
+### §A-ZZZZ90 — die Fixture trug den Literal-Wert
+
+Die Zustandszeilen-Fixture sagte `9 Felder`, die Liste hatte 10. Der
+Prüfer fand das an sich selbst („Zahl geschrieben statt gezählt"). Die
+Fixture ist jetzt `_zeile_fixture()` und rechnet `len(ZUSTAND_FELDER)`
+— als Funktion, weil ein berechneter Modulglobal nach dem Meta-Prüfer
+„Zustand deklarieren" verlangt, und eine Fixture ist kein Zustand.
+
+### §A-ZZZZ86 — `pytest-timeout`
+
+Der zweite Job mit defekter Abhängigkeit, fünf Wochen unentdeckt:
+`--timeout=60` ohne Plugin. Installiert.
+
+**Bilanz:** 13 Regeln, 13 Gegenläufe, 10 Felder, `EXIT` 0/0, `offen 0`,
+`R→F` 0/med 1/n 5. **Prüfer-Job entkoppelt, Rotation gebaut, Klassen
+getrennt.** Zähler bleibt **4 von 13 Regeln gedeckt** — der Nennerwechsel
+hat die Frage nicht verändert, nur ehrlicher gestellt.

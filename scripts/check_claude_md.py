@@ -2918,35 +2918,56 @@ def calibration_card(root: Path | None = None) -> str:
         _txt = _akte.read_text(encoding="utf-8")
     except OSError:
         _txt = ""
+    _sch = 0
+    _mess_n = 0
     if _txt:
-        _bl = split_blocks(_txt)
-        _mess = [b for b in _bl if b["kind"] == "Messung"]
+        _bl_akte = split_blocks(_txt)
+        _mess = [b for b in _bl_akte if b["kind"] == "Messung"]
+        _mess_n = len(_mess)
         _sch = sum(1 for b in _mess if _scheiterbarer_messwert(b))
-        # §A-ZZZZ80: `seit` gegen den **gespeicherten** Vorwert, nicht
-        # gegen die Akte selbst. Fehlt er, ist es der erste Lauf seit der
-        # Einführung — dann steht die Zahl ohne Basis da, und das wird
-        # gesagt, nicht geschätzt.
-        _vor = _lies_blockstand(base)
-        if _vor is None:
-            _seit = 0
-            _seit_txt = "0 Blöcke seit letztem (kein Vorwert)"
-        else:
-            _seit = max(0, len(_bl) - _vor)
-            _seit_txt = f"{_seit} Blöcke seit {_vor}"
-        # §A-ZZZZ79 (Runde 70): **die Deckung der Regeln, nicht der Blöcke.**
-        # Die Gegenlaufzahl sagt „k scheiterbare Meßblöcke auf m Blöcke" —
-        # das war seit Runde 65 unverändert und beantwortet die Frage
-        # nicht, die es stellt: wie viele der Regeln haben überhaupt einen
-        # Gegenlauf? Das steht als eigenes Feld.
-        _gedeckt = sum(1 for _r in REGEL_PRUEFER if _r in GEGENLAUF_JE_REGEL)
-        lines.append(
-            f"Zustand: {_sch}/{len(_mess)} Meßblöcke scheiterbar · "
-            f"{_seit_txt} · Deckel {DECKEL_MEASURE} "
-            f"⇒ {'ÜBER' if _seit > DECKEL_MEASURE else 'unter'} · "
-            f"{len(_bl)} Protokollblöcke · {_sch} : {len(_bl)} Gegenläufe · "
-            f"{_gedeckt} : {len(REGEL_PRUEFER)} Regeln gedeckt · "
-            f"{QUITTUNGEN}/{DECKEL_CIT} quittiert · R→F {REPARATUR_ZU_FUND} · "
-            f"{len(ZUSTAND_FELDER)} Felder")
+    # §A-ZZZZ84 (Runde 72): **der Nenner ist der Prüfer, nicht die Akte.**
+    #
+    # Runde 71 hat gesagt „die Blockzahl zählt das Protokoll" — in
+    # `MESSBEREICH` stimmte das, im Zähler nicht. Die Zeile las weiter
+    # `TAG7_ABNAHME.md` und *nannte* das Ergebnis `Protokollbloecke`. Eine
+    # Umbenennung, die eine andere Messung behauptet als sie ausfuehrt,
+    # ist schlimmer als die alte Zahl: sie sieht geprueft aus.
+    #
+    # Jetzt: gezaehlt werden `def`/`class` in `scripts/*.py` **ohne**
+    # `check_claude_md.py` selbst. Die Waage steht nicht im selben Raum
+    # wie das Gewogene — sonst waechst der Nenner, wenn der Pruefer waechst,
+    # und jeder neue Gegenlauf sieht wie Stillstand aus.
+    _n_code = _zaehle_codebloecke(base)
+    _seit_txt = ("seit 213 Protokoll (Einheitenwechsel)")
+    # §A-ZZZZ89 (Runde 72): **das Protokoll ist append-only.**
+    #
+    # Runde 71 hat gezeigt, wohin ein Deckel führt, der Kürzen verlangt:
+    # Deckel ÜBER → Protokoll kürzen → `L[0:H]=[]` → fast Datenverlust.
+    # Der Bug war kein Zufall, er war der vorprogrammierte Unfall eines
+    # Designs, das Umschreiben erzwingt.
+    #
+    # Jetzt: Überlauf wird **rotiert**, nicht gelöscht. Liegt die Akte
+    # über `ROTATION_AB`, wandert der älteste Abschnitt nach
+    # `TAG7_ABNAHME.archive.md` — weg aus dem aktiven Fenster, nicht aus
+    # der Existenz. Die Rotation selbst schreibt nur an, sie schneidet
+    # nicht (siehe `rotiere_protokoll`).
+    _n_protokoll = len(split_blocks(_txt)) if _txt else 0
+    # Die Fenstergröße gehört ins `bloecke`-Feld, nicht ins `seit`-Feld:
+    # zwei Werte in einem Feld sind ein elftes Feld mit anderem Namen.
+    _fenster_txt = (f"{_n_protokoll} Protokoll im Fenster"
+                    + (f" ⇒ Rotation (>{ROTATION_AB})"
+                       if _n_protokoll > ROTATION_AB else ""))
+    # §A-ZZZZ79 (Runde 70): **die Deckung der Regeln, nicht der Bloecke.**
+    _gedeckt = sum(1 for _r in REGEL_PRUEFER if _r in GEGENLAUF_JE_REGEL)
+    lines.append(
+        f"Zustand: {_sch}/{_mess_n} Meßblöcke scheiterbar · "
+        f"{_seit_txt} · Deckel {DECKEL_CODE} "
+        f"⇒ {'ÜBER' if _n_code > DECKEL_CODE else 'unter'} · "
+        f"{_n_code} Code-Blöcke · {_fenster_txt} · "
+        f"{_sch} : {_n_code} Gegenläufe · "
+        f"{_gedeckt} : {len(REGEL_PRUEFER)} Regeln gedeckt · "
+        f"{QUITTUNGEN}/{DECKEL_CIT} quittiert · R→F {REPARATUR_ZU_FUND} · "
+        f"{len(ZUSTAND_FELDER)} Felder")
 
     lines.append(f"Bezug: root={base}, CLAUDE.md sha256:{sha}, "
                  f"Baum {_tree_ref(base)}")
@@ -7802,6 +7823,97 @@ def _self_test_zustandszeile() -> list[str]:
 
 
 DECKEL_MEASURE = 5
+# §A-ZZZZ84 (Runde 72): der Deckel gilt **nicht mehr** für Protokollblöcke —
+# das Protokoll ist append-only und wird rotiert, nicht gekürzt (Runde 72).
+# Ein Deckel, der Kürzen erzwingt, macht aus einem Log eine Datei, die
+# umgeschrieben wird; genau das hat in Runde 71 zu `L[0:H]=[]` geführt.
+# Gezählt werden Code-Blöcke in `scripts/` ohne den Prüfer selbst.
+DECKEL_CODE = 3000
+
+# §A-ZZZZ89 (Runde 72): das Protokoll wächst, es wird nicht gekürzt.
+# Ab dieser Blockzahl wird der älteste Abschnitt **rotiert** (nach
+# `TAG7_ABNAHME.archive.md`), nicht gelöscht. Der Deckel steht damit auf
+# einer Zahl, die regelmäßig erreicht wird — und die Reaktion ist ein
+# Umzug, kein Schnitt.
+ROTATION_AB = 240
+
+
+def rotiere_protokoll(base: Path) -> str | None:
+    """Verschiebt den ältesten Abschnitt ins Archiv — **ohne Löschung**.
+
+    §A-ZZZZ89: der Grund, warum es diese Funktion gibt, ist ein Unfall:
+    Runde 71 hat mit `L[0:H]=[]` fast die ganze Akte gelöscht, weil der
+    Deckel zum Kürzen zwang. Kürzen ist hier verboten; Rotation ist der
+    Ersatz.
+
+    Rückgabe: eine Zeile, was geschah — oder `None`, wenn nichts fällig.
+    Die Funktion schreibt **beide** Dateien, aber sie verliert keine
+    Zeile: was aus der Akte geht, steht danach im Archiv.
+    """
+    akte = base / "order_execution_engine" / "ops" / "TAG7_ABNAHME.md"
+    archiv = base / "order_execution_engine" / "ops" / "TAG7_ABNAHME.archive.md"
+    try:
+        text = akte.read_text(encoding="utf-8")
+    except OSError:
+        return None
+    # Gezählt werden **Abschnitte** (`## Runde ...`), nicht `###`-Blöcke:
+    # `split_blocks` zählt die inneren Unterteilungen, und die Rotation
+    # verschiebt ganze Abschnitte. Die beiden Zahlen sind nicht dieselbe.
+    abschnitte = [z for z in text.split("\n") if z.startswith("## Runde ")]
+    if len(abschnitte) <= ROTATION_AB:
+        return None
+    # Der älteste **Abschnitt** (nicht Block): gesucht ist die erste
+    # `## Runde ...`-Überschrift nach dem Kopf.
+    zeilen = text.split("\n")
+    start = None
+    for i, z in enumerate(zeilen):
+        if z.startswith("## Runde "):
+            start = i
+            break
+    if start is None or start == 0:
+        return None
+    kopf, rest = zeilen[:start], zeilen[start:]
+    # Zweiter Abschnitt als Grenze
+    ende = len(rest)
+    for i in range(1, len(rest)):
+        if rest[i].startswith("## Runde "):
+            ende = i
+            break
+    wandert, bleibt = rest[:ende], rest[ende:]
+    try:
+        alt = archiv.read_text(encoding="utf-8") if archiv.exists() else ""
+    except OSError:
+        alt = ""
+    archiv.write_text(alt + "\n".join(wandert) + "\n", encoding="utf-8")
+    akte.write_text("\n".join(kopf + bleibt), encoding="utf-8")
+    _nach = sum(1 for z in bleibt if z.startswith("## Runde "))
+    return (f"rotiert: {len(wandert)} Zeilen → {archiv.name} "
+            f"({len(abschnitte)} → {_nach} Abschnitte)")
+
+
+def _zaehle_codebloecke(base: Path) -> int:
+    """`def`/`class` in `scripts/*.py` — **ohne** `check_claude_md.py`.
+
+    §A-ZZZZ84: die Waage darf nicht im selben Raum stehen wie das
+    Gewogene. Wächst der Nenner mit dem Prüfer, sieht jeder neue
+    Gegenlauf wie Stillstand aus (`4 : 216` → `5 : 226`).
+    """
+    import ast
+    n = 0
+    sd = base / "scripts"
+    if not sd.is_dir():
+        return 0
+    for f in sorted(sd.glob("*.py")):
+        if f.name == "check_claude_md.py":
+            continue
+        try:
+            t = ast.parse(f.read_text(encoding="utf-8"))
+        except (OSError, SyntaxError, UnicodeDecodeError):
+            continue
+        n += sum(1 for x in ast.walk(t)
+                 if isinstance(x, (ast.FunctionDef, ast.AsyncFunctionDef,
+                                   ast.ClassDef)))
+    return n
 
 
 # §A-ZZZZ53 (Runde 64): **die Konvention, hingeschrieben.** Runde 63
@@ -7982,7 +8094,8 @@ ZUSTAND_FELDER = (
     "scheiterbar",   # a/b
     "seit",          # Blöcke seit letztem Meßwert
     "deckel",        # Grenze + Urteil
-    "bloecke",       # Gesamtzahl
+    "bloecke",       # Code-Blöcke in scripts/, ohne Prüfer
+    "fenster",       # Protokollblöcke im aktiven Fenster
     "gegenlaeufe",   # k : n
     "regeldeckung",  # n : 13 — Regeln mit erzwungenem fail-Zweig
     "quittungen",    # n/DECKEL — der eine Slot für alles Ungedeckte
@@ -8028,14 +8141,16 @@ def pruefe_zustandszeile(zeile: str) -> list[str]:
             f"— fehlt eins, ist es kein Zusatz")
     _formen = (
         ("Meßblöcke scheiterbar", r"^\d+/\d+ Meßblöcke scheiterbar$"),
-        ("seit", r"^\d+ Blöcke seit ?\d*"),
+        ("seit", r"^seit \d+ Protokoll \(Einheitenwechsel\)$"),
         ("Deckel", r"^Deckel \d+ ⇒ (ÜBER|unter)$"),
         # §A-ZZZZ81c (Runde 71): **`Protokollblöcke`, nicht `Blöcke`.**
         # Der Nenner ist die Akte, nicht der Code — `4 : 213` sind vier
         # Gegenläufe auf N Protokollblöcke. Die Zahl steigt, wenn
         # geschrieben wird, und nicht, wenn der Code besser wird. Der
         # Name sagt jetzt, was gezählt wird.
-        ("Protokollblöcke", r"^\d+ Protokollblöcke$"),
+        ("Code-Blöcke", r"^\d+ Code-Blöcke$"),
+        ("Protokollfenster", r"^\d+ Protokoll im Fenster( ⇒ Rotation \(>\d+\))?$"),
+        ("Feldzahl", r"^\d+ Felder$"),
         ("Gegenläufe", r"^\d+ : \d+ Gegenläufe$"),
         ("Regeln gedeckt", r"^\d+ : \d+ Regeln gedeckt$"),
         ("quittiert", r"^\d+/\d+ quittiert$"),
@@ -8093,6 +8208,10 @@ QUITTUNG_TESTS = ("_self_test_prozent",)
 MESSBEREICH: dict[str, tuple[str, ...]] = {
     "prosa": ("scripts/check_claude_md.py",),
     "blockzahl": ("scripts/check_claude_md.py",),
+    # §A-ZZZZ85: der Entkopplungs-Beweis des `pruefer`-Jobs ist Teil der
+    # Wache, nicht Beiwerk. Er zählt im Prosa-Bereich mit — wer ihn
+    # ändert, ändert die Bedingung, unter der die Wache läuft.
+    "workflow_wache": ("scripts/_ci_stdonly_probe.py",),
     "protokoll": ("order_execution_engine/ops/TAG7_ABNAHME.md",
                   "order_execution_engine/ops/BERICHT.md"),
 }
@@ -8119,6 +8238,69 @@ AUSNAHME_KLASSEN: tuple[tuple[str, str], ...] = (
     ("__pycache__/", "Bytecode-Verzeichnis, kein Bestand"),
     (".pyc", "Bytecode, kein Bestand"),
 )
+
+# §A-ZZZZ88 (Runde 72): **„ohne Bereich" ist keine Kategorie.**
+#
+# Alle Dateien in einem Topf setzen `openzeppelin-contracts-upgradeable` und
+# `Makefile` gleich — und genau diese Gleichsetzung hat den CI-Fund
+# verschleiert: die eine ist der Grund, warum ein Job stirbt, die andere
+# ist ein Build-Rezept. Getrennt gezählt:
+#
+#   CODE_UNBEWERTET — Python/Shell unter `scripts/`, kein Test, keine
+#                     Deckung. **Die offene Position.**
+#   TEST_UNBEWERTET — `test_*.py`: eigene Suite, nicht Gegenlauf.
+#   CONFIG          — `.yml`, `.json`, `.plist`, `.sh`-Helper, Makefile.
+#   VENDORED        — `lib/**`, `node_modules/**`: fremder Code, nicht
+#                     unser Bestand.
+#
+# Die Reihenfolge ist bedeutsam: die erste zutreffende Klasse gewinnt.
+KLASSEN_REGELN: tuple[tuple[str, str], ...] = (
+    ("VENDORED", "lib/"),
+    ("VENDORED", "node_modules/"),
+    ("CONFIG", ".github/workflows/"),
+    ("CONFIG", ".plist"),
+    ("CONFIG", ".yml"),
+    ("CONFIG", ".yaml"),
+    ("CONFIG", ".json"),
+    ("CONFIG", ".ini"),
+    ("CONFIG", ".cfg"),
+    ("CONFIG", ".toml"),
+    ("CONFIG", ".sh"),
+    ("TEST_UNBEWERTET", "scripts/test_"),
+    ("CODE_UNBEWERTET", "scripts/"),
+)
+
+
+def messbereich_klassen(base: Path) -> dict[str, int]:
+    """Zählt unzugewiesene Dateien je Klasse — **getrennt, nicht summiert.**
+
+    §A-ZZZZ88: eine Zahl für alles ist eine Aussage über nichts. Die
+    Ausgabe trennt die offene Position (`CODE_UNBEWERTET`) von den
+    legitimen Ausnahmen.
+    """
+    zugewiesen: set[str] = set()
+    for dateien in MESSBEREICH.values():
+        zugewiesen.update(dateien)
+    zaehler: dict[str, int] = {}
+    for d in BEREICHSDATEIEN:
+        p = base / d
+        if not p.exists():
+            continue
+        for f in sorted(p.rglob("*")):
+            if not f.is_file():
+                continue
+            rel = f.relative_to(base).as_posix()
+            if rel in zugewiesen or rel in AUSGENOMMEN:
+                continue
+            if any(k in rel for k, _ in AUSNAHME_KLASSEN):
+                continue
+            klasse = "SONSTIGES"
+            for name, praefix in KLASSEN_REGELN:
+                if rel.startswith(praefix) or rel.endswith(praefix):
+                    klasse = name
+                    break
+            zaehler[klasse] = zaehler.get(klasse, 0) + 1
+    return zaehler
 # Bereiche, in denen **jede** Datei zugewiesen sein muß. Alles außerhalb
 # steht in keiner Meßkette und wird darum nicht verlangt.
 BEREICHSDATEIEN = ("scripts/", ".github/workflows/")
@@ -8198,6 +8380,41 @@ def pruefe_workflow(root: Path | None = None) -> list[str]:
                     f"Workflow {wf.name}: Step ohne `shell:` — Default "
                     f"ist `bash -e` ohne `pipefail`; ein angehängtes "
                     f"`| tee` würde den Abbruch verschlucken")
+        # §A-ZZZZ85 (Runde 72): **der Job muß von sich aus starten.**
+        #
+        # Runde 71 hat den Auslöser repariert; Run 39142099847 zeigte dann
+        # das fünfte Glied: F8 stand in `formal-invariants`, das
+        # `needs: [unit-tests]` hat und an `openzeppelin-contracts-upgradeable`
+        # starb, bevor der Step erreicht wurde. `continue-on-error: false`
+        # schützt nur, was erreicht wird.
+        #
+        # Prüffrage: liegt der Prüfer-Step in **einem** Job, der weder
+        # `needs:` noch fremde Installationsschritte hat? Sonst ist er an
+        # etwas gekoppelt, das unabhängig von ihm ausfallen kann — dieselbe
+        # Fehlerklasse wie der Path-Filter, eine Ebene tiefer.
+        jobs_txt = text.split("\njobs:", 1)[1] if "\njobs:" in text else ""
+        _job_bloecke = re.split(r"^  ([a-z0-9_-]+):\s*$", jobs_txt,
+                                flags=re.MULTILINE)
+        _pruefer_jobs: list[str] = []
+        for i in range(1, len(_job_bloecke), 2):
+            _name, _rumpf = _job_bloecke[i], _job_bloecke[i + 1]
+            if "check_claude_md.py" not in _rumpf:
+                continue
+            _pruefer_jobs.append(_name)
+            if re.search(r"^\s{4}needs:\s*\[?\s*[a-z]", _rumpf, re.MULTILINE):
+                out.append(
+                    f"Workflow {wf.name}: Prüfer-Step liegt im Job `{_name}`,"
+                    f" der `needs:` hat — er starbe mit, wenn eine fremde "
+                    f"Abhängigkeit scheitert, bevor der Step erreicht wird")
+            if re.search(r"pip install|apt-get|npm (i|install)", _rumpf):
+                out.append(
+                    f"Workflow {wf.name}: Prüfer-Step liegt im Job `{_name}`,"
+                    f" der Fremdpakete installiert — die Wache ist an eine "
+                    f"Abhängigkeit gekoppelt, die unabhängig ausfallen kann")
+        if not _pruefer_jobs:
+            out.append(f"Workflow {wf.name}: kein Job enthält den "
+                       f"Prüfer-Step — der `paths`-Filter nennt ihn, aber "
+                       f"kein Job führt ihn aus")
     return out
 
 
@@ -8263,9 +8480,10 @@ def pruefe_messbereich(root: Path | None = None) -> list[str]:
             if any(_k in rel for _k, _ in AUSNAHME_KLASSEN):
                 continue
             _unzugewiesen += 1
+    _kl = messbereich_klassen(base)
     MESSBEREICH_BILANZ[0] = (
-        f"{_unzugewiesen} Dateien unter {', '.join(BEREICHSDATEIEN)} "
-        f"ohne Bereich — benannt, nicht zugewiesen")
+        f"{_unzugewiesen} Dateien ohne Bereich — "
+        + " / ".join(f"{k} {v}" for k, v in sorted(_kl.items())))
     # Ein Befund nur, wenn eine **neue** Datei dazukommt, ohne daß die
     # Bilanz wächst: das ist die Auslassung, die sich als Vollständigkeit
     # ausgibt. Der Vorwert steht in `.messbereich-n`; fehlt er, ist es
@@ -8286,6 +8504,16 @@ def pruefe_messbereich(root: Path | None = None) -> list[str]:
             f"Meßbereich: {_unzugewiesen - _vor} Datei(en) ohne Zuweisung "
             f"dazugekommen ({_vor} → {_unzugewiesen}) — eine neue Datei "
             f"in keinem Bereich wird nirgends gezählt")
+    # §A-ZZZZ87 (Runde 72): **auch die Ausnahme verrottet.**
+    #
+    # Runde 71 prüfte nur eine Richtung: jede Datei ist zugewiesen oder
+    # ausgenommen. Die andere fehlt: **existiert jeder `AUSGENOMMEN`-
+    # Eintrag noch?** Wird eine ausgenommene Datei gelöscht, bleibt der
+    # Eintrag stehen, und nichts wird rot. Der Gegenlauf ist ein `rm`.
+    for pfad, _grund in sorted(AUSGENOMMEN.items()):
+        if not (base / pfad).exists():
+            out.append(f"Meßbereich: AUSGENOMMEN-Eintrag `{pfad}` verwaist "
+                       f"— Datei existiert nicht, die Ausnahme gilt ins Leere")
     return out
 
 # §A-ZZZZ61 (Runde 66): der Nenner des Prosa-Prüfers. Eine Liste, weil die
@@ -8410,10 +8638,19 @@ REGEL_PRUEFER: dict[str, str] = {
 
 GEGENLAUF_JE_REGEL: dict[str, str] = {}  # am Dateiende befuellt
 
-_ZEILE_FIXTURE = ("4/8 Meßblöcke scheiterbar · 0 Blöcke seit 210 · "
-                  "Deckel 5 ⇒ unter · 210 Protokollblöcke · 4 : 210 Gegenläufe · "
-                  "13 : 13 Regeln gedeckt · 1/2 quittiert · "
-                  "R→F 0/med 1/n 5/letzte 0/Prüfer · 9 Felder")
+def _zeile_fixture() -> str:
+    """Eine gültige Zustandszeile zum Prüfen — **gerechnet**, nicht geschrieben.
+
+    §A-ZZZZ90 (Runde 72): ein Literal hier wäre genau der Fehler, den der
+    Prüfer findet („sagt 9 Felder, hat 10"). Die Feldzahl kommt aus
+    `len(ZUSTAND_FELDER)`. Als Funktion statt als Modulglobal, weil ein
+    berechneter Global nach dem Meta-Prüfer „Zustand deklarieren"
+    verlangt — und ein Fixture ist kein Zustand.""".replace('"""','"'*3)
+    return (
+        "4/8 Meßblöcke scheiterbar · seit 213 Protokoll (Einheitenwechsel) · "
+        "Deckel 3000 ⇒ unter · 2525 Code-Blöcke · 216 Protokoll im Fenster · "
+        f"4 : 2525 Gegenläufe · 13 : 13 Regeln gedeckt · 1/2 quittiert · "
+        f"R→F 0/med 1/n 5/letzte 0/Prüfer · {len(ZUSTAND_FELDER)} Felder")
 
 
 
@@ -8481,7 +8718,7 @@ def _self_test_zustandsfelder() -> list[str]:
     Gegenläufe, zwei müssen rot werden — und zwar am **richtigen** Ende.
     """
     out: list[str] = []
-    voll = _ZEILE_FIXTURE
+    voll = _zeile_fixture()
     fehlt = " · ".join(t for t in voll.split(" · ")
                        if not t.startswith("R→F"))
     zuviel = voll + " · Reserve 0"
@@ -8895,6 +9132,14 @@ def _format_detail(detail: dict[str, int]) -> str:
 
 
 def main() -> int:
+    if "--rotate" in sys.argv:
+        # §A-ZZZZ89 (Runde 72): Rotieren statt Kürzen. Der Aufruf ist
+        # bewusst ein eigener Modus und nie Teil des Prüflaufs — eine
+        # Prüfung, die schreibt, ist keine Prüfung mehr.
+        base = Path(__file__).resolve().parent.parent
+        ergebnis = rotiere_protokoll(base)
+        print(ergebnis or f"nichts zu rotieren (≤ {ROTATION_AB} Abschnitte)")
+        return 0
     if "--self-test" in sys.argv:
         fails = self_test_check_counts()
         if fails:
@@ -9347,7 +9592,7 @@ def _g_regeltabelle_name_tot() -> list[str]:
 
 def _g_zustand_feldzahl_falsch() -> list[str]:
     """§A-ZZZZ52: geschriebene Feldzahl statt gezählter."""
-    _t = _ZEILE_FIXTURE.split(" · ")
+    _t = _zeile_fixture().split(" · ")
     _t[-1] = "7 Felder"
     got = pruefe_zustandszeile(" · ".join(_t))
     return [] if got else [
@@ -9357,14 +9602,14 @@ def _g_zustand_feldzahl_falsch() -> list[str]:
 def _g_zustand_rekord_ohne_letzte() -> list[str]:
     """§A-ZZZZ55: `R→F 1` ohne `/letzte` ist eine Bilanz, kein Lauf."""
     got = pruefe_zustandszeile(
-        _ZEILE_FIXTURE.replace("R→F 0/med 1/n 5/letzte 0/Prüfer", "R→F 0"))
+        _zeile_fixture().replace("R→F 0/med 1/n 5/letzte 0/Prüfer", "R→F 0"))
     return [] if got else [
         "Gegenlauf §A-ZZZZ55: reine Rekordform geht durch"]
 
 
 def _g_zustand_ohne_quelle() -> list[str]:
     """§A-ZZZZ56: ohne Quelle ist `letzte` eine Zahl ohne Operand."""
-    got = pruefe_zustandszeile(_ZEILE_FIXTURE.replace("/Prüfer", ""))
+    got = pruefe_zustandszeile(_zeile_fixture().replace("/Prüfer", ""))
     return [] if got else [
         "Gegenlauf §A-ZZZZ56: R→F ohne Quelle geht durch"]
 
@@ -9378,7 +9623,7 @@ def _g_prozent_literal() -> list[str]:
 
 def _g_zustand_feld_fehlt() -> list[str]:
     """§A-ZZZZ59: ein fehlendes Feld ist kein Zusatz."""
-    teile = _ZEILE_FIXTURE.split(" · ")
+    teile = _zeile_fixture().split(" · ")
     # ein echtes Pflichtfeld entfernen, nicht nur das letzte
     got = pruefe_zustandszeile(" · ".join(t for t in teile
                                           if not t.endswith("quittiert")))
@@ -9395,7 +9640,7 @@ def _g_deckung_ohne_gegenlauf() -> list[str]:
 
 def _g_zeile_zu_lang() -> list[str]:
     """§A-ZZZZ64: ein Zusatzfeld schlägt an."""
-    got = pruefe_zustandszeile(_ZEILE_FIXTURE + " · Reserve 0")
+    got = pruefe_zustandszeile(_zeile_fixture() + " · Reserve 0")
     return [] if got else [
         "Gegenlauf §A-ZZZZ64: Zusatzfeld geht durch"]
 

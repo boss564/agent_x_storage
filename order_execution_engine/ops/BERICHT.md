@@ -1,7 +1,39 @@
 # BERICHT — Runde 71b
 
+# BERICHT — Runde 72
+
+**Commit:** Arbeitsstand Runde 72
+**Zustand:** 4/8 Meßblöcke scheiterbar · seit 213 Protokoll (Einheitenwechsel) · Deckel 3000 ⇒ unter · 2525 Code-Blöcke · 224 Protokoll im Fenster · 4 : 2525 Gegenläufe · 13 : 13 Regeln gedeckt · 1/2 quittiert · R→F 0/med 1/n 5/letzte 0/Prüfer · 10 Felder
+**EXIT:** Selbsttest 0 · Hauptlauf 0
+**offen:** 0 · **quittiert:** 1 · **frisch:** 1 (_self_test_prozent)
+**Zahlen:** Nenner = 2525 `def`/`class` in `scripts/` **ohne** den Prüfer (233 Definitionen draußen) · 224 Protokollblöcke im Fenster, Rotation ab 240 · 283 ohne Bereich: **175 CODE_UNBEWERTET / 92 TEST_UNBEWERTET / 16 CONFIG** · R→F min 0 / Median 1 / n 5
+**Nicht getan:** die 12 offenen Kontexte · `FRISCH`-Versetzung · 175 CODE_UNBEWERTET einzeln zugewiesen
+**Deckel-Entscheidung:** `_self_test_prozent` bleibt quittiert. `deploy-safe` = mit gezähltem Deckel; `make telemetry-deploy-hetzner` liest `offen` aus dieser Datei vor dem ersten `ssh` — kein Literal im Makefile.
+
+## Runde 72 — Auslöser → Job
+
+Der Beweis-Run 39142099847 bewies den **Start**, nicht den **Lauf**: F8 lag
+in `formal-invariants`, das an `openzeppelin-contracts-upgradeable` starb.
+Fünftes Glied: `needs: []`-Job `pruefer`, nur Stdlib, mit
+Entkopplungs-Beweis. Der fand sofort die Repo-Importe `akte_guard` und
+`check_fixtures` — beide stdlib, also keine Fremdabhängigkeit.
+
+Die Waage stand im selben Raum: `_zaehle_codebloecke()` zählt jetzt
+Code-Blöcke **ohne** den Prüfer. Sonst wüchse der Nenner mit jeder neuen
+Regel, und jeder Gegenlauf sähe wie Stillstand aus.
+
+`AUSGENOMMEN`-Einträge werden auf Existenz geprüft (zweite Richtung).
+Die 283 sind in drei Klassen getrennt; `openzeppelin` und `Makefile`
+stehen nicht mehr im selben Topf. **Der Prüfer fing sich selbst:** das
+neue Probe-Skript erhöhte die Bilanz von 282 auf 283.
+
+Protokoll: Rotation statt Löschung (`--rotate`), getestet im tmpdir ohne
+Zeilenverlust. `DECKEL_CODE = 3000` gilt Code, nicht der Akte.
+
+**Nächster Schritt:** Zähler 4 → 13 (je Regel ein erzwungener `fail`-Zweig).
+
 **Commit:** `557fb2cd` (Runde 71b) · Arbeitsstand dieser Runde
-**Zustand:** 4/8 Meßblöcke scheiterbar · 3 Blöcke seit 213 · Deckel 5 ⇒ unter · 216 Protokollblöcke · 4 : 216 Gegenläufe · 13 : 13 Regeln gedeckt · 1/2 quittiert · R→F 0/med 1/n 5/letzte 0/Prüfer · 9 Felder
+**Zustand:** 4/8 Meßblöcke scheiterbar · seit 213 Protokoll (Einheitenwechsel) · Deckel 3000 ⇒ unter · 2525 Code-Blöcke · 224 Protokoll im Fenster · 4 : 2525 Gegenläufe · 13 : 13 Regeln gedeckt · 1/2 quittiert · R→F 0/med 1/n 5/letzte 0/Prüfer · 10 Felder
 **EXIT:** Selbsttest 0 · Hauptlauf 0
 **offen:** 0 · **quittiert:** 1 · **frisch:** 1 (_self_test_prozent)
 **Zahlen:** 216 Protokollblöcke (Name sagt jetzt, was gezählt wird) · 4 scheiterbar / 8 · 13 : 13 Regeln mit erzwungenem `fail`-Zweig · 282 Dateien unter `scripts/`/`.github/workflows/` **ohne Bereich, benannt** · R→F min 0 / Median 1 / n 5
