@@ -317,13 +317,21 @@ def pruefe_strom(strom: list[tuple[str, str]]) -> tuple[int, int, list[str]]:
             # "bewusste Neusendung, belegt durch anderen Zeitstempel".
             # Ein unbelegter Fall darf diesen Token nicht tragen.
             # Jetzt drei Verdicts aus DREI Quellen, nicht zwei aus einem Bool.
+            # §A-ZZZZ188 (Runde 90): `art` bleibt Ereignis-ONTOLOGIE.
+            # R89 schrieb `art=ZEITSTEMPEL-UNLESBAR` — das ist aber die
+            # URSACHE fuer das fehlende Urteil, keine Ereignisart. Ein
+            # Konsument, der auf `art` verzweigt, bekam einen Wert, der
+            # nicht in die Verzweigung passt. `grund=` traegt seit R86
+            # genau diese Semantik.
+            grund = ""
             if _cmp == "gleich":
                 urteil, art, warum = "VERWERFEN", "KANAL-DUPLIKAT", "(gleicher Zeitstempel)"
             elif _cmp == "ungleich":
                 urteil, art, warum = "WIEDERHOLT", "WIEDERHOLUNG", "(anderer Zeitstempel)"
             else:
-                urteil, art, warum = "UNGEPRUEFT", "ZEITSTEMPEL-UNLESBAR", "(Zeitstempel unlesbar)"
-            bericht.append(f"ZEILE {h} {urteil};pos={i + 1};art={art};")
+                urteil, art, warum = "UNGEPRUEFT", "UNBEURTEILBAR", "(Zeitstempel unlesbar)"
+                grund = ";grund=ZEITSTEMPEL-UNLESBAR"
+            bericht.append(f"ZEILE {h} {urteil};pos={i + 1};art={art}{grund};")
             bericht.append(f"  # {art} #{j + 1} == #{i + 1}"
                            f"  Δ={i - j}  {warum}  sha {h[:12]}")
         else:

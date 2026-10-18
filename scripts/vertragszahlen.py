@@ -62,8 +62,23 @@ def main() -> None:
     for name, wert, quelle in z:
         print(f"{name:26s} {str(wert):>4s}   <- {quelle}")
     n_mit_test = z[4][1] - z[5][1]
+    # §A-ZZZZ193 (Runde 90 Befund 7): "27 Suiten" war eine bare Zahl in
+    # der Prosa. Jetzt gezaehlt — und zwar die RICHTIGE Menge: nur die
+    # Tests, die den Waechter-Vertrag beruehren. `glob(test_*.py)` liefert
+    # das GANZE Repo (118) und misst nicht, was gemeint war.
+    import re as _re
+    waechter: list[str] = []
+    for p in sorted(V.parent.glob("test_*.py")):
+        if _re.search(r"waechter_vertrag|einwurf_waechter|konsumenten_semantik",
+                      p.read_text(encoding="utf-8", errors="replace")):
+            waechter.append(p.name)
     print(f"{'Zweige mit Test':26s} {n_mit_test:>4d}   "
           f"<- Zweige - latent_ohne_test")
+    print(f"{'Waechter-Suiten':26s} {len(waechter):>4d}   "
+          f"<- test_*.py mit Vertragsbezug")
+    print(f"{'Repo-Tests gesamt':26s} "
+          f"{len(list(V.parent.glob('test_*.py'))):>4d}   "
+          f"<- glob(test_*.py)")
 
 
 if __name__ == "__main__":

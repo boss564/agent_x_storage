@@ -1,5 +1,5 @@
 {
-  "_version": 9,
+  "_version": 11,
   "_zweck": "Maschinenlesbarer Vertrag des Einwurf-Waechters. Single source of truth fuer Repo und externe Ingestion. Wer hier eine Zeile aendert, aendert das Tor ausserhalb dieses Repos mit.",
   "_stand": "Runde 84 (2026-10-18)",
   "_geltung": "Der Runner (scripts/vertrags_runner.py) importiert diese Datei; die externe Ingestion MUSS sie einlesen. Solange sie es nicht tut, zertifiziert N/N einen Vertrag, den draussen niemand benutzt.",
@@ -299,7 +299,16 @@
     "verbote": [
       "Drei ifs mit verschiedenen return-Stellen. Genau eine Aggregationsfunktion.",
       "Exit-Codes numerisch/ordinal vergleichen. 1 < 4 im Alphabet der Zahlen, aber 4 ist das strengere Urteil."
-    ]
+    ],
+    "vier_eimer_invariante": "Paare = KANAL-DUPLIKAT + WIEDERHOLUNG + ZEITSTEMPEL-UNLESBAR. Der vierte Eimer ist die Menge der EINZIGARTIGEN Meldungen (<sha> nur einmal), die KEIN Paar bilden; er wird nicht gezaehlt, sondern ergibt sich. Die drei gezaehlten Eimer sind disjunkt und summieren auf Paare.",
+    "paar_zaehlung": {
+      "definition": "Paare = n - 1 bei n Kopien derselben Klasse (jede Kopie ausser der ersten bildet genau EIN Paar mit ihrem Vorgaenger im Strom).",
+      "nicht": "C(n,2) = vollstaendige Menge aller Kopien-Paare. Das waere die Zahl der MOEGLICHEN Vergleiche, nicht der getroffenen Urteile.",
+      "warum": "Der Waechter urteilt zeilenweise gegen den Vorgaenger (anker=vorgaenger). Bei [T1,T1,T1] entstehen zwei Paare (2,1) und (3,2), nicht drei (1,2),(1,3),(2,3).",
+      "bruecke": "Damit ist 'Paare' die Zahl der ZEILE-Records mit Urteil VERWERFEN|WIEDERHOLT|UNGEPRUEFT — direkt nachzaehlbar.",
+      "test": "test_determinismus.py (9/9)"
+    },
+    "vier_eimer_invariante_test": "test_determinismus.py (9/9)"
   },
   "nominal_nicht_ordinal": {
     "regel": "Exit-Codes sind Namen, keine Rangzahlen. `exit > 1` ist ein Defekt, nicht eine Abkuerzung.",
@@ -447,7 +456,16 @@
       "rest": "Der Fix (Vergleich auf Rohwert statt Normalform) ist plausibel, aber nicht gebucht — er aendert, was `gleich` heisst, und damit jede bestehende Regel.",
       "blocker": "Die Injektivitaetsprobe braucht den ECHTEN Strom mit Normalformen. Der laufende Transcript-Strom ist nicht einfrierbar (Harness-Zaun), und ein Fixture kann Kollisionen nicht zeigen, die es nicht enthaelt. Ohne eingefrorenen Schnappschuss mit bekannter Kollisionszahl ist die Probe nicht falsifizierbar.",
       "beweisversuch": "R88: dritter Zweig bei_unlesbar eingefuehrt — entschaerft den Fall 'Zeitstempel nicht lesbar', beruehrt aber NICHT den Kernfall (zwei LESBARE Rohwerte, gleiche Normalform). Kein Injektivitaetsbeweis gefuehrt.",
-      "datums_herleitung": "R90 folgt aus: ein Runde fuer den eingefrorenen Schnappschuss (R89), eine Runde fuer die Kollisionszaehlung (R90). Nicht Wunschtermin."
+      "datums_herleitung": "R90 folgt aus: ein Runde fuer den eingefrorenen Schnappschuss (R89), eine Runde fuer die Kollisionszaehlung (R90). Nicht Wunschtermin.",
+      "blockiert_durch": "blocker_nrm_injektivitaet.py",
+      "blocker_ausfuehrbar": true,
+      "blocker_exit_bedeutung": {
+        "0": "BESTANDEN — Injektivitaet belegt, Frist kann geschlossen werden",
+        "1": "WIDERLEGT — Kollision gefunden, Normalisierung ist fehlerhaft",
+        "2": "UNBEWIESEN — Probe nicht entscheidbar (Strom fehlt oder zu klein). Das ist KEIN Bestehen."
+      },
+      "blocker_ist_kein_freitext": "Der Freitext bleibt als `blocker` (Kontext), aber das Gate prueft `blockiert_durch` und fuehrt die Datei aus. Exit 2 ist der Blocker-Zustand: rot fuer das Gate, ohne die Frist als widerlegt zu markieren.",
+      "test": "test_blocker_typisiert.py (4/4)"
     },
     "ORDNUNG": {
       "gesetzt": "R89",
@@ -735,6 +753,13 @@
         "Zwei Autoritaeten: normative_quelle deklariert (Code), Falsifikator (ING) fehlt",
         "K2 ist Spiegel, kein Falsifikator — der '?'-Bug waere in beiden gewesen",
         "Umgebungsvarianz gebaut (4 Seeds); Scheduling/Race-Varianz nicht"
+      ],
+      "stand_r90": [
+        "ING ist weiterhin die einzige echte Instanz: liest Exit 4, baut VERGLEICH aus der Prosa, braucht TS-Treue. Alle drei sind jetzt spezifiziert, aber nicht von einem FREMDEN Konsumenten validiert.",
+        "Frist NRM (R90) ist jetzt typisiert (blocker_nrm_injektivitaet.py, Exit 2 = UNBEWIESEN). Der Blocker ist ausfuehrbar, aber die Probe braucht einen eingefrorenen Strom mit >=1000 Zeilen. Fixture hat 3.",
+        "Der TS-Treue-Satz (zustell_zusage) ist eine ENTSCHEIDUNG, keine Messung. Sie schliesst den Widerspruch, aber nur weil der Vertrag die Zusage nie gab. Wer TS-Treue will, muss die Zusage zuerst aendern.",
+        "Vier Seeds bleiben Stichprobe. Baseline-Determinismus ist separat bewiesen (test_determinismus.py), Seed-Unabhaengigkeit NICHT — nur 'keine Abweichung beobachtet'.",
+        "Die 24 Waechter-Suiten sind gezaehlt, nicht getippt. Die '27' in R89 war falsch (Befund 7)."
       ]
     }
   },
@@ -978,6 +1003,18 @@
       "commit": "—",
       "runde": 88,
       "aenderung": "VERWORFEN: bei_unlesbar=WIEDERHOLT. Grund: WIEDERHOLT heisst seit R85 'bewusste Neusendung, BELEGT durch anderen Zeitstempel'. Ein unlesbarer TS belegt nichts. Steht im Ledger, weil es plausibel klingt ('markieren ist reversibel') und ohne den Eintrag neu erfunden wuerde."
+    },
+    {
+      "version": 10,
+      "runde": 90,
+      "aenderung": "Reorder ist im Payload kein Widerspruch (zustell_zusage: ZUSTELLEN garantiert Inhalt, nicht Original-Zeitstempel, gemessen 7/7). Exit-Taxonomie 0-4 normiert (stdout_ist_bericht je Code, Exit 4 = Bericht mit Unbeurteilbarem, NICHT Prozessausfall, gemessen 7/7). vergleich_schnittstelle sprach-agnostisch (Wahrheitstafel, Nachbau aus Prosa deckungsgleich, 10/10). art= bleibt Ereignis-Ontologie: unlesbar -> art=UNBEURTEILBAR;grund=ZEITSTEMPEL-UNLESBAR. version_doktrin: Ledger ist einzige Versionswahrheit.",
+      "gebucht": "R90 Befunde 2,3,4,5,7"
+    },
+    {
+      "version": 11,
+      "runde": 90,
+      "aenderung": "Typisierter Blocker (blocker_nrm_injektivitaet.py, Exit 2=UNBEWIESEN), Gelegenheits-Norm, Hash-Volllaenge im Record, Paar-Zaehlung n-1, Vier-Eimer-Invariante als Normsatz, Vokabular-Abbildung 7 Ebenen, Baseline-Determinismus separat bewiesen. Waechter-Suiten gezaehlt: 24 (R89 sagte 27).",
+      "gebucht": "R90 Befunde 6,7,8"
     }
   ],
   "kreuz_record_invarianten": {
@@ -999,7 +1036,8 @@
       "unbeobachtbar",
       "nicht gefangen"
     ],
-    "anlass": "Ein Lauf/Mutant kann 'deterministisch gefangen' nicht von 'gelegentlich entkommen' trennen."
+    "anlass": "Ein Lauf/Mutant kann 'deterministisch gefangen' nicht von 'gelegentlich entkommen' trennen.",
+    "seed_begruendung": "4 Seeds sind eine Stichprobe, kein Beweis. Die Baseline-Determinismus-Eigenschaft wird SEPARAT bewiesen: zweimaliger Lauf mit identischem Seed muss byte-gleiche Ausgabe liefern (test_determinismus.py). Die Seed-Varianz prueft dann nur, dass die ERGEBNISSE nicht vom Hash-Salz abhaengen. N=4 ist die kleinste Zahl, die 0/1/2/3 abdeckt; die Aussage ist 'keine Seed-Abhaengigkeit beobachtet', nicht 'keine existiert'."
   },
   "konsumenten_semantik": {
     "status": "NORM — nicht Beispiel. Jede Aussage hier ist ausfuehrbar in scripts/konsumenten_semantik.py.",
@@ -1065,6 +1103,102 @@
   "frist_instrument": {
     "konstruktionsfehler": "Verfall loest keine Buchung aus. Dreimal belegt: ADJ (R84->R86), NRM (R86->R87 ungebucht), Mutationsvarianz.",
     "regel": "Jede Frist endet in GENAU EINER von zwei Buchungen: 'bewiesen/entschieden' ODER 'akzeptiert mit neuem Termin und Begruendung'. 'Schweigen' ist kein moeglicher Endzustand.",
-    "test": "scripts/test_frist_gate.py"
+    "test": "scripts/test_frist_gate.py",
+    "blocker_doktrin": "Ein Blocker ist ein AUSFUEHRBARES Artefakt, kein Satz. `blockiert_durch` nennt eine Datei, die das Gate ausfuehrt; Exit != 0 ist der gebuchte Zustand. Freitext (`blocker`) bleibt als Kontext erlaubt, ersetzt aber nie `blockiert_durch`. Ohne diese Bindung ist das Gate eine Praesenz-Pruefung auf Formularen (R90 Befund 6).",
+    "gelegenheit_norm": "Eine Probe, die unterhalb ihrer Mindestgroesse laeuft, ist UNBEWIESEN (Exit 2), nicht BESTANDEN. `0 von 3` ist keine Messung von `0 von 1000`. Dritte Auspraegung der Verdinglichungs-Krankheit: das Ergebnis existiert, die Gelegenheit fehlte.",
+    "blocker_doktrin_werkzeug": "test_blocker_typisiert.py (4/4), blocker_nrm_injektivitaet.py",
+    "gelegenheit_norm_werkzeug": "test_blocker_typisiert.py (4/4)"
+  },
+  "exit_taxonomie": {
+    "regel": "Fuer jeden Exit-Code ist deklariert, ob stdout der Bericht ist. Kein Code hat stdout=undefiniert; das ist Absicht: der Waecher emittiert auf JEDEM Zweig die Messachse (R82).",
+    "warum_nicht_undefiniert": "Ein undefinierter stdout bei Exit != 0 war die Harness-Falle aus R88: leerer Strom las sich als 'keine Ereignisse'. Ein Bericht, den man bei Fehler wegwirft, ist genau der verschluckte Alarm, gegen den das System gebaut ist.",
+    "je_code": {
+      "0": {
+        "urteil": "neu",
+        "stdout_ist_bericht": true,
+        "konsument": "Zeilen-Urteile lesen und ausfuehren"
+      },
+      "1": {
+        "urteil": "duplikat",
+        "stdout_ist_bericht": true,
+        "konsument": "Zeilen-Urteile lesen und ausfuehren"
+      },
+      "2": {
+        "urteil": "aufruf_fehler",
+        "stdout_ist_bericht": true,
+        "konsument": "genau eine AUFRUF-Zeile lesen; Aufrufer korrigieren. stdout traegt KEINE Inhalts-Records."
+      },
+      "3": {
+        "urteil": "ungeprueft",
+        "stdout_ist_bericht": true,
+        "konsument": "Achse lesen; es gibt KEINE ZEILE-Records. Zustellen mit Marke UNGEPRUEFT; alarmieren."
+      },
+      "4": {
+        "urteil": "unvollstaendig_geprueft",
+        "stdout_ist_bericht": true,
+        "konsument": "AUSDRUECKLICH lesen: Zeilen-Urteile ausfuehren, UNGEPRUEFT-Records markiert zustellen, alarmieren. NICHT verwerfen."
+      }
+    },
+    "norm_exit4": "Exit 4 bedeutet 'Bericht enthaelt Unbeurteilbares', NICHT 'Prozess gescheitert'. Der UNGEPRUEFT-Record MUSS gelesen und markiert zugestellt werden. Wer Exit 4 als Prozessausfall liest und stdout verwirft, entwertet den Fix aus R89.",
+    "anlass": "R89 fuehrte Exit 4 fuer UNGEPRUEFT-Zeilen ein, ohne zu sagen, ob der Record gelesen werden soll. Zwei Lesarten, entgegengesetzte Pflichten.",
+    "verhaeltnis_zu_exit_semantik": "ausgabe_grammatik.exit_semantik sagt 'Exit ist Telemetrie, nicht Handlung'. Diese Tabelle sagt WELCHE Telemetrie bei welchem Code lesbar ist. Zusammen: Exit ordnet ein, die Zeilen handeln.",
+    "test": "test_exit_taxonomie.py (7/7)"
+  },
+  "zustell_zusage": {
+    "satz": "ZUSTELLEN garantiert den INHALT der Meldung (zeitstempel-frei gehasht), NICHT den Zeitstempel der urspruenglichen Meldung.",
+    "beweis_dass_hash_ts_frei": "digest() entfernt <timestamp> VOR dem Hash. Waere der TS im Hash, haetten Original und bewusste Neusendung verschiedene Hashes und bei_ungleich=WIEDERHOLT koennte NIE feuern.",
+    "folge_unter_reorder": "Unter Reorder traegt das zugestellte Exemplar den Zeitstempel der ERSTEN im Konsumenten-Strom gesehenen Kopie. Der Inhalt ist in beiden Ordnungen identisch und wird genau einmal geliefert.",
+    "warum_das_kein_widerspruch_ist": "Norm 1 (Regel) und Norm 4 (Reorder) widersprechen sich nicht: R87 hat entschieden, dass 'erst' der erste im KONSUMENTEN-Strom ist. Die Reorder-Differenz ist die erwartete Folge dieser Relativitaet, kein Datenverlust.",
+    "konsequenz_fuer_varianten": "FIFO/Sequenznummer/Batch transportieren alle eine Zeitstempel-Treue, die der Vertrag nie zugesagt hat. Sie sind nur noetig, wenn TS-Treue ZUGESAGT wird — dann zuerst diese Zusage aendern, dann eine Variante waehlen.",
+    "anlass": "R90: gemessener Widerspruch Norm 1 vs. Norm 4 ist im Payload keiner. Messachse war Etikett, nicht Inhalt.",
+    "test": "test_reorder_payload.py (7/7)"
+  },
+  "vergleich_schnittstelle": {
+    "zweck": "Sprach-agnostische Spezifikation des Zeitstempel-Vergleichs. 'vergleich_pflicht' ist ein PYTHON-Verbot; ein Konsument in einer anderen Sprache kann ts_vergleich() nicht aufrufen und muss sie aus der Prosa nachbauen — genau dort reisst die boolesche Falle wieder auf (R90 Befund 4).",
+    "signatur": "VERGLEICH(a, b) -> {GLEICH, UNGLEICH, UNLESBAR}",
+    "eingabe_domaene": "{LESBARER_ZEITSTEMPEL, UNLESBAR} x {LESBARER_ZEITSTEMPEL, UNLESBAR}",
+    "ausgabe_domaene": [
+      "GLEICH",
+      "UNGLEICH",
+      "UNLESBAR"
+    ],
+    "wahrheitstafel": {
+      "LESBAR x LESBAR, gleicher Wert": "GLEICH",
+      "LESBAR x LESBAR, verschiedene Werte": "UNGLEICH",
+      "LESBAR x UNLESBAR": "UNLESBAR",
+      "UNLESBAR x LESBAR": "UNLESBAR",
+      "UNLESBAR x UNLESBAR": "UNLESBAR"
+    },
+    "invariante": "VERGLEICH(x,x)=GLEICH nur wenn x LESBAR ist. Fuer UNLESBAR ist VERGLEICH(x,x)=UNLESBAR. Unlesbar ist NICHT reflexiv — das ist der Kern der Falle.",
+    "konsumenten_pflicht": "JEDER Vergleich im Konsumenten laeuft ueber diese Funktion. Gleichheit ist dreiwertig, nicht zweiwertig.",
+    "abbildung": "UNLESBAR -> Verdict UNGEPRUEFT (nicht WIEDERHOLT, nicht VERWERFEN). GLEICH -> VERWERFEN. UNGLEICH -> WIEDERHOLT.",
+    "konformitaetstest": "Wer zwei UNLESBAR als GLEICH oder UNGLEICH behandelt, ist nicht-konform. Pruefbar an der AUSGABE (test_konsument_kongruenz.py K2, test_unwissen_etikett.py C), nicht am Quelltext.",
+    "verhaeltnis_zu_vergleich_pflicht": "vergleich_pflicht bleibt als Python-spezifische Praezisierung. Diese Schnittstelle ist die normative Fassung; sie ist durch Ausgaben pruefbar, das Verbot nicht.",
+    "test": "test_vergleich_nachbau.py (10/10)"
+  },
+  "version_doktrin": {
+    "regel": "versions_ledger ist die einzige Versionswahrheit. _version MUSS gleich der hoechsten AKZEPTIERTEN (nicht verworfenen) Ledger-Version sein. Die Prosa nennt keine Version — sie liest kopfzeile.py.",
+    "luecke_r90": "R87 nannte v7, R89 nannte v9; v8 (R88) stand im Ledger, wurde aber nie in der Prosa genannt. Kein fehlender Eintrag — eine fehlende ABLEITUNG. Die Prosa hat die Version getippt statt gelesen.",
+    "pruefbar": "test_version_ledger.py: _version == max(akzeptierte Ledger-Version) UND keine Luecke in 1..n.",
+    "verworfene": "Eintraege mit '-verworfen' im Schluessel zaehlen NICHT fuer die Kontiguitaet — sie dokumentieren Entscheidungen, keine Staende.",
+    "anlass": "R90 Befund 7: v9 ohne v8, vierte Wiederholung desselben Befunds.",
+    "test": "test_version_ledger.py (6/6)"
+  },
+  "hash_vertrag": {
+    "laenge": "vollen SHA-256 (64 hex) im ZEILE-Record, nicht die 12-Zeichen-Kurzform im Kommentar.",
+    "kollision": "Bei voller Laenge ist eine Kollision als praktisch ausgeschlossen deklariert (2^-128 Geburtstagsschranke). Kurz-Hashes im Kommentar sind ANZEIGE, nie Schluessel.",
+    "konsequenz": "Zwei verschiedene Inhalte mit gleichem <h> wuerden einen davon VERWERFEN — stiller Datenverlust. Die volle Laenge macht das praktisch unmoeglich.",
+    "test": "test_determinismus.py (9/9)"
+  },
+  "vokabular_abbildung": {
+    "zustand": "ZEITSTEMPEL UNLESBAR",
+    "achse": "ZEITSTEMPEL-UNLESBAR (Zaehler)",
+    "regel_zweig": "bei_unlesbar",
+    "regel_wert": "UNGEPRUEFT",
+    "record_art": "UNBEURTEILBAR (Ereignis-Ontologie)",
+    "record_grund": "ZEITSTEMPEL-UNLESBAR (Ursache)",
+    "record_verdict": "UNGEPRUEFT",
+    "norm": "Diese sieben Namen bezeichnen EINEN epistemischen Zustand auf sieben Ebenen. Die Abbildung ist Teil des Vertrags — sonst ist 'vier disjunkte Eimer' auf der einen und 'drei Zweige' auf der anderen Seite eine stillschweigende Bijektion.",
+    "test": "test_determinismus.py (9/9)"
   }
 }

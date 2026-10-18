@@ -76,14 +76,18 @@ def main() -> int:
     ok += gut
 
     # B1: kein Verdict behauptet eine Klassifikation, die nicht stattfand.
+    # §A-ZZZZ188 (Runde 90): Norm bewegte sich (art=UNBEURTEILBAR;grund=...),
+    # Soll stand — genau der Fehler, den R89 buchte. Jetzt mit Grund-Pruefung:
+    # die URSACHE muss da sein, aber in `grund`, nicht in `art`.
     gesamt += 1
     out = _strom([_z(None), _z(None)])
     # Nur ZEILE-Records zaehlen: `bei_ungleich=WIEDERHOLT` im DEDUP-Record
     # ist die Vorschrift fuer den BELEGTEN Fall und bleibt richtig.
     zeile = [z for z in out.splitlines() if z.startswith("ZEILE ")]
-    gut = (any("UNGEPRUEFT;pos=2;art=ZEITSTEMPEL-UNLESBAR" in z
+    gut = (any("UNGEPRUEFT;pos=2;art=UNBEURTEILBAR;grund=ZEITSTEMPEL-UNLESBAR" in z
                for z in zeile)
-           and not any("WIEDERHOLT" in z for z in zeile))
+           and not any("WIEDERHOLT" in z for z in zeile)
+           and not any("art=ZEITSTEMPEL-UNLESBAR" in z for z in zeile))
     print(f"{'ok  ' if gut else 'FAIL'} B1 unlesbar -> UNGEPRUEFT      "
           f"WIEDERHOLT={'WIEDERHOLT' in out}")
     ok += gut

@@ -208,6 +208,16 @@ NO_TEST_SUMMARY: set[str] = {
     "scripts/test_exit2_zeilen.py",        # 3/3 Exit 2 traegt genau eine AUFRUF-Zeile
     "scripts/test_adj_slot.py",            # 4/4 WIEDERHOLUNG hat eigenen Verdict
     "scripts/regel_konsument.py",          # 4/4 DEDUP-Regeln, Rang-Invariante
+    # Runde 90: die fuenf neuen Suiten — Ausgabe endet auf "N/N ... gruen",
+    # wie die Zeilen oben. Korb bewusst gewaehlt, nicht Baseline: die
+    # Baseline nimmt Dateien auf, ohne zu pruefen, was sie ausgeben.
+    "scripts/test_exit_taxonomie.py",      # 7/7 Exit 4 = Bericht, nicht Ausfall
+    "scripts/test_reorder_payload.py",     # 7/7 Reorder: Inhalt gleich, Etikett !=
+    "scripts/test_vergleich_nachbau.py",   # 10/10 Schnittstelle aus Prosa nachgebaut
+    "scripts/test_version_ledger.py",      # 6/6 Ledger ist Versionswahrheit
+    "scripts/test_determinismus.py",       # 9/9 Baseline-Determinismus + Zahlen
+    "scripts/test_blocker_typisiert.py",   # 4/4 Blocker ist ausfuehrbar
+    "scripts/blocker_nrm_injektivitaet.py",  # NRM-Probe (Exit 2 = UNBEWIESEN)
     "scripts/test_klasse_mehrdeutig.py",   # 4/4 Hash ist Klasse, pos driftet
     "scripts/test_regel_gegen_pos.py",     # 3/3 Regel trifft, pos nicht
     "scripts/test_escaping.py",            # 3/3 freie Felder bleiben ein Feld
