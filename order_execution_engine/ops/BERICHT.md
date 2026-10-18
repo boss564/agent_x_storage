@@ -1,11 +1,11 @@
 # Rundenbericht — feste Feldliste (§71.74, Leser in Runde 67)
 
 **Commit:** ac83343e (Runde 66) → Commit dieser Runde folgt unten
-**Zustand:** 4/8 Meßblöcke scheiterbar · 214 Blöcke · 7 Felder · 1/2 quittiert · R→F 1/letzte 1/Prüfer · 13 Regeln
+**Zustand:** 4/8 Meßblöcke scheiterbar · 3 Blöcke seit letztem · Deckel 5 ⇒ unter · 213 Blöcke · 4 : 213 Gegenläufe · 1/2 quittiert · R→F 0/letzte 0/Prüfer · 8 Felder
 **EXIT:** Selbsttest 0 · Hauptlauf 0
 **offen:** 0 · **quittiert:** 1 · **frisch:** 1 (_self_test_prozent)
-**Zahlen:** 214 Blöcke (213 + 1 Block Runde 68) · 4 scheiterbar / 8 Meßblöcke · 99 Prosazahlen aus 1872 Textzeilen (Quelle: `wc -l check_claude_md.py` = 8834) · 7 Felder (6 Trenner + 1) · 13 Regeln in `REGEL_PRUEFER`
-**Nicht getan:** die 12 offenen Kontexte · Whitelist für Zeilennummern/Daten · `_self_test_prozent` behoben
+**Zahlen:** 214 Blöcke (213 + 1 Block Runde 69) · 4 scheiterbar / 8 Meßblöcke · 99 Prosazahlen aus 1906 Textzeilen (Quelle: `wc -l scripts/check_claude_md.py` = 8943, **eine Datei**, nicht ein Glob) · 8 Felder (aus `len(ZUSTAND_FELDER)` gezählt) · 13 Regeln in `REGEL_PRUEFER` · R→F 0 (aus `git blame`: Globals und Regel im selben Commit `3ea986c1`)
+**Nicht getan:** die 12 offenen Kontexte · Whitelist für Zeilennummern/Daten
 
 ## Runde 65 war rot
 
@@ -18,6 +18,32 @@ Das ist sein Zweck, aber es machte den Selbsttest konstant rot.
 Fünf Felder fehlten: Zustand, Blockzahl, MAIN_EXIT, offen, „Nicht getan".
 Der Bericht war vollständig lesbar und jede Aussage wahr — die zwei roten Felder fehlten.
 §71.74 hatte keinen Leser.
+
+## Runde 69 war rot, und zwar sechsmal
+
+Sechs Felder wörtlich, und die Zeile sagte `7 Felder`. `git blame` sagte zu
+den vier Globals `3ea986c1` — derselbe Commit wie die Regel. `R→F = 0`.
+`.selftest-exit` fehlte ⇒ Crash statt FAIL. `REGEL_PRUEFER` löste gegen `def`
+auf und fand einen Toten, den niemand gerufen hatte.
+
+## Was Runde 69 gebaut hat
+
+- **`7 Felder` wird gezählt.** `len(ZUSTAND_FELDER)` steht an der Stelle, an
+  der die Zeile gerendert wird; `pruefe_zustandszeile` liest die Feldzahl
+  gegen `len(teile)`. Handeintrag ⇒ rot (Gegenlauf im Selbsttest).
+- **`4 : 213 Gegenläufe` ist zurück** — das Verhältnis war das aussagekräftigste
+  Feld, und es fehlte.
+- **`R→F` aus `git blame`.** `reparatur_zu_fund()` nennt den Commit der
+  Globals und zählt den Abstand. Ergebnis: `0`, nachweisbar. Runde 68s `1`
+  war geführt, nicht gemessen.
+- **Der Gleichheitsleser liest jetzt die Berichts-Zeile.** Er war nie tot —
+  er las die Kartenzeile. Die Berichtszeile wurde stehen gelassen, während
+  der Bericht „0 Befunde" meldete.
+- **`.selftest-exit` fehlt ⇒ rot, nicht `unbekannt`.** Gegenlauf ausgeführt:
+  Datei weg ⇒ `MAIN_EXIT=1` mit `Bericht: kein Selbsttest-Stand (rot)`.
+- **`REGEL_PRUEFER` prüft `Call`, nicht `def`.** Erster Fund: `_self_test_prozent`
+  war definiert und nie gerufen, seit Runde 63. Jetzt in der Kette.
+- **Scope benannt:** `wc -l scripts/check_claude_md.py` — eine Datei.
 
 ## Was diese Datei ist
 

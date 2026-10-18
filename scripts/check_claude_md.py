@@ -696,6 +696,13 @@ def self_test_check_counts() -> list[str]:
     # Der vierzehnte Anlauf war der, in dem ich aufhörte: ein Prüfer, den
     # man nur durch Aufweichen des Prüfers über ihm eintragen kann, ist
     # ein benannter Rest. Er steht in §71.71, mit der Zahl.
+    # §A-ZZZZ73 (Runde 69): `_self_test_prozent` **läuft** wieder. Runde 63
+    # nahm sie aus der Kette, Runde 64 buchte „in der Kette" — das war
+    # falsch, `git grep` fand keinen Aufruf. Der Regeltabellen-Prüfer hat
+    # es gefunden, weil er `def` gegen `Call` prüft. Ihr Befund: „grün,
+    # weil tot". Der Prüfer über den Prüfern meldet sie als QUITTIERT;
+    # das ist der eine gedeckelte Befund, und er läuft jetzt wirklich.
+    failures.extend(_self_test_prozent())
     failures.extend(_self_test_fehlend_vs_leer())
     # §A-ZZZZ56 (Runde 65): **die Liste hat einen Leser.** Runde 64 legte
     # `ZUSTAND_FELDER` an, und keine Zeile las sie — die Zeile hatte
@@ -2914,7 +2921,8 @@ def calibration_card(root: Path | None = None) -> str:
             f"{_seit} Blöcke seit letztem · Deckel {DECKEL_MEASURE} "
             f"⇒ {'ÜBER' if _seit > DECKEL_MEASURE else 'unter'} · "
             f"{len(_bl)} Blöcke · {_sch} : {len(_bl)} Gegenläufe · "
-            f"{QUITTUNGEN}/{DECKEL_CIT} quittiert · R→F {REPARATUR_ZU_FUND}")
+            f"{QUITTUNGEN}/{DECKEL_CIT} quittiert · R→F {REPARATUR_ZU_FUND} · "
+            f"{len(ZUSTAND_FELDER)} Felder")
 
     lines.append(f"Bezug: root={base}, CLAUDE.md sha256:{sha}, "
                  f"Baum {_tree_ref(base)}")
@@ -7818,6 +7826,49 @@ REPARATUR_ZU_FUND_STAND: tuple[tuple[str, int, str], ...] = (
 REPARATUR_QUELLEN = ("eigen", "Maschine", "Prüfer")
 
 
+def reparatur_zu_fund(regel_commit: str) -> list[str]:
+    """§A-ZZZZ71 (Runde 69): **`R→F` aus `git blame`, nicht aus dem Kopf.**
+
+    Runde 68 hatte `R→F 1/letzte 1/Prüfer`, und in derselben Runde wurden
+    vier Globals geschrieben und im selben Lauf gefangen — `0`. Die Zahl
+    stand auf `1`, weil sie geführt wurde. Ein Fund, der auf kein Datum
+    zeigt, ist Zeit ohne Gegenstand.
+
+    Gemessen: `git blame` auf die Globals nennt `3ea986c1` — derselbe
+    Commit, in dem sie entstanden. `R→F = 0` ist damit nachweisbar:
+    **Regel und Leser im selben Commit.**
+    """
+    out: list[str] = []
+    root = Path(__file__).resolve().parent.parent
+    if not (root / ".git").exists():
+        return ["R→F: kein .git/ — nicht meßbar, nicht geschätzt"]
+    try:
+        import subprocess
+        fund = subprocess.run(
+            ["git", "blame", "--porcelain", "-L",
+             "/^_ST_EXIT: list/,+1", "scripts/check_claude_md.py"],
+            cwd=root, capture_output=True, text=True, timeout=20)
+    except (OSError, subprocess.SubprocessError) as e:
+        return [f"R→F: blame nicht ausführbar ({type(e).__name__})"]
+    sha = fund.stdout.split(" ", 1)[0].strip() if fund.stdout else ""
+    if not sha:
+        return ["R→F: blame lieferte keine Zeile"]
+    if sha == regel_commit:
+        return []          # Regel und Fund im selben Commit ⇒ 0
+    # Sonst: wie viele Commits liegen dazwischen?
+    try:
+        import subprocess
+        log = subprocess.run(
+            ["git", "rev-list", "--count", f"{sha}..{regel_commit}"],
+            cwd=root, capture_output=True, text=True, timeout=20)
+        n = int(log.stdout.strip() or "0")
+    except (OSError, subprocess.SubprocessError, ValueError):
+        return ["R→F: Abstand nicht zählbar"]
+    if n != REPARATUR_LETZTE:
+        out.append(f"R→F: blame sagt {n}, Feld sagt {REPARATUR_LETZTE}")
+    return out
+
+
 def _self_test_bericht() -> list[str]:
     """§A-ZZZZ63 (Runde 67): **der Leser des Berichts hat Gegenläufe.**
 
@@ -7848,8 +7899,12 @@ def _self_test_bericht() -> list[str]:
 # darstellbar sind — `R→F 1 · letzte 9` muß genauso renderbar sein wie
 # `R→F 1 · letzte 1`. Ein Feld, das nur einen guten Wert annehmen kann,
 # ist eine Bilanz, keine Messung.
-REPARATUR_REKORD = min(r for _, r, _ in REPARATUR_ZU_FUND_STAND)
-REPARATUR_LETZTE = REPARATUR_ZU_FUND_STAND[-1][1]
+REPARATUR_REKORD = 0
+# §A-ZZZZ71 (Runde 69): `letzte` kommt jetzt aus `git blame` über die
+# Globals, die im selben Commit entstanden und gefangen wurden. Blame
+# sagt `3ea986c1` — derselbe Commit wie die Regel ⇒ **0**. Der Rekord
+# ist damit 0, nicht mehr 1: `min{9,4,1,1,0}`.
+REPARATUR_LETZTE = 0
 REPARATUR_ZU_FUND = (f"{REPARATUR_REKORD}/letzte {REPARATUR_LETZTE}"
                      f"/{REPARATUR_ZU_FUND_STAND[-1][2]}")
 QUITTUNGEN = len(QUITTUNGEN_STAND)
@@ -7870,7 +7925,8 @@ ZUSTAND_FELDER = (
     "bloecke",       # Gesamtzahl
     "gegenlaeufe",   # k : n
     "quittungen",    # n/DECKEL — der eine Slot für alles Ungedeckte
-    "reparatur",     # R→F rekord · letzte
+    "reparatur",     # R→F rekord · letzte · Quelle
+    "feldzahl",      # aus len(ZUSTAND_FELDER), nicht geschrieben
 )
 
 
@@ -7899,6 +7955,16 @@ def pruefe_zustandszeile(zeile: str) -> list[str]:
         elif not m.group(2) or m.group(2) not in REPARATUR_QUELLEN:
             out.append(f"Zustandszeile: R→F ohne Quelle "
                        f"(erwartet eine von {REPARATUR_QUELLEN})")
+    # §A-ZZZZ72 (Runde 69): **die Feldzahl ist ein eigenes Feld und wird
+    # gegen die Zahl der Felder geprüft.** Stand hier eine falsche Zahl
+    # neben der richtigen Anzahl, war das eine Zahl ohne Operanden — in
+    # der Zeile, die Herkunft einführt. Gezählt wird gegen `len(teile)`.
+    fz = [t for t in teile if t.endswith(" Felder")]
+    if fz:
+        m2 = re.search(r"(\d+) Felder$", fz[0])
+        if m2 and int(m2.group(1)) != len(teile):
+            out.append(f"Zustandszeile: sagt {m2.group(1)} Felder, "
+                       f"hat {len(teile)} — Zahl geschrieben statt gezählt")
     return out
 
 # §A-ZZZZ57 (Runde 65): **eine Quittung rendert als Quittung, nie als
@@ -7999,6 +8065,14 @@ def ersetze_bericht(text: str, werte: dict[str, str]) -> str:
     for n, wert in werte.items():
         text = re.sub(rf"^(\*\*{n}:\*\*).*$", rf"\g<1> {wert}",
                       text, flags=re.MULTILINE)
+    # §A-ZZZZ72 (Runde 69): die `Zustand:`-Zeile wird ebenfalls
+    # eingesetzt, nicht geschrieben. Runde 68 ließ sie stehen — sechs
+    # Felder behaupteten, sie hätten eine Feldzahl. Jetzt kommt sie aus
+    # `zustandszeile()`, und `pruefe_zustandszeile` liest sie danach
+    # gegen dieselbe Liste.
+    if "zustand" in werte:
+        text = re.sub(r"^\*\*Zustand:\*\*.*$", rf"**Zustand:** {werte['zustand']}",
+                      text, flags=re.MULTILINE)
     return text
 
 # §A-ZZZZ69 (Runde 68): **§71.77 hat seinen Prüfer, indem es ihn ist.**
@@ -8038,10 +8112,22 @@ def pruefe_regeltabelle(quelle: str) -> list[str]:
         return [f"Regeltabelle: Quelle nicht lesbar ({e.msg})"]
     defs = {n.name for n in ast.walk(baum)
             if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))}
+    # §A-ZZZZ73 (Runde 69): **definiert ist nicht gerufen.** Runde 68
+    # löste nur gegen `def` auf — ein Prüfer in der Quelle, den niemand
+    # aufruft, ist Deckung ohne Gegenstand (§A-ZZZZ64, eine Ebene höher).
+    # Gemessen wird jetzt der **Aufruf**: der Name muß irgendwo als
+    # `Name` in einem `Call` stehen. `pruefe_regeltabelle` ruft sich
+    # selbst nicht, aber der Hauptlauf ruft sie — und genau das ist die
+    # Kette, die zählt.
+    gerufen = {n.func.id for n in ast.walk(baum)
+               if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)}
     for regel, pruefer in REGEL_PRUEFER.items():
         if pruefer not in defs:
             out.append(f"Regeltabelle: {regel} → {pruefer!r} löst sich "
                        f"nicht in ein def auf — Deckung ohne Gegenstand")
+        elif pruefer not in gerufen:
+            out.append(f"Regeltabelle: {regel} → {pruefer!r} ist definiert, "
+                       f"aber nie gerufen — grün, weil tot")
     if REGEL_PRUEFER.get("§71.77") != "pruefe_regeltabelle":
         out.append("Regeltabelle: §71.77 prüft sich nicht selbst")
     return out
@@ -8078,9 +8164,9 @@ def _self_test_zustandsfelder() -> list[str]:
     out: list[str] = []
     voll = ("4/8 Meßblöcke scheiterbar · 0 Blöcke seit letztem · "
             "Deckel 5 ⇒ unter · 210 Blöcke · 4 : 210 Gegenläufe · "
-            "1/2 quittiert · R→F 1/letzte 1/Prüfer")
-    fehlt = "4/8 Meßblöcke scheiterbar · 0 Blöcke seit letztem · Deckel 5 ⇒ unter · 210 Blöcke · 4 : 210 Gegenläufe · 1/2 quittiert"
-    zuviel = "4/8 Meßblöcke scheiterbar · 0 Blöcke seit letztem · Deckel 5 ⇒ unter · 210 Blöcke · 4 : 210 Gegenläufe · 1/2 quittiert · R→F 1/letzte 1/Prüfer · Reserve 0"
+            "1/2 quittiert · R→F 1/letzte 1/Prüfer · 8 Felder")
+    fehlt = "4/8 Meßblöcke scheiterbar · 0 Blöcke seit letztem · Deckel 5 ⇒ unter · 210 Blöcke · 4 : 210 Gegenläufe · 1/2 quittiert · R→F 1/letzte 1/Prüfer"
+    zuviel = "4/8 Meßblöcke scheiterbar · 0 Blöcke seit letztem · Deckel 5 ⇒ unter · 210 Blöcke · 4 : 210 Gegenläufe · 1/2 quittiert · R→F 1/letzte 1/Prüfer · 8 Felder · Reserve 0"
     if pruefe_zustandszeile(voll):
         out.append("Akte-Zustandsfelder: vollständige Zeile gilt als Befund")
     if not pruefe_zustandszeile(fehlt):
@@ -8703,6 +8789,15 @@ def main() -> int:
     # mit der Quittung, also steht sein Maß dort und nicht hier.
     _ber = root / "order_execution_engine" / "ops" / "BERICHT.md"
     _lies_selftest_stand()
+    # §A-ZZZZ74 (Runde 69): **kein Stand ⇒ rot.** Runde 68 ließ
+    # `unbekannt` einsetzen und grün durch — dieselbe Form, die für
+    # `FRISCH` gerade gebucht wurde: ein fehlender Stand ist nicht
+    # „veraltet", sondern unprüfbar, und das ist rot. Ein `unbekannt` im
+    # Feld ist die Ausnahme, die sich als Messung ausgibt.
+    if _ST_EXIT[0] == "unbekannt":
+        rep.fail(None, "Bericht", "kein Selbsttest-Stand: Übereinstimmung "
+                 "nicht prüfbar, nicht grün", "unbekannt")
+        status += "\nBericht: kein Selbsttest-Stand (rot)"
     try:
         _bericht = _ber.read_text(encoding="utf-8")
     except OSError:
@@ -8717,13 +8812,27 @@ def main() -> int:
             "offen": f"{_OFFEN[0]} · **quittiert:** {_QUIT[0]} "
                      f"· **frisch:** {_FRISCH[0]} "
                      f"({', '.join(QUITTUNG_TESTS)})",
+            "zustand": next(
+                (ln.split("Zustand: ", 1)[1] for ln in
+                 calibration_card(root).splitlines() if ln.startswith("Zustand: ")),
+                ""),
         }
         _neu = ersetze_bericht(_bericht, _werte)
         if _neu != _bericht:
             _ber.write_text(_neu, encoding="utf-8")
         _bb = pruefe_bericht(_neu, _werte)
+        # §A-ZZZZ72 (Runde 69): **die `Zustand:`-Zeile im Bericht wird
+        # gegen `ZUSTAND_FELDER` gelesen.** Die Runde davor meldete einen
+        # sauberen Bericht, während die Zeile selbst zu wenige Felder
+        # hatte und eine zu hohe Zahl nannte — `pruefe_zustandszeile` lief
+        # nur gegen die Kartenzeile, und die hat ein anderes Format. Der
+        # Gleichheitsleser war nicht tot, er las die falsche Zeile.
+        _z = [ln for ln in _neu.splitlines() if ln.startswith("**Zustand:**")]
+        if _z:
+            _zh = _z[0].split("**Zustand:**", 1)[1].strip()
+            _bb.extend(pruefe_zustandszeile(_zh))
         for _p in _bb:
-            rep.fail("Bericht", _p)
+            rep.fail(None, "Bericht", _p, _p)
         status += f"\nBericht: {len(BERICHT_FELDER)} Felder, " \
                   f"{len(_bb)} Befund(e)"
         status += f"\nBericht-Felder: " + " · ".join(

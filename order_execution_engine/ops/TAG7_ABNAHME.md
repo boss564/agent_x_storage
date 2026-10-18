@@ -7987,3 +7987,45 @@ Gezählt: **212 Blöcke (211 + 1) · 4/8 scheiterbar · 7 Felder (6
 Trenner + 1, Zeile und Liste gleich) · R→F 1/letzte 1/Prüfer (rek =
 min{9,4,1,1}, letzte = Eintrag **drei Kopien**, Quelle = Prüfer) ·
 1/2 quittiert · Prosa 0 von 98 · offen 0 · EXIT 0/0.**
+
+## Runde 69 — `R→F` aus `git blame`, die Feldzahl gezählt
+
+**Ihr erster Satz war der Befund:** sechs Felder wörtlich, die Zeile sagte
+`7 Felder`. Drei ±1 in vier Runden, und diesmal im Feld, das sie verhindern
+sollte. Unter beiden Lesarten falsch: die Zahl ohne Operand oder die Zeile
+zu kurz — und der Gleichheitsleser schwieg zu beiden.
+
+**Warum er schwieg:** `pruefe_zustandszeile` lief nur gegen die
+**Kartenzeile**. Die `Zustand:`-Zeile im Bericht wurde von `ersetze_bericht`
+stehen gelassen, obwohl `EXIT` und `offen` eingesetzt wurden. Der Leser war
+nie tot — er las die falsche Zeile. Seit Runde 69 wird die Zeile eingesetzt
+**und** gelesen; Gegenlauf: sechs Felder ⇒ rot, `sagt 7 Felder, hat 8` ⇒ rot.
+
+**`R→F` aus `git blame`.** `git blame --porcelain -L '/^_ST_EXIT: list/,+1'`
+nennt `3ea986c1` — den Commit, in dem die vier Globals entstanden. Derselbe
+Commit wie die Regel ⇒ **0**. Runde 68s `1` war geführt, nicht gemessen.
+`min{9,4,1,1,0} = 0`, der Rekord ist jetzt 0 — der erste Nullpunkt ist
+eingetreten und **nachweisbar**, nicht behauptet. Gegenlauf:
+`reparatur_zu_fund('3ea986c1')` ⇒ `['R→F: blame sagt 0, Feld sagt 1']`
+solange das Feld 1 stand.
+
+**`REGEL_PRUEFER` prüft `Call`, nicht `def`.** Erster Lauf, erster Fund:
+`_self_test_prozent` war definiert, dokumentiert („Aufruf per Hand") und
+seit Runde 63 **nie gerufen**. Runde 64 buchte sie „wieder in der Kette" —
+`git grep` fand keinen Aufruf. Der Prüfer über den Prüfern hat es gefunden,
+weil er jetzt Aufrufe zählt. Sie läuft wieder (QUITTIERT, gedeckelt).
+
+**`.selftest-exit` fehlt ⇒ rot.** Gegenlauf ausgeführt (`mv .selftest-exit`):
+`MAIN_EXIT=1`, `Bericht: kein Selbsttest-Stand (rot)`. Vorher war der Fehler
+ein `TypeError` im `rep.fail` — ein Crash ist kein FAIL. Beides behoben.
+
+**Scope benannt.** `wc -l scripts/check_claude_md.py` — **eine Datei**,
+nicht ein Glob. 1906 Textzeilen von 8943.
+
+Gezählt: **214 Blöcke (213 + 1) · 4/8 scheiterbar · 8 Felder (aus
+`len(ZUSTAND_FELDER)` gezählt, Handeintrag ⇒ rot) · 4 : 213 Gegenläufe
+(zurück in der Zeile) · R→F 0/letzte 0/Prüfer (blame, Commit `3ea986c1`) ·
+1/2 quittiert · 13 Regeln · Prosa 0 von 102 ohne Herkunft (1906/8943) ·
+offen 0 · EXIT 0/0.**
+
+**Nicht getan:** die 12 offenen Kontexte · Whitelist · `FRISCH`-Versetzung.
