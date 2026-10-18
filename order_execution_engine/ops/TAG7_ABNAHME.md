@@ -5672,7 +5672,7 @@ total=0 chain_total=0 reported=0 unclassified=0 unchecked=0 unclassified_checker
   Wellen: 0
   Tests ohne Skript: 0
   Inventare: 0
-Bezug: root=/Volumes/THX_OS_ULTRA/Users/olivermueller/agent_x_storage, CLAUDE.md sha256:69159540db89, Baum 2cde5abe+dirty
+Bezug: root=/Volumes/THX_OS_ULTRA/Users/olivermueller/agent_x_storage, CLAUDE.md sha256:69159540db89, Baum 326b269a+dirty
 ```
 
 **Was offen bleibt:** der Vergleich kennt nur **einen** Block — den
