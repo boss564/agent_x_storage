@@ -203,6 +203,10 @@ NO_TEST_SUMMARY: set[str] = {
     "scripts/test_zeilen_identitaet.py",   # 4/4 Zeilen-Identitaet (Zaehler vs Zeiger)
     "scripts/test_konformitaet.py",        # 8/8 Ausgabe gegen Vertrags-Grammatik
     "scripts/test_zaun_meta.py",           # 5/5 Zaun prueft sich selbst
+    "scripts/test_zeiger_stabil.py",       # 3/3 Zeiger trifft Inhalt unter Bewegung
+    "scripts/test_projektion.py",          # 5/5 Exit folgt aus den Zeilen
+    "scripts/test_exit2_zeilen.py",        # 3/3 Exit 2 traegt genau eine AUFRUF-Zeile
+    "scripts/test_adj_slot.py",            # 4/4 WIEDERHOLUNG hat eigenen Verdict
     "scripts/test_gaeb_reference.py",  # X83-Fixtures gitignore; TMP-checkout ohne Referenzdaten
     "scripts/test_bvbs_pruefdatei.py",     # braucht externe Pruefdatei
     "scripts/export_backtest_signals.py",  # Daten-Exporter, kein Test
@@ -5834,6 +5838,34 @@ def _lade_baseline(root: Path) -> set[str]:
         return set()
 
 
+def _zaun_dateien(root: Path) -> list[str]:
+    """Die EINE Enumeration, die Zaun und Regeneration teilen.
+
+    §A-ZZZZ151 (Runde 85): `--baseline-neu` stand seit R84 im Kommentar
+    und war nie gebaut — die Regeneration war ein Handgriff, und der
+    Handgriff hat die 162 aus dem kaputten Filter nie ersetzt. Jetzt
+    generiert derselbe os.walk, der prueft, auch die Baseline.
+    """
+    import os as _os
+    sd = root / "scripts"
+    out: list[str] = []
+    for dirpath, dirnames, filenames in _os.walk(sd):
+        dirnames[:] = [d for d in dirnames if d != "__pycache__"]
+        for fn in filenames:
+            if fn.endswith(".py"):
+                out.append((Path(dirpath) / fn).relative_to(root).as_posix())
+    return sorted(out)
+
+
+def schreibe_baseline(root: Path) -> int:
+    """Schreibt die Baseline aus dem Baum. Gibt die Anzahl zurueck."""
+    import json as _j
+    dateien = _zaun_dateien(root)
+    (root / BASELINE_DATEI).write_text(
+        _j.dumps(dateien, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return len(dateien)
+
+
 def _ist_werkzeug(name: str) -> bool:
     return False  # Muster abgeschafft; die Baseline entscheidet.
 
@@ -5857,16 +5889,7 @@ def check_undocumented_tests(root: Path, rep: Report) -> None:
     Dateien, die beim Anlegen existierten — sie wird aus dem Baum
     GENERIERT, nicht von Hand gepflegt.
     """
-    import os as _os
-    sd = root / "scripts"
-    on_disk: list[str] = []
-    for dirpath, dirnames, filenames in _os.walk(sd):
-        dirnames[:] = [d for d in dirnames if d != "__pycache__"]
-        for fn in filenames:
-            if fn.endswith(".py"):
-                full = Path(dirpath) / fn
-                on_disk.append(full.relative_to(root).as_posix())
-    on_disk.sort()
+    on_disk = _zaun_dateien(root)
     known = ({t[0] for t in TEST_SCRIPTS} | NO_TEST_SUMMARY
              | SKRIPT_OHNE_LAUF | _lade_baseline(root))
     # §A-ZZZZ143b: **der Zen-Test des Zauns.** Eine Pruefung, die 0
@@ -9450,6 +9473,14 @@ def _format_detail(detail: dict[str, int]) -> str:
 
 
 def main() -> int:
+    if "--baseline-neu" in sys.argv:
+        # §A-ZZZZ151 (Runde 85): der Modus, den der Kommentar seit R84
+        # versprach. Eigener Modus, nie Teil des Prueflaufs — eine
+        # Pruefung, die schreibt, ist keine Pruefung mehr (Runde 72).
+        base = Path(__file__).resolve().parent.parent
+        n = schreibe_baseline(base)
+        print(f"Baseline regeneriert: {n} Skripte unter scripts/")
+        return 0
     if "--rotate" in sys.argv:
         # §A-ZZZZ89 (Runde 72): Rotieren statt Kürzen. Der Aufruf ist
         # bewusst ein eigener Modus und nie Teil des Prüflaufs — eine
@@ -9800,7 +9831,19 @@ def main() -> int:
                      "Konformitaet"),
                     ("test_zaun_meta.py",
                      r"(\d+)/(\d+) Zaun-Meta-Faelle gruen",
-                     "Zaun-Meta")):
+                     "Zaun-Meta"),
+                    ("test_zeiger_stabil.py",
+                     r"(\d+)/(\d+) Zeiger-Stabilitaets-Faelle gruen",
+                     "Zeiger"),
+                    ("test_projektion.py",
+                     r"(\d+)/(\d+) Projektions-Faelle gruen",
+                     "Projektion"),
+                    ("test_exit2_zeilen.py",
+                     r"(\d+)/(\d+) Exit-2-Zeilen-Faelle gruen",
+                     "Exit2-Zeilen"),
+                    ("test_adj_slot.py",
+                     r"(\d+)/(\d+) ADJ-Slot-Faelle gruen",
+                     "ADJ-Slot")):
                 try:
                     _r = subprocess.run(
                         [sys.executable, str(root / "scripts" / _sk)],

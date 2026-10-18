@@ -1,5 +1,5 @@
 {
-  "_version": 4,
+  "_version": 5,
   "_zweck": "Maschinenlesbarer Vertrag des Einwurf-Waechters. Single source of truth fuer Repo und externe Ingestion. Wer hier eine Zeile aendert, aendert das Tor ausserhalb dieses Repos mit.",
   "_stand": "Runde 84 (2026-10-18)",
   "_geltung": "Der Runner (scripts/vertrags_runner.py) importiert diese Datei; die externe Ingestion MUSS sie einlesen. Solange sie es nicht tut, zertifiziert N/N einen Vertrag, den draussen niemand benutzt.",
@@ -202,18 +202,24 @@
         "posten": "Normalisierungs-Grenze",
         "eigner": "Betreiber (Maintainer normalisiere)",
         "disziplin": "code",
-        "faellig": "R83"
+        "faellig": "R83 — geschlossen (test_normalisierung.py), Restrisiko Trailing Spaces -> R86"
       },
       {
         "id": "ADJ",
         "posten": "Adjudikation bewusste Neusendung",
         "eigner": "Betreiber",
         "disziplin": "politik",
-        "faellig": "R84 oder vor Ingestion — was frueher eintritt",
+        "faellig": "R84 — VERFALLEN am 2026-10-18, gebucht in R85",
         "vorlaeufig": {
           "wert": "beide Etiketten Exit 1 (Duplikat)",
           "risiko": "bewusste Neusendung wird unterdrueckt (Datenverlust)",
           "annahme_bis_runde": "R84"
+        },
+        "verfall": {
+          "eingetreten": "R84 (2026-10-18)",
+          "nicht_gebucht_in": "R84 — der Bericht schwieg zu ADJ",
+          "buchung_r85": "Risiko als AKZEPTIERT gebucht, praezise: bewusste Neusendungen werden blockiert. Nicht 'stiller Fallback', sondern benannte, akzeptierte Vorlaeufigkeit.",
+          "geltung": "Default beide Etiketten Exit 1 bleibt in Kraft, jetzt mit Verfallsbuchung statt Frist."
         }
       },
       {
@@ -229,6 +235,39 @@
         "eigner": "Betreiber (externer Konsument)",
         "disziplin": "extern",
         "faellig": "vor Go-Live"
+      }
+    ],
+    "ledger": [
+      {
+        "runde": "R76-78",
+        "aenderung": "Detektor gebaut, Vertrag erfunden",
+        "version": 1
+      },
+      {
+        "runde": "R79-81",
+        "aenderung": "Zeitstempel aus Hash, Vorgaenger-Referenz, Negativkontrolle",
+        "version": 1
+      },
+      {
+        "runde": "R82",
+        "aenderung": "Exit 4, Messachse schluessel=wert, Mutanten auf Messachse",
+        "version": 2
+      },
+      {
+        "runde": "R83",
+        "aenderung": "Aggregation _SCHWERE, Konstanten-Probe, Normalisierungs-Grenze",
+        "version": 3,
+        "nicht_dokumentiert": "Aktionsaenderung 3/4 wurde OHNE Versionsnennung gebucht"
+      },
+      {
+        "runde": "R84",
+        "aenderung": "Zeilen-Identitaet, Exit 2 Meta-Achse, Ausgabe-Grammatik, Zaun os.walk",
+        "version": 4
+      },
+      {
+        "runde": "R85",
+        "aenderung": "ADJ-Verfall gebucht, Zeiger->Inhalt, Projektion, Ledger, Baseline regeneriert",
+        "version": 5
       }
     ]
   },
@@ -454,7 +493,7 @@
   },
   "bringschuld": {
     "regel": "Ein neuer Vertragsfall ist zulaessig, wenn ein BLINDER FLECK NACHGEWIESEN ist.",
-    "zaehlachse": "ALLE nachgewiesenen blinden Flecken, nicht nur die mit Vertragsfall.",
+    "zaehlachse": "ALLE nachgewiesenen blinden Flecken; jeder mit Instanz, Runde und Datei — Zeiger, nicht Zahl.",
     "nachweise": [
       {
         "runde": 82,
@@ -489,7 +528,63 @@
       }
     ],
     "orakel_luecke": "Ein blinder Fleck ist nur nachweisbar, wenn ein unabhaengiges Orakel sagt 'das haette rot sein muessen'. Der Konstanten-Mutant wurde nur sichtbar, weil der Betreiber ihn vorhersagte. Die Bringschuld verlagert die Beweislast, erzeugt aber kein Orakel. ING bleibt das einzige externe Orakel.",
-    "definition_offen": "Wenn nur Vertragsfaelle zaehlen, ist die Bringschuld Buchhaltung, keine Wache. Entschieden R84: alle Flecken zaehlen."
+    "definition_offen": "Wenn nur Vertragsfaelle zaehlen, ist die Bringschuld Buchhaltung, keine Wache. Entschieden R84: alle Flecken zaehlen.",
+    "instanzen": [
+      {
+        "runde": 82,
+        "instanz": "uebersprung exit=0 gruen",
+        "code": "einwurf_waechter.pruefe_strom",
+        "test": "vertrags_runner.uebersprung"
+      },
+      {
+        "runde": 83,
+        "instanz": "Konstanten-Mutant 37 bestand 10/10",
+        "code": "einwurf_waechter.pruefe_strom",
+        "test": "test_konstanten"
+      },
+      {
+        "runde": 84,
+        "instanz": "Zaehler statt Zeiger im Strom-Urteil",
+        "code": "einwurf_waechter.pruefe_strom",
+        "test": "test_zeilen_identitaet"
+      },
+      {
+        "runde": 84,
+        "instanz": "LESESTAT-Summe ueber Liste (TypeError)",
+        "code": "einwurf_waechter.main",
+        "test": "keiner — Lauf fand es"
+      },
+      {
+        "runde": 84,
+        "instanz": "Detailzeile als Schluessel ohne =",
+        "code": "einwurf_waechter.pruefe_strom",
+        "test": "test_konformitaet"
+      },
+      {
+        "runde": 85,
+        "instanz": "Zeiger positionsgebunden, Strom beweglich",
+        "code": "einwurf_waechter.pruefe_strom",
+        "test": "test_zeiger_stabil"
+      },
+      {
+        "runde": 85,
+        "instanz": "Baseline vom kaputten Filter (162 vs 278)",
+        "code": "check_claude_md.check_undocumented_tests",
+        "test": "test_zaun_meta"
+      },
+      {
+        "runde": 85,
+        "instanz": "ADJ-Frist verfallen ohne Buchung",
+        "code": "keiner — Governance",
+        "test": "keiner"
+      },
+      {
+        "runde": 85,
+        "instanz": "Exit 2 ohne Zeilen (Schema-Luecke)",
+        "code": "einwurf_waechter.main",
+        "test": "mock_ingestion"
+      }
+    ]
   },
   "orakel": {
     "befund": "Die Konstanten-Probe 0/1/2 beweist Anti-Hardcoding, nicht Zaehl-Richtigkeit. Sie zeigt, dass der Code nicht 37 ausgibt — nicht, dass 0 richtig IST.",
@@ -511,6 +606,52 @@
       "json"
     ],
     "regel": "Die Grammatik ist Vertrag. Ein Konsument parst per Grammatik, nicht per Positions-Annahme. Der Bindestrich ist erlaubt — R83 hatte ihn erzeugt und der Parser ihn zerlegt.",
-    "geprueft_durch": "scripts/test_konformitaet.py — liest die Grammatik HIER, nicht im Test"
+    "geprueft_durch": "scripts/test_konformitaet.py — liest die Grammatik HIER, nicht im Test",
+    "zeile": {
+      "syntax": "ZEILE <zeiger> <urteil>;<feld>=<wert>;...",
+      "zeiger": {
+        "inhalt": "<sha256 hex, 64 Zeichen aus digest()>",
+        "meta": "AUFRUF — nur bei Exit 2, kein Inhalt vorhanden",
+        "unparsbar": "pos:<n> — Zeile nicht parsebar, kein Inhalt zu hashen"
+      },
+      "urteile": [
+        "ZUSTELLEN",
+        "VERWERFEN",
+        "WIEDERHOLT",
+        "UNGEPRUEFT"
+      ],
+      "mapping": {
+        "KANAL-DUPLIKAT": "VERWERFEN",
+        "WIEDERHOLUNG": "WIEDERHOLT",
+        "unparsbar": "UNGEPRUEFT",
+        "neu": "ZUSTELLEN"
+      },
+      "grund": "§A-ZZZZ145/148/149 (Runde 85): Zeiger traegt Inhalt, Exit 2 traegt AUFRUF, WIEDERHOLUNG hat eigenen Slot (ADJ)."
+    },
+    "exit_semantik": {
+      "regel": "Exit ist Telemetrie, nicht Handlung — Konsumenten lesen die Zeilen.",
+      "projektion": "exit == exit_aus_zeilen(zeilen) (test_projektion.py)",
+      "exit2": "traegt genau EINE Zeile `ZEILE AUFRUF VERWERFEN;grund=...`",
+      "aktion2": "Konsument blockiert und alarmiert; keine Inhalts-Handlung moeglich."
+    }
+  },
+  "encoding": {
+    "regel": "Maschinen-Tokens sind ASCII-only: [A-Za-z_][A-Za-z0-9_-]*",
+    "begruendung": "UNGEPRUEFT statt UNGEPRUEFT-mit-Umlaut ist Politik, kein Versehen. Ein Umlaut im Token bricht denselben Parser, der am Bindestrich schon gescheitert ist.",
+    "prosa": "Freitext darf Unicode; nur Maschinenfelder nicht."
+  },
+  "konsumenten_migration": {
+    "regel": "Ein Konsument darf NUR die Zeilen-Verdicts als Handlung lesen. Exit ist Telemetrie fuer Dashboards.",
+    "v1_v3_verhalten": "lesen den Exit -> muessen migriert werden oder still in alte Modi zurueckfallen",
+    "exit_2": "blockieren + alarmieren, keine Inhalts-Handlung",
+    "exit_3": "Strom nicht pruefbar -> keine Inhalts-Handlung, alarmieren",
+    "test": "test_projektion.py (5/5) beweist exit == exit_aus_zeilen(zeilen)"
+  },
+  "zaun_scope": {
+    "enumeration": "os.walk ueber scripts/, ohne Tiefen- oder Praefixfilter",
+    "baseline": "scripts/.skript_baseline.json — GENERIERT via `--baseline-neu` (Runde 85 gebaut)",
+    "historisch": "R83 baute die Baseline mit dem kaputten count('/')==2-Filter: 162 statt 278/283",
+    "stand_r85": "283 Dateien unter os.walk",
+    "regel": "Baseline waechst nie von selbst; jeder neue Skriptpfad ist meldepflichtig."
   }
 }

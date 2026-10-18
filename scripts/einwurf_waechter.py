@@ -165,9 +165,30 @@ def lese_strom(p: Path) -> list[tuple[str, str]]:
 LESESTAT: dict[str, int] = {"json": 0, "kurz": 0, "envelope": 0}
 
 
+def exit_aus_zeilen(bericht: list[str]) -> int:
+    """Leitet den Strom-Exit aus den Zeilen-Urteilen ab — die einzige Quelle.
+
+    §A-ZZZZ147 (Runde 85): `UNGEPRUEFT` ist unvollstaendig (4),
+    `VERWERFEN` ist ein Befund (1), sonst neu (0). Die Reihenfolge ist
+    nicht "hart gewinnt", sondern folgt `aggregiere`.
+    """
+    urteile = {m.group(1) for z in bericht
+               for m in [re.match(r"ZEILE \S+ ([A-Z]+);", z)] if m}
+    # WIEDERHOLT ist ein Befund (1), aber KEIN Verwerfen — es stehen
+    # beide in der Schwere 1, only die Aktion unterscheidet sich.
+    befunde = {"VERWERFEN", "WIEDERHOLT"} & urteile
+    return aggregiere(4 if "UNGEPRUEFT" in urteile else 0,
+                      1 if befunde else 0)
+
+
 def _unparsbar_zeilen() -> list[str]:
     """§A-ZZZZ139: Meldungszeilen, die nicht pruefbar waren — als Zeilen."""
-    return [f"ZEILE {n} UNGEPRUEFT;" for n in LESESTAT.get("json_pos", [])]  # type: ignore[arg-type]
+    # Unparsbare Zeilen haben keinen Inhalts-Hash (es gibt keinen Inhalt).
+    # Ihr Zeiger ist die Position — aber die ist hier eindeutig, weil die
+    # Zeile nicht parsebar ist und ein Konsument sie per Zeilennummer
+    # markiert, nicht per Hash. Das wird im Vertrag als Ausnahme benannt.
+    return [f"ZEILE pos:{n} UNGEPRUEFT;pos={n};"
+            for n in LESESTAT.get("json_pos", [])]
 
 
 def pruefe_strom(strom: list[tuple[str, str]]) -> tuple[int, int, list[str]]:
@@ -209,13 +230,31 @@ def pruefe_strom(strom: list[tuple[str, str]]) -> tuple[int, int, list[str]]:
             # trennt, sah `  KANAL-DUPLIKAT #1 == #2` als Schluessel ohne
             # `=`. Jetzt: Marke auf der Messachse, Prosa auf eigener Zeile
             # mit Praefix `#` — grammatisch kein Paar.
-            bericht.append(f"ZEILE {i + 1} VERWERFEN;")
+            # §A-ZZZZ145 (Runde 85): **der Zeiger traegt Inhalt, nicht
+            # nur Position.** `ZEILE 2` ist eine Position in einem Strom,
+            # der sich bewegt — kommen vorne Meldungen hinzu, zeigt 2 auf
+            # eine andere Meldung. Jetzt traegt der Zeiger den Inhalts-
+            # Hash; die Position bleibt als Diagnose daneben (zweites
+            # Feld, nicht der Zeiger).
+            # §A-ZZZZ149 (Runde 85): **das Urteil traegt die Achse, an
+            # der ADJ haengt.** Bis R84 warfen beide Etiketten dasselbe
+            # `VERWERFEN` — damit war die Frage, ob eine BEWUSSTE
+            # Neusendung blockiert werden darf, durch Auslassung
+            # entschieden: der Code sagte "ja", der Betreiber hatte nie
+            # zugestimmt. Jetzt ein eigener Zeiger-Fall:
+            #   KANAL-DUPLIKAT -> VERWERFEN  (bytegleich, gleicher ts)
+            #   WIEDERHOLUNG   -> WIEDERHOLT (Inhalt gleich, ts anders)
+            # `WIEDERHOLT` ist ein eigener Verdict-Slot, kein stilles
+            # VERWERFEN. Die Aktion dazu entscheidet der Betreiber
+            # (ADJ); Default ist heute VERWERFEN, jetzt benannt.
+            urteil = "WIEDERHOLT" if not gleich_ts else "VERWERFEN"
+            bericht.append(f"ZEILE {h} {urteil};pos={i + 1};art={art};")
             bericht.append(f"  # {art} #{j + 1} == #{i + 1}"
                            f"  Δ={i - j}"
                            f"  {'(gleicher Zeitstempel)' if gleich_ts else '(anderer Zeitstempel)'}"
                            f"  sha {h[:12]}")
         else:
-            bericht.append(f"ZEILE {i + 1} ZUSTELLEN;")
+            bericht.append(f"ZEILE {h} ZUSTELLEN;pos={i + 1};")
         seen[h] = i
     # Die unparsbaren Zeilen tragen ihr Urteil, ohne Inhalt zu haben.
     bericht[:0] = [z for z in _unparsbar_zeilen()]
@@ -279,6 +318,8 @@ def main(argv: list[str]) -> int:
     if "--einwurf" in argv:
         if "--strom" not in argv:
             print(achse(0, 0, 0), end="")
+            # §A-ZZZZ148 (Runde 85): **Exit 2 darf nicht zeilenlos sein.**
+            print("ZEILE AUFRUF VERWERFEN;grund=einwurf_ohne_strom;")
             print("--einwurf braucht --strom als Referenz", file=sys.stderr)
             return 2
         try:
@@ -375,11 +416,20 @@ def main(argv: list[str]) -> int:
         # Tor-Verbraucher, der nur den Exit-Code liest, stellte den Inhalt
         # zu und sah die Warnung nie. Exit 3 = gar nicht geprueft,
         # Exit 4 = geprueft, aber nicht vollstaendig.
-        # §A-ZZZZ129: EINE Aggregationsstelle, nicht drei ifs.
-        return aggregiere(1 if paare else 0,
-                          4 if LESESTAT["json"] >= JSON_SCHWELLE else 0)
+        # §A-ZZZZ147 (Runde 85): **der Exit folgt aus den Zeilen.**
+        # Bis R84 entstanden Strom-Exit und Zeilen-Urteile parallel —
+        # zwei Wahrheiten ohne Ableitung. Jetzt leitet genau EINE
+        # Funktion den Exit aus den Zeilen-Verdicts ab; die Zaehler
+        # sind Telemetrie daneben, nicht die Quelle.
+        return exit_aus_zeilen(bericht)
 
+    # §A-ZZZZ148 (Runde 85): **Exit 2 darf nicht zeilenlos sein.**
+    # Vorher endete 2 vor jedem Zeilen-Array — der Konsument bekam 2 und
+    # eine leere Parse. Jetzt traegt auch der Meta-Fall genau EINE Zeile:
+    # Zeiger `AUFRUF` (kein Inhalt, also kein Inhalts-Hash), Urteil
+    # VERWERFEN — der Konsument blockiert, alarmiert, handelt nicht.
     print(achse(0, 0, 0, 0), end="")
+    print("ZEILE AUFRUF VERWERFEN;grund=kein_modus;")
     print(__doc__.strip(), file=sys.stderr)
     return 2
 

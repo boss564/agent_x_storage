@@ -9855,3 +9855,199 @@ mehr wert als zehn, die immer grün waren — und die Bringschuld, die nur
 Vertragsfall-Flecken zählt, hat den einen Fleck, den sie finden sollte,
 in „keiner" verwandelt.
 
+
+---
+
+# Runde 85 — Zeiger sind keine Identität
+
+## 0. Was zuerst gebucht werden musste
+
+`ADJ` war auf **R84** terminiert. R84 ist vergangen, der Bericht schwieg.
+Die erste Buchung dieser Runde ist die **Verfallsbuchung**, bevor
+irgendetwas gebaut wurde:
+
+| Posten | Frist | Stand R85 |
+|---|---|---|
+| `ADJ` | R84 | **verfallen**, gebucht — Risiko als *akzeptiert*: bewusste Neusendungen bleiben blockiert, jetzt benannt statt still |
+| `NRM` | R83 | geschlossen (`test_normalisierung.py`), Restrisiko Trailing Spaces → R86 |
+
+Eine Frist, deren Ablauf keine Buchung auslöst, ist Prosa. R84 war der
+Testfall — durchgefallen, in R85 nachgeholt.
+
+## 1. Hauptbefund: `ZEILE <n>` war ein Zeiger in ein bewegtes Ziel
+
+**Test zuerst, rot:**
+
+```
+FAIL Zeiger-Form             nur Position
+FAIL Urteil unter Bewegung   Position STABIL BEHAUPTET, ABER BEWEGLICH
+FAIL Positions-Drift         2 Positionen wechseln das Urteil — NICHT kompensiert
+0/3
+```
+
+Der dritte Fall ist der Beweis, nicht die Behauptung: derselbe Strom,
+dreimal vorne etwas eingefügt — **zwei Positionen tragen danach ein
+anderes Urteil.** Ein Konsument, der später auf demselben Pfad handelt,
+verwirft die falsche Zeile.
+
+**Reparatur:** der Zeiger trägt jetzt **Inhalt**:
+
+```
+ZEILE e1a00da8…e119 ZUSTELLEN;pos=1;
+ZEILE e1a00da8…e119 VERWERFEN;pos=2;art=KANAL-DUPLIKAT;
+ZEILE e1a00da8…e119 WIEDERHOLT;pos=3;art=WIEDERHOLUNG;
+```
+
+Die Position bleibt als Diagnose (`pos=`), sie ist nicht der Zeiger.
+Für unparsebare Zeilen bleibt `pos:<n>` — dort gibt es keinen Inhalt zu
+hashen, die Ausnahme ist im Vertrag benannt.
+
+**3/3 grün.** Die Bewegung ist jetzt irrelevant; genau das konnte kein
+Fixture der vorigen Runde zeigen.
+
+## 2. Zwei Wahrheiten → eine Ableitung
+
+Der Exit entsteht nicht mehr parallel zu den Zeilen, sondern **aus**
+ihnen:
+
+```python
+def exit_aus_zeilen(bericht): ...   # die EINE Quelle
+return exit_aus_zeilen(bericht)      # im Strom-Zweig
+```
+
+`test_projektion.py` prüft `exit == exit_aus_zeilen(zeilen)` über fünf
+Fixtures, inklusive der Kombination „Duplikat + Müll → 4". **5/5.**
+
+Die Migration ist im Vertrag festgeschrieben: *Exit ist Telemetrie,
+Konsumenten lesen Zeilen.* v1–v3-Konsumenten, die nur den Exit lesen,
+sind namentlich als migrationspflichtig gebucht.
+
+## 3. Exit 2: Meta-Achse, aber nicht zeilenlos
+
+```
+Paare=0;…;json=0;ZEILE AUFRUF VERWERFEN;grund=kein_modus;
+```
+
+Jeder 2-Zweig trägt genau **eine** Zeile mit dem Zeiger `AUFRUF` (kein
+Inflations-Hash — es gibt keinen Inhalt). Ein 2 ohne Zeilen war für den
+Konsumenten eine leere Parse bei syntaktisch gültigem Aufruf.
+
+Nebenbefund beim Bauen: `--einwurf /nicht/da --strom /nicht/da` ist
+**Exit 3**, nicht 2 — der Strom ist unprüfbar, das ist ein Inhalts-Urteil
+über den Strom, kein Meta-Fehler. Der erste Testentwurf vermischte die
+Achsen; die Reparatur war der Test, nicht der Code.
+
+## 4. `WIEDERHOLUNG` hat jetzt einen Slot
+
+Das Vokabular hatte drei Werte, der Detektor vier Etiketten. Gerade die
+fehlende Unterscheidung entschied `ADJ` durch Auslassung — `VERWERFEN`
+für beide heißt „bewusste Neusendung blockiert", ohne Betreiberentscheid.
+
+| Etikett | Verdict | Aktion |
+|---|---|---|
+| neu | `ZUSTELLEN` | zustellen |
+| `KANAL-DUPLIKAT` | `VERWERFEN` | verwerfen |
+| `WIEDERHOLUNG` | **`WIEDERHOLT`** | **offen — der Betreiber entscheidet** |
+| unparsebar | `UNGEPRUEFT` | nicht zustellen, alarmieren |
+
+Beide heben den Exit auf 1 (Befund), nur `VERWERFEN` ist eine Aktion.
+`test_adj_slot.py` **4/4**.
+
+## 5. Governance-Zähler → Zeiger
+
+| Alt | Neu |
+|---|---|
+| „fünf blinde Flecken" | **neun Instanzen** mit Runde, Code-Ort und Test (`bringschuld.instanzen`) |
+| „v4" ohne v3 | **Ledger** R76–R85: je Version die Änderung, inkl. der Feststellung, dass R83 die Aktionsänderung **ohne Versionsnennung** buchte |
+
+## 6. Zaun: die Baseline war selbst vom kaputten Filter gebaut
+
+**Dritte Interpretation bestätigt — keine der beiden aus dem Urteil:**
+
+| Messung | Wert |
+|---|---|
+| `count("/")==2` (R83) | 0 |
+| Baseline, aus diesem Filter erzeugt | **162** |
+| Baseline vorgefunden R85 | **282** |
+| `os.walk` R85 (5 neue − 4 gelöschte) | **283** |
+
+162 war nicht „der alte Baum" — es war die Zahl einer Prüfung, die nichts
+sah. Und `--baseline-neu` stand seit R84 **nur im Kommentar**: die
+Regeneration war ein Handgriff, den niemand getan hat. Jetzt gebaut,
+derselbe `os.walk`, der prüft, generiert:
+
+```
+Baseline regeneriert: 283 Skripte unter scripts/
+```
+
+Scope im Vertrag fixiert (`zaun_scope`).
+
+## 7. Coverage: der Zweig, der niemand betrat
+
+`json_pos`/`skip` brachen zur Laufzeit; danach grün an ihnen vorbei. Auch
+diese Runde: der erste Patch setzte drei Zweige, **keiner** wurde
+betreten — die Assertion brach, bevor der Code geschrieben war. Die
+Reihenfolge „lieber Test als Auge" hat es gefangen.
+
+Neu: `test_exit2_zeilen.py` betritt **jeden** 2-Zweig namentlich und
+prüft, dass dort **kein** Inhalts-Hash erfunden wird. **3/3.**
+
+## 8. Grammatik: jetzt der Zaun, nicht die Nachlese
+
+`test_konformitaet.py` war an `ZEILE (\d+)` geschmiedet — 8/8, weil er den
+Vertrag nicht las, sondern eine Kopie davon. Jetzt liest er
+`ausgabe_grammatik.zeile` aus dem Vertrag (Zeiger-Formen, Urteilsliste)
+und schlug beim ersten Lauf **rot** aus:
+
+```
+FAIL Zeilen-Marken   0 Marken, Positionen >= 1
+```
+
+**Encoding-Politik** ist im Vertrag benannt: Maschinen-Tokens
+ASCII-only (`[A-Za-z_][A-Za-z0-9_-]*`), Prosa darf Unicode.
+`UNGEPRUEFT` ist daher Politik, kein Versehen.
+
+## 9. Normalisierung: Frist an den Beweis gebunden
+
+Risiko bleibt akzeptiert — aber die Annahme ist jetzt der Gegenstand der
+Frist, nicht das Risiko:
+
+> **„Frist R86 gilt dem Nachweis, dass Trailing Spaces in Markdown
+> zustellungsneutral sind — nicht dem Trost über das Risiko."**
+
+Verfällt R86 ungebucht, gilt `ADJ`-Präzedenz: Buchung als akzeptiert.
+
+## 10. Stand
+
+| Größe | Wert |
+|---|---|
+| Vertragsfälle | 10/10 |
+| Mutationen | **6/6** (Exit4 zielte auf entfallenen Code — Mutation neu ausgerichtet, jetzt gefangen) |
+| Hash-Eingang | 6/6 |
+| Konsument | 7/7 |
+| Konstanten | 3/3 |
+| Normalisierung | 8/8 |
+| Zeilen-Identität | 4/4 |
+| Konformität | 8/8 |
+| Zaun-Meta | 5/5 |
+| **Zeiger (neu)** | **3/3** |
+| **Projektion (neu)** | **5/5** |
+| **Exit-2-Zeilen (neu)** | **3/3** |
+| **ADJ-Slot (neu)** | **4/4** |
+| Skripte unter `scripts/` | 283 (Baseline = 283, 0 ohne Korb) |
+| Vertrag | **v5** (Ledger R76–R85) |
+
+## 11. Der Satz
+
+> **Der Zeiger trifft die Zeile jetzt, weil er ihren Inhalt trägt und
+> nicht ihre Stelle — und der Exit, der bisher neben den Zeilen stand,
+> wird aus ihnen abgeleitet, so daß es nur noch eine Wahrheit gibt; die
+> Frist, die verstrich, ist gebucht, das Etikett, das fehlte, hat einen
+> Slot, der Zaun, der den Filter überwand, schützt jetzt gegen einen
+> Bestand, der nicht mehr von diesem Filter stammt — aber die Bedingung
+> bleibt dieselbe: nur ein fremder Konsument auf einem Strom, den ich
+> nicht eingefroren habe, beweist, daß der Zeiger auch dort trifft, wo
+> ich nicht hinsehen kann.**
+
+**Nicht getan:** `ING` nicht angeschlossen, kein Produktionslauf, kein
+Commit vor dieser Zeile.

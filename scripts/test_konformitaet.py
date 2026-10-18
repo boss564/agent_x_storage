@@ -22,6 +22,7 @@ Grammatik, aendert sich der Test von selbst.
 from __future__ import annotations
 
 import json
+import json
 import re
 import subprocess
 import sys
@@ -88,12 +89,24 @@ def main() -> int:
           + (f" {verstoesse}" if verstoesse else ""))
     ok += gut
 
-    # 4. Zeilen-Marken mit gueltiger Position.
+    # 4. Zeilen-Marken: der ZEIGER und das URTEIL kommen aus dem Vertrag.
+    #    §A-ZZZZ150 (Runde 85): bis R84 stand hier `ZEILE (\d+)` — der
+    #    Test war an die Positionssyntax geschmiedet und lief an der
+    #    neuen Inhalts-Syntax vorbei. Konformitaet war 8/8, weil sie den
+    #    Vertrag nicht las. Jetzt ist die Grammatik die Quelle.
     gesamt += 1
-    zeilen = re.findall(r"ZEILE (\d+) ([A-Z]+)", out)
-    gut = bool(zeilen) and all(int(n) >= 1 for n, _ in zeilen)
+    vertrag = json.loads((Path(__file__).resolve().parent /
+                          "waechter_vertrag.json").read_text(encoding="utf-8"))
+    zs = vertrag["ausgabe_grammatik"]["zeile"]
+    muster = (r"ZEILE (AUFRUF|pos:\d+|[0-9a-f]{64}) "
+              r"(" + "|".join(zs["urteile"]) + r");")
+    marken = re.findall(muster, out)
+    zeiger_ok = all(z == "AUFRUF" or z.startswith("pos:")
+                    or re.fullmatch(r"[0-9a-f]{64}", z) for z, _ in marken)
+    urteil_ok = all(u in zs["urteile"] for _, u in marken)
+    gut = bool(marken) and zeiger_ok and urteil_ok
     print(f"{'ok  ' if gut else 'FAIL'} Zeilen-Marken            "
-          f"{len(zeilen)} Marken, Positionen >= 1")
+          f"{len(marken)} Marken, Zeiger={zeiger_ok}, Urteil={urteil_ok}")
     ok += gut
 
     print(f"\n{ok}/{gesamt} Konformitaets-Pruefungen gruen")

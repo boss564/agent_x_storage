@@ -183,8 +183,13 @@ MUTATIONEN = [
     ("Konstante", "KANAL-DUPLIKAT={kanal}", "KANAL-DUPLIKAT=37"),
     # Die Exit-Mutation prueft, dass ein Duplikat wirklich blockiert:
     # der Strom-Zweig muss ohne Duplikat 0 liefern.
-    ("Exit", "return aggregiere(1, 4 if _u else 1)", "return aggregiere(0, 0)"),
-    ("Exit4", "4 if LESESTAT[\"json\"] >= JSON_SCHWELLE else 0", "0"),
+    # §A-ZZZZ152 (Runde 85): die Mutation zielt jetzt auf die EINE
+    # Ableitung. "4 if LESESTAT..." existiert nicht mehr — der Exit folgt
+    # aus den Zeilen (exit_aus_zeilen). Eine Mutation auf entfallenen
+    # Code ist kein Fangerfolg, sondern ein Textmuster ohne Ziel.
+    ("Exit", "return exit_aus_zeilen(bericht)",
+     "return 0 if not any('VERWERFEN' in z for z in bericht) else 1"),
+    ("Exit4", '4 if "UNGEPRUEFT" in urteile else 0', "0"),
     ("stderr", "DIE WACHE TRÄGT NICHT", "WACHE LAEUFT"),         # Wort weg
     ("Zweig", None, None),  # Reihenfolge, s. _mutiere_zweig
 ]

@@ -48,9 +48,15 @@ def _lauf(zeilen: list[str]) -> tuple[int, str]:
 
 
 def _zeilenurteile(out: str) -> dict[int, str]:
-    """Position -> Urteil, gelesen aus den `ZEILE <n> <urteil>`-Marken."""
-    return {int(n): u for n, u in
-            re.findall(r"ZEILE (\d+) ([A-Z\-]+)", out)}
+    """Position -> Urteil.
+
+    §A-ZZZZ146 (Runde 85): der Zeiger traegt jetzt den Inhalt (`ZEILE
+    <sha>`), die Position steht als `pos=<n>` daneben. Dieser Test prueft
+    die ZUORDNUNG Inhalt->Position, nicht den Zeiger — dafuer ist
+    `test_zeiger_stabil.py` zustaendig.
+    """
+    paare = re.findall(r"ZEILE \S+ ([A-Z]+);pos=(\d+);", out)
+    return {int(pos): u for u, pos in paare}
 
 
 def main() -> int:
