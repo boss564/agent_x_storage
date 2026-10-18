@@ -662,6 +662,7 @@ def self_test_check_counts() -> list[str]:
     failures.extend(_self_test_reader_calls())
     failures.extend(_self_test_wirkung())
     # §A-NL (Runde 50): der Pruefer ueber den Pruefern — Namensbasen == 0.
+    failures.extend(_self_test_auswahl_truthiness())
     failures.extend(_self_test_name_bases())
     failures.extend(_self_test_anchor_uniqueness())
     if failures:
@@ -4702,22 +4703,72 @@ def _self_test_block_kind() -> list[str]:
         out.append(f"Kopfzeile: committeter Block weicht ab: {hart}")
     # Die Gegenprobe: `U > 0` **ohne** `unvollstaendig` muß rot sein. Das
     # ist der Fehler der Vorrunde, nachgestellt.
+    #
+    # §A-ZZZZ2 (Runde 58): Runde 57 hatte **einen** Gegenlauf — und der
+    # prüfte nur die Abwesenheit von Rauschen. `sieben gemessen` und ein
+    # fehlender `·` fallen aus dem Muster; ein Filter, der nur prüft, was
+    # er erkennt, ist bei Unbekanntem grün. Drei Fälle, alle nötig:
+    #
+    #   muster-konform und falsch   → Meldung mit Begründung
+    #   muster-fremd (kein `·`)     → „Form nicht lesbar"
+    #   Zahl durch Wort ersetzt     → dasselbe, nicht still
     import tempfile as _tf, shutil as _sh
     _d = Path(_tf.mkdtemp())
     try:
         (_d / "order_execution_engine" / "ops").mkdir(parents=True)
         (_d / "order_execution_engine" / "ops" / "KOPFZEILE.md").write_text(
             "<gemessen> <unvollständig> <keine>\n", encoding="utf-8")
-        kopf_kaputt = ("### §71.x — x\n\n```\ntotal=1 chain=0\n"
-                       "kopfzeile: 8 gemessen · 1 nicht gemessen · "
-                       "Prüfer aaa\nKarte: fp\n```\n")
-        (_d / "order_execution_engine" / "ops" / "TAG7_ABNAHME.md").write_text(
-            kopf_kaputt, encoding="utf-8")
-        if not _kopfzeile_errors(_d):
-            out.append("Kopfzeile: `1 nicht gemessen` ohne `unvollstaendig` "
-                       "bleibt grün")
+        kopf = ("### §71.x — x\n\n```\ntotal=1 chain=0\n"
+                "kopfzeile: 8 gemessen · 1 nicht gemessen · "
+                "Prüfer aaa\nKarte: fp\n```\n")
+        for name, text, wort in (
+                ("unvollstaendig fehlt", kopf, "nicht als unvollstaendig"),
+                ("ohne Trenner", kopf.replace(" gemessen · 1", " gemessen 1"),
+                 "nicht lesbar"),
+                ("Wort statt Zahl", kopf.replace("8 gemessen", "sieben gemessen"),
+                 "nicht lesbar")):
+            (_d / "order_execution_engine" / "ops" / "TAG7_ABNAHME.md").write_text(
+                text, encoding="utf-8")
+            got = _kopfzeile_errors(_d)
+            if not any(wort in g for g in got):
+                out.append(f"Kopfzeile: {name} bleibt grün ({got})")
     finally:
         _sh.rmtree(_d, ignore_errors=True)
+    return out
+
+
+def _self_test_auswahl_truthiness() -> list[str]:
+    """§A-ZZZZ6 (Runde 58): `if r:` auf `(0, [])` ist immer wahr.
+
+    Die fünfte Fehlerklasse dieser Akte in ihrer allgemeinen Form: eine
+    Bedingung, die wahr ist, wenn der Gegenstand **fehlt**. Ein
+    `Auswahl(ok=…)`-Objekt wurde versucht und wieder verworfen — es
+    bricht den Sammler (`carries_case` vergleicht `<= 0`) für einen
+    Fehler, der im **Aufrufer** sitzt. Die Wache ist darum hier: jede
+    Funktion in `scripts/`/`check_fixtures.py`, die irgendwo ein Tupel
+    zurückgibt, darf nicht per Wahrheitswert gegated werden.
+    """
+    import ast as _ast
+    out: list[str] = []
+    hier = Path(__file__).resolve().parent
+    for datei in (Path(__file__).resolve(), hier / "check_fixtures.py"):
+        try:
+            tree = _ast.parse(datei.read_text(encoding="utf-8"))
+        except (OSError, SyntaxError):
+            continue
+        tupel = {
+            n.name for n in _ast.walk(tree) if isinstance(n, _ast.FunctionDef)
+            for r in _ast.walk(n)
+            if isinstance(r, _ast.Return) and isinstance(r.value, _ast.Tuple)}
+        for n in _ast.walk(tree):
+            if not isinstance(n, _ast.If):
+                continue
+            t = n.test
+            if (isinstance(t, _ast.Call) and isinstance(t.func, _ast.Name)
+                    and t.func.id in tupel):
+                out.append(f"Akte-Truthiness ({datei.name}): "
+                           f"`if {t.func.id}(...)` prüft einen Tupel — "
+                           "`(0, [])` ist wahr")
     return out
 
 
@@ -7457,6 +7508,15 @@ def main() -> int:
     # beiden Prozentzahlen, und kein Pruefer sah ihn — weil die Ableitung
     # daneben stand und niemand sie rechnete.
     check_prose_fractions(root, rep)
+    # §A-ZZZZ3 (Runde 58): **die Kopfzeile ist ein Tor, kein Bericht.**
+    # Runde 57 hat `_kopfzeile_errors()` gebaut und nur aus dem Selbsttest
+    # aufgerufen — eine Prüfung, die existiert, um zu existieren (§71.45
+    # in neuer Form). Hier hängt sie am Lauf, den der Hook fährt, und
+    # damit am Commit.
+    for _msg in _kopfzeile_errors(root):
+        if "Block ist Vorzustand" in _msg:
+            continue          # kein Fehler: der Block ist committet
+        rep.fail(None, _msg, "siehe ops/KOPFZEILE.md", _msg)
     # §A-NC: --write-count schreibt den Stand mit Grund fort.
     if "--write-count" in sys.argv:
         _save_count_snapshot(rep.checked, _count_reason(sys.argv), root=root)

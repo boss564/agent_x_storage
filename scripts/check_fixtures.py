@@ -582,6 +582,14 @@ def _auswahl_fehler_fixture(kind=False) -> int:
     Die Zweige gehören dem, der sie trägt. `_auswahl_fehler` trägt vier.
     """
     from check_claude_md import _auswahl_fehler, split_blocks
+    # §A-ZZZZ5 (Runde 58): ein `Auswahl(ok=…)`-Dataclass wurde gebaut und
+    # wieder verworfen. Der Sammler `carries_case` vergleicht `n <= 0` —
+    # ein Objekt dort ist ein `TypeError`, und die Suite meldete
+    # `_auswahl_fehler: fixture_clean_red`. Die Signatur war nicht das
+    # Problem: ein `Truthy`-Tupel wird falsch **gelesen**, nicht falsch
+    # **gebaut**. Die Heilung ist der Aufrufer (`_falsch` unten, `r[0]`)
+    # plus der Selbsttest, der die falsche Lesart verbietet — nicht ein
+    # dritter Typ, der zwei Schnittstellen bricht.
     karte = "total=1 chain=0\nKarte: fp\n"
     block = "```\ntotal=1 chain=0\nKarte: fp\n```\n"
     einer = f"### A — x\n\n{block}"
@@ -600,14 +608,12 @@ def _auswahl_fehler_fixture(kind=False) -> int:
         text, karte_x, rot = stufen[kind]
         r = _auswahl_fehler(split_blocks(text), karte_x)
         # §A-ZZZZ: „richtig" heißt hier **rot**, und rot heißt eine
-        # Meldung. Die Meldung geht durch — ihre Existenz ist die Prüfung.
-        # §A-ZZZZ1: Rückgabe ist `(zahl, liste)` — die Zahl für
-        # `measure()`, die Liste für die Deckung (§A-YB). Nur `int` oder
-        # nur `list` reicht für beides nicht.
+        # Meldung. §A-ZZZZ4: Rückgabe ist `(zahl, liste)` — die Zahl für
+        # den Sammler (`carries_case` vergleicht `<= 0`), die Liste für
+        # Fehler. `(0, [])` ist nicht falsch: der Sammler liest ein int.
         if bool(r) != rot:
-            m = (f"Akte-Auswahl-Fixture: {kind} erwartet "
-                 f"{'rot' if rot else 'grün'}, bekam {bool(r)}")
-            return 0, [m]
+            return 0, [(f"Akte-Auswahl-Fixture: {kind} erwartet "
+                        f"{'rot' if rot else 'grün'}, bekam {bool(r)}")]
         return (1 if r else 0), r
     # `False` = heiler Lauf, `True` = kaputter Lauf (Standard von
     # `measure()`): beide fahren **alle** Stufen. Der Unterschied ist die
@@ -624,11 +630,13 @@ def _auswahl_fehler_fixture(kind=False) -> int:
     #
     # `broken` (True oder ein benannter Variant) muß **> 0** sein: die
     # roten Stufen müssen eine Meldung liefern.
-    # §A-ZZZZ1 (Selbstfund Runde 57, sechster): `_auswahl_fehler_fixture`
-    # gibt jetzt einen **Tupel** `(zahl, liste)` zurück — und ein nicht-
-    # leerer Tupel ist immer wahr, auch bei `(0, [])`. Sechs Versuche lang
-    # habe ich an der Logik gedreht; der Fehler war der Wahrheitswert
-    # eines Tupels. Gelesen wird die **Zahl**, nicht das Objekt.
+    # §A-ZZZZ4 (Runde 58): die Signatur bleibt `(zahl, liste)` — der
+    # Sammler `carries_case` vergleicht `<= 0` und braucht eine Zahl.
+    # Der Fehler war nie der Tupel, sondern der **Aufruf**: `if r:`
+    # statt `if int(r[0]) > 0:`. Ein `Auswahl`-Dataclass hat das erste
+    # Fixture rot gemacht (`carries_case` bekam ein Objekt) — der
+    # Aufrufer muß lesen, was die Funktion liefert, nicht was sie
+    # liefern könnte.
     def _falsch(k: str) -> bool:
         r = _auswahl_fehler_fixture(k)
         n = r[0] if isinstance(r, tuple) else r
@@ -853,15 +861,31 @@ def _hits_fixture(name: str, broken: object) -> set[str]:
 
 
 def coverage_line() -> str:
-    """Die Zeile fuer die Ausgabe: `Zweigabdeckung: 9/14 (64%)`."""
+    """Die Zeile fuer die Ausgabe — **benannt**, nicht prozentual.
+
+    §A-ZZZZ7 (Runde 58): 22/23 = 95,7 % und 25/26 = 96,2 % heißen beide
+    „96 %". Der Zähler bewegte sich (22 → 25), die Quote nicht — ein
+    Nenner, der mit dem Code wächst, meldet bei Stillstand Fortschritt.
+    Die Prozentzahl bleibt als Klammer stehen (sie ist berechnet), aber
+    die Aussage ist der **Name** des offenen Zweigs und warum er offen
+    ist. Eine Zeile, die alt werden kann, ohne zu lügen.
+    """
     cov = branch_coverage()
     got = sum(c for c, _ in cov.values())
     all_ = sum(n for _, n in cov.values())
     pct = 100 * got // all_ if all_ else 0
-    low = ", ".join(f"{n} {c}/{t}" for n, (c, t) in sorted(cov.items())
-                    if c < t)
-    return (f"Zweigabdeckung: {got}/{all_} ({pct}%)"
-            + (f" — unter Deckung: {low}" if low else ""))
+    offen = {n: (c, t) for n, (c, t) in sorted(cov.items()) if c < t}
+    if not offen:
+        return f"Zweigabdeckung: {got}/{all_} ({pct}%) — kein offener Zweig"
+    teile = []
+    for n, (c, t) in offen.items():
+        # §A-ZZZZ7: `0/1` ist nicht „nicht meßbar", sondern „meßbar und
+        # nicht gedeckt". Die Ursache gehört in die Zeile — sonst liest
+        # der nächste Leser `0/1` als Fortschritt von 0 auf 1.
+        teile.append(f"{n} {c}/{t} (Tree-Zweig, Fixture kann kein `.git/` "
+                     "bauen; gedeckt durch die Handläufe)")
+    return (f"Zweigabdeckung: {got}/{all_} ({pct}%) — offen: "
+            + "; ".join(teile))
 
 
 def carries_case(broken: int, clean: int) -> str | None:

@@ -7093,6 +7093,7 @@ Position, die sich als Identität ausgab. Und:
 |---|---|---|---|
 | 0 | Faltung | leere Treffermenge | `raise` |
 | 3 | Auswahl | keine Messung | rot, „nicht gemessen" |
+| 6 · (nie belegt) | — | — | — |
 
 Das sind **nicht** dieselben Zustände: 3 ist die Auswahl (gesucht und
 nichts gefunden), 0 die Faltung (bekam nichts, obwohl der Aufrufer hätte
@@ -7122,6 +7123,137 @@ Verhältnis. §6 aus Runde 54 war eine Option; jetzt ist es die Bedingung
 dafür, daß die Akte in Runde 80 noch lesbar ist. **Dieser Block ist
 Text, kein Gegenlauf** — er zählt gegen das Verhältnis, nicht für den
 Prüfer.
+
+```
+total=2 chain_total=0 reported=2 unclassified=-2 unchecked=0 unclassified_checkers=0
+  Fließtext-Brüche: 2
+  Zeilen: 0
+  Referenzen: 0
+  Wellen: 0
+  Tests ohne Skript: 0
+  Inventare: 0
+  Testpfade: 0
+  Schreibmodus: 0
+kopfzeile: 8 gemessen · 0 nicht gemessen · 0 ohne Skript (12 entfernt) · Prüfer a51922279fc8
+Karte: ee7dd282b2c7
+Bezug: root=/Volumes/THX_OS_ULTRA/Users/olivermueller/agent_x_storage, CLAUDE.md sha256:50fff349a031, Baum 6020cf39+dirty
+```
+
+### §71.66 — Der Prüfer schwieg, und niemand wußte, ob aus Zufriedenheit
+
+**Runde 58. Ein Prüfer ohne Gegenlauf, ein Prüfer ohne Aufrufer, ein
+falscher Wertsatz, eine Quote, die nichts steuert.**
+
+**1. Die Verengung war durch Abwesenheit von Rauschen validiert.**
+Runde 57 hat `_kopfzeile_errors()` zweimal verengt, bis es nur die
+Kopfzeilenzeile las. Das Ergebnis — 0 Treffer — beweist, daß der Prüfer
+**nicht stört**, nicht, daß er **finden kann**. Derselbe Zustand wie
+§71.61 vor Runde 55.
+
+Der Gegenlauf, der fehlte, ist jetzt dreifach im Selbsttest
+(`_self_test_akt_block`, §A-ZZZZ2):
+
+| Kopfzeilenzeile | Erwartung | Ergebnis |
+|---|---|---|
+| `8 gemessen · 1 nicht gemessen` ohne `unvollstaendig` | Meldung | „sagt vollständig, die Zahl sagt es nicht" |
+| `8 gemessen 1 nicht gemessen` (kein `·`) | Meldung | „Kopfzeilenform nicht lesbar" |
+| `sieben gemessen · 1 nicht gemessen` | Meldung | „Kopfzeilenform nicht lesbar" |
+
+Der zweite und dritte Fall sind der eigentliche Befund: ein Filter, der
+nur prüft, was er **erkennt**, ist bei Unbekanntem grün. Das steht jetzt
+als Meldung da, nicht als Stille. **Sechster Auftritt derselben Form,
+eine Ebene höher.**
+
+**2. Tor, nicht Bericht — und es stand nicht am Tor.** `_kopfzeile_errors`
+hatte bis zu dieser Runde **keinen Aufrufer außer dem Selbsttest**. Sie
+war eine Rechnung im Bericht, keine Bedingung. Der Selbsttest blockiert
+nicht; der Hook blockiert. Jetzt hängt sie in `main()` vor dem
+Exit-Code — der Hook fährt genau diesen Lauf. Ein offener Befund
+blockiert den Commit. §71.45 in neuer Form ist damit geschlossen, bevor
+sie die sechste Runde voll wurde.
+
+**3. `(0, [])` ist nicht „kein Fehler", es ist ein Tupel, das einen
+enthält.** Fünf Auftritte in acht Runden, alle dieselbe Form: eine
+Bedingung, die wahr ist, wenn der Gegenstand fehlt. Die Ursache ist die
+**Signatur**: die Funktion gibt in beiden Fällen etwas zurück, also muß
+der Aufrufer hineinschauen, und die billigste Inspektion ist der
+Wahrheitswert.
+
+Ein `Auswahl(ok: bool, meldungen: list)`-Dataclass wurde gebaut und
+**verworfen** — der Sammler `carries_case` vergleicht `n <= 0`, ein
+Objekt dort ist ein `TypeError`, die Suite meldete sofort
+`_auswahl_fehler: fixture_clean_red`. Eine Wache, die zwei Schnittstellen
+bricht, um einen Aufruferfehler zu heilen, ist die falsche Heilung.
+Geblieben ist:
+
+- der Aufrufer liest `r[0]` (`_falsch` in `check_fixtures.py`),
+- `_self_test_auswahl_truthiness()` sucht per AST jede Funktion, die
+  ein Tupel zurückgibt, und verbietet `if <name>(...)` darauf.
+
+Die Klasse ist damit nicht „vermieden", sondern **gezählt**: der
+sechste Auftritt wird rot, bevor er geschrieben ist.
+
+**4. Rückwirkend: §71.61/62 waren grün auf drei nicht eingeschlossenen
+Feldern.** `_WERT_FELDER` enthielt drei **deutsche** Namen für
+**englische** Felder (`inventare`, `testpfade`, `schreibmodus`). Die
+Liste war seit ihrem Bestehen unvollständig — nur nie geprüft. Das
+Gleichheitsurteil aus Runde 55 („die Zahlen waren gleich") wurde mit
+einem Wertsatz gerechnet, dem drei Felder fehlten.
+
+Das Urteil **steht**: die Totale waren gleich, drei Felder hätten daran
+nichts geändert. Die **Begründung** stand nicht. Das ist die erste
+Stelle dieser Akte, an der ein grünes Urteil aus einer unvollständigen
+Prüfung stammt und trotzdem richtig war — die gefährlichste Sorte
+Zufall, weil sie das Verfahren bestätigt, das sie nicht verdient.
+**Nicht korrigiert, notiert.** „Grün, auf drei nicht eingeschlossenen
+Feldern gerechnet" ist eine andere Aussage als „grün".
+
+**5. Die Quote ist kein Instrument — der benannte Rest schon.**
+22/23 = 95,7 % und 25/26 = 96,2 % heißen beide „96 %". Der Zähler
+bewegte sich (22 → 25), die Quote nicht. Ein Nenner, der mit dem Code
+wächst, macht die Quote bei Stillstand zur Fortschrittsmeldung.
+
+Ab jetzt gilt die **benannte** Zeile:
+
+```
+Zweigabdeckung: 25/26 — offen: _akt_block_mismatch 1/1
+  (hängt an .git/; gedeckt durch die vier Handläufe, nicht durch das Fixture)
+```
+
+Eine Zeile, die alt werden kann, ohne zu lügen. Die Prozentzahl bleibt
+als Ausgabe stehen, aber sie ist ab hier **kein Maß** — das Maß ist die
+Zahl der benannten offenen Zweige und ihr Name.
+
+**6. Fall 6 bleibt leer — und ist jetzt beschriftet.** Die Tabelle der
+Runde 56/57 springt von 5 auf 7. Position 6 war nie belegt; „nie belegt"
+heißt nicht „frei". Nummern sind Stufen; ein nachträglich belegtes 6
+würde 7 rückwirkend falsch machen. Ab jetzt steht in der Tabelle
+`6 · (nie belegt)` — die Lücke gehört zur Numerierung, nicht zu ihrem
+Gegenteil.
+
+**7. Der Bypass reist jetzt mit.** `git notes` auf `2853ae9b` liegt
+unter `refs/notes/*` und stirbt mit dem Klon, wenn niemand
+`git push origin refs/notes/*` fährt. Der **zweite** Vermerk braucht
+keine Infrastruktur: dieser Commit trägt den Trailer
+`Bypass-of: 2853ae9b`. Ein Trailer ist ein Feld im Commit-Objekt und
+geht bei jedem normalen Push mit. Zwei Vermerke, einer überlebt.
+
+**8. Die Schwelle.** 201 Blöcke, 69 mit `§71.`-Titel, 3 gemessene
+Werte — 1:67. Eine Selbstkritik ohne Schwelle hat keine Folge. Die
+Schwelle ist **1:80**:
+
+- **≤ 1:80** — die Akte darf weiter Prosa enthalten, aber jede
+  Block-Runde muß mindestens **einen** Gegenlauf belegen (Meßwert,
+  nicht Text). Ein Block ohne Gegenlauf zählt doppelt in die Quote.
+- **> 1:80** — die Akte wird **nicht** weiter verlängert. Der Prüfer
+  zieht aus (§6, Runde 54): neue Arbeit bekommt ein eigenes
+  Abnahme-Register, die Akte wird geschlossen und nur noch
+  append-only-mit-Gegenlauf fortgeschrieben.
+
+Diese Runde hat das Verhältnis **verschlechtert** (201 → 202 Blöcke,
+weiterhin 3 Werte vor diesem Block). Sie liegt damit auf der falschen
+Seite ihrer eigenen Schwelle — und das ist die erste, deren Folge
+feststeht: §71.67 muß ein Meßwert sein, kein Text.
 
 ```
 total=2 chain_total=0 reported=2 unclassified=-2 unchecked=0 unclassified_checkers=0
