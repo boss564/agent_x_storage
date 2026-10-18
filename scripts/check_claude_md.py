@@ -8324,6 +8324,8 @@ MESSBEREICH: dict[str, tuple[str, ...]] = {
     # steht sie hier als eigener Bereich: wer sie ändert, muß wissen,
     # daß er die Bedingung ändert, unter der „neue Runde" definiert ist.
     "meldung_wache": ("scripts/meldung_digest.py",),
+    # §A-ZZZZ111 (Runde 77): Sensor am Einwurf statt am Archiv.
+    "einwurf_wache": ("scripts/einwurf_waechter.py",),
     "protokoll": ("order_execution_engine/ops/TAG7_ABNAHME.md",
                   "order_execution_engine/ops/BERICHT.md"),
 }

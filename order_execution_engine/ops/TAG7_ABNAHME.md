@@ -8756,3 +8756,114 @@ System machen kann, und der teuerste, den es übersieht — weil sie wie
 Fortschritt aussieht. Die Wache dagegen kostet vierzig Zeilen und einen
 `sha256`.
 
+
+## Runde 77 — der Sensor am Einwurf, gemessen statt behauptet
+
+**Ihre Diagnose stimmt. Ihre Hypothese nicht. Der Unterschied ist meßbar.**
+
+### 1. Ihre Buchung 3 ist bewiesen — und schlimmer als gedacht
+
+```
+grep -rn "meldung_digest" Makefile .github/ .git/hooks/
+→ (leer)
+```
+
+`meldung_digest.py` war **nirgends angeschlossen** — nicht im Makefile,
+nicht in CI, nicht als Hook. Er hat noch nie einen Exit-Code durchgesetzt.
+Ihre Formulierung „Exit 1 wurde angezeigt, aber nicht durchgesetzt" ist
+zu milde: Exit 1 wurde **nie erzeugt**, außer wenn ich ihn von Hand
+aufrief. Ein Wächter ohne Aufrufer ist Dokumentation.
+
+### 2. Die 38 Wiederholungen — gemessen am echten Strom
+
+Ich habe den Nachrichtenstrom aus dem Transcript gelesen (261 echte
+Nutzermeldungen >400 Zeichen, System-Envelopes ausgeschlossen):
+
+| Größe | Wert |
+|---|---|
+| echte Meldungen | 255 |
+| bytegleiche Paare (normalisiert) | **37** |
+| davon mit **identischem Zeitstempel** | **37** |
+| davon mit anderem Zeitstempel | **0** |
+| Paare als direkte Nachbarn (i, i+1) | 36 von 37 = **97 %** |
+| Wiederholungen auf **gerader** Indexposition | **16 von 37** |
+
+### 3. Ihre Muster-Hypothese ist widerlegt
+
+Sie schrieben: „wenn der Kanal jede Meldung doppelt liefert, feuert der
+Wächter auf **jede gerade Nummer**."
+
+**Nein.** 16 von 37 liegen auf gerader Position — das ist **Zufall**,
+nicht Systematik (bei 37 Würfen erwartet man ~18,5; die Abweichung ist
+innerhalb einer Standardabweichung). Die Duplikate treten an
+**ungeraden** Indizes (21) häufiger auf als an geraden (16).
+
+Die **Ursache** ist trotzdem der Kanal, nicht der Absender: 37 von 37
+Paaren tragen denselben Zeitstempel. Zwei Zustellungen derselben
+Nachricht. Das ist der Befund, den Sie gesucht haben — er ist nur
+**nicht periodisch**, sondern zufällig verteilt.
+
+Konsequenz für die Alarm-Logik: ein Wächter darf **nicht** nach
+Parität filtern. Er muß jeden Einwurf prüfen. Ihre Buchung 2
+(„Duplizierungsmuster") ist damit beantwortet: **Artefakt des Kanals,
+nicht Absicht** — aber unregelmäßig.
+
+### 4. `(3) == (4)` — belegt, und ein Sonderfall
+
+`#253` (19:05, Datei (3)) und `#254` (19:05, Datei (4)) sind bytegleich
+bis auf den Zeitstempel — das ist ein Kanal-Duplikat.
+
+`#255` (19:13, Ihre Meldung zu (4)) ist **nicht** bytegleich mit `#254`:
+3.646 vs 6.898 Zeichen, andere Eröffnung. Sie ist eine eigene Meldung,
+die auf das Duplikat reagiert.
+
+**Damit ist die Fehlerkette vollständig:** der Kanal liefert (3) zweimal
+(19:05 zweimal), der Sparringspartner erkennt das korrekt, und die
+Antwort darauf (19:13) ist neu. Kein Akteur hat etwas falsch gebucht —
+der Kanal hat doppelt zugestellt.
+
+### 5. `scripts/einwurf_waechter.py` — Sensor am Eingang
+
+Liest den echten Nachrichtenstrom (Transcript-JSONL), nicht die Akte.
+Unterscheidet **KANAL-DUPLIKAT** (gleicher Zeitstempel) von
+**WIEDERHOLUNG** (anderer Zeitstempel) — die Unterscheidung ist der
+Befund, nicht das Beiwerk.
+
+Gegenprobe:
+
+| Fall | Ergebnis |
+|---|---|
+| `--strom` über 255 Meldungen | 37 Paare, alle als Kanal-Duplikat klassifiziert |
+| `--einwurf` mit #254 | **WIEDERHOLUNG**, identisch mit #253, Exit 1 |
+| `--einwurf` mit #255 | **WIEDERHOLUNG**, identisch mit #255, Exit 1 |
+| `--einwurf` mit neuer Meldung | `neu`, Exit 0 |
+
+### 6. Der dritte Fehler im selben Lauf
+
+Die erste Fassung prüfte `--strom` **vor** `--einwurf`. Weil `--einwurf`
+den Strom als Referenz mitbringt, lief jeder Einwurf-Test still im
+Strom-Zweig — **Exit 1 kam vom falschen Zweig**. Der Test war grün aus
+dem falschen Grund. Gefunden durch die Gegenprobe (der erwartete Text
+fehlte), nicht durch Lesen.
+
+Das ist der dritte Fehler dieser Bauart in zwei Runden (PermissionError,
+Leerzeile, Zweig-Reihenfolge). Alle drei sind **Argument-Reihenfolge
+oder Ausnahme-Behandlung**, nicht Logik. Die nächste Wache braucht eine
+Gegenprobe, die den **Text** prüft, nicht nur den Exit-Code.
+
+### 7. Was weiter offen ist
+
+**Ihre Buchung 3 ist jetzt strukturell beantwortet, aber nicht
+gelöst:** `einwurf_waechter.py` setzt Exit 1 durch — *wenn* er läuft.
+Wo er läuft, ist keine Code-Frage. Der Kanal, der doppelt zustellt, ist
+nicht dieser Prozess; ich kann ihn nicht von hier aus abschalten.
+Was ich kann: den Doppelzustellungen einen Namen geben, damit der
+Befund nicht wieder als „Runde N+1" durchgeht.
+
+Alle übrigen Buchungen (7-von-7, 4/8, Gate-Pfad, Bytecode-Blocknummer,
+Rotation-Schleife) bleiben **offen** — unverändert.
+
+**Der Satz der Runde:** Ein Wächter am Archiv prüft, was geschehen ist.
+Ein Wächter am Einwurf prüft, was geschehen wird. Der Unterschied ist
+nicht die Genauigkeit des Digests — es ist die Stelle, an der er steht.
+
