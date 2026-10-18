@@ -594,17 +594,18 @@ def self_test_check_counts() -> list[str]:
     failures.extend(_self_test_calibration_classes())
     failures.extend(_self_test_probe_anchors_self())
     failures.extend(_self_test_reads_without_root())
+    failures.extend(_self_test_default_root())
     if failures:
         return failures
     # §A-MN (Runde 44): die drei neuen Pruefer sind **eigene** Selbsttests
     # und muessen hier erscheinen — ein Selbsttest, der nicht in der
     # Kopfzeile steht, ist ein Selbsttest, den niemand bucht. Die Summe
     # steht in der Ausgabe, nicht im Kommentar.
-    _SELF_TEST_SCOPE[0] = ("29/29 (5 Zaehlung + 5 Bezugsraum + 14 "
+    _SELF_TEST_SCOPE[0] = ("30/30 (5 Zaehlung + 5 Bezugsraum + 14 "
                            "Differenz/Nenner/Ort/Einheit/Zwillingspfad"
                            " + 1 root-Zaehlung + 1 Literal-Regel"
                            " + 1 Klassenliste + 1 Selbstprobe"
-                           " + 1 Lesepfad, 28 Zusagen live)")
+                           " + 1 Lesepfad + 1 Default-Ort, 28 Zusagen live)")
 
 
 def _self_test_root_counts() -> list[str]:
@@ -665,6 +666,12 @@ def _self_test_root_counts() -> list[str]:
 # der Pruefling darf sie nur verfehlen. Ausnahmen sind benannt: zwei
 # Messungen duerfen verglichen werden (die Aussage ist dann die
 # Differenz), benannte Konstanten in Grossbuchstaben sind Literale.
+# §A-ML: Namen, die im Test einen **selbstgeschriebenen** Quellethext
+# tragen. Sie sind die Erwartung, nicht der Pruefling.
+_CONSTRUCTION_CONSTS = ("anch", "marker", "A", "sep", "probe", "backward",
+                        "src_probe", "fake", "fixture")
+
+
 def _str_concat_of_literals(n: "ast.AST", consts: tuple[str, ...]) -> bool:
     """Ist `n` eine Verkettung aus String-Literalen und `consts`? (\u00a7A-ML)
 
@@ -792,11 +799,11 @@ def _self_test_literal_errors(src: str | None = None) -> list[str]:
                 # der Pruefling. Er ist vollstaendig Literal, sobald man
                 # die benannten Konstanten (`anch`) einsetzt.
                 if isinstance(s, ast.BinOp) and _str_concat_of_literals(
-                        s, ("anch", "marker", "A", "sep")):
+                        s, _CONSTRUCTION_CONSTS):
                     continue
                 # Der Call traegt die Konstruktion **innen**: `f("x" + anch)`.
                 if isinstance(s, ast.Call) and all(
-                        _str_concat_of_literals(a, ("anch", "marker", "A", "sep"))
+                        _str_concat_of_literals(a, _CONSTRUCTION_CONSTS)
                         or is_literal(a) or isinstance(a, ast.Dict)
                         for a in s.args):
                     continue
@@ -859,8 +866,16 @@ def calibration_run(root: Path, text: str | None = None,
         # §A-MQ (Runde 45): Pruefer, die **nur** die Kette faehrt. Sie
         # stehen in keiner Klasse — genau darum sind sie der Lueckenfall,
         # den `unclassified` zaehlen muss.
+        # §A-MU (Runde 46): und sie gehoeren in `reported`. Sonst sind
+        # `total` und `reported` im einzigen Zustand gleich, in dem sich
+        # die drei Zahlen des Laufs trennen koennten — im eigenen Baum
+        # sind alle drei null und widersprechen sich nicht.
         for _, extra in extra_checkers:
+            before = len(rep.problems)
             extra(rep)
+            lid = len(reported)
+            reported.append(Report())
+            reported[lid].problems = rep.problems[before:]
 
     doc = text if text is not None else (root / "CLAUDE.md").read_text(
         encoding="utf-8")
@@ -910,7 +925,122 @@ def calibration_run(root: Path, text: str | None = None,
         # geht einen dritten.
         "reported": sum(len(rep.problems)
                         for rep in reported),
+        # §A-MT (Runde 46): die **Gegenrichtung**. `unclassified` zaehlt
+        # Pruefer, die die Kette faehrt und keine Klasse kennt. Der Fehler
+        # der letzten Runde war ein Pruefer zu **wenig**:
+        # `check_undocumented_tests` stand in `main` und nicht hier. Das
+        # faengt nur eine Differenz zwischen zwei Mengen — beide
+        # Richtungen, nicht eine.
+        "unchecked": _checker_gap("main", "calibration_run"),
+        "unclassified_checkers": _checker_gap("calibration_run", "main"),
     }
+
+
+def _checker_gap(fn_a: str, fn_b: str, src: str | None = None) -> int:
+    """Pruefer, die `fn_a` ruft und `fn_b` nicht kennt.
+
+    Die Menge kommt aus dem **AST beider Funktionen**, nicht aus einer
+    Handliste. Genau das war der Fehler, den die Klassenliste verhindern
+    sollte: fuenf Pruefer von Hand, sechs im Code.
+
+    `_checker_gap("main", "calibration_run")` = `unchecked`: was die
+    Produktion faehrt und der Kalibrierlauf nicht sieht — der Fall der
+    letzten Runde. Die Umkehrung ist `unclassified_checkers`: ein Pruefer
+    im Kalibrierlauf, den niemand in der Produktion faehrt.
+    """
+    import ast
+    text = src if src is not None else Path(__file__).read_text(encoding="utf-8")
+    tree = ast.parse(text)
+
+    def calls(fn_name: str) -> set[str]:
+        for n in tree.body:
+            if isinstance(n, ast.FunctionDef) and n.name == fn_name:
+                return {c.func.id for c in ast.walk(n)
+                        if isinstance(c, ast.Call)
+                        and isinstance(c.func, ast.Name)
+                        and c.func.id.startswith("check_")}
+        return set()
+
+    a, b = calls(fn_a), calls(fn_b)
+    if not a or not b:
+        return 0        # Testprobe ohne beide Funktionen: nichts zu beweisen
+    return len(a - b)
+
+
+def _default_root_errors(src: str | None = None) -> list[str]:
+    """Ist der Ort ein **Default**? (§A-MV, Runde 46)
+
+    `_reads_without_root` unterscheidet „hat `root`" von „ohne `root`".
+    Die kranke Form ist „hat `root` und benutzt es **manchmal** nicht":
+
+        def version_line(root=None):
+            p = root or Path.cwd()      # gelesen wird default-relativ
+
+    Der Pruefer hätte sie nicht gefunden: der Name steht in seiner
+    Erlaubnisliste, der Lesezugriff geht ueber `p`, und `p` geht ueber
+    einen Fallback. **Die Signatur des Fehlers ist der Default.**
+
+    Drei Formen, jede ein Verstoss:
+
+      1. `root=None` als Vorgabewert — ein Lesepfad ohne Bezug ist dann
+         die Vorgabe, nicht die Ausnahme.
+      2. `X or Path.cwd()` / `X or "."` im Rumpf — der Fallback liest
+         relativ, auch wenn `root` gesetzt ist.
+      3. `os.getcwd()` / `Path.cwd()` im Rumpf ohne `or` — derselbe Ort,
+         ohne dass ein Aufrufer ihn steuern kann.
+
+    **Nebenwirkung, ehrlich:** `root=None` ist vermutlich an einigen
+    Stellen bewusst gesetzt, damit Tests ohne Argument rufen koennen. Das
+    ist Aufrufkomfort — und der gehoert in den Aufrufer, nicht in die
+    Signatur. Der Pruefer meldet darum **jede** Form; die erste Reaktion
+    darf nicht „Ausnahme" heissen.
+    """
+    import ast
+    text = src if src is not None else Path(__file__).read_text(encoding="utf-8")
+    tree = ast.parse(text)
+    out: list[str] = []
+
+    def is_none(n: ast.AST | None) -> bool:
+        return isinstance(n, ast.Constant) and n.value is None
+
+    def is_cwd(n: ast.AST) -> bool:
+        return (isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
+                and n.func.attr == "cwd"
+                and isinstance(n.func.value, ast.Name)
+                and n.func.value.id in ("Path", "os"))
+
+    for fn in ast.walk(tree):
+        if not isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        args = fn.args.args + fn.args.kwonlyargs
+        defaults = list(fn.args.defaults) + [
+            d for d in fn.args.kw_defaults if d is not None]
+        # (1) Ortsparameter mit Default None
+        offset = len(fn.args.args) - len(fn.args.defaults)
+        for i, d in enumerate(fn.args.defaults):
+            name = fn.args.args[offset + i].arg
+            if name in ("root", "doc_root", "repo") and is_none(d):
+                out.append(
+                    f"{fn.name} (@L{fn.lineno}): `{name}=None` als "
+                    f"Vorgabewert — Leseort ist die Vorgabe")
+        # (2) `or Path.cwd()` im Rumpf — der Fallback
+        for n in ast.walk(fn):
+            if isinstance(n, ast.BoolOp) and isinstance(n.op, ast.Or):
+                if any(is_cwd(v) for v in n.values):
+                    out.append(
+                        f"{fn.name} (@L{n.lineno}): `or Path.cwd()` — "
+                        f"Fallback liest relativ")
+                elif any(isinstance(v, ast.Constant) and v.value == "."
+                         for v in n.values):
+                    out.append(
+                        f"{fn.name} (@L{n.lineno}): `or '.'` — "
+                        f"Fallback liest relativ")
+            # (3) cwd im Rumpf ohne `or`
+            if is_cwd(n) and not isinstance(n, ast.BoolOp):
+                out.append(
+                    f"{fn.name} (@L{n.lineno}): `Path.cwd()` im Rumpf — "
+                    f"Ort ist nicht steuerbar")
+    return out
 
 
 def _reads_without_root(src: str | None = None) -> list[str]:
@@ -1070,6 +1200,76 @@ def _self_test_reads_without_root() -> list[str]:
     return out
 
 
+def _self_test_default_root() -> list[str]:
+    """Findet der Default-Pruefer die drei Formen? (§A-MV)
+
+    Erwartungen als **Literale mit Herkunft**: von vier Probefunktionen
+    sind genau **zwei** krank (`root=None` plus `or Path.cwd()`, und
+    `Path.cwd()` im Rumpf), zwei sind sauber (`root` ohne Default,
+    `root=Path("/tmp")`). Die Gesamtzahl der Fundstellen wird **nicht**
+    behauptet — sie ist die Buchung, nicht die Zusicherung.
+
+    **Und sie steht als Zahl im Ergebnis**, nicht als Schwelle: die
+    Akte soll den Stand kennen, nicht dulden. Ein Gate, das heute den
+    Stand X hat und X erlaubt, ist ein Literal gegen sich selbst.
+    """
+    out: list[str] = []
+    probe = (
+        "def version_line(root=None):\n"
+        "    p = root or Path.cwd()\n"
+        "    return (p / 'x').read_text()\n"
+        "def check_cwd(rep):\n"
+        "    return Path.cwd() / 'x'\n"
+        "def ok_fn(root):\n"
+        "    return (root / 'x').read_text()\n"
+        "def ok_default(root=Path('/tmp')):\n"
+        "    return (root / 'x').read_text()\n"
+    )
+    got = _default_root_errors(probe)
+    names = {g.split(" ")[0] for g in got}
+    if names != {"version_line", "check_cwd"}:
+        out.append(f"Default-Pruefer: Funktionen {sorted(names)}, "
+                   f"erwartet ['check_cwd', 'version_line']")
+    if "`root=None` als Vorgabewert" not in " ".join(got):
+        out.append("Default-Pruefer findet `root=None` nicht")
+    if "`or Path.cwd()`" not in " ".join(got):
+        out.append("Default-Pruefer findet den Fallback nicht")
+    for name in ("ok_fn", "ok_default"):
+        if any(g.startswith(name) for g in got):
+            out.append(f"Default-Pruefer meldet {name} — legitime Form")
+    return out
+
+
+def calibration_card(root: Path | None = None) -> str:
+    """Der Block, den die Akte zitiert — als **Ausgabe**, nicht als Absatz.
+
+    Die Akte hat seit Runde 42 eine Regel: jede Zahl traegt ihren Bezug.
+    Die Kopfzeile nennt `root` und `sha256`, die Felder sind einzeln rot
+    gemessen. **Der Ergebnisblock war die einzige Zahlengruppe ohne
+    Bezugszeile** — er hatte keinen `root`, keine `sha256`, keinen
+    Commit-Hash des Laufs, der ihn erzeugt hat. Deshalb konnte eine
+    einzelne Zahl verschwinden, ohne dass es auffiel.
+
+    Ausgabe: der Block mit einer `Bezug:`-Zeile darunter, im selben
+    Format wie die Kopfzeile. Wer ihn in die Akte kopiert, kopiert eine
+    Messung, keinen Absatz.
+    """
+    import hashlib
+    base = root or Path(__file__).resolve().parent.parent
+    rep = calibration_run(base)
+    doc = (base / "CLAUDE.md").read_text(encoding="utf-8")
+    sha = hashlib.sha256(doc.encode("utf-8")).hexdigest()[:12]
+    lines = [f"total={rep['total']} chain_total={rep['chain_total']} "
+             f"reported={rep['reported']} unclassified={rep['unclassified']} "
+             f"unchecked={rep['unchecked']} "
+             f"unclassified_checkers={rep['unclassified_checkers']}"]
+    for name, n in rep["classes"]:
+        lines.append(f"  {name}: {n}")
+    lines.append(f"Bezug: root={base}, CLAUDE.md sha256:{sha}, "
+                 f"Baum {_tree_ref(base)}")
+    return "\n".join(lines)
+
+
 def _self_test_calibration_classes() -> list[str]:
     """Kommt die Klassenliste aus dem Lauf — und schliesst sie? (§A-MM)
 
@@ -1160,6 +1360,50 @@ def _self_test_calibration_classes() -> list[str]:
         if "Luecke" in [n for n, _ in gap["classes"]]:
             out.append("Kalibrierlauf: Zusatzpruefer ist in die Klassen "
                        "gerutscht und verdeckt die Luecke")
+        # §A-MU (Runde 46): **hier** trennen sich die drei Zahlen. Im
+        # eigenen Baum sind total, chain_total und reported alle null und
+        # widersprechen sich nicht; der Zusatzpruefer ist der einzige
+        # Zustand im Selbsttest, in dem `reported` beweisen muss, dass es
+        # unabhaengig entsteht. Erwartung: `reported` waechst mit der
+        # Kette, `total` bleibt — und beide Zahlen sind **verschieden**.
+        if gap["reported"] != gap["chain_total"]:
+            out.append(f"Kalibrierlauf: reported {gap['reported']} != "
+                       f"chain_total {gap['chain_total']} — der "
+                       f"Zusatzpruefer fehlt in der Meldung")
+        if gap["reported"] == gap["total"]:
+            out.append(f"Kalibrierlauf: reported == total ({gap['total']}) "
+                       f"— die drei Zahlen trennen sich nicht")
+    # §A-MT: beide Richtungen der Pruefer-Differenz. Eine Probe, in der
+    # `main` einen Pruefer kennt, den der Lauf nicht kennt, muss als
+    # `unchecked` erscheinen — das war der Fehler der letzten Runde. Die
+    # Umkehrung muss als `unclassified_checkers` erscheinen.
+    probe = (
+        "def main():\n"
+        "    check_a()\n"
+        "    check_b()\n"
+        "def calibration_run():\n"
+        "    check_a()\n"
+    )
+    if _checker_gap("main", "calibration_run", probe) != 1:
+        out.append("Pruefer-Differenz: `unchecked` findet den fehlenden "
+                   "Pruefer nicht (erwartet 1)")
+    backward = (
+        "def main():\n"
+        "    check_a()\n"
+        "def calibration_run():\n"
+        "    check_a()\n"
+        "    check_c()\n"
+    )
+    if _checker_gap("calibration_run", "main", backward) != 1:
+        out.append("Pruefer-Differenz: `unclassified_checkers` findet den "
+                   "unproduktiven Pruefer nicht (erwartet 1)")
+    # Und die eigene Datei: beide Differenzen sind heute 0.
+    if _checker_gap("main", "calibration_run") != 0:
+        out.append("Pruefer-Differenz: main ruft einen Pruefer, den der "
+                   "Kalibrierlauf nicht kennt")
+    if _checker_gap("calibration_run", "main") != 0:
+        out.append("Pruefer-Differenz: der Kalibrierlauf ruft einen Pruefer, "
+                   "den main nicht faehrt")
     return out
 
 

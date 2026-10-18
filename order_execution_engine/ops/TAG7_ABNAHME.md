@@ -5514,4 +5514,80 @@ fehlender Prüfer gerade nichts meldet.
 Fehler in der Reparatur desselben Fehlers gemacht, zweimal, und beide
 Male hat ihn eine Messung gefunden und nicht das Hinsehen.**
 
+### §71.52 — Runde 46: zwei Differenzen statt einer, und ein Block als Ausgabe
 
+Die Buchung dieser Runde hat vier Teile, und der erste war der Fehler
+der letzten Runde in der Gegenrichtung.
+
+**1. `unchecked` — Klassen ohne Prüfer.** `extra_checkers` schiebt einen
+Prüfer in die Kette, der in keiner Klasse steht; `unclassified` zählt
+genau das. Der Fehler von Runde 44 war aber ein Prüfer zu **wenig**:
+`check_undocumented_tests` stand in `main` und nicht in `calibration_run`.
+Eine Differenz zwischen zwei Mengen, die nur in eine Richtung geprüft
+wird, ist eine halbe Differenz. Jetzt gibt es `_checker_gap(a, b)` — die
+Menge kommt aus dem **AST beider Funktionen**, nicht aus einer Handliste:
+
+| Richtung | Aufruf | erwartet |
+|---|---|---|
+| Prüfer ohne Klasse | `_checker_gap("calibration_run", "main")` | 0 |
+| Klasse ohne Prüfer | `_checker_gap("main", "calibration_run")` | 0 |
+
+Die Probe `main` ruft `check_a(), check_b()`, `calibration_run` ruft
+`check_a()` liefert `1` — und die Umkehrung in der anderen Probe
+ebenfalls `1`. Beide Richtungen sind heute `0/0`; das ist der Stand,
+nicht die Zusicherung.
+
+**2. `total` und `reported` trennen sich.** Der Zusatzprüfer lief nur in
+der Kette und nicht in `reported` — damit waren `total` und `reported` im
+einzigen Zustand gleich, in dem sich die drei Zahlen trennen könnten.
+Gemessen: ohne Zusatz `1/1/1`, mit Zusatz `total=1, reported=2,
+chain_total=2`. Die Erwartung im Selbsttest ist `reported == chain_total`
+**und** `reported != total`.
+
+**3. Der Default ist der Fehler.** `_reads_without_root` unterscheidet
+„hat `root`" von „ohne `root`"; die kranke Form ist „hat `root` und
+benutzt es nicht immer":
+
+```python
+def version_line(root=None):
+    p = root or Path.cwd()      # gelesen wird default-relativ
+```
+
+Der Prüfer hätte sie nicht gefunden — `root` steht in seiner
+Erlaubnisliste, der Lesezugriff geht über `p`, `p` über einen Fallback.
+`_default_root_errors` meldet drei Formen: `root=None` als Vorgabewert,
+`X or Path.cwd()`/`X or "."` im Rumpf, `Path.cwd()`/`os.getcwd()` im
+Rumpf. Die Probe mit vier Funktionen (zwei krank, zwei sauber) ist grün;
+der eigene Baum hat **19 Fundstellen** (12 × `root=None`, 7 × `cwd` im
+Rumpf) — überwiegend bewusster Aufrufkomfort (`repo_root`,
+`_snapshot_path`, `_tree_ref`), der nach dieser Akte in den Aufrufer
+gehört, nicht in die Signatur. Die erste Fundstelle ist `check_counts` —
+dieselbe Funktion, deren Signatur der Fehler der letzten Runde war.
+
+**4. Der Block ist eine Ausgabe.** `calibration_card()` gibt den
+Ergebnisblock **mit** `Bezug:`-Zeile aus (`root`, `CLAUDE.md`-sha256,
+Baum). Er war die einzige Zahlengruppe in der Akte ohne Bezug — deshalb
+konnte eine Zahl verschwinden, ohne dass es auffiel. Der Block unten ist
+kopiert, nicht getippt:
+
+```
+total=0 chain_total=0 reported=0 unclassified=0 unchecked=0 unclassified_checkers=0
+  Zeilen: 0
+  Referenzen: 0
+  Wellen: 0
+  Tests ohne Skript: 0
+  Inventare: 0
+Bezug: root=/Volumes/THX_OS_ULTRA/Users/olivermueller/agent_x_storage, CLAUDE.md sha256:69159540db89, Baum 1e0d9e5a+dirty
+```
+
+Klon zur Gegenprobe: `total=151 chain_total=151 reported=151
+unclassified=0 unchecked=0 unclassified_checkers=0` — `Referenzen 124,
+Wellen 16, Zeilen 10, Inventare 1, Tests 0`.
+
+**Würdigung, ehrlich:** der Selbsttest steht bei **30/30**, die Suite bei
+**216 passed**. Die zwei neuen Prüfer waren beim Bau nicht rot, weil die
+Buchung sauber war — der Default-Prüfer war rot an 19 Stellen, die
+niemand erwartet hatte, und die erste Reaktion war nicht „Ausnahme",
+sondern die Zählung. Was offen bleibt: `unchecked` prüft **heute** die
+eigene Datei, nicht die Historie. Ein Prüfer, der in Runde 44 fehlte und
+in Runde 45 nachgetragen wurde, ist in keiner der beiden Zahlen sichtbar.
