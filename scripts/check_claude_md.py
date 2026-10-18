@@ -8319,6 +8319,11 @@ MESSBEREICH: dict[str, tuple[str, ...]] = {
     # prüft Drift. Es ist Waage, nicht Gewogenes — die Contracts in
     # `shadow_contract_pilot/` sind der Gegenstand.
     "bytecode_wache": ("scripts/bytecode_manifest.py",),
+    # §A-ZZZZ109 (Runde 76): die Wache gegen Wiederholung. Sie zählt
+    # **sich selbst nicht** — sie prüft Meldungen, nicht Code. Deshalb
+    # steht sie hier als eigener Bereich: wer sie ändert, muß wissen,
+    # daß er die Bedingung ändert, unter der „neue Runde" definiert ist.
+    "meldung_wache": ("scripts/meldung_digest.py",),
     "protokoll": ("order_execution_engine/ops/TAG7_ABNAHME.md",
                   "order_execution_engine/ops/BERICHT.md"),
 }

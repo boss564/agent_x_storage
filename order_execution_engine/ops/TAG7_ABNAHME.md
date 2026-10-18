@@ -8403,6 +8403,21 @@ Ergebnisvergleich" — sie akzeptierte `.result` irgendwo im Rumpf. Das ist
 dieselbe Fehlerklasse wie die Fixture der Vorrunde: der Sollwert war zu
 großzügig. Erst die Gegenprobe mit sechs Mutationen hat es gezeigt.
 
+### 6. Was diese Runde **nicht** beantwortet
+
+Die sieben Buchungen aus Runde 75/76 bleiben **offen**. Sie zu behaupten,
+ohne sie zu belegen, wäre die Fehlerklasse, die diese Runde bucht.
+
+| # | Buchung | Zustand |
+|---|---|---|
+| 1 | sieben Jobs mit erstem Rot | offen — kein CI-Lauf in dieser Runde angestoßen |
+| 2 | `4/8` gegen `8/8` meßbare Blöcke | offen — die Zustandszeile trägt jetzt `13/13` (Regeln), nicht Blöcke |
+| 3 | Fixture-Ableitung, exakte Ausrichtung | offen |
+| 4 | Facetten #5/#7 mit Datei und Zeile | offen |
+| 5 | Gate-Pfad-Kopplung | offen |
+| 6 | Bytecode-Manifest mit Blocknummer / Deployment-Parität | offen — Manifest existiert, Blocknummer nicht |
+| 7 | Rotation als Schleife über **alle** offenen Positionen | teilweise — Invariante prüft Zeilenverlust, die Schleife ist einfach |
+
 **Der Satz der Runde:** Die Wache läuft, und das Artefakt baut. Beides
 war vorher nicht wahr. Der Unterschied zwischen heute und gestern ist
 nicht, daß eine Zahl besser aussieht — es ist, daß zum ersten Mal
@@ -8605,8 +8620,139 @@ gegen das Deployment, drei `paths`-Lücken, die gelöschten Rotations­zeilen
 Offen-Konto der Akte **nicht** dieselbe Liste ist wie die Befunde des
 Prüfers; das ist selbst ein Befund und bleibt offen.
 
+### 6. Was diese Runde **nicht** beantwortet
+
+Die sieben Buchungen aus Runde 75/76 bleiben **offen**. Sie zu behaupten,
+ohne sie zu belegen, wäre die Fehlerklasse, die diese Runde bucht.
+
+| # | Buchung | Zustand |
+|---|---|---|
+| 1 | sieben Jobs mit erstem Rot | offen — kein CI-Lauf in dieser Runde angestoßen |
+| 2 | `4/8` gegen `8/8` meßbare Blöcke | offen — die Zustandszeile trägt jetzt `13/13` (Regeln), nicht Blöcke |
+| 3 | Fixture-Ableitung, exakte Ausrichtung | offen |
+| 4 | Facetten #5/#7 mit Datei und Zeile | offen |
+| 5 | Gate-Pfad-Kopplung | offen |
+| 6 | Bytecode-Manifest mit Blocknummer / Deployment-Parität | offen — Manifest existiert, Blocknummer nicht |
+| 7 | Rotation als Schleife über **alle** offenen Positionen | teilweise — Invariante prüft Zeilenverlust, die Schleife ist einfach |
+
 **Der Satz der Runde:** Was in Runde 74 als Beweis aussah, war zu einem
 Drittel Erzählung — eine erfundene 283, ein falsch etikettierter Zähler,
 eine Sperre, die Zeilen löschte. Die Korrektur ist vollständig, und sie
 ist unangenehmer als der Erfolg.
+
+
+## Runde 76 — keine neuen Bytes, kein neuer Befund
+
+**Diese Runde prüft nichts. Sie bucht die Wache, die ihre eigene
+Wiederholung verhindert.**
+
+### 1. Der Befund, und was daran stimmt
+
+Der Vorwurf: die vierte Meldung trägt den Inhalt der dritten — derselbe
+Run (`39147180502`), derselbe Eröffnungssatz, dieselben acht Abschnitte,
+nur der Index ist gewandert.
+
+**Was ich belegen kann und was nicht.** Die Meldungen selbst liegen nicht
+auf der Platte; ein `sha256`-Vergleich der Anhänge ist von hier aus nicht
+möglich. Was ich belegen kann, ist der **Aktenzustand**:
+
+```
+git status --porcelain        → leer
+grep '^## Runde 7' TAG7_ABNAHME.md → 72, 74, 75
+grep -c '^## Runde 76\|^## Runde 77' → 0
+```
+
+Es gibt keine Runde 76 und keine 77 in der Akte, und es gab keinen
+unversionierten Stand. **Die Akte hat sich nicht bewegt.** Damit ist der
+zweite Teil des Vorwurfs unabhängig bestätigt: null von null Buchungen
+sind fortgeschrieben.
+
+Der erste Teil ist ein Befund über den **Kanal**, nicht über die Akte:
+eine Meldung, die als neue Runde auftritt, ohne neue Bytes zu tragen.
+
+### 2. Die Fehlerklasse, benannt
+
+Runde 71 hat `MESSBEREICH["blockzahl"]` verurteilt, weil der Name mehr
+behauptete als die Messung trug. Der Fall hier ist dieselbe Form, eine
+Ebene höher: **eine Beschriftung („Runde N+1"), die mehr behauptet als
+der Inhalt trägt.**
+
+Für Code gilt die Regel seit Runde 1: *kein Grün ohne erstes Rot.*
+Für Prosa fehlte das Gegenstück. Es lautet: **kein neuer Befund ohne
+neue Bytes.**
+
+### 3. Die Wache — `scripts/meldung_digest.py`
+
+    python3 scripts/meldung_digest.py --neu <meldung.md>
+    python3 scripts/meldung_digest.py --alle
+
+`--neu` normalisiert (Zeilenenden, trailing Whitespace, Leerzeilenfolgen),
+rechnet `sha256` und vergleicht gegen `.meldung-digests.json`. Ein Treffer
+endet mit **Exit 1** und dem Satz „die Meldung wird nicht als Runde
+gezählt". `--alle` sucht Wiederholungen im Bestand.
+
+Gegenprobe, fünf Fälle:
+
+| Fall | Ergebnis |
+|---|---|
+| erste Meldung | `neu`, Exit 0 |
+| zweite, bytegleich | **WIEDERHOLUNG**, Exit 1 |
+| zweite, Whitespace-Drift (`   ` am Zeilenende, Leerzeilen) | **WIEDERHOLUNG**, Exit 1 |
+| zweite, CRLF statt LF | **WIEDERHOLUNG**, Exit 1 |
+| dritte, wirklich anderer Text | `neu`, Exit 0 |
+
+### 4. Zwei Fehler in der Wache selbst — im selben Lauf gefunden
+
+**Erstens:** der erste Lauf endete mit einem `PermissionError`-Stacktrace
+statt mit einem Befund. Genau der Fehler, den Runde 72 an
+`.selftest-exit` repariert hat (`except OSError: pass` → Befund), hier
+neu gebaut. Jetzt: Exit 3 und die Meldung „die Wache trägt nicht".
+
+**Zweitens:** die erste Normalisierung ließ eine Leerzeile dort, wo keine
+war. `A\nB` und `A\n\n\nB` ergaben **verschiedene** Digests — die Wache
+war blind gegen genau die Schreibweisen-Drift, für die sie gebaut ist.
+Gefunden durch die Gegenprobe, nicht durch Nachdenken.
+
+Beide Fehler sind dieselbe Klasse wie die, die diese Runde bucht: eine
+Wache, die aussieht, als prüfe sie, und es nicht tut.
+
+### 5. Grenze, ausdrücklich
+
+Der Digest erkennt **Wiederholung**, nicht **Wahrheit**. Eine neue Runde
+mit falschem Inhalt hat einen neuen Digest und ist trotzdem falsch. Die
+Wache schließt genau eine Lücke — die billigste, und die einzige, die
+sich mechanisch schließen läßt.
+
+### Bilanz
+
+| Größe | Wert |
+|---|---|
+| Regeln mit Gegenlauf | 13/13 |
+| Code-Blöcke `scripts/` | **2532** gezählt (`_zaehle_codebloecke`), Deckel 3000 |
+| Regeln mit Gegenlauf | **13/13** (gezählt, nicht geschrieben) |
+| `R→F` | min 0 / median 1 / n 5 |
+| `EXIT` | 0/0 |
+| Meßbereich | 6 Bereiche; `meldung_wache` neu gebucht |
+| Neue Runden in dieser Meldung | **1** — ihre Bytes sind neu (Gegenprobe: 5/5) |
+| Offene Buchungen aus R75/76 | **7 von 7 offen** — s. §6 |
+
+### 6. Was diese Runde **nicht** beantwortet
+
+Die sieben Buchungen aus Runde 75/76 bleiben **offen**. Sie zu behaupten,
+ohne sie zu belegen, wäre die Fehlerklasse, die diese Runde bucht.
+
+| # | Buchung | Zustand |
+|---|---|---|
+| 1 | sieben Jobs mit erstem Rot | offen — kein CI-Lauf in dieser Runde angestoßen |
+| 2 | `4/8` gegen `8/8` meßbare Blöcke | offen — die Zustandszeile trägt jetzt `13/13` (Regeln), nicht Blöcke |
+| 3 | Fixture-Ableitung, exakte Ausrichtung | offen |
+| 4 | Facetten #5/#7 mit Datei und Zeile | offen |
+| 5 | Gate-Pfad-Kopplung | offen |
+| 6 | Bytecode-Manifest mit Blocknummer / Deployment-Parität | offen — Manifest existiert, Blocknummer nicht |
+| 7 | Rotation als Schleife über **alle** offenen Positionen | teilweise — Invariante prüft Zeilenverlust, die Schleife ist einfach |
+
+**Der Satz der Runde:** Die Wiederholung ist der billigste Fehler, den ein
+System machen kann, und der teuerste, den es übersieht — weil sie wie
+Fortschritt aussieht. Die Wache dagegen kostet vierzig Zeilen und einen
+`sha256`.
 
