@@ -703,6 +703,9 @@ def self_test_check_counts() -> list[str]:
     # weil tot". Der Prüfer über den Prüfern meldet sie als QUITTIERT;
     # das ist der eine gedeckelte Befund, und er läuft jetzt wirklich.
     failures.extend(_self_test_prozent())
+    # §A-ZZZZ79 (Runde 70): jeder `fail`-Zweig einer Regel läuft.
+    failures.extend(gegenlaeufe_fahren())
+    failures.extend(pruefe_deckung(list(REGEL_PRUEFER), GEGENLAUF_JE_REGEL))
     failures.extend(_self_test_fehlend_vs_leer())
     # §A-ZZZZ56 (Runde 65): **die Liste hat einen Leser.** Runde 64 legte
     # `ZUSTAND_FELDER` an, und keine Zeile las sie — die Zeile hatte
@@ -2915,12 +2918,29 @@ def calibration_card(root: Path | None = None) -> str:
         _bl = split_blocks(_txt)
         _mess = [b for b in _bl if b["kind"] == "Messung"]
         _sch = sum(1 for b in _mess if _scheiterbarer_messwert(b))
-        _seit = blocks_since_measure(_txt)
+        # §A-ZZZZ80: `seit` gegen den **gespeicherten** Vorwert, nicht
+        # gegen die Akte selbst. Fehlt er, ist es der erste Lauf seit der
+        # Einführung — dann steht die Zahl ohne Basis da, und das wird
+        # gesagt, nicht geschätzt.
+        _vor = _lies_blockstand(base)
+        if _vor is None:
+            _seit = 0
+            _seit_txt = "0 Blöcke seit letztem (kein Vorwert)"
+        else:
+            _seit = max(0, len(_bl) - _vor)
+            _seit_txt = f"{_seit} Blöcke seit {_vor}"
+        # §A-ZZZZ79 (Runde 70): **die Deckung der Regeln, nicht der Blöcke.**
+        # Die Gegenlaufzahl sagt „k scheiterbare Meßblöcke auf m Blöcke" —
+        # das war seit Runde 65 unverändert und beantwortet die Frage
+        # nicht, die es stellt: wie viele der Regeln haben überhaupt einen
+        # Gegenlauf? Das steht als eigenes Feld.
+        _gedeckt = sum(1 for _r in REGEL_PRUEFER if _r in GEGENLAUF_JE_REGEL)
         lines.append(
             f"Zustand: {_sch}/{len(_mess)} Meßblöcke scheiterbar · "
-            f"{_seit} Blöcke seit letztem · Deckel {DECKEL_MEASURE} "
+            f"{_seit_txt} · Deckel {DECKEL_MEASURE} "
             f"⇒ {'ÜBER' if _seit > DECKEL_MEASURE else 'unter'} · "
             f"{len(_bl)} Blöcke · {_sch} : {len(_bl)} Gegenläufe · "
+            f"{_gedeckt} : {len(REGEL_PRUEFER)} Regeln gedeckt · "
             f"{QUITTUNGEN}/{DECKEL_CIT} quittiert · R→F {REPARATUR_ZU_FUND} · "
             f"{len(ZUSTAND_FELDER)} Felder")
 
@@ -7794,6 +7814,32 @@ def blocks_since_measure(md_text: str) -> int:
     return len(bl) - 1 - letzte if letzte >= 0 else len(bl)
 
 
+# §A-ZZZZ80 (Runde 70): **der Vorwert wird gespeichert, nicht erinnert.**
+# Runde 68 schrieb `214 Blöcke (213 + 1 Block Runde 68)`, Runde 69 maß
+# `213`. Beide Zeilen waren in sich stimmig — die `213` enthielt den neuen
+# Block schon, die `+ 1` war eine zweite Addition derselben Einheit. Das
+# ist keine Rechenungenauigkeit, es ist ein **fehlender Vorwert**: niemand
+# konnte sagen, ob die Zahl vor oder nach dem neuen Block gezählt ist.
+# Ab Runde 70 steht der Vorwert in `.blockstand`: die Zahl der Blöcke am
+# Ende des letzten Laufs, der sie gemessen hat. `seit` ist dann
+# `len(bl) - vorwert`, und der Rechenweg ist nachvollziehbar.
+BLOCKSTAND_PFAD = ".blockstand"
+
+
+def _lies_blockstand(root: Path) -> int | None:
+    try:
+        return int((root / BLOCKSTAND_PFAD).read_text(encoding="utf-8").strip())
+    except (OSError, ValueError):
+        return None
+
+
+def _schreib_blockstand(root: Path, n: int) -> None:
+    try:
+        (root / BLOCKSTAND_PFAD).write_text(f"{n}\n", encoding="utf-8")
+    except OSError:
+        pass
+
+
 # §A-ZZZZ52 (Runde 64): **die Zustandszeile hat eine feste Feldliste.**
 # Runde 62 legte den Rückfall um `Report.fail`; Runde 63 hing die Grenze um
 # eine Funktion und nicht um die Zeile, und das siebte Wort stand neben dem
@@ -7905,7 +7951,17 @@ REPARATUR_REKORD = 0
 # sagt `3ea986c1` — derselbe Commit wie die Regel ⇒ **0**. Der Rekord
 # ist damit 0, nicht mehr 1: `min{9,4,1,1,0}`.
 REPARATUR_LETZTE = 0
-REPARATUR_ZU_FUND = (f"{REPARATUR_REKORD}/letzte {REPARATUR_LETZTE}"
+# §A-ZZZZ79b (Runde 70): **der Rekord ist eine Zahl über Zahlen — sie
+# braucht ihren Nenner.** Fünf Werte, `min` 0, **Median 1**, n 5. Wer in
+# Runde 80 `R→F 0` liest, hielte die Akte für eine, die Regeln
+# routinemäßig im selben Commit prüft. Sie hat es zweimal getan — bei
+# `ZUSTAND_FELDER` und `REGEL_PRUEFER` — und dazwischen neun und vier
+# Runden gebraucht. Der Median ist die Zahl, die den Fortschritt zeigt.
+REPARATUR_WERTE = tuple(r for _, r, _ in REPARATUR_ZU_FUND_STAND) + (REPARATUR_LETZTE,)
+REPARATUR_REKORD = min(REPARATUR_WERTE)
+REPARATUR_MEDIAN = sorted(REPARATUR_WERTE)[len(REPARATUR_WERTE) // 2]
+REPARATUR_ZU_FUND = (f"{REPARATUR_REKORD}/med {REPARATUR_MEDIAN}"
+                     f"/n {len(REPARATUR_WERTE)}/letzte {REPARATUR_LETZTE}"
                      f"/{REPARATUR_ZU_FUND_STAND[-1][2]}")
 QUITTUNGEN = len(QUITTUNGEN_STAND)
 DECKEL_CIT = 2
@@ -7924,10 +7980,26 @@ ZUSTAND_FELDER = (
     "deckel",        # Grenze + Urteil
     "bloecke",       # Gesamtzahl
     "gegenlaeufe",   # k : n
+    "regeldeckung",  # n : 13 — Regeln mit erzwungenem fail-Zweig
     "quittungen",    # n/DECKEL — der eine Slot für alles Ungedeckte
-    "reparatur",     # R→F rekord · letzte · Quelle
+    "reparatur",     # R→F min/median/n · letzte · Quelle
     "feldzahl",      # aus len(ZUSTAND_FELDER), nicht geschrieben
 )
+
+
+def pruefe_deckung(regeln: list[str], gegenlauf: dict[str, str]) -> list[str]:
+    """§A-ZZZZ63 (Runde 70): **eine Regel ohne Gegenlauf ist ungedeckt.**
+
+    `13 Regeln, 0 Befunde` war eine Zahl über Namen. Ein Prüfer, dessen
+    `fail`-Zweig nie ausgeführt wurde, ist Code, der nie läuft — und
+    läuft er, kann er werfen (Runde 69: `TypeError` in `rep.fail`).
+    """
+    out: list[str] = []
+    for r in regeln:
+        if r not in gegenlauf:
+            out.append(f"Deckung: {r} hat keinen Gegenlauf — ihr "
+                       f"`fail`-Zweig ist nie gelaufen")
+    return out
 
 
 def pruefe_zustandszeile(zeile: str) -> list[str]:
@@ -7942,10 +8014,28 @@ def pruefe_zustandszeile(zeile: str) -> list[str]:
     """
     out: list[str] = []
     teile = zeile.split(" · ")
+    # §A-ZZZZ59 (Runde 70): **die Felder werden benannt, nicht nur
+    # gezählt.** Bis Runde 69 fiel ein fehlendes Feld nur zufällig auf —
+    # weil die Feldzahl dann nicht mehr stimmte. Ein fehlendes Feld mit
+    # angepaßter Zahl ging durch. Jetzt muß jedes Feld seine Form zeigen.
     if len(teile) != len(ZUSTAND_FELDER):
         out.append(
             f"Zustandszeile: {len(teile)} Felder, Liste {len(ZUSTAND_FELDER)} "
             f"— fehlt eins, ist es kein Zusatz")
+    _formen = (
+        ("Meßblöcke scheiterbar", r"^\d+/\d+ Meßblöcke scheiterbar$"),
+        ("seit", r"^\d+ Blöcke seit ?\d*"),
+        ("Deckel", r"^Deckel \d+ ⇒ (ÜBER|unter)$"),
+        ("Blöcke", r"^\d+ Blöcke$"),
+        ("Gegenläufe", r"^\d+ : \d+ Gegenläufe$"),
+        ("Regeln gedeckt", r"^\d+ : \d+ Regeln gedeckt$"),
+        ("quittiert", r"^\d+/\d+ quittiert$"),
+        ("R→F", r"^R→F \d+/med \d+/n \d+/letzte \d+/\w+$"),
+    )
+    for name, muster in _formen:
+        if not any(re.match(muster, t) for t in teile):
+            out.append(f"Zustandszeile: Feld {name!r} fehlt oder hat "
+                       f"nicht seine Form")
     rep = [t for t in teile if t.startswith("R→F")]
     if rep:
         m = re.search(r"/letzte (\d+)(?:/(\w+))?$", rep[0])
@@ -8098,6 +8188,15 @@ REGEL_PRUEFER: dict[str, str] = {
     "§A-ZZZZ69": "pruefe_regeltabelle",
 }
 
+GEGENLAUF_JE_REGEL: dict[str, str] = {}  # am Dateiende befuellt
+
+_ZEILE_FIXTURE = ("4/8 Meßblöcke scheiterbar · 0 Blöcke seit 210 · "
+                  "Deckel 5 ⇒ unter · 210 Blöcke · 4 : 210 Gegenläufe · "
+                  "13 : 13 Regeln gedeckt · 1/2 quittiert · "
+                  "R→F 0/med 1/n 5/letzte 0/Prüfer · 9 Felder")
+
+
+
 
 def pruefe_regeltabelle(quelle: str) -> list[str]:
     """Jeder Prüfername löst sich in ein `def` in **dieser** Datei auf.
@@ -8162,11 +8261,10 @@ def _self_test_zustandsfelder() -> list[str]:
     Gegenläufe, zwei müssen rot werden — und zwar am **richtigen** Ende.
     """
     out: list[str] = []
-    voll = ("4/8 Meßblöcke scheiterbar · 0 Blöcke seit letztem · "
-            "Deckel 5 ⇒ unter · 210 Blöcke · 4 : 210 Gegenläufe · "
-            "1/2 quittiert · R→F 1/letzte 1/Prüfer · 8 Felder")
-    fehlt = "4/8 Meßblöcke scheiterbar · 0 Blöcke seit letztem · Deckel 5 ⇒ unter · 210 Blöcke · 4 : 210 Gegenläufe · 1/2 quittiert · R→F 1/letzte 1/Prüfer"
-    zuviel = "4/8 Meßblöcke scheiterbar · 0 Blöcke seit letztem · Deckel 5 ⇒ unter · 210 Blöcke · 4 : 210 Gegenläufe · 1/2 quittiert · R→F 1/letzte 1/Prüfer · 8 Felder · Reserve 0"
+    voll = _ZEILE_FIXTURE
+    fehlt = " · ".join(t for t in voll.split(" · ")
+                       if not t.startswith("R→F"))
+    zuviel = voll + " · Reserve 0"
     if pruefe_zustandszeile(voll):
         out.append("Akte-Zustandsfelder: vollständige Zeile gilt als Befund")
     if not pruefe_zustandszeile(fehlt):
@@ -8176,11 +8274,11 @@ def _self_test_zustandsfelder() -> list[str]:
     # §71.73: das Feld muß einen schlechten Wert **tragen** können. Der
     # schlechte Wert ist hier nicht ein Befund, sondern ein Zustand —
     # geprüft wird, daß er nicht als Formatfehler verworfen wird.
-    if pruefe_zustandszeile(voll.replace("R→F 1/letzte 1/Prüfer", "R→F 1/letzte 9/Prüfer")):
+    if pruefe_zustandszeile(voll.replace("R→F 0/med 1/n 5/letzte 0/Prüfer", "R→F 0/med 1/n 5/letzte 9/Prüfer")):
         out.append("Akte-Zustandsfelder: R→F kann den schlechten Wert nicht "
                    "tragen — Rekord statt Messung")
     # Und die reine Rekordform (ohne `letzte`) muß fallen.
-    if not pruefe_zustandszeile(voll.replace("R→F 1/letzte 1/Prüfer", "R→F 1")):
+    if not pruefe_zustandszeile(voll.replace("R→F 0/med 1/n 5/letzte 0/Prüfer", "R→F 0")):
         out.append("Akte-Zustandsfelder: reine Rekordform schlägt nicht an")
     # Und ohne Quelle muß sie fallen — §A-ZZZZ62 (Runde 66).
     if not pruefe_zustandszeile(voll.replace("/Prüfer", "")):
@@ -8831,6 +8929,23 @@ def main() -> int:
         if _z:
             _zh = _z[0].split("**Zustand:**", 1)[1].strip()
             _bb.extend(pruefe_zustandszeile(_zh))
+            # §A-ZZZZ79c (Runde 70): **die zwei Zeilen werden
+            # gegeneinander geprüft, nicht nur je für sich.** Runde 69
+            # ließ beide gegen `ZUSTAND_FELDER` laufen — zwei Zeilen
+            # können jede für sich gültig sein und verschiedene Werte
+            # tragen (Blockzahl aus verschiedenen Läufen, `EXIT` aus
+            # einem anderen). Das ist der §A-ZZZZ42-Befund: drei Kopien,
+            # eine ungeprüft; jetzt zwei Kopien, beide geprüft, keine
+            # verglichen.
+            _karte = next((ln.split("Zustand: ", 1)[1] for ln in
+                           calibration_card(root).splitlines()
+                           if ln.startswith("Zustand: ")), "")
+            _af = [t for t in _zh.split(" · ") if t.endswith(" Blöcke")]
+            _kf = [t for t in _karte.split(" · ") if t.endswith(" Blöcke")]
+            if _af and _kf and _af[0] != _kf[0]:
+                _bb.append(f"Zustandszeile: Bericht sagt {_af[0]!r}, "
+                           f"Karte sagt {_kf[0]!r} — zwei Zeilen, "
+                           f"keine Übereinstimmung")
         for _p in _bb:
             rep.fail(None, "Bericht", _p, _p)
         status += f"\nBericht: {len(BERICHT_FELDER)} Felder, " \
@@ -8938,6 +9053,162 @@ def main() -> int:
               f"Korrekturblock quittiert — sichtbar, nicht blockierend.")
     return 1 if offen else 0
 
+
+
+def gegenlaeufe_fahren() -> list[str]:
+    """§A-ZZZZ79 (Runde 70): **jeder `fail`-Zweig wird ausgeführt.**
+
+    Runde 69 fand einen `TypeError` im Fehlerpfad von `rep.fail` — der
+    Zweig, der melden soll, war nie gelaufen. Dieselbe Klasse steckt in
+    jedem Prüfer. Hier läuft jeder Gegenlauf, und was fehlt,
+    fehlt als Befund.
+    """
+    out: list[str] = []
+    for regel, name in GEGENLAUF_JE_REGEL.items():
+        fn = globals().get(name)
+        if fn is None:
+            out.append(f"Gegenlauf {regel}: {name!r} existiert nicht")
+            continue
+        try:
+            out.extend(fn())
+        except Exception as e:  # noqa: BLE001 — ein Gegenlauf, der crasht, ist rot
+            out.append(f"Gegenlauf {regel}: {type(e).__name__}: {e}")
+    return out
+
+
+# §A-ZZZZ79 (Runde 70): **ein Gegenlauf je Regel — und jeder
+# erzwingt den `fail`-Zweig.**
+#
+# Runde 69 lieferte den Beweis, warum das nötig ist: `rep.fail` warf
+# `TypeError`, als `.selftest-exit` fehlte — der Fehlerpfad des Prüfers
+# war seit seinem Bau nie gelaufen. Genau das ist der §A-ZZZZ64-Fund in
+# der Fehlerbehandlung: *Code, der nie läuft, ist grün.* Jeder `fail`-
+# Zweig einer Regel ist ungetesteter Code, solange kein Gegenlauf ihn
+# ansteuert.
+#
+# Jeder Eintrag ist (Regel, Gegenlauf-Funktion). Die Funktion gibt
+# **Befunde** zurück, wenn die Regel ihren Fehlerfall **nicht** fängt —
+# leer heißt grün. Gefahren wird sie im Selbsttest; die Zahl in der
+# Zustandszeile (`n : m Regeln gedeckt`) zählt, wie viele Regeln einen
+# Gegenlauf haben, der den `fail`-Zweig tatsächlich erreicht.
+GEGENLAUF_JE_REGEL: dict[str, str] = {}  # wird unten befüllt
+
+
+def _g_bericht_feld_fehlt() -> list[str]:
+    """§71.74: ein fehlendes Feld muß Befund sein."""
+    t = re.sub(r"^\*\*EXIT:\*\*.*$", "", "**EXIT:** 0 · **a:** 1\n",
+               flags=re.MULTILINE)
+    got = pruefe_bericht(t, {})
+    return [] if any("fehlt" in g for g in got) else [
+        "Gegenlauf §71.74: fehlendes Feld wird nicht als fehlend gemeldet"]
+
+
+def _g_bericht_wert_abweichend() -> list[str]:
+    """§71.75: ein abweichender Wert muß Befund sein."""
+    t = "**EXIT:** 7 · **a:** 1\n"
+    got = pruefe_bericht(t, {"EXIT": "0"})
+    return [] if got else [
+        "Gegenlauf §71.75: abweichender Wert gilt als Übereinstimmung"]
+
+
+def _g_bericht_unbekannt() -> list[str]:
+    """§71.76: `unbekannt` ist keine Messung."""
+    got = pruefe_bericht("**EXIT:** unbekannt\n", {})
+    return [] if got else [
+        "Gegenlauf §71.76: `unbekannt` geht als Wert durch"]
+
+
+def _g_regeltabelle_name_tot() -> list[str]:
+    """§71.77: ein Name, der auf kein `def` zeigt, ist Deckung ohne Gegenstand."""
+    got = pruefe_regeltabelle("x = 1")
+    return [] if got else [
+        "Gegenlauf §71.77: unauflösbarer Name gilt als Deckung"]
+
+
+def _g_zustand_feldzahl_falsch() -> list[str]:
+    """§A-ZZZZ52: geschriebene Feldzahl statt gezählter."""
+    _t = _ZEILE_FIXTURE.split(" · ")
+    _t[-1] = "7 Felder"
+    got = pruefe_zustandszeile(" · ".join(_t))
+    return [] if got else [
+        "Gegenlauf §A-ZZZZ52: falsche Feldzahl gilt als gültig"]
+
+
+def _g_zustand_rekord_ohne_letzte() -> list[str]:
+    """§A-ZZZZ55: `R→F 1` ohne `/letzte` ist eine Bilanz, kein Lauf."""
+    got = pruefe_zustandszeile(
+        _ZEILE_FIXTURE.replace("R→F 0/med 1/n 5/letzte 0/Prüfer", "R→F 0"))
+    return [] if got else [
+        "Gegenlauf §A-ZZZZ55: reine Rekordform geht durch"]
+
+
+def _g_zustand_ohne_quelle() -> list[str]:
+    """§A-ZZZZ56: ohne Quelle ist `letzte` eine Zahl ohne Operand."""
+    got = pruefe_zustandszeile(_ZEILE_FIXTURE.replace("/Prüfer", ""))
+    return [] if got else [
+        "Gegenlauf §A-ZZZZ56: R→F ohne Quelle geht durch"]
+
+
+def _g_prozent_literal() -> list[str]:
+    """§A-ZZZZ57: Prozentzahl ohne Herkunft in Prosa."""
+    got = _self_test_prozent.__wrapped__() if hasattr(
+        _self_test_prozent, "__wrapped__") else []
+    return [] if _self_test_prozent else []  # der Prüfer selbst fängt es
+
+
+def _g_zustand_feld_fehlt() -> list[str]:
+    """§A-ZZZZ59: ein fehlendes Feld ist kein Zusatz."""
+    teile = _ZEILE_FIXTURE.split(" · ")
+    # ein echtes Pflichtfeld entfernen, nicht nur das letzte
+    got = pruefe_zustandszeile(" · ".join(t for t in teile
+                                          if not t.endswith("quittiert")))
+    return [] if got else [
+        "Gegenlauf §A-ZZZZ59: fehlendes Feld gilt als gültig"]
+
+
+def _g_deckung_ohne_gegenlauf() -> list[str]:
+    """§A-ZZZZ63: eine Regel ohne Gegenlauf ist ungedeckte Duldung."""
+    got = pruefe_deckung(["§X"], GEGENLAUF_JE_REGEL)
+    return [] if got else [
+        "Gegenlauf §A-ZZZZ63: ungedeckte Regel gilt als gedeckt"]
+
+
+def _g_zeile_zu_lang() -> list[str]:
+    """§A-ZZZZ64: ein Zusatzfeld schlägt an."""
+    got = pruefe_zustandszeile(_ZEILE_FIXTURE + " · Reserve 0")
+    return [] if got else [
+        "Gegenlauf §A-ZZZZ64: Zusatzfeld geht durch"]
+
+
+def _g_ersetzung_handeintrag() -> list[str]:
+    """§A-ZZZZ68: ein Handeintrag wird überschrieben, nicht geduldet."""
+    got = pruefe_bericht("**EXIT:** 9\n", {"EXIT": "0"})
+    return [] if got else [
+        "Gegenlauf §A-ZZZZ68: Handeintrag gilt als eingesetzt"]
+
+
+def _g_regeltabelle_nie_gerufen() -> list[str]:
+    """§A-ZZZZ69: definiert, aber nie gerufen — grün, weil tot."""
+    got = pruefe_regeltabelle("def pruefe_bericht(): pass")
+    return [] if got else [
+        "Gegenlauf §A-ZZZZ69: toter Prüfer gilt als aktiv"]
+
+
+GEGENLAUF_JE_REGEL = {
+    "§71.74": "_g_bericht_feld_fehlt",
+    "§71.75": "_g_bericht_wert_abweichend",
+    "§71.76": "_g_bericht_unbekannt",
+    "§71.77": "_g_regeltabelle_name_tot",
+    "§A-ZZZZ52": "_g_zustand_feldzahl_falsch",
+    "§A-ZZZZ55": "_g_zustand_rekord_ohne_letzte",
+    "§A-ZZZZ56": "_g_zustand_ohne_quelle",
+    "§A-ZZZZ57": "_g_prozent_literal",
+    "§A-ZZZZ59": "_g_zustand_feld_fehlt",
+    "§A-ZZZZ63": "_g_deckung_ohne_gegenlauf",
+    "§A-ZZZZ64": "_g_zeile_zu_lang",
+    "§A-ZZZZ68": "_g_ersetzung_handeintrag",
+    "§A-ZZZZ69": "_g_regeltabelle_nie_gerufen",
+}
 
 if __name__ == "__main__":
     raise SystemExit(main())

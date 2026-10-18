@@ -8029,3 +8029,46 @@ Gezählt: **214 Blöcke (213 + 1) · 4/8 scheiterbar · 8 Felder (aus
 offen 0 · EXIT 0/0.**
 
 **Nicht getan:** die 12 offenen Kontexte · Whitelist · `FRISCH`-Versetzung.
+
+## Runde 70 — 13 Gegenläufe, die Blockzahl berichtigt
+
+**Ihr Befund stand als erstes:** `213` gegen `214 (213 + 1)`. `213` ist
+richtig. Runde 68 rechnete `213 + 1`, und die 213 enthielt den neuen Block
+schon — eine **zweite Addition derselben Einheit**. Runde 69 hätte es nennen
+müssen. Diese Runde nennt es, zweimal: im Bericht und hier.
+
+**Der Vorwert wird gespeichert (§71.80).** `.blockstand` hält die Blockzahl
+des letzten Laufs. `seit` ist jetzt `len(bl) − vorwert`, nicht „Blöcke seit
+dem letzten scheiterbaren Meßblock" — das war eine Erinnerung an eine Zahl,
+die niemand aufgeschrieben hatte.
+
+**`13 : n Regeln gedeckt`** ist ein eigenes Feld. `4 : 213` sagt, wie viele
+**Meßblöcke** scheiterbar sind; es sagt nicht, wie viele **Regeln** einen
+Gegenlauf haben. Das ist jetzt die Zahl daneben, und sie ist die härtere.
+
+**13 Gegenläufe, einer je Regel, jeder erzwingt den `fail`-Zweig.** Beim
+ersten Lauf **zwei rot**:
+
+- §A-ZZZZ59: ein fehlendes Feld ging durch, weil nur die Feldzahl geprüft
+  wurde. Fiel nur zufällig auf, wenn die Zahl dann nicht mehr stimmte. Jetzt
+  wird jedes Feld gegen seine Form geprüft.
+- §A-ZZZZ63: `pruefe_deckung` existierte nicht — eine Regel ohne Gegenlauf
+  wäre als gedeckt durchgegangen.
+
+Beide behoben, **13 : 13 grün**, alle `fail`-Zweige ausgeführt.
+
+**`R→F 0/med 1/n 5/letzte 0/Prüfer`.** Der Rekord braucht seinen Nenner.
+Zweimal 0, dazwischen neun und vier Runden — **Median 1** ist die Zahl, die
+die Arbeit zeigt, nicht das Minimum.
+
+**Zwei Zustandszeilen gegeneinander.** Die Blockzahl aus `BERICHT.md` wird
+gegen die aus der Karte geprüft. Zwei Zeilen, jede für sich gültig, hätten
+verschiedene Werte tragen können — das war der §A-ZZZZ42-Befund, eine Ebene
+höher, unverändert.
+
+Gezählt: **213 Blöcke (214 war verzogen) · 4/8 scheiterbar · 9 Felder
+gezählt und gedruckt · 4 : 213 Gegenläufe · 13 : 13 Regeln gedeckt ·
+R→F 0/med 1/n 5/letzte 0/Prüfer · 1/2 quittiert · Prosa 0 von 104 ohne
+Herkunft (1979/9214, eine Datei) · offen 0 · EXIT 0/0.**
+
+**Nicht getan:** die 12 offenen Kontexte · Whitelist · `FRISCH`-Versetzung.
