@@ -1543,7 +1543,16 @@ def _kopfzeile_errors(root: Path | None = None) -> list[str]:
     text = doc.read_text(encoding="utf-8")
     ms = [b for b in split_blocks(text) if b["kind"] == "Messung"]
     if not ms:
-        return out + ["Kopfzeile: kein Messblock — keine Zahl zu prüfen"]
+        # §A-ZZZZ13 (Runde 59): **kein `raise`.** Runde 56 entschied `raise`
+        # für die Faltung (`_falte_gruen`), weil dort der Aufrufer hätte
+        # vorher entscheiden müssen — ein Programmierfehler. Hier ist das
+        # Fehlen der Grundlage ein **Zustand des Baums** (frischer Klon,
+        # Akte ohne Messblock): ein Befund, der den Hook blockiert, aber
+        # nicht den Prozess abreißt. Die Meldung sagt, was fehlt, nicht
+        # was falsch ist — „keine Zahl zu prüfen" ist ehrlicher als ein
+        # Traceback, der wie ein Werkzeugfehler aussieht.
+        return out + ["Kopfzeile: kein Messblock — Grundlage fehlt, "
+                      "nicht geprüft (blockierend)"]
     # Der **letzte** Messblock ist die aktuelle Messung (append-only).
     body = "\n".join(ms[-1]["lines"])
     if "gemessen ·" not in body:
@@ -4737,6 +4746,141 @@ def _self_test_block_kind() -> list[str]:
     return out
 
 
+def _truthiness_nutzungen(tree) -> list[str]:
+    """§A-ZZZZ8 (Runde 59): Tupel-Funktionen in **jeder** Bedingung.
+
+    Der Wächter aus Runde 58 sah nur `Call` direkt im `test`. Gemessen an
+    drei Ausweichformen fand er **eine**:
+
+        if f(k):            gesehen
+        x = f(k); if x:     nicht   (Name im test)
+        if f(k) or True:    nicht   (BoolOp)
+        if not f(k):        nicht   (UnaryOp)
+
+    Die Zeile `or True` aus §71.65 ist genau der Fall, den er nicht sieht.
+    Ein Wächter, der nur die Form verbietet, die schon dastand, ist die
+    Ausschlußliste aus Runde 55 in Syntax gegossen.
+
+    Die Heilung ist die **Klasse**: erkannt wird jede Verwendung, die den
+    Rückgabewert eines `tuple`-Rückgebers wahrheitsprüft — rekursiv durch
+    `BoolOp`/`UnaryOp`/`Compare`/`IfExp`, über Zuweisungsnamen im selben
+    Bereich, und im **Vergleich gegen einen Wert außerhalb** von `None`
+    (`f(k) != 1` prüft `1`; `f(k) is None` prüft die Existenz — nur das
+    zweite ist erlaubt, weil es das Problem adressiert).
+    """
+    import ast as _ast
+
+    tupel = {
+        n.name for n in _ast.walk(tree) if isinstance(n, _ast.FunctionDef)
+        for r in _ast.walk(n)
+        if isinstance(r, _ast.Return) and isinstance(r.value, _ast.Tuple)}
+    # §A-ZZZZ12 (Runde 59): Rückgabetyp, nicht Aufrufform — aber
+    # **streng**: nur Funktionen, deren `Return`s **ausschließlich**
+    # Tupel sind. `_checker_gap` gibt `set`, `int` und `None` zurück; sein
+    # Tupel ist ein lokaler Wert im `_called_checkers`-Zweig. Ihn
+    # mitzuzählen war ein False Positive (die `fwd`/`bwd`-Warnungen waren
+    # falsch; ihre Prüfung ist korrekt).
+    nur_tupel: dict[str, bool] = {}
+    for n in _ast.walk(tree):
+        if not isinstance(n, _ast.FunctionDef):
+            continue
+        rets = [r.value for r in _ast.walk(n) if isinstance(r, _ast.Return)]
+        if not rets:
+            continue
+        if n.name in nur_tupel:
+            nur_tupel[n.name] &= all(isinstance(r, _ast.Tuple) for r in rets)
+        else:
+            nur_tupel[n.name] = all(isinstance(r, _ast.Tuple) for r in rets)
+    tupel = {k for k, v in nur_tupel.items() if v}
+    out: list[str] = []
+
+    def _namen_in(node) -> set[str]:
+        """Namen, deren Wert **als Ganzes** wahrheitsgeprüft wird."""
+        if isinstance(node, _ast.Call) and isinstance(node.func, _ast.Name):
+            return {node.func.id}            # f(...) — Rückgabewert geprüft
+        if isinstance(node, _ast.Name):
+            return {node.id}                 # §A-ZZZZ11: `x` geprüft
+        if isinstance(node, _ast.BoolOp):
+            s: set[str] = set()
+            for v in node.values:
+                s |= _namen_in(v)
+            return s
+        if isinstance(node, _ast.UnaryOp) and isinstance(node.op, _ast.Not):
+            return _namen_in(node.operand)
+        if isinstance(node, _ast.Compare):
+            # §A-ZZZZ8: nur `is None`/`is not None`/`== None`/`!= None`
+            # prüfen die **Existenz**. Jeder andere Vergleich prüft den
+            # Rückgabewert und ist derselbe Fehler: `(0, []) != 1` ist
+            # wahr, obwohl kein Fehler vorliegt.
+            if all(isinstance(c, _ast.Constant) and c.value is None
+                   for c in node.comparators):
+                return set()
+            return _namen_in(node.left)
+        if isinstance(node, _ast.IfExp):
+            return _namen_in(node.test)
+        return set()
+
+    def _zuweisungen(scope) -> dict[str, str]:
+        """`{name: funktion}` für `x = f(...)` in **verschachtelten** Bereichen.
+
+        Ein `while`-Rumpf ist kein eigener Bereich — sein Name gilt auch
+        nach der Schleife. Deshalb wird nicht nur der direkt umgebende
+        `FunctionDef` gelesen, sondern jeder `NamedExpr`/`Assign` im
+        gesamten Teilbaum, der **nicht** in einer inneren `def` liegt.
+        """
+        m: dict[str, str] = {}
+        innere = {id(n) for n in _ast.walk(scope)
+                  if isinstance(n, (_ast.FunctionDef, _ast.AsyncFunctionDef,
+                                    _ast.Lambda))}
+        for n in _ast.walk(scope):
+            if (isinstance(n, _ast.Assign) and isinstance(n.value, _ast.Call)
+                    and isinstance(n.value.func, _ast.Name)
+                    and isinstance(n.targets[0], _ast.Name)):
+                if n.targets[0].id not in innere:
+                    if n.targets[0].id not in m:
+                        m[n.targets[0].id] = n.value.func.id
+        return m
+
+    zu: dict[str, str] = {}
+    # §A-ZZZZ10: **ein** Durchlauf. `_ast.walk` steigt selbst in `def`s
+    # ab — die rekursive Fassung besuchte jeden Knoten erneut und lief in
+    # `RecursionError`. Ein Name, der in **irgendeinem** Bereich ein Tupel
+    # hält, wird gemeldet: der Wächter darf über- melden, nicht unter-.
+    for n in _ast.walk(tree):
+        if (isinstance(n, _ast.Assign) and isinstance(n.value, _ast.Call)
+                and isinstance(n.value.func, _ast.Name)
+                and isinstance(n.targets[0], _ast.Name)):
+            zu.setdefault(n.targets[0].id, n.value.func.id)
+
+    def _pruef(test_node) -> None:
+        for i in _namen_in(test_node):
+            if i in tupel:
+                out.append(f"`if {i}(...)` prüft einen Tupel — "
+                           "`(0, [])` ist wahr")
+            elif zu.get(i) in tupel:
+                out.append(f"`{i} = {zu[i]}(...)` dann `if {i}` — "
+                           "der Tupel wird über den Namen geprüft")
+        for n in _ast.walk(test_node):
+            if isinstance(n, _ast.BoolOp):
+                for v in n.values:
+                    if (isinstance(v, _ast.Call)
+                            and isinstance(v.func, _ast.Name)
+                            and v.func.id in tupel):
+                        out.append(f"`... {type(n.op).__name__.lower()} "
+                                   f"{v.func.id}(...)` in Bedingung — "
+                                   "Tupel im abkürzenden Ausdruck")
+
+    for n in _ast.walk(tree):
+        if isinstance(n, (_ast.If, _ast.While)):
+            _pruef(n.test)
+        elif isinstance(n, _ast.IfExp):
+            _pruef(n.test)
+        elif isinstance(n, _ast.comprehension) and n.ifs:
+            for t in n.ifs:
+                _pruef(t)
+    return out
+
+
 def _self_test_auswahl_truthiness() -> list[str]:
     """§A-ZZZZ6 (Runde 58): `if r:` auf `(0, [])` ist immer wahr.
 
@@ -4756,19 +4900,35 @@ def _self_test_auswahl_truthiness() -> list[str]:
             tree = _ast.parse(datei.read_text(encoding="utf-8"))
         except (OSError, SyntaxError):
             continue
-        tupel = {
-            n.name for n in _ast.walk(tree) if isinstance(n, _ast.FunctionDef)
-            for r in _ast.walk(n)
-            if isinstance(r, _ast.Return) and isinstance(r.value, _ast.Tuple)}
-        for n in _ast.walk(tree):
-            if not isinstance(n, _ast.If):
-                continue
-            t = n.test
-            if (isinstance(t, _ast.Call) and isinstance(t.func, _ast.Name)
-                    and t.func.id in tupel):
-                out.append(f"Akte-Truthiness ({datei.name}): "
-                           f"`if {t.func.id}(...)` prüft einen Tupel — "
-                           "`(0, [])` ist wahr")
+        for m in _truthiness_nutzungen(tree):
+            out.append(f"Akte-Truthiness ({datei.name}): {m}")
+    # §A-ZZZZ9 (Runde 59): **der Meßwert.** Der Wächter wird gegen
+    # Ausweichformen gehalten, die er vor dieser Runde nicht sah. Gemessen
+    # wird, wie viele er findet — die Zahl selbst ist die Aussage, nicht
+    # das Bestehen. Steht sie unter der Zahl der Formen, ist der Rest benannt.
+    formen = {
+        "direkt": "if f(k):\n    pass\n",
+        "ueber_namen": "x = f(k)\nif x:\n    pass\n",
+        "oder_true": "if f(k) or True:\n    pass\n",
+        "nicht": "if not f(k):\n    pass\n",
+        "und": "if f(k) and g():\n    pass\n",
+        "vergleich": "if f(k) != 1:\n    pass\n",
+    }
+    rumpf = "def f(k):\n    return 0, []\ndef g():\n    return True\n"
+    gefunden = 0
+    for name, src in formen.items():
+        if _truthiness_nutzungen(_ast.parse(rumpf + src)):
+            gefunden += 1
+        else:
+            out.append(f"Akte-Truthiness: Ausweichform `{name}` bleibt grün")
+    # §A-ZZZZ16: **kein Modulglobal.** Die erste Fassung schrieb das
+    # Ergebnis in einen Modulglobal — und der Global-Prüfer aus
+    # §A-JX/§A-JY meldete sofort „nicht deklariert". Zu Recht: ein Global, das
+    # nur ein Selbsttest liest, ist Zustand ohne Zweck. Die Messung ist
+    # der Befund selbst — `n von m` steht in der Ausgabe des Laufs.
+    if gefunden < len(formen):
+        out.append(f"Akte-Truthiness: Wächter deckt {gefunden} von "
+                   f"{len(formen)} Ausweichformen — Rest benannt")
     return out
 
 
@@ -7185,6 +7345,20 @@ def _citation_counts(root: Path) -> tuple[int, int]:
     pair = re.compile(
         r"(?<![\d.])(\d{1,5})\s*/\s*(\d{1,5})(?![\d.])\s*[(\[]?\s*(\d{1,3})\s*%")
     offen = quittiert = 0
+    # §A-ZZZZ15 (Runde 59): **„quittiert" hatte keinen Deckel.** Jeder
+    # offene Befund durfte zitiert werden, und der Hook blieb grün — die
+    # Zusammenfassung, die den einen nicht-grünen Eintrag verschluckt.
+    # Zwei Bedingungen, beide billig:
+    #
+    #   1. Eine Quittung zählt nur, wenn das **Heading ihres Blocks** eine
+    #      `§`-Nummer trägt. Ein Zitat in einem Block ohne Nummer ist
+    #      keine Auflösung, sondern eine Ausrede.
+    #   2. Höchstens zwei Quittungen pro Lauf. Die dritte wird **offen**
+    #      — nicht abgelehnt, sondern sichtbar blockierend.
+    #
+    # Wie viele Quittungen es sind, steht danach in der Ausgabe. Ein
+    # Deckel ohne Anzeige wäre eine stille Abschneidung.
+    DECKEL = 2
     for path in (root / "CLAUDE.md",
                  root / "order_execution_engine" / "ops" / "TAG7_ABNAHME.md"):
         try:
@@ -7205,8 +7379,14 @@ def _citation_counts(root: Path) -> tuple[int, int]:
                 z, n, p = int(m.group(1)), int(m.group(2)), int(m.group(3))
                 if n == 0 or abs(100.0 * z / n - p) <= 1.0:
                     continue
+                if not (". §" in cur or cur.startswith("### §")):
+                    offen += 1            # keine Blocknummer ⇒ keine Quittung
+                    continue
                 if _is_citation(line, cur, sel) or _block_key(cur) in sel["targets"]:
-                    quittiert += 1
+                    if quittiert < DECKEL:
+                        quittiert += 1
+                    else:
+                        offen += 1        # der dritte wird sichtbar
                 else:
                     offen += 1
     return offen, quittiert

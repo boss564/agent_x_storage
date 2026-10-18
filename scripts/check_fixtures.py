@@ -512,6 +512,18 @@ def _akt_block(broken: bool) -> int:
     (root / "order_execution_engine" / "ops" / "TAG7_ABNAHME.md").write_text(
         payload, encoding="utf-8")
     hits = _akt_block_mismatch(root)
+    # §A-ZZZZ14 (Runde 59): **der Tree-Zweig, am Stub statt am Baum.**
+    # `not doc_path.exists() → return []` war der eine ungedeckte Zweig
+    # (0/1). Ein `git init` im Fixture hätte ihn „gedeckt" — aber an einem
+    # **Modellbaum**, und das Ergebnis hieße Deckung eines Modells. Der
+    # Stub ist die Naht, die der Wrapper ohnehin hat: kein Pfad, keine
+    # Datei, und der Wrapper muß **nichts** melden statt zu raten.
+    #
+    # Die Aussage: „keine Datei" ist grün, nicht rot. Eine Akte, die es
+    # nicht gibt, hat keinen zitierten Block, der abweichen könnte.
+    leer = _tree({"CLAUDE.md": "# Fixture\n"})
+    if _akt_block_mismatch(leer):
+        hits = list(hits) + ["Akte-Block: fehlende Akte gilt als Abweichung"]
     return len(hits), hits
 
 
@@ -882,8 +894,8 @@ def coverage_line() -> str:
         # §A-ZZZZ7: `0/1` ist nicht „nicht meßbar", sondern „meßbar und
         # nicht gedeckt". Die Ursache gehört in die Zeile — sonst liest
         # der nächste Leser `0/1` als Fortschritt von 0 auf 1.
-        teile.append(f"{n} {c}/{t} (Tree-Zweig, Fixture kann kein `.git/` "
-                     "bauen; gedeckt durch die Handläufe)")
+        teile.append(f"{n} {c}/{t} (Zweig geübt, Klasse nicht benannt; "
+                     "der Wrapper gibt `[]` zurück, ohne Meldetext)")
     return (f"Zweigabdeckung: {got}/{all_} ({pct}%) — offen: "
             + "; ".join(teile))
 

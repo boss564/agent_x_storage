@@ -7269,3 +7269,102 @@ kopfzeile: 8 gemessen · 0 nicht gemessen · 0 ohne Skript (12 entfernt) · Prü
 Karte: ee7dd282b2c7
 Bezug: root=/Volumes/THX_OS_ULTRA/Users/olivermueller/agent_x_storage, CLAUDE.md sha256:50fff349a031, Baum 6020cf39+dirty
 ```
+
+### §71.67 — Der Wächter sah eine Form; gemessen fand er eine von sechs
+
+**Runde 59. Ein Meßwert: der Wächter gegen sechs Ausweichformen.**
+
+**1. §71.66 hat die Meldung festgehalten und das Urteil weggelassen.**
+Die drei Gegenläufe standen als Sätze da („sagt vollständig, die Zahl
+sagt es nicht", „Form nicht lesbar"). Ob sie **blockieren**, war die
+Frage der Runde und blieb offen. Nachgemessen: alle drei liefern einen
+Befund, `EXIT=1`. Die Tabelle war unvollständig, nicht falsch.
+
+**2. Der leere Fall — `raise` wäre falsch.** Runde 56 entschied `raise`
+für `_falte_gruen`, weil dort der **Aufrufer** hätte vorher entscheiden
+müssen (Programmierfehler). Hier ist „kein Messblock" ein **Zustand des
+Baums** (frischer Klon). Ein `raise` reißt den Hook mit Traceback ab und
+sieht wie ein Werkzeugfehler aus. Die ehrliche Form ist ein Befund, der
+blockiert und sagt, was fehlt: `kein Messblock — Grundlage fehlt, nicht
+geprüft (blockierend)`. Das Tor ist bei fehlender Grundlage **zu**.
+
+**3. Der Wächter aus §71.66 war eine Ausschlußliste in Syntaxform.**
+Gemessen gegen sechs Formen, die vorher unbelegt waren:
+
+| Schreibweise | Runde 58 | Runde 59 |
+|---|---|---|
+| `if f(k):` | greift | greift |
+| `x = f(k); if x:` | — | greift |
+| `if f(k) or True:` | — | greift |
+| `if not f(k):` | — | greift |
+| `if f(k) and g():` | — | greift |
+| `if f(k) != 1:` | — | greift |
+
+**1/6 → 6/6.** Der AST liest jetzt den `test` **rekursiv** (`BoolOp`,
+`UnaryOp`, `Compare`, `IfExp`, Comprehension-Filter) und verfolgt
+Zuweisungen über Namen. Verglichen wird der **Rückgabetyp** — und zwar
+streng: nur Funktionen, deren `Return`s **ausschließlich** Tupel sind.
+
+**4. Die zwei Selbstfunde des neuen Wächters — beide echt.**
+`_checker_gap` wurde zunächst für einen Tupel-Rückgeber gehalten (er
+gibt `set`, `int` und `None` zurück; sein Tupel ist lokal). Mit dem zu
+groben Test meldete er `fwd`/`bwd` als Fehler — die Prüfung dort ist
+korrekt (`isinstance`-Wache, dann `!= 0`). Nach der Verschärfung:
+**0 Befunde im Produktivcode.**
+
+Konsequenz in §71.66 nachgetragen: „eine Fixture hat das Dataclass
+verworfen" war **keine Naturgewalt**. `carries_case` kodiert die
+Rückgabeform; sie hätte auf Verhalten umgestellt werden können. Das ist
+ein **benannter Rest**, kein Naturgesetz.
+
+**5. Die Fixture war nicht das Problem — aber ein `git init` wäre es.**
+Der Tree-Zweig (`not doc_path.exists() → []`) ist per **Stub an der
+Naht** geübt, ohne `§`-Block: kein Pfad, keine Datei ⇒ der Wrapper
+meldet nichts (richtig: eine Akte, die es nicht gibt, hat keinen
+Block, der abweichen könnte). Die Deckung bleibt **0/1** und heißt jetzt
+ehrlich: *Zweig geübt, Klasse nicht benannt* — der Wrapper gibt `[]`
+zurück, ohne Meldetext, also ohne Klasse. Ein `git init` hätte `2/2`
+eines **Modellbaums** gezeigt; die Falle, die §71.60 erkannt hat.
+
+**6. „Quittiert" hat jetzt einen Deckel — und beide Bedingungen greifen.**
+Eine Quittung zählt nur, wenn das **Heading ihres Blocks** eine
+`§`-Nummer trägt; höchstens **zwei** pro Lauf, die dritte wird offen.
+Heute: `0 offen · 2 quittiert` — genau am Deckel. Der nächste zitierte
+Bruch blockiert, bis einer der beiden aufgelöst ist.
+
+**7. Der Prüfer hat mich dreimal gefunden.**
+Beim Bau des Wächters meldete `--self-test`: zwei Zahlen ohne Herkunft
+in meinen eigenen Kommentaren, ein Modulglobal ohne Deklaration
+(`_WAECHTER_MESSUNG`), und einen Akte-Block, der vom Messlauf abweicht.
+Alle drei behoben — der Global durch **Löschen** (ein Zustand, den nur
+ein Selbsttest liest, ist Zustand ohne Zweck). Das ist der erste Lauf
+dieser Akte, in dem der Prüfer den **Schreibenden** blockiert hat.
+
+**8. Das Verhältnis — erstmals verbessert.** 204 Blöcke, 72 mit
+`§71.`-Titel, **4 gemessene Werte**: 1:51 statt 1:67. §71.67 ist ein
+Meßwert, kein Bericht; §71.66 war der letzte Textblock. Bilanz seit
+§71.61: zwei Befunde vom Prüfer, sechs vom Text. Die Schwelle 1:80
+bleibt — aber der Weg dahin führt über Blöcke **ohne** Text, nicht über
+weniger Text.
+
+**9. Benannte Reste (kein §-Block, weil Handwerk):**
+
+- `carries_case` prüft die Rückgabeform, nicht das Verhalten — solange
+  sie das tut, hat die Suite bei einem Rückgabetyp-Wechsel ein Veto an
+  der Stelle, die prüfen soll.
+- `_akt_block_mismatch` bleibt `0/1` benannt, nicht `1/1` deklariert.
+
+```
+total=2 chain_total=0 reported=2 unclassified=-2 unchecked=0 unclassified_checkers=0
+  Fließtext-Brüche: 2
+  Zeilen: 0
+  Referenzen: 0
+  Wellen: 0
+  Tests ohne Skript: 0
+  Inventare: 0
+  Testpfade: 0
+  Schreibmodus: 0
+kopfzeile: 8 gemessen · 0 nicht gemessen · 0 ohne Skript (12 entfernt) · Prüfer f9d94560b353
+Karte: ee7dd282b2c7
+Bezug: root=/Volumes/THX_OS_ULTRA/Users/olivermueller/agent_x_storage, CLAUDE.md sha256:50fff349a031, Baum 90639fbb+dirty
+```
