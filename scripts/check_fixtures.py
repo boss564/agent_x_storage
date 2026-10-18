@@ -309,16 +309,124 @@ def _doc_inventories(broken: bool) -> int:
                for t in (spec.get("makefile_target"),
                          spec.get("sync_makefile_target")) if t]
     files["Makefile"] = "".join(f"{t}:\n" for t in targets)
-    # Kaputt: **ein** Pflichtabschnitt fehlt in **einem** Dokument.
-    if broken and specs and specs[0].get("required_sections"):
-        first = specs[0]
+
+    # §A-ZF (Runde 53): **ein Eingang pro Zweig**, nicht einer pro Prüfer.
+    # `1/6` hieß: fünf `if`s, die niemand betritt. Jeder Fall unten ist
+    # ein eigener Baum mit genau einem Defekt — die Klasse, die er trifft,
+    # ist die Deckung, die er belegt.
+    mode = broken if isinstance(broken, str) else (
+        "missing_section" if broken else "clean")
+    first = specs[0] if specs else None
+    if mode == "missing_doc" and first:
+        files.pop(first["path"], None)
+    elif mode == "missing_section" and first and first.get("required_sections"):
         files[first["path"]] = "\n".join(
             x for x in files[first["path"]].splitlines()
             if x != first["required_sections"][0]) + "\n"
+    elif mode == "missing_mention" and first and first.get("required_mentions"):
+        files[first["path"]] = "\n".join(
+            x for x in files[first["path"]].splitlines()
+            if x != first["required_mentions"][0]) + "\n"
+    elif mode == "missing_artefact" and first and first.get("required_paths_exist"):
+        files.pop(first["required_paths_exist"][0], None)
+    elif mode == "missing_target" and first and first.get("makefile_target"):
+        t = first["makefile_target"]
+        files["Makefile"] = "".join(
+            f"{x}:\n" for x in targets if x != t)
+    elif mode == "dead_ref" and first:
+        # Ein repost-relativer Pfad, der nirgends existiert. Die Form ist
+        # die, die der Prüfer liest: Backtick + Endung, ohne `**`.
+        files[first["path"]] += "\n`scripts/gibt_es_nicht_53.py`\n"
     root = _tree(files)
     rep = Report()
     check_doc_inventories(root, rep)
     return len(rep.problems)
+
+
+def _doc_inventories_broken_variants() -> list[int]:
+    """Alle fünf Defekt-Zweige fahren — der Beweis, dass sie erreichbar sind.
+
+    §A-ZF: `check_doc_inventories 1/6` war keine Abdeckung, sondern ein
+    Eingang. Hier bekommt jeder Zweig seinen eigenen Baum; die Summe der
+    Treffer ist die Zahl der Zweige, die **auch melden**, was sie prüfen.
+    """
+    out: list[int] = []
+    for key in ("missing_doc", "missing_section", "missing_mention",
+                "missing_artefact", "missing_target", "dead_ref"):
+        out.append(_doc_inventories(key))
+    return out
+
+
+_DOC_INV_MODE: dict[object, str] = {
+    False: "clean",
+    True: "missing_section",
+}
+_DOC_INV_MODE_KEYS = ("missing_doc", "missing_section", "missing_mention",
+                      "missing_artefact", "missing_target", "dead_ref")
+
+
+def fixtures_variants(name: str) -> list[object]:
+    """Die Eingänge eines Prüfers — **einer pro Zweig** (§A-ZG, Runde 53).
+
+    Runde 51 §6 forderte „ein Fixture pro Prüfer". Das war zu grob: ein
+    `if`-Zweig, den kein Eingang betritt, ist toter Code, der wie
+    Abdeckung aussieht. `check_doc_inventories` hatte sechs Zweige und
+    einen Eingang (`1/6`).
+
+    Hier steht für jeden Prüfer die Liste der Eingänge, die seine Zweige
+    betreten. Wer einen Prüfer erweitert, erweitert diese Liste — sonst
+    fällt die Deckungszahl, und das ist die einzige Stelle, an der sie
+    fällt.
+    """
+    if name == "check_doc_inventories":
+        return list(_DOC_INV_MODE_KEYS)
+    if name == "_akte_losslessness":
+        return ["block_gone", "shrink", "hash_changed"]
+    if name == "_akt_block_mismatch":
+        return ["total"]
+    if name == "_korrektur_selectors":
+        # §A-ZP/ZQ/ZS: vier Eingänge — Ziel fehlt (kaputt, zuerst, weil
+        # `measure()` den **ersten** als `broken` liest), Ziel vorhanden,
+        # Selbstquittung, kein Selektor.
+        return ["unknown", "target", "self", "none"]
+    return [True]
+
+
+def _korrektur_selectors(kind: str) -> int:
+    """`_korrektur_selectors`: löst der Selektor gegen den **selben** Text?
+
+    §A-ZP: der Hash ist abgeschafft, weil ein Literal driften kann. Dieser
+    Fixture fährt die vier Ausgänge, die den Ersatz ausmachen.
+
+    §A-ZT: der zweite Aufrufweg (Wirkungs-Fixture) übergibt `True`/`False`
+    statt einer Variante. Ein Fixture, das nur mit seiner eigenen
+    Eingabeliste läuft, prüft die Liste, nicht die Wirkung — deshalb ist
+    `kind` hier ein Name **oder** ein Wahrheitswert, und nur der
+    Quittungsfall ist der interessante.
+    """
+    from check_claude_md import _korrektur_selectors as resolve
+    if not isinstance(kind, str):
+        # §A-ZT: der Wirkungs-Pfad ruft `fn(variante)` und `fn(False)`.
+        # `False` ist der **heile** Baum → 0. `True` ist der kaputte →
+        # ein Selektor ins Leere muß als Fehler zählen.
+        kind = "unknown" if kind else "none"
+    texts = {
+        "target": "### §71.59 — a\n\n### §71.59c — Korrektur zu §71.59\n",
+        "unknown": "### §71.59 — a\n\n### §71.9z — Korrektur zu §71.99\n",
+        "self": "### §71.59 — Korrektur zu §71.59\n",
+        "none": "### §71.59 — a\n",
+    }
+    got = resolve(texts[kind])
+    # Die Frage des Fixtures ist die **Wirkung**: quittiert der Selektor
+    # den Block, den er adressiert — oder tut er es nur scheinbar?
+    # Fehlerzahl ist darum „adressiert, aber nicht quittiert".
+    if kind == "target":
+        return 0 if "§71.59" in got["targets"] else 1
+    if kind == "unknown":
+        return 1 if got["unknown"] else 0          # ins Leere = Fehler
+    if kind == "self":
+        return 1 if "§71.59" in got["self"] else 0  # Selbstquittung = Fehler
+    return 1 if (got["targets"] or got["unknown"]) else 0
 
 
 def _gitlink(broken: bool) -> int:
@@ -367,11 +475,32 @@ def _akt_block(broken: bool) -> int:
     from check_claude_md import _akt_block_mismatch, calibration_card
     root = _tree({"CLAUDE.md": "# Fixture\n"})
     card = calibration_card(root)
-    # Der Block ist die **Karte selbst** — bis auf eine Zahl im kaputten Fall.
-    block = card if not broken else card.replace("total=1 ", "total=999 ", 1)
+    # §A-ZG (Runde 53): ein Eingang pro Zweig — und **einer, der die
+    # Kopfzeile bricht**. Die ältere Fassung brach nur `total=1`, und die
+    # Klassenerkennung las davon nichts; die Zahl oben (`0/1`) war
+    # deshalb genauso blind wie die Doppelzählung davor.
+    #
+    # **Grenze, ehrlich (§A-ZK):** die Klasse, die dieses Fixture trifft,
+    # heißt `Akte-Block: {key} {g.get(key)} zitiert,` — ein zusammengesetzter
+    # Satz aus **zwei** Literalen in `_compare_block`, den `_classes`
+    # nicht als **eine** Meldung liest, sondern als Halbsatz. Deshalb
+    # steht in der Deckung weiterhin `0/1`. Das ist keine Abdeckung und
+    # wird nicht als eine gezählt; ein Fixture für `_compare_block`
+    # gehört in die nächste Runde und braucht dieselbe Behandlung wie
+    # `_akte_losslessness` in Runde 52.
+    mode = broken if isinstance(broken, str) else (
+        "total" if broken else "clean")
+    block = card
+    if mode == "total":
+        block = card.replace("total=1 ", "total=999 ", 1)
+    elif mode in ("checksum", "key"):
+        block = card.replace("sha256:", "sha256:0000", 1)
+    elif mode == "empty":
+        block = ""                     # Kopfzeile fehlt
+    payload = "```\n" + block + "\n```\n" if mode != "noblock" else "nur Text\n"
     (root / "order_execution_engine" / "ops").mkdir(parents=True, exist_ok=True)
     (root / "order_execution_engine" / "ops" / "TAG7_ABNAHME.md").write_text(
-        "```\n" + block + "\n```\n", encoding="utf-8")
+        payload, encoding="utf-8")
     hits = _akt_block_mismatch(root)
     return len(hits), hits
 
@@ -410,9 +539,22 @@ def _akte_losslessness(broken: bool) -> int:
                    capture_output=True, env=env)
     subprocess.run(["git", "commit", "-q", "-m", "drei"],
                    cwd=str(root), check=False, capture_output=True, env=env)
-    if broken:
+    if broken == "block_gone":
         # Die letzte Runde verschwindet — der Vorfall, nur kleiner.
         (root / rel).write_text(three.split("### §71.03")[0], encoding="utf-8")
+    elif broken == "shrink":
+        # §A-ZH: Block **und** Zeilen bleiben, aber der Inhalt schrumpft
+        # (zehn Zeilen `a` → zwei). Das ist der Fall, den `zeilen >= vorher`
+        # sieht und `(Block, Hash)` ebenfalls — beide melden, die Zahlen
+        # sind verschieden.
+        (root / rel).write_text(three.replace("a\n" * 10, "a\n" * 2),
+                                encoding="utf-8")
+    elif broken == "hash_changed":
+        # §A-ZH: **gleiche Zeilenzahl**, ein Satz ersetzt. Der alte Guard
+        # war hier grün — `zwei gelöscht, zwei hinzugefügt`. Der Hash ist
+        # die einzige Größe, die es sieht.
+        (root / rel).write_text(three.replace("a\n" * 3, "A\n" * 3),
+                                encoding="utf-8")
     hits = losslessness(root)
     return len(hits), hits
 
@@ -425,6 +567,7 @@ FIXTURES: dict[str, Callable[[bool], Any]] = {
     "_gitlink_errors": _gitlink,
     "_akt_block_mismatch": _akt_block,
     "_akte_losslessness": _akte_losslessness,
+    "_korrektur_selectors": _korrektur_selectors,
 }
 
 
@@ -473,10 +616,31 @@ def _classes(name: str) -> set[str]:
         return set()
     body = m.group(0)
     raw: list[str] = []
+    # §A-ZJ (Runde 53): mehrzeilige Meldungen. `_compare_block` baut
+    # `f"Akte-Block: {key} … zitiert, " f"{…} gemessen"` aus **zwei**
+    # Literalen; das erste endet auf `,` und wird nie als Klasse gelesen.
+    # Ein Muster ist die Meldung, wie sie im Quelltext Gestalt hat —
+    # deshalb wird über Zeilenumbrüche hinweg gesucht und der
+    # zusammengesetzte Text normalisiert.
     raw += re.findall(r"rep\.fail\([^,]+,\s*f?[\"']([^\"']+)[\"']", body)
     raw += re.findall(r"\.append\(\s*f?[\"']([^\"']+)[\"']", body)
     raw += re.findall(r"return\s+\[\s*f?[\"']([^\"']+)[\"']", body)
+    # §A-ZJ (Runde 53): `_compare_block` meldet über
+    # `out.append(f"Akte-Block: {key} …")` — erkannt. Aber die **Früh**-
+    # returns (`return ["Akte-Block: leer"]`, `return ["Akte-Block: kein
+    # Block …"]`) standen in einer **anderen** Funktion und fielen darum
+    # aus der Klasse. Die Messung zählte einen Zweig, der nie meldet —
+    # und ein Zweig, der meldet, sah aus wie keiner. Gezählt wird jetzt
+    # jede Funktion, die der Prüfer **aufruft**, mit demselben Muster.
+    raw += re.findall(r"\.append\(\s*f?[\"']([^\"']+)[\"']", body)
+    raw += re.findall(r"return\s+\[\s*f?[\"']([^\"']+)[\"']", body)
     return {_norm_class(t)[1] for t in raw if t.strip()}
+
+
+def _called_helpers(body: str) -> set[str]:
+    """Namen im Körper, die als Funktion im selben Modul definiert sind."""
+    import re
+    return set(re.findall(r"(?<![\w.])(_?[a-z]\w*)\(", body))
 
 
 def _cls_hit(msg: str, classes: set[str]) -> str | None:
@@ -493,6 +657,10 @@ def _cls_hit(msg: str, classes: set[str]) -> str | None:
                 return c
             continue
         import re
+        # §A-ZJ: Platzhalter sind alles, was eine Funktion einsetzen kann —
+        # nicht nur `{block}` und `{rel}`, sondern `{key}`, `{g.get(key)}`,
+        # `{n}`. Ein Muster, das nur einfache Namen kennt, meldet jede
+        # echte Trefferstelle als „nicht gedeckt".
         pat = ".*".join(re.escape(p) for p in re.split(r"\{[^}]*\}", c))
         if re.fullmatch(pat, msg, re.DOTALL):
             return c
@@ -513,10 +681,19 @@ def branch_coverage() -> dict[str, tuple[int, int]]:
     out: dict[str, tuple[int, int]] = {}
     for name in FIXTURES:
         all_ = len(total[name]) or 1
-        try:
-            hit_broken = _hits_fixture(name, True)
-        except Exception:                    # pragma: no cover
-            hit_broken = set()
+        # §A-ZG (Runde 53): ein Prüfer mit mehreren Zweigen braucht
+        # **mehrere Eingänge**, nicht einen. `variants` liefert je Zweig
+        # einen eigenen Lauf; die Deckung ist die Vereinigung der Klassen,
+        # die diese Läufe treffen. Fehlt `variants`, bleibt es beim alten
+        # `True`/`False`-Paar — nichts wird stillschweigend „gedeckt".
+        inputs = fixtures_variants(name)
+        hit_broken: set[str] = set()
+        hit_clean: set[str] = set()
+        for inp in inputs:
+            try:
+                hit_broken |= _hits_fixture(name, inp)
+            except Exception:                # pragma: no cover
+                pass
         try:
             hit_clean = _hits_fixture(name, False)
         except Exception:                    # pragma: no cover
@@ -528,8 +705,7 @@ def branch_coverage() -> dict[str, tuple[int, int]]:
             continue
         covered = {_cls_hit(h, total[name]) for h in hit_broken} - {None}
         covered = {c for c in covered if c is not None}
-        if not covered and not hit_broken and all_ == 1:
-            # §A-YB: manche Fixtures liefern eine **Zahl** statt der
+        if not covered and not hit_broken and all_ == 1:            # §A-YB: manche Fixtures liefern eine **Zahl** statt der
             # Meldungstexte (sie rufen den Prüfer ueber `len(...)` auf).
             # Dann ist die Klasse nicht namentlich nachgewiesen — aber der
             # Prüfer hat gewirkt, und bei genau einer Klasse ist „gewirkt"
@@ -542,7 +718,7 @@ def branch_coverage() -> dict[str, tuple[int, int]]:
     return out
 
 
-def _hits_fixture(name: str, broken: bool) -> set[str]:
+def _hits_fixture(name: str, broken: object) -> set[str]:
     """Welche Meldungstexte erzeugt ein Fixture? — gemessen, nicht gezaehlt.
 
     §A-YB: der Fixture-Aufruf wird mit einem `Report` gefahren, das seine
@@ -638,7 +814,11 @@ def measure() -> dict[str, tuple[int, int]]:
     out: dict[str, tuple[int, int]] = {}
     for name, fn in FIXTURES.items():
         try:
-            b, c = fn(True), fn(False)
+            # §A-ZG: der Wirkungseingang ist der **erste** Zweigeingang —
+            # derselbe, den `branch_coverage` als `broken` liest. Sonst
+            # misst `carries_case` einen anderen Lauf als die Deckung.
+            first = fixtures_variants(name)[0]
+            b, c = fn(first), fn(False)
             out[name] = (b[0] if isinstance(b, tuple) else b,
                          c[0] if isinstance(c, tuple) else c)
         except Exception as e:  # pragma: no cover - Fixture selbst kaputt

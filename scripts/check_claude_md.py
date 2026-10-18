@@ -382,10 +382,11 @@ class Report:
             raise AssertionError("jede Zusage braucht ihren Feldnamen")
         self.claims.append((field, int(count), line, text[:80]))
 
-    def fail(self, line: int | None, kind: str, doc, real, note: str = "") -> None:
+    def fail(self, line: int | None, kind: str, doc, real, note: str = "",
+             state: str = "offen") -> None:
         self.checked += 1
         self.problems.append({"line": line, "kind": kind, "doc": doc,
-                              "real": real, "note": note})
+                              "real": real, "note": note, "state": state})
 
     def skip(self, rule: str, n: int = 1) -> None:
         """Zaehlt einen Ausschluss (nicht: eine Pruefung)."""
@@ -655,6 +656,7 @@ def self_test_check_counts() -> list[str]:
     # §A-NS (Runde 52): der Beinahe-Verlust und seine Ursache.
     failures.extend(_self_test_akte_write_mode())
     failures.extend(_self_test_akte_guard())
+    failures.extend(_self_test_prose_fractions())
     failures.extend(_self_test_cwd_readers())
     failures.extend(_self_test_reader_calls())
     failures.extend(_self_test_wirkung())
@@ -994,6 +996,9 @@ def calibration_run(root: Path, text: str | None = None,
     # `check_*`-Calls, und `run("Schreibmodus", check_akte_write_mode,
     # root)` uebergibt den Namen als `Name`-Argument; der Pruefer sieht ihn.
     run("Schreibmodus", check_akte_write_mode, root)
+    # §A-ZB (Runde 53): der Bruchzahlen-Pruefer — in `main` und hier.
+    # Er steht in beiden Ketten, sonst meldet §A-MT eine Differenz.
+    run("Fließtext-Brüche", check_prose_fractions, root)
     if with_tests:
         run("Testsuite", check_tests, doc, root)
 
@@ -1993,6 +1998,15 @@ def _akte_losslessness(root: Path | None = None) -> list[str]:
             out.append(
                 f"Akte: Block {sec} Zeilen {old_lines} -> {new_lines} "
                 f"— Verlust im Block (Hash {old_id[sec]} -> {now_id[sec]})")
+        else:
+            # §A-ZH (Runde 53): gleiche oder mehr Zeilen, anderer Hash.
+            # `if new_lines < old_lines` war die Bandage aus Runde 52:
+            # „zwei gelöscht, zwei hinzugefügt ist in beiden grün". Der
+            # Hash sieht es, und er ist die einzige Größe, die es sieht.
+            out.append(
+                f"Akte: Block {sec} geändert ({old_lines} -> {new_lines} "
+                f"Zeilen, Hash {old_id[sec]} -> {now_id[sec]})"
+                " — Berichtigung als neuer Block (§71.5x), nicht still")
     # Und die Groessen, damit ein Zeilenverlust **innerhalb** eines
     # Blocks nicht durch die Mengenpruefung faellt.
     for label, fn in (("Bezug-Zeilen", lambda t: t.count("\nBezug: root=")),
@@ -2585,17 +2599,19 @@ def _self_test_calibration_classes() -> list[str]:
         # Erwartung als Literal mit Herkunft: `main` ruft
         # `check_line_counts`, `check_dead_refs`, `check_counts`,
         # `check_undocumented_tests`, `check_doc_inventories`,
-        # `check_test_paths_ignored` (Runde 51) und `check_akte_write_mode`
-        # (Runde 52; `check_tests` nur unter `--run-tests`). Ohne
-        # `with_tests` sind das **sieben** Klassen — die Zahl selbst wird
-        # vom `_checker_gap`-Test gegen `main` gemessen, nicht hier vertraut.
-        if names != sorted(["Zeilen", "Referenzen", "Wellen",
-                            "Tests ohne Skript", "Inventare", "Testpfade",
-                            "Schreibmodus"]):
-            out.append(f"Kalibrierlauf nennt nicht die sieben der Kette: {names}")
-        if len(base["classes"]) != 7:
+        # `check_test_paths_ignored` (Runde 51), `check_akte_write_mode`
+        # (Runde 52) und `check_prose_fractions` (Runde 53; `check_tests`
+        # nur unter `--run-tests`). Ohne `with_tests` sind das **acht**
+        # Klassen — die Zahl selbst wird vom `_checker_gap`-Test gegen
+        # `main` gemessen, nicht hier vertraut.
+        want = ["Zeilen", "Referenzen", "Wellen", "Tests ohne Skript",
+                "Inventare", "Testpfade", "Schreibmodus",
+                "Fließtext-Brüche"]
+        if names != sorted(want):
+            out.append(f"Kalibrierlauf nennt nicht die acht der Kette: {names}")
+        if len(base["classes"]) != len(want):
             out.append(f"Kalibrierlauf hat {len(base['classes'])} Klassen, "
-                       f"erwartet 7")
+                       f"erwartet {len(want)}")
         # (2) Die harte Zeile: total ist die Summe der Klassen — und die
         #     Kette ist Summe plus Luecke. Beide Gleichungen, nicht eine.
         s = sum(n for _, n in base["classes"])
@@ -4100,6 +4116,209 @@ def _self_test_akte_write_mode() -> list[str]:
     return out
 
 
+def check_prose_fractions(root: Path, rep: Report) -> None:
+    """Stimmt `Z/N (P%)` im Fließtext mit der Division? (§A-ZB, Runde 53)
+
+    §A-ZA: die Akte enthielt den Satz „die Gesamtzahl ist gefallen".
+    Der Anteil war **gestiegen**. Gefunden hat das nicht ein Prüfer,
+    sondern der Leser. Ein Prüfer über Prosa wäre teuer; ein Prüfer über
+    **Bruchzahlen** ist eine Division.
+
+    Rot ist jede Stelle, an der `Z/N` und `(P%)` zusammenstehen und
+    `100*Z/N` mehr als eine Prozentstelle von `P` abweicht. Die Toleranz
+    ist eine Stelle: sie deckt `floor` und `round`, nicht einen Rechenfehler.
+
+    **Grenze, benannt:** erkannt wird nur, was in **einem** Satz als
+    `Z/N (P%)` steht oder als `(P%)`-Klammer direkt hinter dem Bruch.
+    Zwei Prozentzahlen ohne ihre Brüche daneben sieht kein Prüfer — und
+    kann es nicht, weil die Operanden fehlen.
+    """
+    import re
+    pair = re.compile(
+        r"(?<![\d.])(\d{1,5})\s*/\s*(\d{1,5})(?![\d.])\s*[(\[]?\s*(\d{1,3})\s*%")
+    for path in (root / "CLAUDE.md",
+                 root / "order_execution_engine" / "ops" / "TAG7_ABNAHME.md"):
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        # §71.59b (Runde 53): Codeblöcke sind **Syntax**, keine Behauptung.
+        # Dort steht ein Beispiel, und ein Gegenbeispiel ist dort zulässig —
+        # im Fließtext nicht. Diese eine Ausnahme ist der Unterschied
+        # zwischen einem Prüfer, der Beispiele versteht, und einem, der
+        # Zahlen zählt.
+        # §A-ZP (Runde 54): der Korrekturblock trägt einen **Selektor**
+        # (`Korrektur zu §71.59`), keinen Hash. Ein Literal driftet, ein
+        # abgeleiteter Wert nicht — und der Prüfer rechnet den Hash im
+        # **selben Artefakt**, in dem er den Block liest. Eine Diskrepanz
+        # ist damit baulich unmöglich, nicht nur behoben.
+        #
+        # Dieselbe Entscheidung wie `global` (R50) und `ast` (R51):
+        # nicht speichern, was ableitbar ist.
+        sel = _korrektur_selectors(text)
+        fenced = False
+        cur_block = ""
+        cur_title = ""
+        for lineno, line in enumerate(text.splitlines(), 1):
+            if line.startswith("### "):
+                cur_block = line
+                cur_title = line
+            if line.lstrip().startswith("```"):
+                fenced = not fenced
+                rep.ok()
+                continue
+            if fenced:
+                rep.ok()       # im Block: Beispiel, keine Behauptung
+                continue
+            # §A-ZQ: eine Korrektur, die den falschen Wert zitieren würde,
+            # wird selbst zum Befund. Deshalb gilt: der Block, den ein
+            # Korrekturblock adressiert, wird gegen den Block **geprüft,
+            # in dem er steht** — und ein Selektor auf einen unbekannten
+            # Block ist offen, nicht quittiert.
+            cur_sel = _selector_in(cur_title)
+            if cur_sel and cur_sel not in sel["targets"]:
+                rep.fail(lineno, "Korrektur zu unbekanntem Block",
+                         cur_sel, "Selektor trifft keinen Block",
+                         state="offen")
+                break
+            # §A-ZR: Ziel-Quittung steckt in `_is_citation` (der Prüfer soll
+            # **eine** Stelle haben, an der „quittiert" entschieden wird).
+            # Eine zweite Variable hier wäre ein zweiter Wahrheitsort.
+            for m in pair.finditer(line):
+                z, n, p = int(m.group(1)), int(m.group(2)), int(m.group(3))
+                if n == 0:
+                    rep.fail(lineno, "Bruch mit Nenner 0", m.group(0),
+                             "unmoeglich")
+                    continue
+                want = 100.0 * z / n
+                if abs(want - p) <= 1.0:
+                    rep.ok()
+                    continue
+                # §A-ZM: Zitat oder Behauptung? Ein Zitat nennt seine
+                # Herkunft (`laut`/`zitiert`/`steht`) oder steht in einem
+                # Quittungsblock. Beides wird **gemeldet** — nur die
+                # Kopfzeile unterscheidet (`offen` / `quittiert`).
+                if _is_citation(line, cur_block, sel):
+                    rep.fail(lineno, "Bruch und Prozent passen nicht (zitiert)",
+                             m.group(0),
+                             f"echt {want:.1f}% ({z}/{n})", state="quittiert")
+                    continue
+                rep.fail(lineno, "Bruch und Prozent passen nicht",
+                         m.group(0), f"echt {want:.1f}% ({z}/{n})")
+            # Jede Zeile ist geprueft, auch ohne Bruch: was nicht dasteht,
+            # ist nicht falsch. Der Zaehler zaehlt die Zeilen, die der
+            # Pruefer gelesen hat — bei `_akt_block` ist es dasselbe Muster.
+            if not pair.search(line):
+                rep.ok()
+
+
+def _selector_in(title: str) -> str | None:
+    """`### §71.59c — Korrektur zu §71.59` → `§71.59`. Sonst `None`.
+
+    §A-ZP: der Selektor ist ein **Verweis**, kein Wert. Er wird im selben
+    Text aufgelöst, in dem er steht. Der frühere Hash konnte driften; ein
+    Verweis auf einen Blocknamen driftet nur, wenn der Block umbenannt
+    wird — und dann ist es eine sichtbare Umbenennung, keine stille.
+    """
+    import re
+    m = re.search(r"Korrektur zu\s+(§[\d.]+[a-z]?)", title)
+    return m.group(1) if m else None
+
+
+def _block_key(title: str) -> str | None:
+    """`### §71.59 — …` → `§71.59`. Die Identität eines Blocks ist seine
+    Nummer, nicht seine Überschrift: der Titel darf sich ändern, ohne die
+    Quittung zu brechen (§A-ZR)."""
+    import re
+    m = re.match(r"###\s+(§[\d.]+[a-z]?)", title)
+    return m.group(1) if m else None
+
+
+def _korrektur_selectors(text: str) -> dict[str, set[str]]:
+    """Welche Blöcke ein Korrekturblock adressiert — und ob er existiert.
+
+    §A-ZQ: der Auflöser hat zwei Eingänge:
+      `targets` — Selektoren mit **vorhandenem** Zielblock (quittiert)
+      `unknown` — Selektoren ohne Ziel (offen: ein Verweis ins Leere)
+
+    Öffentlich geprüft, weil die Gegenprobe („Block entfernen ⇒ rot") nur
+    dann etwas belegt, wenn sie denselben Auflöser benutzt wie der Lauf.
+    """
+    import re
+    titles: set[str] = set()
+    for line in text.splitlines():
+        if line.startswith("### "):
+            m = re.match(r"###\s+(§[\d.]+[a-z]?)", line)
+            if m:
+                titles.add(m.group(1))
+    targets: set[str] = set()
+    unknown: set[str] = set()
+    selff: set[str] = set()
+    for line in text.splitlines():
+        if not line.startswith("### "):
+            continue
+        s = _selector_in(line)
+        if s is None:
+            continue
+        (targets if s in titles else unknown).add(s)
+        if _block_key(line) == s:
+            selff.add(s)
+    return {"targets": targets, "unknown": unknown, "self": selff}
+
+
+
+def _is_citation(line: str, block_title: str = "",
+                 sel: dict[str, set[str]] | None = None) -> bool:
+    """Ist diese falsche Zahl ein **Zitat** oder eine **Behauptung**?
+
+    §A-ZM (Runde 54): dieselbe Prädikat-Frage wie `_path_is_asserted_not_read`
+    in Runde 51, ein anderes Objekt. Ein Fund, den die Akte selbst als
+    Fund zitiert, darf den Prüfer nicht dauerhaft rot halten — sonst
+    schaltet man nach sechs Runden den Prüfer ab, nicht die Zahl.
+
+    Zitat heißt, erkennbar an der **Zeile**:
+
+      die Zahl steht in Anführungszeichen (`…` oder ``…``),
+      **und** die Zeile nennt ihre Rolle (`laut`, `zitiert`, `steht`)
+
+    oder an der **Umgebung**: der Block trägt `Korrektur zu §<ziel>`, und
+    dieses Ziel **existiert im selben Text** (`sel["targets"]`). Ein
+    Selektor ins Leere quittiert nichts — er ist selbst offen.
+
+    Grenze, benannt: eine Korrektur soll den falschen Wert **nicht
+    wiederholen**. Tut sie es doch in Anführungszeichen mit Rolle, ist
+    das ein Zitat — gemeldet, quittiert, sichtbar. Eine Regel sparen ist
+    besser, aber ein Zitat zu verbieten, das keiner mehr braucht, wäre
+    die vierte Ausnahme.
+    """
+    import re
+    quoted = (bool(re.search(r"[`„\"']\s*\d{1,5}\s*/\s*\d{1,5}[^`\"'„“]*[`\"'„“]", line))
+              or "``" in line)
+    role = any(w in line for w in ("laut", "zitiert", "steht"))
+    if quoted and role:
+        return True
+    if "Berichtigung" in block_title:
+        return True
+    # §A-ZS: **Selbstquittung ist keine Quittung.** Ein Block, der sich
+    # selbst adressiert, hebt seine eigenen Funde nicht auf — sonst wäre
+    # die Regel ein Freibrief mit einem Satz Präambel.
+    s = _selector_in(block_title)
+    if s is not None:
+        k = _block_key(block_title)
+        if k == s:
+            return False
+        return bool(sel and s in sel["targets"])
+    # §A-ZR: der **Zielblock** selbst. Adressiert ihn ein Korrekturblock,
+    # quittiert das seine Fundstellen — außer der Zielblock hat sich in
+    # `self` selbst adressiert.
+    if sel:
+        k = _block_key(block_title)
+        if not k or k not in sel["targets"]:
+            return False
+        return k not in sel.get("self", set())
+    return False
+
+
 def _self_test_akte_guard() -> list[str]:
     """§A-NS: verweigert der Guard den Schrumpf, und räumt er `.tmp` weg?
 
@@ -4135,6 +4354,60 @@ def _self_test_akte_guard() -> list[str]:
     # Und der Fall, der durchgehen MUSS: mehr Bloecke, mehr Zeilen.
     if G.check_shrink(body, body + "\n### §71.05 — fünf\n\nmehr\n"):
         out.append("akte_guard: Wachstum wurde als Verlust gemeldet")
+    # §A-ZE (Runde 53): **gleiche Zeilenzahl**, ein Satz ersetzt. Runde 52
+    # war hier gruen — `zeilen >= vorher` ist eine Zahl, keine Menge.
+    # Der Anker ist das **erste Zeichen** der Zeile, nicht das ganze Wort —
+    # `"Text."` steht inzwischen in mehreren Fixtures (§A-ZI).
+    same_lines = body.replace("\nText.", "\nText!!", 1)
+    if len(same_lines.splitlines()) != len(body.splitlines()):
+        out.append("akte_guard: Fixture veraendert die Zeilenzahl — "
+                   "der Hash-Fall ist nicht isoliert")
+    hits = G.check_shrink(body, same_lines)
+    if not any("geändert" in h for h in hits):
+        out.append(f"akte_guard: Inhaltsaenderung bei gleicher Zeilenzahl "
+                   f"nicht erkannt ({hits})")
+    return out
+
+
+def _self_test_prose_fractions() -> list[str]:
+    """§A-ZB: findet der Prüfer den Satz, der in der Akte stand?
+
+    Der Selbsttest ist die **Negativprobe**: die alte Form
+    (`14/21 (66%)` neben `53% → 66%`) muß rot sein, die Rundung
+    (`14/21 (67%)`) grün, `7/21 (33%)` grün. Ein Prüfer, der im
+    Quelltext steht und nie feuert, ist der Fehler, um den es geht.
+    """
+    import tempfile
+    out: list[str] = []
+    d = Path(tempfile.mkdtemp(prefix="pf_"))
+    (d / "order_execution_engine" / "ops").mkdir(parents=True)
+    akte = d / "order_execution_engine" / "ops" / "TAG7_ABNAHME.md"
+    (d / "CLAUDE.md").write_text("", encoding="utf-8")
+    cases = [
+        ("14/21 (99%)\n", 1, "falsche Prozentzahl"),
+        ("7/21 (33%)\n", 0, "richtige Ableitung"),
+        ("14/21 (67%)\n", 0, "gerundete Prozentzahl"),
+        ("14/21 (66%)\n", 0, "abgerundete Prozentzahl"),
+        ("Kein Bruch in dieser Zeile.\n", 0, "Zeile ohne Bruch"),
+        # §A-ZM: Zitat ist nicht Behauptung — gemeldet, aber quittiert.
+        ("laut Akte steht dort `14/21 (99%)`\n", 1, "zitiert, quittiert"),
+        ("```\n14/21 (99%)\n```\n", 0, "im Codeblock: Beispiel"),
+        # §A-ZP/ZQ/ZS: Selektor statt Hash — gültig, ins Leere, gegen sich selbst.
+        ("### §71.59 — a\n14/21 (99%)\n### §71.59c — Korrektur zu §71.59\n",
+         1, "gueltiger Selektor quittiert den Zielblock"),
+        ("### §71.59 — a\n14/21 (99%)\n### §71.59c — Korrektur zu §71.99\n",
+         2, "Selektor ins Leere quittiert nichts (+ eigener Befund)"),
+        ("### §71.59 — Korrektur zu §71.59\n14/21 (99%)\n",
+         1, "Selbstquittung ist keine Quittung"),
+    ]
+    for text, want, label in cases:
+        akte.write_text(text, encoding="utf-8")
+        rep = Report()
+        check_prose_fractions(d, rep)
+        got = len(rep.problems)
+        if got != want:
+            out.append(f"check_prose_fractions: {label} — {got} Befunde, "
+                       f"erwartet {want} ({text.strip()})")
     return out
 
 
@@ -5758,9 +6031,43 @@ def check_akte_write_mode(root: Path, rep: Report) -> None:
     dann jedes String-Literal — Ergebnis: `35958 Angaben geprüft` und
     `unclassified=-7`. Eine Prüfung ist ein **Schreibaufruf**, nicht jedes
     Vorkommen des Dateinamens. Gezählt wird jetzt je Aufruf.
+
+    **§A-ZC (Runde 53) — Negativliste gegen Zielliste.** Die Fassung aus
+    Runde 52 fragte `open(..., "w")`, `.write_text`, `.write_bytes`. Das
+    ist eine **Liste von Methoden**, und sie ist strukturell
+    unvollständig: `"w+"`, `"wb"`, `"x"`, `os.replace`, `shutil.copy`,
+    `json.dump(fp)`, `os.truncate`, `pandas.to_csv`, `sed -i` — jede
+    Bibliothek bringt einen neuen Weg, und der Prüfer merkt es nicht.
+
+    Die Umkehrung, die abschließbar ist: **weil die Ziele endlich sind**
+    (zwei Akten), wird jeder Aufruf gefahren, in dem ein Aktenpfad
+    vorkommt, und gefragt: steht `guarded_write`/`append_block` im
+    **selben Funktionskörper**? Wenn nicht, ist es ein Schreibweg, den
+    niemand absichert — unabhängig davon, welche Methode es ist.
+
+    Das fängt `open(x, "w")` genauso wie `Path.replace` und
+    `json.dump(fp)`; es fängt **nicht** einen Pfad, der zur Laufzeit
+    zusammengesetzt wird (`base / name`). Diese Grenze steht hier, weil
+    sie gilt: `git diff --stat` bleibt der eine Prüfer, der den
+    **Zustand** sieht statt den Code.
+
+    **§A-ZD (Runde 53, nach dem ersten Lauf):** der erste Versuch fragte
+    „kommt ein Aktenpfad in den Argumenten vor?" und meldete zu viele
+    Befunde — `parse_waves(text)`, `enumerate(…‑)`, `json.load(fp)`.
+    Lesen ist kein Schreiben. Die Zielliste gilt deshalb nur für Aufrufe,
+    die **schreiben können**: `open` mit Schreibmodus (jeder Modus, auch
+    `"a"` — das ist der Guard-Fall), Attribute aus der Schreibmenge
+    (`write*`, `replace`, `rename`, `dump`, `dump_all`, `copy*`,
+    `move`, `truncate`, `unlink`) und `subprocess` mit `-i`/`--in-place`.
+    Das ist **wieder eine Liste** — aber eine über die **Zielseite**:
+    ein Aufruf, der auf einen Aktenpfad schreibt, ist nur dann grün,
+    wenn `guarded_write` im selben Körper steht. Was die Liste nicht
+    kennt, ist der Fehler dieser Liste, nicht des Schreibvorgangs — und
+    steht hier, damit er nachlesbar ist.
     """
     import ast
     akten = ("TAG7_ABNAHME.md", "CLAUDE.md")
+    guard_rufe = ("guarded_write", "append_block")
     for py in sorted(list(root.glob("scripts/*.py")) + list(root.glob("*.py"))):
         if py.name == "akte_guard.py":
             continue                       # der Guard selbst ist die Ausnahme
@@ -5773,26 +6080,33 @@ def check_akte_write_mode(root: Path, rep: Report) -> None:
         except SyntaxError:
             continue
         akte_names = _akte_bound_names(tree, akten)
+        scopes = _function_scopes(tree)
         found_any = False
         for n in ast.walk(tree):
             if not isinstance(n, ast.Call):
                 continue
-            hit = _write_mode_on_akte(n, akten, akte_names)
-            if hit is None:
-                continue                    # kein Schreibaufruf = keine Pruefung
-            found_any = True
+            if not _touches_akte(n, akten, akte_names):
+                continue
+            if not _can_write(n):
+                rep.ok()                   # liest: gemessen, nicht gemeint
+                continue
             if _is_temp_fixture(n, tree, akten):
-                # §A-NZ: ein Fixture under `tmp_path`/`TemporaryDirectory`
-                # legt eine **Kopie** der Akte an — es gibt nichts zu
-                # verlieren. Dieselbe Regel wie bei `check_test_paths_ignored`:
-                # „erzeugt, nicht vorgefunden" ist grün.
+                # §3 (Runde 53): dieselbe Form unter `mkdtemp` ist die
+                # **Ausnahme**, die den Prüfer benutzbar hält. Ein Fixture
+                # legt eine Kopie an, es gibt nichts zu verlieren. Grün,
+                # aber gezählt — und nur, wenn der Temp-Bezug im Baum steht.
                 rep.ok()
                 continue
+            found_any = True
+            scope = scopes.get(id(n))
+            if _scope_has_guard(scope, guard_rufe):
+                rep.ok()                   # Schreibweg existiert, Guard auch
+                continue
             rep.fail(getattr(n, "lineno", 0),
-                     f"{py.name}: Akte mit 'w' geschrieben",
-                     hit, "akte_guard.guarded_write fehlt")
+                     f"{py.name}: Aktenpfad ohne guarded_write",
+                     _call_label(n), "kein Guard im Funktionskoerper")
         if not found_any:
-            rep.ok()                        # gemessen: diese Datei schreibt nicht
+            rep.ok()                        # gemessen: diese Datei fasst keine Akte an
 
 
 def _is_temp_fixture(call: object, tree: object,
@@ -5854,6 +6168,121 @@ def _is_temp_fixture(call: object, tree: object,
         for n in ast.walk(tree))                 # type: ignore[arg-type]
 
 
+
+
+def _function_scopes(tree: object) -> dict[int, object]:
+    """`{id(Aufrufknoten): umgebende Funktion}` — einmal je Baum (§A-ZC)."""
+    import ast
+    out: dict[int, object] = {}
+    for fn in ast.walk(tree):                       # type: ignore[arg-type]
+        if isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            for c in ast.walk(fn):
+                out.setdefault(id(c), fn)
+    return out
+
+
+def _touches_akte(call: object, akten: tuple[str, ...],
+                  names: set[str]) -> bool:
+    """Zeigt dieses Aufrufobjekt auf einen Aktenpfad? (§A-ZC)
+
+    §A-ZI (Runde 53, nach dem Selbsttest): `p.write_text("x")` hat den
+    **Empfänger** `p` als `call.func.value`, nicht als Argument. Die
+    erste Fassung sah nur `call.args` und `call.keywords` — und meldete
+    den Vorfall selbst nicht mehr, während sie jeden *lesenden* Aufruf
+    meldete. Das Fixture hat es gefunden, weil es den Prüfer fährt, nicht
+    seine Helfer.
+
+    Geprüft werden drei Stellen: Empfänger, Argumente, Keywords.
+    """
+    import ast
+    f = getattr(call, "func", None)
+    recv = getattr(f, "value", None)         # `p` in `p.write_text(…)`
+    # §A-ZI: `open(p, "w").write("x")` ist **ein** Schreibweg, nicht zwei.
+    # Der Empfänger ist selbst ein Aufruf — dann ist dieser Aufruf der
+    # Wurzelaufruf, und der äußere ist nur der Schreiber des Handles.
+    if isinstance(recv, ast.Call):
+        return _touches_akte(recv, akten, names) and not _can_write(recv)
+    for node in [recv, *getattr(call, "args", []),
+                 *(kw.value for kw in getattr(call, "keywords", []))]:
+        if node is None:
+            continue
+        if _mentions_akte(node, akten):
+            return True
+        # §A-ZI: nur **gebundene Namen** — ein `Name` in einer Zuweisung
+        # (`Path = …`) ist kein Pfad, sondern ein Ziel.
+        for c in ast.walk(node):
+            if isinstance(c, ast.Name) and c.id in names and \
+                    not isinstance(getattr(c, "ctx", None), ast.Store):
+                return True
+    return False
+
+
+def _can_write(call: object) -> bool:
+    """Kann dieser Aufruf schreiben? (§A-ZD — Zielseite, nicht Zielpfad)"""
+    import ast
+    f = getattr(call, "func", None)
+    attr = getattr(f, "attr", None)
+    name = getattr(f, "id", None)
+    if attr:
+        base = attr.split("_")[0] if attr.startswith("write") else attr
+        if attr in ("replace", "rename", "dump", "dump_all", "move",
+                    "truncate", "unlink", "rmtree", "dump_stream"):
+            return True
+        if attr.startswith("write") or attr.startswith("copy"):
+            return True
+    if name == "open":
+        mode = ""
+        if len(getattr(call, "args", [])) >= 2:
+            m0 = call.args[1]                 # type: ignore[attr-defined]
+            if isinstance(m0, ast.Constant) and isinstance(m0.value, str):
+                mode = m0.value
+        for kw in getattr(call, "keywords", []):
+            if kw.arg == "mode" and isinstance(kw.value, ast.Constant):
+                mode = str(kw.value.value or "")
+        if not mode:
+            return False                      # `open(p)` liest
+        return any(ch in mode for ch in "wax+") and "r" not in mode.replace("r+", "")
+    if var_is_subprocess_write(call):
+        return True
+    return False
+
+
+def var_is_subprocess_write(call: object) -> bool:
+    """`subprocess.run(["sed", "-i", …])` — in-place ist schreiben."""
+    import ast
+    f = getattr(call, "func", None)
+    attr = getattr(f, "attr", None)
+    if attr not in ("run", "call", "check_call", "check_output", "Popen"):
+        return False
+    for a in getattr(call, "args", [])[:1]:
+        if isinstance(a, (ast.List, ast.Tuple)):
+            lits = [e.value for e in a.elts
+                    if isinstance(e, ast.Constant) and isinstance(e.value, str)]
+            if "-i" in lits or "--in-place" in lits:
+                return True
+    return False
+
+
+def _scope_has_guard(scope: object,
+                     guard_rufe: tuple[str, ...]) -> bool:
+    """Steht `guarded_write`/`append_block` im selben Funktionskörper?"""
+    import ast
+    if scope is None:
+        return False
+    for c in ast.walk(scope):                       # type: ignore[arg-type]
+        if isinstance(c, ast.Call):
+            f = c.func
+            nm = getattr(f, "id", None) or getattr(f, "attr", None) or ""
+            if nm in guard_rufe:
+                return True
+    return False
+
+
+def _call_label(call: object) -> str:
+    """`.write_text(…)` / `open(…)` / `os.replace(…)` — für die Meldung."""
+    f = getattr(call, "func", None)
+    nm = getattr(f, "id", None) or getattr(f, "attr", None) or "?"
+    return f".{nm}(…)" if isinstance(getattr(f, "attr", None), str) else f"{nm}(…)"
 
 
 def _akte_bound_names(tree: object, akten: tuple[str, ...]) -> set[str]:
@@ -6147,7 +6576,80 @@ def tally_line(tally: dict[str, int | None]) -> str:
         tail += f" ({removed} entfernt)"
     if aw is None:
         tail += " — unvollstaendig"
+    # §A-ZL: der Stand des Prüfers, nicht nur seine Zahlen. Ohne ihn ist
+    # die Zahl eine Aussage über ein Programm ohne Namen.
+    tail += f" · Prüfer {_pruefer_hash()}"
+    # §A-ZM: zwei Zustände, beide sichtbar — offen zählt gegen den Lauf,
+    # quittiert wird benannt und nicht verschwiegen.
+    tally_offen, tally_quittiert = tally.get("offen"), tally.get("quittiert")
+    if isinstance(tally_offen, int):
+        tail += f" · {tally_offen} offen"
+    if isinstance(tally_quittiert, int) and tally_quittiert > 0:
+        tail += f" · {tally_quittiert} quittiert"
     return tail
+
+
+def _citation_counts(root: Path) -> tuple[int, int]:
+    """`(offen, quittiert)` — falsche Fließtextzahlen nach Rolle (§A-ZM).
+
+    Der Prüfer meldet **beide**; nur die Kopfzeile unterscheidet. Ein
+    Alarm ohne Quittung wird abgeschaltet — das ist der Grund, warum
+    „rot bleiben lassen" allein nicht reicht.
+    """
+    import re
+    pair = re.compile(
+        r"(?<![\d.])(\d{1,5})\s*/\s*(\d{1,5})(?![\d.])\s*[(\[]?\s*(\d{1,3})\s*%")
+    offen = quittiert = 0
+    for path in (root / "CLAUDE.md",
+                 root / "order_execution_engine" / "ops" / "TAG7_ABNAHME.md"):
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        fenced, cur = False, ""
+        sel = _korrektur_selectors(text)
+        for line in text.splitlines():
+            if line.startswith("### "):
+                cur = line
+            if line.lstrip().startswith("```"):
+                fenced = not fenced
+                continue
+            if fenced:
+                continue
+            for m in pair.finditer(line):
+                z, n, p = int(m.group(1)), int(m.group(2)), int(m.group(3))
+                if n == 0 or abs(100.0 * z / n - p) <= 1.0:
+                    continue
+                if _is_citation(line, cur, sel) or _block_key(cur) in sel["targets"]:
+                    quittiert += 1
+                else:
+                    offen += 1
+    return offen, quittiert
+
+
+def _pruefer_hash() -> str:
+    """Der Stand des **Programms**, das die Zahlen erzeugt (§A-ZL, Runde 54).
+
+    Runde 53 schloss mit einer Behauptung über einen Prüfer, der gar nicht
+    geladen war — ein Modul-Cache, und das Ergebnis sah plausibel aus.
+    Eine Kopfzeile mit Zahlen über einen Prüfer, dessen Fassung niemand
+    kennt, ist darum keine Messung, sondern ein Zitat.
+
+    Gehasht wird `scripts/`, nicht die Akte: **wer** zählt, nicht **was**
+    gezählt wurde. Das `CLAUDE.md`-Hash daneben sagt, was gelesen wurde.
+
+    Grenze: der Hash ändert sich mit jedem Edit an `scripts/` — die
+    Kopfzeile ist dann veraltet, bis sie neu geschrieben ist. Das ist
+    gewollt: ein Stand, der nicht mehr gilt, soll als solcher erkennbar
+    sein. Von Hand gepflegt wird sie nicht; `--write-count` schreibt sie.
+    """
+    import hashlib
+    h = hashlib.sha256()
+    base = Path(__file__).resolve().parent
+    for p in sorted(base.glob("*.py")):
+        h.update(p.name.encode())
+        h.update(p.read_bytes())
+    return h.hexdigest()[:12]
 
 
 def _pruefer_umfang() -> int:
@@ -6275,6 +6777,11 @@ def _status_line(checked: Checks, problems: int | None,
     tally = measurement_tally(problems, unmessured, measured=True,
                               ohne_skript=ohne_skript,
                               umfang=PRUEFER_UMFANG)
+    # §A-ZM: zwei Zustände. `offen` zählt gegen den Lauf (der Prüfer meldet
+    # sie), `quittiert` wird benannt. Beide kommen aus **derselben**
+    # Funktion wie die Meldungen — keine Handzahl.
+    _of, _qu = _citation_counts(root) if root is not None else (0, 0)
+    tally = dict(tally, offen=_of, quittiert=_qu)
     return out + f", {tally_line(tally)}"
 
 
@@ -6411,6 +6918,11 @@ def main() -> int:
     # `open(..., "w")`, ohne den Guard? Der Guard faengt die Folge, dieser
     # Pruefer die Form, die sie erzeugt.
     check_akte_write_mode(root, rep)
+    # §A-ZB (Runde 53): Bruchzahlen im Fliesstext gegen ihre Ableitung.
+    # Der Satz „die Gesamtzahl ist gefallen" stand in der Akte neben den
+    # beiden Prozentzahlen, und kein Pruefer sah ihn — weil die Ableitung
+    # daneben stand und niemand sie rechnete.
+    check_prose_fractions(root, rep)
     # §A-NC: --write-count schreibt den Stand mit Grund fort.
     if "--write-count" in sys.argv:
         _save_count_snapshot(rep.checked, _count_reason(sys.argv), root=root)
@@ -6567,7 +7079,21 @@ def main() -> int:
         if _noref:
             print(f"  {len(_noref)} Zusagen ohne Skript — im Klon nicht "
                   "gelaufen (benannt, nicht geprueft).")
-    return 1 if rep.problems else 0
+    # §A-ZN (Runde 54): der Exit-Code unterscheidet die **zwei Zustände**.
+    # Ein quittierter Fund ist kein offener — sonst ist die Quittung
+    # wirkungslos, und nach sechs Runden steht `--skip-prose-numbers` im
+    # Hook. Offen blockiert; quittiert wird gedruckt und durchgelassen.
+    #
+    # §A-ZN-B (nach dem ersten Lauf): gelesen wurde `note`, geschrieben
+    # wird `real` — der Exit war 0, obwohl ein offener Fund dastand. Der
+    # Zustand gehört in ein **eigenes Feld**, nicht in einen angehängten
+    # Text: `Report.fail` trägt ihn als `state`.
+    offen = [p for p in rep.problems if p.get("state", "offen") == "offen"]
+    n_quittiert = len(rep.problems) - len(offen)
+    if n_quittiert:
+        print(f"  {n_quittiert} Befund(e) zitiert und durch einen "
+              f"Korrekturblock quittiert — sichtbar, nicht blockierend.")
+    return 1 if offen else 0
 
 
 if __name__ == "__main__":

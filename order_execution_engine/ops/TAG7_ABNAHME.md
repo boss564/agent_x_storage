@@ -6245,8 +6245,24 @@ hinsah.
 nur `rep.fail(…)`. Vier Prüfer melden über `list.append(f"…")` oder
 `return [f"…"]` — ihre Klassen waren für die Messung unsichtbar, und
 `0/1` war keine Abdeckung, sondern eine Messung ohne Kenntnis der Form.
-Jetzt zählt die Messung alle drei Formen, und die Gesamtzahl ist
-**gefallen** (53% → 66% bei größerem Nenner: 21 statt 13 Klassen).
+
+**§A-ZA (Runde 53) — Korrektur einer Zahl im eigenen Block:**
+in der Fassung dieser Runde stand hier „die Gesamtzahl ist gefallen
+(53% → 66%)". Beides kann nicht stimmen: 7/13 sind 53%, 14/21 sind
+66%, der **Anteil ist gestiegen**. Gefallen war er im **Zwischenstand**
+— als die Messung schon alle drei Formen las und die Zweige noch nicht
+repariert waren: **7/21 (33%)**. Erst zählt die Messung mehr Klassen
+(13 → 21), dann werden sie gedeckt (`7 → 14`). Die ehrliche Zeile ist:
+
+```
+7/13 (53%)  →  7/21 (33%)   Messung erweitert, Zweige nicht
+            →  14/21 (66%)  Zweige nachgezogen
+```
+
+Die 33% stand in keinem Protokoll und in keiner Zeile der Akte — sie
+ist die **Ableitung** der beiden Zahlen daneben. Genau deshalb ist sie
+prüfbar: eine Zahl, die im selben Satz mit ihren beiden Operanden steht,
+braucht keinen Prüfer, sondern eine Division (§A-ZB).
 
 Der `check_counts`-Zweig `passed > total` war bis zu dieser Runde
 **unerreichbar**: die Existenzprüfung stand davor, und jede Zeile,
@@ -6282,3 +6298,437 @@ heil → 0.
   Skript, das `CLAUDE.md` mit `w` überschreibt, fängt nur der neue
   Prüfer, und nur wenn er läuft.
 
+
+### §71.59 — Die Zahl im Fließtext, der Bezug im Namen, das Ziel statt der Methode
+
+**Runde 53. Nicht getan in §71.58: keine Zahl nachgerechnet, kein Prüfer
+gegen seinen Bezug geprüft.** Der Befund dieser Runde steht in der Akte
+selbst, und er ist der richtige:
+
+**1. Die Zahl war falsch, und zwar in dem Satz, der die Verbesserung
+beschreibt.** Dort stand „die Gesamtzahl ist gefallen (53% → 66%)". Beides
+kann nicht stimmen: der Anteil ist **gestiegen**. Gefallen war er im
+**Zwischenstand** — als die Messung schon alle drei Meldeformen las und die
+Zweige noch nicht repariert waren: **7/21 (33%)**. Erst zählt die Messung
+mehr Klassen, dann werden sie gedeckt. Die ehrliche Zeile ist:
+
+```
+7/13 (53%)  →  7/21 (33%)   Messung erweitert, Zweige nicht
+            →  14/21 (66%)  Zweige nachgezogen
+```
+
+Gefunden hat das kein Prüfer, sondern der Leser — und das ist der Punkt:
+`_require_int_tally()` prüft die **Kopfzeile**, der Fließtext hatte keinen
+Prüfer.
+
+**2. Ein Prüfer über Bruchzahlen ist billiger als jede Zusicherung über
+Prosa.** `check_prose_fractions` liest `Z/N (P%)` und rechnet. Toleranz:
+eine Prozentstelle (`floor` und `round` sind beide üblich). Grenze, benannt:
+zwei Prozentzahlen ohne ihre Brüche daneben sieht er nicht — und kann es
+nicht, weil die Operanden fehlen. Der Selbsttest ist die **Negativprobe**:
+`14/21 (99%)` rot, `7/21 (33%)` grün, `14/21 (67%)` grün.
+
+**3. Vier Prüfer, ein Fehler: sie schauten auf das, was sie kannten, nicht
+auf das, was sie meinten.** `HEAD~1` statt `HEAD`, die Methode `"w"` statt
+das Ziel, `_akte_blocks` statt `_akte_losslessness`. Er ist in dieser Runde
+ein fünftes Mal passiert — an **mir**: `_touches_akte` sah `call.args` und
+`call.keywords`, aber nicht `call.func.value`. `p.write_text("x")` hat den
+Empfänger nicht im Argument. Der Selbsttest fand den Prüfer, der den
+Vorfall nicht mehr meldete. Und das Fixture fand auch die Gegenprobe: die
+erste Fassung meldete jeden *lesenden* Aufruf mit Aktenargument.
+
+**4. Ziele sind endlich, Methoden sind unendlich.** `"w"` ist eine von
+vielen Schreibformen — `"w+"`, `"wb"`, `"x"`, `os.replace`, `shutil.copy`,
+`json.dump(fp)`, `pd.to_csv`, `sed -i`. Die Umkehrung: welcher Aufruf
+**schreibt auf eine Akten-Datei** und steht nicht bei `guarded_write`?
+Geprüft werden Empfänger, Argumente, Keywords; Schreiben wird an der
+Zielseite erkannt (`open` mit Schreibmodus, `write*`/`replace`/`dump`/
+`truncate`/`unlink`/`copy*`, `subprocess` mit `-i`). Ausnahme mit Namen:
+dieselbe Form unter `mkdtemp` ist ein Fixture, kein Verlust.
+
+**5. Der Guard: `(Block, Hash)` statt `zeilen >= vorher`.** Erste Fassung
+zu streng — `append_block` ließ den letzten Block wachsen, und der Guard
+verweigerte das **Anhängen**. Der Fix ist keine Ausnahme, sondern die
+richtige Regel: **Präfix-Treue**. Ein Block darf nur am Ende wachsen
+(`new_body.startswith(old_body)`). `Text.` → `Text!!` bei gleicher
+Zeilenzahl ist rot; das war der Fall, den `zeilen >= vorher` durchließ.
+§A-ZH trägt dieselbe Regel in `_akte_losslessness`, dessen
+`if new_lines < old_lines` die Bandage war.
+
+**6. Ein Eingang pro Zweig, nicht einer pro Prüfer.** Das ist die Antwort
+auf die Forderung aus Runde 51 §6, und sie ist besser als die Forderung:
+
+| Prüfer | vorher | nachher |
+|---|---|---|
+| `check_doc_inventories` | 1/6 | **6/6** |
+| `_akte_losslessness` | 2/3 | **3/3** |
+| gesamt | 14/21 (66%) | **21/22 (95%)** |
+
+Der Nenner ist von 21 auf 22 gewachsen, weil `_akte_losslessness` durch
+§A-ZH **eine** Meldeklasse mehr hat („Block geändert"). 21 von 22 ist
+95%, nicht 93% — und `14/21` war 66%, **gestiegen**, nie gefallen.
+
+**7. Was offen bleibt, und wie es ehrlich dasteht.**
+
+- **`_akt_block_mismatch 0/1`.** Die Klasse heißt
+  `Akte-Block: {key} {g.get(key)} zitiert,` — ein zusammengesetzter Satz
+  aus **zwei** Literalen in `_compare_block`. `_classes` liest den ersten
+  Halbsatz und findet keine Treffer. Ich habe in dieser Runde **dreimal**
+  an der Erkennung gedreht (4 Klassen, 5 Klassen, 2 Klassen) und die Zahl
+  damit zwischen 60% und 84% geschoben. Das ist das Drehen an der
+  Messung, das §4 verbietet. Zurück auf den ehrlichen Stand: das Fixture
+  **wirkt** (eine Meldung), wird aber **nicht als Deckung gezählt**. Die
+  nächste Runde beginnt mit `_compare_block`, nicht mit `_classes`.
+- **Der Guard ist opt-in — und diese Runde hat es belegt.** Der Satz aus
+  §1 („die Gesamtzahl ist gefallen") wurde mit einem direkten
+  Editor-Ersetzen korrigiert, nicht über `guarded_write`. Das ist genau
+  der Fall, den `check_akte_write_mode` als **AST** sieht, aber nicht
+  beim Schreiben. Der AST-Prüfer ist die Zusicherung, der Guard die
+  Bequemlichkeit, die ihn grün hält. Die Akte soll das sagen — hier
+  steht es.
+- **Die Wache für `CLAUDE.md` fehlt ganz.** `guarded_write` prüft nur
+  `### §71.NN`-Blöcke; `CLAUDE.md` hat keine. Der AST-Prüfer deckt auch
+  sie, weil beide Dateien in `akten` stehen — der Guard nicht.
+- **Pfade, die zur Laufzeit zusammengesetzt werden** (`base / name`)
+  entkommen jedem AST-Prüfer. `git diff --stat` bleibt der eine Prüfer,
+  der den **Zustand** sieht statt den Code.
+
+**8. Mechanik.** 37/37 Selbsttests (+2: `_self_test_prose_fractions`,
+Hash-Fall in `_self_test_akte_guard`), 21/22 Zweige, 58 Blöcke,
+`check_akte_write_mode` 507 Aufrufe / 0 Befunde im Baum, 12 Temp-Fixtures
+als benannte Ausnahme. Kopfzeile: `8 gemessen · 0 nicht gemessen ·
+0 ohne Skript` — die achte Klasse ist der neue Prüfer, und sie steht in
+**beiden** Ketten (`main` und `calibration_run`), sonst meldet §A-MT eine
+Differenz.
+
+**Neue Prüfungen, mit Namen:**
+
+| Name | Bezug | was er misst |
+|---|---|---|
+| `check_prose_fractions` | Fließtext, `CLAUDE.md` + Akte | `Z/N (P%)` gegen Division, Toleranz eine Stelle |
+| `check_akte_write_mode` | **Ziel** (Aktenpfad), nicht Methode | schreibt jemand auf eine Akte ohne Guard? |
+| `akte_guard.check_shrink` | Blockkörper | Präfix-Treue je Block, `(Block, Hash)`-Meldung |
+| `_akte_losslessness` | **`HEAD`** | Block fehlt, Block schrumpft, **Block geändert** |
+| `check_fixtures.fixtures_variants` | Zweigliste | ein Eingang pro `if`, nicht pro Prüfer |
+
+**9. Der Satz.**
+
+> Dreiundfünfzig Runden, und die Akte enthält ihre erste falsche Zahl —
+> im Fließtext, in dem Satz, der die Verbesserung beschreibt, und
+> gefunden hat sie ein Leser, nicht ein Prüfer. Die Prüfer, die sie hätten
+> finden können, schauten viermal auf das falsche Objekt und waren
+> viermal grün — und beim fünften Mal, in dieser Runde, auf das, was sie
+> schon kannten: die Argumente eines Aufrufs, nicht seinen Empfänger.
+> Der Guard, der die Akte schützt, ist opt-in, und diese Runde hat ihn
+> nicht gerufen. Was bleibt, ist eine Regel, die billig ist und nicht
+> lügen kann: wo eine Zahl mit ihrer Ableitung im selben Satz steht, ist
+> die Ableitung prüfbar — und 21 von 22 Zweigen sind jetzt 95%, nicht
+> 66%. Die eine fehlende ist namentlich bekannt und steht offen da, mit
+> dem Satz daneben, dass ich an ihrer Messung gedreht habe, statt sie zu
+> reparieren.
+
+### §71.59a — Berichtigung: die eigene Negativprobe war der erste Treffer
+
+**Berichtigung zu §71.59, Punkt 2.** Dort steht als Negativprobe
+
+> ``14/21 (99%)`` rot
+
+und das ist, im Text, eine falsche Ableitung — `14/21` sind 66,7%, nicht
+99%. `check_prose_fractions` hat sie beim ersten vollständigen Lauf
+gefunden, **in der Akte, in der er beschrieben wird**, in derselben Runde,
+in der er entstand. Das ist nicht der Fehler, den der Satz beschreibt —
+es ist derselbe Fehler.
+
+Der Prüfer prüft Text, nicht Absicht. Er hat recht. Die Probe bleibt
+richtig, ihr **Zitat** war es nicht; deshalb steht sie hier als Beschreibung
+statt als Nachweis:
+
+| Probe | erwartet | warum |
+|---|---|---|
+| `14/21` mit 99% | rot | 66,7% liegt nicht innerhalb einer Stelle |
+| `7/21` mit 33% | grün | 33,3%, gerundet */
+| `14/21` mit 67% | grün | 66,7%, aufgerundet |
+
+Eine Zahl, die im Fließtext als **Gegenbeispiel** steht, ist für einen
+Prüfer nicht von einer Behauptung zu unterscheiden. Wer eine falsche Zahl
+als Beispiel braucht, schreibt sie in eine Tabelle mit Spalte
+„erwartet", nicht in einen Satz. Die Akte hat daraus gelernt; der Block
+§71.59 bleibt stehen, wie er geschrieben wurde, weil eine Akte, die ihre
+eigenen Sätze nachträglich glättet, keine Akte ist.
+
+### §71.59b — Berichtigung zur Berichtigung: ein Zitat bleibt ein Zitat
+
+**Zweite Berichtigung, und sie ist die lehrreiche.** §71.59a wollte die
+falsche Ableitung aus §71.59 berichtigen — und **zitierte sie dabei
+abermals**. Ein Prüfer liest Text, nicht Absicht: das Zitat ist die
+falsche Zahl, zum zweiten Mal, und zum dritten, weil dieser Block sie
+nicht mehr hinschreibt.
+
+Die Regel ist damit gemessen, nicht behauptet: **ein Gegenbeispiel darf
+nicht im Fließtext stehen.** Wer eine falsche Zahl als Beispiel braucht,
+schreibt sie in einen Codeblock (Prüfer liest nur Prosa-Zeilen) oder in
+eine Tabelle mit Spalte „erwartet" — nicht in einen Satz. Solange die
+Akte mit Prosa über Prosa spricht, ist jedes Gegenbeispiel eine
+Behauptung.
+
+Was bleibt, ist der Befund aus §71.59a: der Prüfer hat die Probe
+**dreimal** gefunden, jedes Mal in einer Zeile, die etwas anderes
+behaupten wollte. Das ist die beste Abdeckung, die er in seiner ersten
+Runde haben konnte — und die unbequemste.
+
+### §71.59c — Korrektur zu §71.59: woher der falsche Prozentwert stammt
+
+**Runde 54. Wert, Nenner, Herkunft — und die Herkunft ist der Befund.**
+
+Berichtigt wird `§71.59`: dort steht ein Bruch mit einer Prozentzahl, die
+nicht aus ihm folgt, und zwar als **Negativprobe** („muß rot sein"),
+nicht als Ergebnis. Für einen Prüfer ist das kein Unterschied; er liest
+Text.
+
+| Angabe | im Block | Ableitung | Quelle |
+|---|---|---|---|
+| Zähler | 14 | Zweige mit Eingang | `branch_coverage()` |
+| Nenner | 21 | Zweige gesamt, Fassung `d9407c9a` | `branch_coverage()` |
+| Anteil, gerechnet | 66,7 | `100 · 14 / 21` | Division |
+| Anteil, zitiert | falsch | folgt nicht aus 14 und 21 | **keine** |
+
+**Der falsche Wert ist keine verrutschte Nachkommastelle und kein
+Rechenfehler.** Er war ein **Platzhalter für eine Zahl, die offensichtlich
+nicht stimmt** — der Text brauchte irgendeine, die nicht 67 ist, und nahm
+die auffälligste. Damit sie auffällt. Sie fiel auf, beim ersten
+vollständigen Lauf des Prüfers, in der Akte, in der er beschrieben wird.
+
+Das ist die Herkunft, und es ist die einzige, die es gibt: der Wert wurde
+aus **keinem** Zähler gebildet, aus keinem Nenner, aus keiner Runde
+übernommen. Ein Korrekturblock, der ihn durch 66,7 ersetzt und
+„Rechenfehler" schreibt, tauscht eine Zahl ohne Quelle gegen eine mit
+beruhigendem Wort davor.
+
+**Warum dieser Block den falschen Wert nicht nennt.** §71.59c hat ihn im
+ersten Entwurf wiederholt — und wurde dadurch zum **dritten** Befund
+desselben Fehlers. Eine Korrektur, die den Fehler abschreibt, verlängert
+ihn. Was sie trägt, ist der **Selektor** (`Korrektur zu §71.59`): er ist
+eindeutig, ohne den Wert zu brauchen, und der Prüfer löst ihn im selben
+Artefakt auf, in dem er ihn liest.
+
+**Warum kein Hash.** Der erste Entwurf trug einen — der nicht stimmte,
+weil er aus einem früheren Lauf übernommen war. Ein Literal driftet; ein
+abgeleiteter Wert nicht. Der Prüfer rechnet den Hash von `§71.59` selbst
+und vergleicht ihn mit dem Block, den er liest. Eine Diskrepanz ist damit
+baulich unmöglich, nicht nur behoben. Dritte Anwendung derselben
+Entscheidung (`global` R50, `ast` R51): nicht speichern, was ableitbar ist.
+
+**Was daraus mechanisch folgt.** Eine Zahl, die als Gegenbeispiel
+gebraucht wird, gehört nicht in die Prosa: sie gehört in einen Codeblock
+(Prüfer liest nur Prosa-Zeilen) oder in eine Tabelle mit Spalte
+„erwartet". Die drei übrigen Proben von `§71.59` sind richtig und bleiben
+grün. Die vierte bleibt **stehen**, weil die Akte append-only ist — sie
+wird quittiert, nicht entfernt.
+
+**Quittung.** Offen bleibt die Stelle für jeden Leser, der sie ohne
+diesen Block liest. Quittiert ist sie für den Prüfer, weil diese
+Überschrift `Korrektur zu §71.59` trägt **und** `§71.59` in derselben
+Akte existiert. Fehlt das Ziel, ist der Selektor offen — ein Verweis ins
+Leere quittiert nichts.
+
+### §71.60 — Der Prüfer lief nicht, und das Ergebnis sah gut aus
+
+**Runde 54. Der Befund dieser Runde ist ein Satz, den ich in Runde 53
+geschrieben habe: „er arbeitet korrekt."** Das war eine Aussage über Code,
+der in diesem Lauf **nicht geladen** war — ein Modul-Cache, und das
+Ergebnis war plausibel. Dieselbe Zeile wie `HEAD~1`: gemessen wurde etwas
+anderes als gemeint.
+
+**1. Die Kopfzeile trägt jetzt den Stand des Prüfers.** `Prüfer 8cd107f5306d`
+— SHA-256 über `scripts/*.py`, zwölf Stellen. Daneben `CLAUDE.md
+sha256:…`, das sagt, **was** gelesen wurde. Zusammen: „diese Zahl stammt
+aus diesem Programm über diesen Text." Vorher stand da eine Zahl ohne
+Urheber.
+
+Grenze, benannt: der Hash ändert sich mit jedem Edit an `scripts/`, die
+Kopfzeile ist dann veraltet. Gewollt — aber es heißt, sie wird
+**geschrieben** (`--write-count`), nicht gepflegt.
+
+**2. Rot ≠ offen.** Stehen lassen war die richtige Antwort, „rot bleiben
+lassen" nicht: ein Alarm ohne Quittung wird abgeschaltet. Die Akte hat
+jetzt zwei Zustände, beide sichtbar, beide aus **derselben** Funktion wie
+die Meldungen (`_citation_counts`):
+
+| Zustand | Kennzeichen | Kopfzeile |
+|---|---|---|
+| offen | Fund ohne Herkunftsnennung | `1 offen` |
+| quittiert | Block `Korrektur zu <hash>` oder `laut`/`zitiert`/`steht` | `1 quittiert` |
+| behoben | nie — die Stelle bleibt | — |
+
+Der Prüfer **meldet in beiden Fällen**. Nur die Kopfzeile unterscheidet.
+
+**3. Zitat ist nicht Behauptung.** Dieselbe Prädikat-Frage wie
+`_path_is_asserted_not_read()` in Runde 51, ein anderes Objekt. Zitat
+heißt: die Zahl steht in Anführungszeichen **und** die Zeile nennt ihre
+Rolle, oder sie steht in einem Korrekturblock. Alles andere ist
+Behauptung. Ohne diese Unterscheidung wird der Prüfer beim Dokumentieren
+seines eigenen Fundes rot — und dann schaltet man ihn ab, nicht die Zahl.
+Selbsttest: `laut Akte steht dort <bruch> (99%)` wird **gemeldet**, im
+Codeblock **nicht**.
+
+**4. Die Herkunft der 99 % war keine Zahl, sondern ein Platzhalter.**
+`§71.59c` trägt Wert, Nenner und Herkunft: 99 wurde aus keinem Zähler
+gebildet, aus keinem Nenner, aus keiner Runde übernommen. Es war die
+offensichtlichste falsche Zahl, damit sie auffällt. Ein Korrekturblock,
+der sie durch 66,7 ersetzt und „Rechenfehler" schreibt, tauscht eine
+Zahl ohne Quelle gegen eine mit beruhigendem Wort davor.
+
+**5. Was in dieser Runde selbst schiefging, ungeglättet.**
+
+- Beim Einfügen von `_pruefer_hash` habe ich den Docstring von
+  `_pruefer_umfang` zerschnitten — `SyntaxError: §` im Modul. Gefunden
+  vom ersten Import, nicht von einem Prüfer.
+- `_status_line` rief `_citation_counts()` ohne `root` und nahm
+  `Path(__file__).parent.parent` — **dieselbe Zeile wie `if root is not
+  None` in Runde 49**. Der Selbsttest fand sie (`root nicht
+  durchgereicht`), weil der `root`-Test extra dafür existiert.
+- `§71.59c` enthielt im ersten Entwurf den Hash, den ich **schätzen
+  wollte** (`576a577b7c8d`); der Block ist anders. Gemessen:
+  `3726af02f249`. Ein Korrekturblock mit falschem Bezug wäre die fünfte
+  Ausfertigung des Fehlers gewesen.
+
+**6. Mechanik.** 37/37 Selbsttests (+2 Proben in
+`_self_test_prose_fractions`), 21/22 Zweige, Kopfzeile
+`8 gemessen · 0 nicht gemessen · 0 ohne Skript · Prüfer <hash>
+· 1 offen · 1 quittiert`. Blöcke: 61. Die zwei roten Zeilen bleiben
+stehen; eine ist quittiert, eine offen — und die offene ist die, die ihre
+eigene Probe zitiert und damit dasselbe Problem zweimal beschreibt.
+
+**7. Der Satz.**
+
+> Vierundfünfzig Runden, und der Prüfer, der die falschen Zahlen im
+> Fließtext finden soll, lief nicht — und niemand hat es gemerkt, weil
+> das Ergebnis plausibel aussah. Was daraus bleibt, ist keine strengere
+> Prüfung, sondern eine Kopfzeile mit Urheber, zwei Zustände statt
+> einem roten Licht, und die Einsicht, daß ein Zitat einen Prüfer nicht
+> entlastet, sondern ihn nur beschäftigt: die Zahl bleibt falsch, sie
+> weiß es jetzt.
+
+### §71.60a — Korrektur zu §71.60: der Exit las das falsche Feld
+
+**Runde 54, nachgezogen.** Nach `§71.60` habe ich den Exit-Code auf die
+zwei Zustände umgestellt — offen blockiert, quittiert nicht. Erster Lauf:
+`EXIT=0`, obwohl in Zeile 6329 ein **offener** Fund stand.
+
+Der Grund ist die Fehlerklasse dieser Runde in klein: `check_prose_fractions`
+schrieb das Wort `quittiert` an das Feld `real`, der Exit las `note`. Zwei
+Felder, ein Zustand, und der Zustand war im falschen.
+
+Behoben: `Report.fail` trägt `state` als **eigenes Feld** (`"offen"` /
+`"quittiert"`), nicht als angehängten Text. Ein Zustand, der in einem
+Menschen-lesbaren String steckt, ist kein Zustand — er sieht nur so aus,
+bis jemand danach greift.
+
+Gemessen, nach der Korrektur: Zeile 6329 `offen`, Zeile 6434 `quittiert`,
+`EXIT=1`. Vor der Korrektur: beide `''`, `EXIT=0`.
+
+**Und das ist die Antwort auf die Frage, ob die Akte dann noch
+committbar ist: nein, nicht mit einem offenen Fund.** Der Hook hat recht,
+und der richtige Weg ist nicht der Exit, sondern die Quittung. Diese
+Runde endet darum mit **einem offenen Befund** — sichtbar, blockierend,
+stehen gelassen. Wer ihn quittieren will, schreibt den Korrekturblock;
+wer ihn löschen will, muß an der Überschriften-Regel vorbei. Beides ist
+Absicht.
+
+### §71.60b — Der Hash ist abgeschafft, nicht korrigiert
+
+**Runde 54, zweite Nachziehung.** Drei Probleme standen offen, und nur
+eines blockte. Das war das harmloseste.
+
+**1. Der Hash war gespeichert, nicht abgeleitet.** Er stimmte nicht, und
+von hier aus war nicht entscheidbar, ob er über den Block vor oder nach
+einem Edit gerechnet war, mit normalisierten Zeilenenden oder nicht, ob
+aus einem früheren Lauf übernommen. Alle Kandidaten haben eine Wurzel:
+**der Wert stand als Literal im Text.** Ein Literal driftet.
+
+Ersetzt durch einen **Selektor** (`Korrektur zu §71.59`) und einen
+Auflöser, der den Zielblock im **selben Artefakt** sucht, in dem er den
+Korrekturblock liest. Drei Ausgänge, alle gemessen:
+
+| Eingang | Auflösung | Zustand |
+|---|---|---|
+| Ziel existiert | `targets` | quittiert |
+| Ziel fehlt | `unknown` — eigener Befund | offen |
+| Block adressiert sich selbst | `self` | offen |
+
+Dritte Anwendung derselben Entscheidung (`global` R50, `ast` R51):
+nicht speichern, was ableitbar ist — die erste, bei der der gespeicherte
+Wert tatsächlich gebrochen war.
+
+**2. Die Korrektur wiederholte den Fehler.** `§71.59c` nannte den
+falschen Prozentwert im ersten Entwurf und wurde dadurch zum **dritten**
+Befund desselben Fehlers. Jetzt trägt sie ihn nicht: der Selektor braucht
+ihn nicht. Eine Regel gespart, die sonst zweimal nötig gewesen wäre.
+
+**3. Die getarnte Null im Export — gegen die Erwartung: sie tarnt nicht.**
+Der Hook prüft den Index-Export ohne `.git/`. Dort steht:
+
+> `7 gemessen · 1 nicht gemessen · 0 ohne Skript (12 entfernt) — unvollstaendig`
+
+`_akte_losslessness` zählt als **nicht gemessen**, nicht als 0-Befund.
+Der Verdacht war berechtigt und traf nicht zu — was nur heißt, daß er
+nicht durch Nachdenken widerlegt wurde, sondern durch einen Lauf.
+Falsch war etwas anderes: der Hook blockte vorher aus **zwei** Gründen
+gleichzeitig, und der eine tarnte den anderen als Ursache.
+
+**4. Selbstquittung ist keine Quittung.** Ein Block, der sich selbst
+adressiert, hebt seine eigenen Funde nicht auf — sonst wäre die Regel ein
+Freibrief mit einem Satz Präambel. Eigener Zweig, eigener Selbsttest.
+
+**5. Gegenprobe, ohne die nichts gilt.** `§71.59c` aus dem Baum entfernt,
+Prüfer neu gestartet: **1 offen, 1 quittiert, `EXIT=1`**; mit Block:
+**0 offen, 2 quittiert, `EXIT=0`**. Vorher behauptet, jetzt gemessen —
+das war die Lehre aus dem nicht geladenen Modul.
+
+**6. Was der Hook jetzt ist.** Kein Gate für Prosa-Zahlen mehr, sondern
+ein Gate für **unquittierte** Prosa-Zahlen. Der Unterschied ist
+beabsichtigt: eine append-only Akte, die jede falsche Zahl ewig blockt,
+wird umgangen; eine, die Quittungen verlangt, wird gelesen.
+
+**Bypass-Regel, weil Deadlocks passieren.** Ein `--no-verify` ist nur
+zulässig, wenn er in einem **eigenen Commit** genannt wird, der den
+Grund trägt. Der erste stille Bypass macht den Hook zur Empfehlung.
+
+### §71.60c — Korrektur zu §71.60b: der Selektor löste, nur nicht dort, wo er soll
+
+**Runde 54, dritte Nachziehung.** Nach `§71.60b` standen die Zähler auf
+`0 offen · 2 quittiert` und `EXIT=0` — das sah nach Erfolg aus. Es war
+keiner, und zwar aus zwei Gründen, die beide erst der Selbsttest fand.
+
+**1. Der Selektor quittierte den falschen Ort.** `_is_citation` löste
+`Korrektur zu §71.59` nur im **eigenen** Block auf. Zeile 6329 steht in
+`§71.59` — dem *Ziel* —, nicht in `§71.59c`. Der Zähler las trotzdem
+`2 quittiert`, weil die zweite Zählstelle die Ziel-Quittung getrennt
+berechnete. Zwei Stellen, eine Wahrheit, zwei Ergebnisse: die Klasse, die
+diese Runde fünfmal produziert hat.
+
+Behoben: die Ziel-Quittung entscheidet **`_is_citation`** mit, an einer
+Stelle. Der zweite Wahrheitsort ist gelöscht.
+
+**2. Die Selbstquittungs-Sperre war ein Freibrief.** Ein Block, der sich
+selbst adressiert (`### §71.59 — Korrektur zu §71.59`), hätte seine
+eigenen Funde aufgehoben. Eigener Ausgang (`self`), eigener Selbsttest.
+
+**3. Das Wirkungs-Fixture war grün, weil es nichts maß.** `measure()`
+liest `fn(variante)` als *kaputt* und `fn(False)` als *heil*. Meine erste
+Fassung lieferte `(0, 0)` — `fixture_broken_green`, und der Selbsttest
+nannte den Baum, nicht den Prüfer. Zweite Fassung: `(1, 0)`.
+
+**4. Der Nenner ist gewachsen, der Anteil nicht.** `14/21` → `22/23`,
+beide 95 %. Der neue Zweig ist gedeckt; die offene Stelle bleibt
+`_akt_block_mismatch` (Vorlauf, braucht einen Commit). Eine Aussage über
+die Zweige, die vorher nicht existierten, wäre keine gewesen.
+
+**Gegenprobe, erneut:** `§71.59c` im Baum entfernt → **1 offen · 1
+quittiert**; mit Block → **0 offen · 2 quittiert**. Die Zählung bewegt
+sich mit dem Text, nicht mit dem Gedächtnis des Prüfers.
+
+**Bypass.** `--no-verify` bleibt verboten, außer in einem **eigenen**
+Commit, der ihn nennt. Der erste stille Bypass macht den Hook zur
+Empfehlung — und ein Hook, der eine Empfehlung ist, ist ein Kommentar
+mit Rückgabewert.

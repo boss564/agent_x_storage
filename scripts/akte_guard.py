@@ -45,19 +45,65 @@ def blocks(text: str) -> set[str]:
     return set(_BLOCK_RE.findall(text))
 
 
+def block_bodies(text: str) -> dict[str, str]:
+    """`{§71.NN: Blockkörper}` — der Text zwischen zwei Überschriften."""
+    marks = list(_BLOCK_RE.finditer(text))
+    out: dict[str, str] = {}
+    for i, m in enumerate(marks):
+        end = marks[i + 1].start() if i + 1 < len(marks) else len(text)
+        out[m.group(1)] = text[m.end():end]
+    return out
+
+
+def _body_hash(body: str) -> str:
+    import hashlib
+    return hashlib.sha256(body.encode("utf-8")).hexdigest()[:16]
+
+
+def block_hashes(text: str) -> dict[str, str]:
+    """`{§71.NN: sha256(Blockkörper)}` — die Identität je Block (§A-ZE).
+
+    `zeilen >= vorher` ist eine **Zahl**, nicht eine **Menge**: zwei
+    gelöscht, zwei hinzugefügt ist grün, und der Verlust steht still in
+    der Akte. Die Kopfzeile fängt es nicht, weil sie den Block sieht; die
+    Zeilenzahl fängt es nicht, weil sie nur zählt.
+
+    Der Hash fängt es: ein Block, dessen Körper sich ändert, hat einen
+    anderen Hash. Er ist **strikt** — auch eine gewollte Berichtigung ist
+    rot, und muß als eigener Block geschrieben werden, nicht als stille
+    Korrektur. Das ist derselbe Vertrag wie bei `bloecke`, nur eine Ebene
+    tiefer: die Akte ist append-only, nicht „append-with-edits".
+    """
+    return {b: _body_hash(t) for b, t in block_bodies(text).items()}
+
+
 def line_count(text: str) -> int:
     return len(text.splitlines())
 
 
 def check_shrink(old: str, new: str) -> list[str]:
-    """Verliert `new` Blöcke oder Zeilen gegen `old`?
+    """Verliert `new` Blöcke, Zeilen oder **Blockinhalte** gegen `old`?
 
-    Zwei Regeln, und die zweite ist die aus dem Vorfall:
+    Drei Regeln, und die dritte ist die aus Runde 53:
 
       1. `bloecke(new) ⊇ bloecke(old)` — kein Block darf verschwinden.
       2. `zeilen(new) >= zeilen(old)` — eine Akte, die schrumpft, ist
          entweder eine Berichtigung (dann als eigener Block) oder ein
          Unfall. Beides ist laut, nicht still.
+      3. **`hash(block, new) == hash(block, old)`** für jeden Block, der
+         in beiden steht — sonst hat sich der Blockkörper geändert und
+         die Zeilenzahl hat es nicht gemerkt.
+
+    **§A-ZE (Runde 53, nach dem ersten Selbsttest):** Regel 3 in der
+    ersten Fassung war **zu streng**. `append_block` hängt an `new` an —
+    und der letzte Block der Akte hat dann keinen Endmarker mehr, also
+    wächst *sein* Körper um den Anhang. Ergebnis: `Anhaengen wurde
+    verweigert`. Der Fix ist keine Ausnahme, sondern die richtige Regel:
+    **Präfix-Treue.** Ein Block darf nur **am Ende** wachsen; wer ihm
+    vorne oder in der Mitte etwas nimmt oder ersetzt, verändert das
+    Präfix. Das ist `new_body.startswith(old_body)` — und es erlaubt
+    Anhängen, während `Text.` → `Text! ` (gleiche Länge, anderes Präfix)
+    rot bleibt.
 
     Leere `old` (erste Fassung) ist immer in Ordnung — es gibt nichts
     zu verlieren.
@@ -71,6 +117,12 @@ def check_shrink(old: str, new: str) -> list[str]:
     old_n, new_n = line_count(old), line_count(new)
     if new_n < old_n:
         out.append(f"Zeilen {old_n} -> {new_n} — Verlust von {old_n - new_n}")
+    old_b, new_b = block_bodies(old), block_bodies(new)
+    for b in sorted(set(old_b) & set(new_b)):
+        if not new_b[b].startswith(old_b[b]):
+            out.append(f"Block {b} geändert ({_body_hash(old_b[b])} -> "
+                       f"{_body_hash(new_b[b])})"
+                       " — Berichtigung als neuer Block, nicht still")
     return out
 
 
