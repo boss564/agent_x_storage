@@ -1,7 +1,7 @@
 # Rundenbericht — feste Feldliste (§71.74, Leser in Runde 67)
 
 **Commit:** `8b3a902b` (Runde 69) → Commit dieser Runde unten
-**Zustand:** 4/8 Meßblöcke scheiterbar · 0 Blöcke seit 213 · Deckel 5 ⇒ unter · 213 Blöcke · 4 : 213 Gegenläufe · 13 : 13 Regeln gedeckt · 1/2 quittiert · R→F 0/med 1/n 5/letzte 0/Prüfer · 9 Felder
+**Zustand:** 4/8 Meßblöcke scheiterbar · 0 Blöcke seit 213 · Deckel 5 ⇒ unter · 213 Protokollblöcke · 4 : 213 Gegenläufe · 13 : 13 Regeln gedeckt · 1/2 quittiert · R→F 0/med 1/n 5/letzte 0/Prüfer · 9 Felder
 **EXIT:** Selbsttest 0 · Hauptlauf 0
 **offen:** 0 · **quittiert:** 1 · **frisch:** 1 (_self_test_prozent)
 **Zahlen:** 214 ist **verzogen** — 213 war richtig, Runde 68 addierte den Block ein zweites Mal · 4 scheiterbar / 8 Meßblöcke · 13 : 13 Regeln mit erzwungenem `fail`-Zweig · 104 Prosazahlen aus 1979 Textzeilen (Quelle: `wc -l scripts/check_claude_md.py` = 9214, **eine Datei**) · R→F min 0 / Median 1 / n 5

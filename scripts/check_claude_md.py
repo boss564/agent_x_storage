@@ -708,6 +708,8 @@ def self_test_check_counts() -> list[str]:
     failures.extend(pruefe_deckung(list(REGEL_PRUEFER), GEGENLAUF_JE_REGEL))
     # §A-ZZZZ81 (Runde 71): der Meßbereich ist eine Liste, nicht ein Glob.
     failures.extend(pruefe_messbereich())
+    # §A-ZZZZ82 (Runde 71): der Auslöser ist Teil des Prüfers.
+    failures.extend(pruefe_workflow())
     failures.extend(_self_test_fehlend_vs_leer())
     # §A-ZZZZ56 (Runde 65): **die Liste hat einen Leser.** Runde 64 legte
     # `ZUSTAND_FELDER` an, und keine Zeile las sie — die Zeile hatte
@@ -2941,7 +2943,7 @@ def calibration_card(root: Path | None = None) -> str:
             f"Zustand: {_sch}/{len(_mess)} Meßblöcke scheiterbar · "
             f"{_seit_txt} · Deckel {DECKEL_MEASURE} "
             f"⇒ {'ÜBER' if _seit > DECKEL_MEASURE else 'unter'} · "
-            f"{len(_bl)} Blöcke · {_sch} : {len(_bl)} Gegenläufe · "
+            f"{len(_bl)} Protokollblöcke · {_sch} : {len(_bl)} Gegenläufe · "
             f"{_gedeckt} : {len(REGEL_PRUEFER)} Regeln gedeckt · "
             f"{QUITTUNGEN}/{DECKEL_CIT} quittiert · R→F {REPARATUR_ZU_FUND} · "
             f"{len(ZUSTAND_FELDER)} Felder")
@@ -8028,7 +8030,12 @@ def pruefe_zustandszeile(zeile: str) -> list[str]:
         ("Meßblöcke scheiterbar", r"^\d+/\d+ Meßblöcke scheiterbar$"),
         ("seit", r"^\d+ Blöcke seit ?\d*"),
         ("Deckel", r"^Deckel \d+ ⇒ (ÜBER|unter)$"),
-        ("Blöcke", r"^\d+ Blöcke$"),
+        # §A-ZZZZ81c (Runde 71): **`Protokollblöcke`, nicht `Blöcke`.**
+        # Der Nenner ist die Akte, nicht der Code — `4 : 213` sind vier
+        # Gegenläufe auf N Protokollblöcke. Die Zahl steigt, wenn
+        # geschrieben wird, und nicht, wenn der Code besser wird. Der
+        # Name sagt jetzt, was gezählt wird.
+        ("Protokollblöcke", r"^\d+ Protokollblöcke$"),
         ("Gegenläufe", r"^\d+ : \d+ Gegenläufe$"),
         ("Regeln gedeckt", r"^\d+ : \d+ Regeln gedeckt$"),
         ("quittiert", r"^\d+/\d+ quittiert$"),
@@ -8085,10 +8092,113 @@ QUITTUNG_TESTS = ("_self_test_prozent",)
 # Test, statt als Annahme im Kopf des Lesers.
 MESSBEREICH: dict[str, tuple[str, ...]] = {
     "prosa": ("scripts/check_claude_md.py",),
-    "blockzahl": ("order_execution_engine/ops/TAG7_ABNAHME.md",),
+    "blockzahl": ("scripts/check_claude_md.py",),
     "protokoll": ("order_execution_engine/ops/TAG7_ABNAHME.md",
                   "order_execution_engine/ops/BERICHT.md"),
 }
+
+# §A-ZZZZ81b (Runde 71): **was nicht in der Liste steht, wird nicht
+# gezählt — und das steht hier, mit Grund.** Eine Ausnahme ohne Grund ist
+# eine Auslassung, die sich als Vollständigkeit ausgibt.
+#
+# `scripts/` hat hunderte Dateien. Einzeleinträge wären ein Leser, der
+# nichts liest. Statt dessen: **Klassen** mit Grund, und jede neue Datei
+# fällt in keine Klasse — bis jemand sie schreibt. Der Gegenlauf ist
+# `touch scripts/foo.py` ⇒ rot.
+AUSGENOMMEN: dict[str, str] = {
+    "order_execution_engine/ops/TAG7_ABNAHME.md":
+        "Protokoll, append-only — zählt sich sonst selbst",
+    "order_execution_engine/ops/BERICHT.md":
+        "Bericht über die Akte — enthält die Zahl, die er berichtet",
+}
+# Klassen-Ausnahmen: (Präfix/Suffix, Grund). Eine Datei ist gedeckt, wenn
+# sie zugewiesen **oder** durch eine Klasse gedeckt ist. Neue Dateien
+# fallen in keine Klasse — das ist der Zweck.
+AUSNAHME_KLASSEN: tuple[tuple[str, str], ...] = (
+    (".DS_Store", "Finder-Artefakt, kein Bestand"),
+    ("__pycache__/", "Bytecode-Verzeichnis, kein Bestand"),
+    (".pyc", "Bytecode, kein Bestand"),
+)
+# Bereiche, in denen **jede** Datei zugewiesen sein muß. Alles außerhalb
+# steht in keiner Meßkette und wird darum nicht verlangt.
+BEREICHSDATEIEN = ("scripts/", ".github/workflows/")
+
+# §A-ZZZZ81b: die Bilanz des letzten Laufs — gedruckt, nicht versteckt.
+MESSBEREICH_BILANZ: list[str] = ["nicht gemessen"]
+
+
+def pruefe_workflow(root: Path | None = None) -> list[str]:
+    """§A-ZZZZ82 (Runde 71): **der Auslöser ist Teil des Prüfers.**
+
+    Die Kette hat vier Glieder, und drei davon sind in dieser Akte
+    geschlossen worden:
+
+      Name → `def`      §71.77   Runde 68
+      `def` → Aufruf    ast.Call Runde 69
+      Aufruf → Lauf     Runde 64 (Gegenläufe)
+      **Lauf → Auslöser**        — nie
+
+    Das vierte war offen, und es hat fünf Wochen nichts gemeldet: die
+    Wache war gebaut, verkabelt, `continue-on-error: false` — und kein
+    Auslöser nannte `scripts/check_claude_md.py`. `scripts/test_*.py`
+    matcht den Namen nicht. Eine gebaute Wache, die nie feuert, ist eine
+    geschlossene Position, die keine ist.
+
+    Eine Regel, deren Aufruf kein Trigger erreicht, ist so grün wie ein
+    Name ohne `def`.
+    """
+    base = root or Path(__file__).resolve().parent.parent
+    wf_dir = base / ".github" / "workflows"
+    out: list[str] = []
+    if not wf_dir.is_dir():
+        return ["Workflow: .github/workflows/ fehlt — Auslöser nicht prüfbar"]
+    _ziel = "scripts/check_claude_md.py"
+    # Welche Workflows führen den Prüfer aus?
+    traeger: list[tuple[Path, str]] = []
+    for wf in sorted(wf_dir.glob("*.yml")):
+        try:
+            text = wf.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        if _ziel in text and "check_claude_md.py" in text:
+            traeger.append((wf, text))
+    if not traeger:
+        return [f"Workflow: kein Workflow ruft {_ziel} — die Wache "
+                f"existiert nicht, gleich was der Zweig ist"]
+    for wf, text in traeger:
+        # `paths:` muß den Prüfer nennen — sonst feuert der Workflow bei
+        # einer Änderung an genau dieser Datei nicht. Der Filter ist
+        # **branch-unabhängig**: `scripts/test_*.py` matcht
+        # `scripts/check_claude_md.py` nicht, auf keinem Zweig.
+        _pm = re.search(r"^\s{2}push:\s*$(.*?)(?=^\s{2}\w|\Z)",
+                        text, re.MULTILINE | re.DOTALL)
+        if not _pm:
+            out.append(f"Workflow {wf.name}: kein `push:` — der Prüfer "
+                       f"wird bei keinem Push ausgeführt")
+            continue
+        push = _pm.group(1)
+        if "paths:" in push and _ziel not in push:
+            _globs = re.findall(r"^\s+- '([^']+)'", push, re.MULTILINE)
+            out.append(
+                f"Workflow {wf.name}: `push.paths` nennt {_ziel} nicht — "
+                f"ein Commit, der nur den Prüfer ändert, feuert nicht "
+                f"(Filter: {', '.join(_globs) or '—'})")
+        # `pull_request` als Trigger: sonst gibt es keinen Ort, an dem
+        # die Korrektur beobachtbar ist.
+        if "pull_request:" not in text:
+            out.append(f"Workflow {wf.name}: kein `pull_request:`-Trigger "
+                       f"— die Wirkung der Prüfung ist nirgends beobachtbar")
+        # `shell:` fehlt ⇒ Default `bash -e`, kein `pipefail`. Bricht der
+        # erste Befehl ab? Ja. Fängt es ein späteres `| tee`? Nein.
+        for step in re.split(r"^\s{6}- name:", text, flags=re.MULTILINE)[1:]:
+            if "check_claude_md.py" not in step:
+                continue
+            if "shell:" not in step:
+                out.append(
+                    f"Workflow {wf.name}: Step ohne `shell:` — Default "
+                    f"ist `bash -e` ohne `pipefail`; ein angehängtes "
+                    f"`| tee` würde den Abbruch verschlucken")
+    return out
 
 
 def pruefe_messbereich(root: Path | None = None) -> list[str]:
@@ -8121,6 +8231,61 @@ def pruefe_messbereich(root: Path | None = None) -> list[str]:
         if p in prosa:
             out.append(f"Meßbereich: {p} steht zugleich im Prosa-Bereich "
                        f"— das Protokoll zählt sich dann selbst")
+        if p not in AUSGENOMMEN:
+            out.append(f"Meßbereich: {p} ist Protokoll, aber nicht in "
+                       f"`AUSGENOMMEN` — die Ausnahme braucht einen Grund")
+    # §A-ZZZZ81b: **Vollständigkeit, nicht nur Übereinstimmung.** Der
+    # Fehlerfall einer Liste ist nicht der Widerspruch, sondern die
+    # Auslassung: eine neue Datei erscheint, steht in keinem Bereich und
+    # wird nirgends gezählt — die Liste bleibt grün, weil sie sich selbst
+    # nicht widerspricht.
+    #
+    # **Nicht als Dauerblocker.** Hunderte Skripte unter `scripts/` sind heute
+    # in keinem Bereich; ein Prüfer, der sie alle meldet, ist eine Wand
+    # aus Rauschen, und Rauschen wird abgeschaltet. Gemessen wird darum
+    # die Klasse: **die Zuweisung ist eine Liste mit Grund, und alles,
+    # was nicht darin steht, ist benannt.** Gezählt werden die
+    # unzugewiesenen Dateien — als Zahl, nicht als Befund je Datei.
+    _zugewiesen: set[str] = set()
+    for dateien in MESSBEREICH.values():
+        _zugewiesen.update(dateien)
+    _unzugewiesen = 0
+    for d in BEREICHSDATEIEN:
+        _p = base / d
+        if not _p.exists():
+            continue
+        for f in sorted(_p.rglob("*")):
+            if not f.is_file():
+                continue
+            rel = f.relative_to(base).as_posix()
+            if rel in _zugewiesen or rel in AUSGENOMMEN:
+                continue
+            if any(_k in rel for _k, _ in AUSNAHME_KLASSEN):
+                continue
+            _unzugewiesen += 1
+    MESSBEREICH_BILANZ[0] = (
+        f"{_unzugewiesen} Dateien unter {', '.join(BEREICHSDATEIEN)} "
+        f"ohne Bereich — benannt, nicht zugewiesen")
+    # Ein Befund nur, wenn eine **neue** Datei dazukommt, ohne daß die
+    # Bilanz wächst: das ist die Auslassung, die sich als Vollständigkeit
+    # ausgibt. Der Vorwert steht in `.messbereich-n`; fehlt er, ist es
+    # der erste Lauf, und die Zahl wird geschrieben statt verglichen.
+    _n_pfad = base / ".messbereich-n"
+    _vor = None
+    try:
+        _vor = int(_n_pfad.read_text(encoding="utf-8").strip())
+    except (OSError, ValueError):
+        pass
+    if _vor is None:
+        try:
+            _n_pfad.write_text(f"{_unzugewiesen}\n", encoding="utf-8")
+        except OSError:
+            pass
+    elif _unzugewiesen > _vor:
+        out.append(
+            f"Meßbereich: {_unzugewiesen - _vor} Datei(en) ohne Zuweisung "
+            f"dazugekommen ({_vor} → {_unzugewiesen}) — eine neue Datei "
+            f"in keinem Bereich wird nirgends gezählt")
     return out
 
 # §A-ZZZZ61 (Runde 66): der Nenner des Prosa-Prüfers. Eine Liste, weil die
@@ -8246,7 +8411,7 @@ REGEL_PRUEFER: dict[str, str] = {
 GEGENLAUF_JE_REGEL: dict[str, str] = {}  # am Dateiende befuellt
 
 _ZEILE_FIXTURE = ("4/8 Meßblöcke scheiterbar · 0 Blöcke seit 210 · "
-                  "Deckel 5 ⇒ unter · 210 Blöcke · 4 : 210 Gegenläufe · "
+                  "Deckel 5 ⇒ unter · 210 Protokollblöcke · 4 : 210 Gegenläufe · "
                   "13 : 13 Regeln gedeckt · 1/2 quittiert · "
                   "R→F 0/med 1/n 5/letzte 0/Prüfer · 9 Felder")
 

@@ -14,17 +14,25 @@ name: Off-Grid Bunker Test + Formal Invariant Verification
 
 on:
   push:
-    branches: [main]
+    branches: [main, deploy-safe-snapshot]
     paths:
       - 'agents_b2g/**'
       - 'tests/**'
       - 'scripts/test_*.py'
+      # §A-ZZZZ82 (Runde 71): der Auslöser nannte seinen Gegenstand nicht.
+      # `scripts/test_*.py` matcht `scripts/check_claude_md.py` nicht —
+      # der Prüfer lief auf keinem Zweig, wenn nur er sich änderte.
+      - 'scripts/check_claude_md.py'
+      - '.github/workflows/offgrid-test.yml'
       - 'services/**'
   pull_request:
+    branches: [main, deploy-safe-snapshot]
     paths:
       - 'agents_b2g/**'
       - 'tests/**'
       - 'scripts/test_wave33_survival.py'
+      - 'scripts/check_claude_md.py'
+      - '.github/workflows/offgrid-test.yml'
       - 'Dockerfile.bunker'
       - 'docker-compose.mock.yml'
   workflow_dispatch:
@@ -289,7 +297,12 @@ jobs:
         continue-on-error: false
 
       - name: F8 — CLAUDE.md Consistency
+        # §A-ZZZZ82: explizites `shell:` — Default ist `bash -e` ohne
+        # `pipefail`. Bricht der erste Befehl ab, ja; fängt es ein später
+        # angehängtes `| tee`, nein. `pipefail` schließt das.
+        shell: bash
         run: |
+          set -euo pipefail
           python3 scripts/check_claude_md.py
           # §A-J: der Selbsttest lief nie in CI. Ein Test, der nur auf
           # einer Maschine laeuft, ist eine Zusage ueber eine Maschine.

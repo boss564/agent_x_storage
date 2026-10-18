@@ -125,3 +125,4 @@ artifacts/
 # Runde 68: Stand des letzten Selbsttests (Hauptlauf setzt EXIT daraus ein)
 /.selftest-exit
 /.blockstand
+/.messbereich-n
