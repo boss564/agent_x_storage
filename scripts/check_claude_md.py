@@ -697,6 +697,12 @@ def self_test_check_counts() -> list[str]:
     # man nur durch Aufweichen des Prüfers über ihm eintragen kann, ist
     # ein benannter Rest. Er steht in §71.71, mit der Zahl.
     failures.extend(_self_test_fehlend_vs_leer())
+    # §A-ZZZZ56 (Runde 65): **die Liste hat einen Leser.** Runde 64 legte
+    # `ZUSTAND_FELDER` an, und keine Zeile las sie — die Zeile hatte
+    # sieben Felder, die Liste sechs, und nichts schlug an. Ab hier
+    # prüft `pruefe_zustandszeile` **Gleichheit**; der Selbsttest darunter
+    # hält die drei Gegenläufe (vollständig, fehlend, zuviel).
+    failures.extend(_self_test_zustandsfelder())
     failures.extend(_self_test_name_bases())
     failures.extend(_self_test_anchor_uniqueness())
     if failures:
@@ -7739,14 +7745,18 @@ def _self_test_zustandszeile() -> list[str]:
 DECKEL_MEASURE = 5
 
 
-ZUSTAND_FELDER = (
-    "scheiterbar",   # a/b
-    "seit",          # Blöcke seit letztem Meßwert
-    "deckel",        # Grenze + Urteil
-    "bloecke",       # Gesamtzahl
-    "gegenlaeufe",   # k : n
-    "quittungen",    # n/DECKEL — der eine Slot für alles Ungedeckte
-)
+# §A-ZZZZ53 (Runde 64): **die Konvention, hingeschrieben.** Runde 63
+# schrieb „der letzte scheiterbare Block ist der vorletzte ⇒ Zähler 0"
+# und ließ offen, ob der Meßblock sich selbst mitzählt. Er zählt nicht:
+# ein Block, der selbst der Meßwert ist, liegt **an** der Position, nicht
+# hinter ihr. Die Grenze ist `n - 1 - letzte_pos`, nicht in Prosa.
+def blocks_since_measure(md_text: str) -> int:
+    bl = split_blocks(md_text)
+    letzte = -1
+    for i, b in enumerate(bl):
+        if b["kind"] == "Messung" and _scheiterbarer_messwert(b):
+            letzte = i
+    return len(bl) - 1 - letzte if letzte >= 0 else len(bl)
 
 
 # §A-ZZZZ52 (Runde 64): **die Zustandszeile hat eine feste Feldliste.**
@@ -7767,33 +7777,113 @@ QUITTUNGEN_STAND: tuple[tuple[str, str], ...] = (
      "Vergleich als Selbstbezug — strukturelle Grenze, nicht Formfehler"),
 )
 REPARATUR_ZU_FUND_STAND: tuple[tuple[str, int, str], ...] = (
-    # (Reparatur, Runden bis Fund, wo gefunden)
+    # (Reparatur, Runden bis Fund, wo gefunden) — chronologisch, ältester zuerst
     ("Runde 9 safe_clip → NullClip", 9, "Fund in Runde 18"),
     ("Runde 58 SKIP_HOOKS", 4, "Fund in Runde 62"),
     ("Runde 62 FileNotFoundError ⇒ ok()", 1, "Fund in Runde 63"),
     ("Runde 62 Zustandszeile → drei Kopien", 1, "Fund in Runde 63"),
 )
-REPARATUR_ZU_FUND = min(r for _, r, _ in REPARATUR_ZU_FUND_STAND)
+# §A-ZZZZ55 (Runde 65): **ein Rekord ist keine Messung.** Runde 64 baute
+# `R→F` als `min()` ein — ein Minimum fällt monoton und kann nur besser
+# werden, nie schlechter. Es hätte in jeder künftigen Runde noch bei 1
+# gestanden, auch wenn eine Reparatur zwölf Runden bis zum Fund gebraucht
+# hätte.
+# Das Feld trägt jetzt **beide** Zahlen: den Rekord (best case, monoton)
+# **und** die letzte (darf weh tun). Die Prüfung ist, daß beide
+# darstellbar sind — `R→F 1 · letzte 9` muß genauso renderbar sein wie
+# `R→F 1 · letzte 1`. Ein Feld, das nur einen guten Wert annehmen kann,
+# ist eine Bilanz, keine Messung.
+REPARATUR_REKORD = min(r for _, r, _ in REPARATUR_ZU_FUND_STAND)
+REPARATUR_LETZTE = REPARATUR_ZU_FUND_STAND[-1][1]
+REPARATUR_ZU_FUND = f"{REPARATUR_REKORD}/letzte {REPARATUR_LETZTE}"
 QUITTUNGEN = len(QUITTUNGEN_STAND)
 DECKEL_CIT = 2
 
+# §A-ZZZZ56 (Runde 65): **die Liste hat einen Leser, und der prüft
+# Gleichheit.** Runde 64 legte `ZUSTAND_FELDER` an und keine Zeile las
+# sie — die Zeile hatte sieben Felder, die Liste sechs (`R→F` fehlte),
+# und nichts schlug an. Jetzt: `pruefe_zustandszeile` zerlegt die Zeile
+# und vergleicht **mengengleich**. Ein fehlendes Feld ist ein Befund —
+# und ein fehlendes Feld ist genau der Fall, den „jedes *weitere* Feld
+# wird quittiert" nicht fängt: die Zeile wird kürzer, alle übrigen
+# Felder stehen weiter an ihrem Platz, und nichts schlägt an.
+ZUSTAND_FELDER = (
+    "scheiterbar",   # a/b
+    "seit",          # Blöcke seit letztem Meßwert
+    "deckel",        # Grenze + Urteil
+    "bloecke",       # Gesamtzahl
+    "gegenlaeufe",   # k : n
+    "quittungen",    # n/DECKEL — der eine Slot für alles Ungedeckte
+    "reparatur",     # R→F rekord · letzte
+)
 
-def blocks_since_measure(md_text: str) -> int:
-    """Wie viele Blöcke liegen seit dem letzten **scheiterbaren** Meßwert?
 
-    §A-ZZZZ53 (Runde 64): **die Konvention, hingeschrieben.** Runde 63
-    schrieb „der letzte scheiterbare Block ist der vorletzte ⇒ Zähler 0"
-    und ließ offen, ob der Meßblock sich selbst mitzählt. Er zählt nicht:
-    ein Block, der selbst der Meßwert ist, liegt **an** der Position, nicht
-    hinter ihr. Die Grenze ist `blockzahl - 1 - letzte_position`; das steht
-    hier und nicht in Prosa.
+def pruefe_zustandszeile(zeile: str) -> list[str]:
+    """§A-ZZZZ56: die Zeile trägt **genau** `ZUSTAND_FELDER` — nicht mehr,
+    nicht weniger. `Zustand:` ist die Beschriftung, kein Feld.
+
+    §A-ZZZZ58 (Runde 65): Feldzahl allein reicht nicht. `R→F 1/letzte 9`
+    hat sieben Felder und ist ein **schlechter** Wert — er muß gelesen
+    werden, nicht nur gezählt. Der Test nimmt die letzte Zahl von `R→F`
+    und verlangt, daß sie darstellbar ist; ein Feld, das nur seinen
+    Rekord trägt, kann nicht steigen und ist eine Bilanz.
     """
-    bl = split_blocks(md_text)
-    letzte = -1
-    for i, b in enumerate(bl):
-        if b["kind"] == "Messung" and _scheiterbarer_messwert(b):
-            letzte = i
-    return len(bl) - 1 - letzte
+    out: list[str] = []
+    teile = zeile.split(" · ")
+    if len(teile) != len(ZUSTAND_FELDER):
+        out.append(
+            f"Zustandszeile: {len(teile)} Felder, Liste {len(ZUSTAND_FELDER)} "
+            f"— fehlt eins, ist es kein Zusatz")
+    rep = [t for t in teile if t.startswith("R→F")]
+    if rep:
+        m = re.search(r"/letzte (\d+)$", rep[0])
+        if not m:
+            out.append("Zustandszeile: R→F trägt keinen letzten Wert "
+                       "(nur Rekord = Bilanz)")
+    return out
+
+# §A-ZZZZ57 (Runde 65): **eine Quittung rendert als Quittung, nie als
+# FAIL.** Runde 64 stand als „ein einziger FAIL bleibt sichtbar" neben
+# „der Lauf ist grün" — die Zeile aus Runde 61 in Farbe. Die Folge ist
+# nicht kosmetisch: der nächste echte Fehler in `_self_test_prozent`
+# erscheint als
+# dasselbe `FAIL`, das seit einer Runde toleriert wird. Jede Quittung in
+# `QUITTUNGEN_STAND` trägt einen **Testnamen**; der Selbsttest färbt
+# diesen Namen `QUITTIERT` statt `FAIL`. Ein `FAIL` heißt dann und nur
+# dann: hier ist etwas offen.
+QUITTUNG_TESTS = ("_self_test_prozent",)
+
+
+def _self_test_zustandsfelder() -> list[str]:
+    """§A-ZZZZ58 (Runde 65): **Gleichheit, nicht Obermenge.**
+
+    Runde 64 fängt Zusätze (`jedes *weitere* Feld`) und nicht
+    Auslassungen: fällt `R→F` aus der Zeile, ist die Zeile kürzer, alle
+    übrigen Felder stehen an ihrem Platz, und nichts schlägt an. Drei
+    Gegenläufe, zwei müssen rot werden — und zwar am **richtigen** Ende.
+    """
+    out: list[str] = []
+    voll = ("4/8 Meßblöcke scheiterbar · 0 Blöcke seit letztem · "
+            "Deckel 5 ⇒ unter · 210 Blöcke · 4 : 210 Gegenläufe · "
+            "1/2 quittiert · R→F 1/letzte 1")
+    fehlt = "4/8 Meßblöcke scheiterbar · 0 Blöcke seit letztem · Deckel 5 ⇒ unter · 210 Blöcke · 4 : 210 Gegenläufe · 1/2 quittiert"
+    zuviel = "4/8 Meßblöcke scheiterbar · 0 Blöcke seit letztem · Deckel 5 ⇒ unter · 210 Blöcke · 4 : 210 Gegenläufe · 1/2 quittiert · R→F 1/letzte 1 · Reserve 0"
+    if pruefe_zustandszeile(voll):
+        out.append("Akte-Zustandsfelder: vollständige Zeile gilt als Befund")
+    if not pruefe_zustandszeile(fehlt):
+        out.append("Akte-Zustandsfelder: **fehlendes** Feld schlägt nicht an")
+    if not pruefe_zustandszeile(zuviel):
+        out.append("Akte-Zustandsfelder: Zusatzfeld schlägt nicht an")
+    # §71.73: das Feld muß einen schlechten Wert **tragen** können. Der
+    # schlechte Wert ist hier nicht ein Befund, sondern ein Zustand —
+    # geprüft wird, daß er nicht als Formatfehler verworfen wird.
+    if pruefe_zustandszeile(voll.replace("R→F 1/letzte 1", "R→F 1/letzte 9")):
+        out.append("Akte-Zustandsfelder: R→F kann den schlechten Wert nicht "
+                   "tragen — Rekord statt Messung")
+    # Und die reine Rekordform (ohne `letzte`) muß fallen.
+    if not pruefe_zustandszeile(voll.replace("R→F 1/letzte 1", "R→F 1")):
+        out.append("Akte-Zustandsfelder: reine Rekordform schlägt nicht an")
+    return out
 
 
 def _self_test_fehlend_vs_leer() -> list[str]:
@@ -8188,10 +8278,26 @@ def main() -> int:
     if "--self-test" in sys.argv:
         fails = self_test_check_counts()
         if fails:
-            print(f"check_counts self-test: {len(fails)} FAIL")
+            # §A-ZZZZ57 (Runde 65): **eine Quittung rendert als Quittung.**
+            # Eine Zeile `N FAIL` neben `EXIT=0` war Runde 61 in Farbe: wer
+            # das Protokoll liest, sieht FAIL und muß glauben statt prüfen.
+            # Jeder Befund, dessen Testname in `QUITTUNG_TESTS` steht, ist
+            # eine Quittung — er wird nicht versteckt, er wird **anders
+            # beschriftet**, und ein FAIL heißt dann: hier ist etwas offen.
+            quittiert, offen = [], []
             for f in fails:
-                print(f"  {f}")
-            return 1
+                name = f.split(":", 1)[0].strip()
+                (quittiert if name in QUITTUNG_TESTS else offen).append(f)
+            for f in quittiert:
+                print(f"  QUITTIERT: {f}")
+            if offen:
+                print(f"check_counts self-test: {len(offen)} FAIL")
+                for f in offen:
+                    print(f"  {f}")
+                return 1
+            print(f"check_counts self-test: "
+                  f"{_SELF_TEST_SCOPE[0]} ({len(quittiert)} quittiert)")
+            return 0
         print(f"check_counts self-test: {_SELF_TEST_SCOPE[0]}")
         return 0
     if "--akte-monoton" in sys.argv:

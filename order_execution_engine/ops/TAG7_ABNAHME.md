@@ -7884,3 +7884,55 @@ Die 15 war `5×3` — die Formel ohne ihr `−1`.
 Gezählt heute: **210 Blöcke · 4/8 scheiterbar · 7 Tupel-Rückgeber · 5
 echt · 1 konvertiert · 12 offen / 13 Entpackstellen · 0
 Wahrheitsprüfungen · 1/2 quittiert · R→F 1 · EXIT=0.**
+
+### §71.74 — Runde 65: der Leser, den die Liste nicht hatte
+
+**`ZUSTAND_FELDER` war eine Konstante ohne Leser.** Runde 64 legte sie
+an, deklarierte sechs Felder, und die Zeile hatte sieben — `R→F`
+fehlte, weil ich es eingebaut und nicht deklariert hatte. Kein Prüfer
+las die Liste, also schlug nichts an. Der Slot war benannt und nicht
+bewacht; das ist das siebte Wort in neuer Form.
+
+⇒ **§A-ZZZZ56/58: `pruefe_zustandszeile` und Gleichheit.** Zerlegen,
+zählen, **mengengleich** vergleichen. Ein fehlendes Feld ist ein
+Befund — genau der Fall, den „jedes *weitere* Feld wird quittiert"
+nicht fängt: die Zeile wird kürzer, die übrigen Felder stehen richtig,
+nichts schlägt an. Drei Gegenläufe in `_self_test_zustandsfelder()`:
+vollständig (grün), fehlend (rot), Zusatzfeld (rot).
+
+**Der Leser schlug an sich selbst an.** `R→F 1 · letzte 1` enthielt
+einen `·` **innerhalb** des Feldes: acht Trenner gezählt, sieben
+deklariert, sofortiger Befund — am ersten Lauf. Die Zeile ist jetzt
+`R→F 1/letzte 1`, und der Trenner deckt nur noch Felder.
+
+**§A-ZZZZ55: `min()` ist ein Rekord, keine Messung.** Ein Minimum
+fällt monoton und kann nur besser werden, nie schlechter — es hätte
+in jeder künftigen Runde bei 1 gestanden, auch bei zwölf Runden bis
+zum Fund. Das Feld trägt jetzt beide Zahlen: `R→F <rekord>/letzte
+<n>`. `4/8` ist der Beleg, daß es geht; `R→F 9/letzte 9` ist
+darstellbar und wird nicht als Formatfehler verworfen (Gegenlauf).
+
+**§A-ZZZZ57: eine Quittung rendert als Quittung.** Runde 64 schrieb
+„ein einziger FAIL bleibt sichtbar" neben „der Lauf ist grün" — Runde
+61 in Farbe. Und es waren zwei Renderings für einen Mechanismus. Der
+Selbsttest druckt jetzt `QUITTIERT:` für Namen in `QUITTUNG_TESTS`,
+und `FAIL` heißt: hier ist etwas offen. Die Ausgabe ist damit prüfbar
+statt glaubwürdig.
+
+**§71.73: jedes Feld trägt einen Gegenlauf im schlechten Wert.** Nicht
+jedes: `210 Blöcke` ist nur durch Löschen „schlecht" darstellbar und
+damit ehrlich ein **Zustand**, keine Messung. Die Felder mit
+Meßcharakter — `scheiterbar`, `seit letztem`, `quittiert`, `R→F` —
+haben je einen Gegenlauf.
+
+**Zum Vorschlag „jede Zahl mit Ausdruck".** Angenommen, und er ist
+Prädiktor: der Prosa-Prüfer fand in dieser Runde sofort zwei Zahlen
+ohne Herkunft — `20` und eine Zeilennummer — **in meinen eigenen
+Kommentaren**. Genau die Klasse, die Sie beschreiben. Beide entfernt.
+Die Buchführung ist damit fortan: **Zahl · Operanden · Quelle.**
+
+Gezählt heute: **211 Blöcke · 4/8 scheiterbar (4 scheiterbare
+Meßblöcke / 8 Meßblöcke) · 7 Felder (6 Trenner + 1) = 7 Einträge in
+`ZUSTAND_FELDER` · R→F 1/letzte 1 (rek = min{9,4,1,1}; letzte = 2.62
+„drei Kopien") · 1/2 quittiert (1 Eintrag / Deckel 2) · 1 QUITTIERT ·
+0 offene FAIL außer dem Block, der diesen Text trägt · EXIT=0.**
