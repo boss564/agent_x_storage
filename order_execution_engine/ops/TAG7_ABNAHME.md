@@ -8275,12 +8275,21 @@ Drei Befunde, die keiner der beiden Jobs benannt hatte:
 | 2 | `ReentrancyGuardUpgradeable` existiert nur bis v4.9 (`security/`) | v4-Name in einem v5-Contract |
 | 3 | `foundry.toml` hatte **keine** Compiler-Konfiguration | kein `solc_version`, kein `via_ir`, kein `optimizer` |
 
-Und zwei weitere Fehler, die nie auffielen, weil **nie kompiliert wurde**:
+Und **drei** weitere, die nie auffielen, weil **nie kompiliert wurde** —
+Runde 75 hat die vorherige Fassung dieser Tabelle korrigiert (siehe
+Runde 75, Abschnitt 1):
 
-| Datei | Fehler |
-|---|---|
-| `ComplianceVerifier.sol` | `__UUPSUpgradeable_init()` existiert in v5 nicht; `external`-Funktion im Modifier |
-| `ValhallaVerifier.sol` | `VerifyingKey public immutable vk` — Structs können nicht `immutable` sein; `external` im Modifier |
+| # | Datei | Fehler | Beleg |
+|---|---|---|---|
+| 4 | `ComplianceVerifier.sol` | `__UUPSUpgradeable_init()` existiert in v5 nicht | `Undeclared identifier`, Zeile 73 |
+| 5 | `ComplianceVerifier.sol` | `external`-Funktion im Modifier (`withCompliance` ruft `verifyAndConsumeCompliance`) | am Vorstand geprüft, 6 Treffer |
+| 6 | `ValhallaVerifier.sol` | `VerifyingKey public immutable vk` — Structs können nicht `immutable` sein | `Error 6377` |
+
+> **Runde-75-Korrektur einer Runde-74-Zeile:** Die vorherige Fassung
+> behauptete, auch `ValhallaVerifier.sol` trage einen `external`-Aufruf
+> im Modifier. Das ist **falsch** — die Datei hat keinen solchen
+> Modifier; sie trägt genau Facette 6. Die sechs Facetten sind damit
+> belegt: eine Wurzel (`nichts hat je kompiliert`), sechs Erscheinungen.
 
 **Ergebnis:** `forge build` → `Compiling 40 files with Solc 0.8.35` →
 `Compiler run successful`. Der Zweig, der `deploy-safe` heißt, ist zum
@@ -8399,4 +8408,205 @@ war vorher nicht wahr. Der Unterschied zwischen heute und gestern ist
 nicht, daß eine Zahl besser aussieht — es ist, daß zum ersten Mal
 **dieselbe Datei** die Waage und das Gewogene getrennt hält und ein Job
 sie zusammenführt.
+
+
+## Runde 75 — die Phantom-Facette, das Loch im Gate und die gelöschten Zeilen
+
+**Diese Runde hat mehr Fehler in der eigenen Arbeit gefunden als in der
+Sache. Das ist der Punkt.**
+
+### 1. Facette 6: es gibt sie — und zwei Fehlbuchungen dazu
+
+Ihre Frage war: fünf Zeilen, sechs Befunde im Text — welche Zahl gilt?
+Am **Vorstand** (`20484d47~1`) geprüft:
+
+| # | Beleg | Treffer |
+|---|---|---|
+| 1 | `ECDSAUpgradeable` in `ComplianceVerifier.sol` | 1 |
+| 2 | `ReentrancyGuardUpgradeable` ebd. | 1 |
+| 3 | `foundry.toml` ohne Compiler-Konfig | belegt |
+| 4 | `__UUPSUpgradeable_init()` ebd. | 1 |
+| 5 | `verifiyAndConsumeCompliance` **external**, im Modifier gerufen | 1 |
+| 6 | `VerifyingKey public immutable vk` | 1 |
+
+**Es sind sechs.** Aber die Runde-74-Tabelle behauptete, auch
+`ValhallaVerifier.sol` trage den `external`-Fehler — **falsch**: die Datei
+hat keinen Modifier dieser Art. Die Tabelle ist korrigiert.
+
+### 2. Die Wurzel ist nicht `openzeppelin` — sie ist `make compile`
+
+`via_ir` wurde nicht für Gas gesetzt. Am Vorstand geprüft:
+
+```
+FOUNDRY_VIA_IR=false forge build
+→ Error (1834): Copying of type struct ... memory[] memory to storage is
+  not supported in legacy (only supported by the IR pipeline)
+```
+
+**Ohne `via_ir` baut der Baum nicht.** Das ist eine siebte Facette, und
+sie wiegt schwerer als die anderen sechs: sie zeigt, daß **nichts beim
+Schreiben kompiliert hat** — sonst wäre sie am ersten Tag aufgefallen.
+
+Deshalb `make compile`: lokal, **0,24 s**, vor jedem Push. Kein Ersatz
+für `deploy-gate` — eine Frühwarnung, die die Lücke zwischen Commit und
+CI schließt. Fünf Wochen Blindheit sind genau diese Lücke.
+
+### 3. Der Zähler war nicht eingefroren — er zeigte das falsche Maß
+
+Der Befund ist schärfer als „`4/13` ist veraltet". Zeile 2977 druckte:
+
+```python
+f"{_sch}/{len(REGEL_PRUEFER)} Regeln mit Gegenlauf · "
+```
+
+`_sch` zählt **scheiterbare Meßblöcke** (4 von 8), nicht Regeln. Zwei
+verschiedene Maße, zufällig gleiche Zahl, falsches Etikett. Die echte
+Regeldeckung ist `_gedeckt` — und sie ist **vollständig**: jede Regel in
+`REGEL_PRUEFER` hat einen definierten Gegenlauf.
+
+Die zweite Hälfte der Zeile (`13 : 13 Regeln gedeckt`) war richtig und
+sagte dasselbe wie die erste Hälfte hätte sagen sollen. **Zwei Felder,
+ein Maß, eine falsch** — deshalb `ZUSTAND_FELDER` von `gegenlaeufe` +
+`regeldeckung` auf **ein** Feld reduziert. Die Zeile ist jetzt 9 Felder
+lang und sagt `13/13` einmal.
+
+**Zur Definition:** ein Gegenlauf ist ein **im Code erzwungener
+Rot-Fall** — eine Funktion, die den Prüfer mit einem fehlerhaften
+Eingang füttert und einen Befund erwartet (`_g_*`). Die sechs
+Gate-Mutationen der Runde 74 sind ein solcher Gegenlauf für das Gate;
+sie liegen in `scripts/check_claude_md.py` als Gegenprobe im Selbsttest.
+
+### 4. Das Loch im Gate: `skipped` und `cancelled`
+
+Die erste Fassung prüfte `!= success` — richtig, aber unbenannt. Jetzt
+explizit, mit Vier-Zustands-Tabelle im Job:
+
+| Zustand | Gate |
+|---|---|
+| `success` | grün |
+| `failure` | rot |
+| `cancelled` | **rot** |
+| `skipped` | **rot** |
+
+Ausgeführt am echten Job-Skript, nicht nachgebaut:
+
+```
+success/success/success    exit=0  GRÜN
+success/skipped/success    exit=1  ROT
+success/success/cancelled  exit=1  ROT
+failure/success/success    exit=1  ROT
+```
+
+**Und ein Loch, das schwerer wog als `skipped`:** `paths:` nannte
+`shadow_contract_pilot/**`, `lib/**`, `foundry.toml` und
+`order_execution_engine/**` **nicht**. Das Gate wäre bei genau den
+Commits, die es prüfen soll, gar nicht gestartet. Ergänzt.
+
+### 5. Die Bilanz 282 → 283 → 282 war nie 283
+
+`messbereich_klassen()` bei vier Commits ausgeführt:
+
+| Commit | Klassen | Summe |
+|---|---|---|
+| `0d6046c1` | 174 / 92 / 16 | 282 |
+| `04eb08f0` | 174 / 92 / 16 | 282 |
+| `20484d47` | 174 / 92 / 16 | 282 |
+| `HEAD` | 174 / 92 / 16 | 282 |
+
+`_ci_stdonly_probe.py` stand seit `0d6046c1` in `MESSBEREICH` — unter den
+gemessenen, nie in der Restmenge. Die Zeile „das neue Probe-Skript erhöhte
+die Bilanz von 282 auf 283" war eine **Erzählung ohne Messung**. Ebenso
+falsch: `VENDORED` kam in Runde 72 (`0d6046c1`), nicht in Runde 74.
+
+**Die echte 283 entsteht in dieser Runde** — `scripts/bytecode_manifest.py`
+ist neu, und der Prüfer hat sie gefangen:
+
+```
+Meßbereich: 1 Datei(en) ohne Zuweisung dazugekommen (282 → 283)
+```
+
+Gebucht unter `bytecode_wache` — **mit Dateinamen**, wie es die Regel
+verlangt. Das ist die erste Wachstumsbuchung dieser Akte, die belegt ist.
+
+### 6. `.selftest-exit`: der Kanal log
+
+Die Datei trug vier Werte. Drei davon waren **abgeleitet** — und der
+Selbsttest erzwingt ohnehin `offen == 0`. Beim Umbau auf „nur `exit`"
+fiel auf: die Datei sagte `frisch: 1`, der gerechnete Wert war **0**.
+
+Jetzt: die Datei trägt `exit=0`. `offen/quittiert/frisch` werden in
+jedem Lauf aus `rep.problems` gerechnet. Fehlerklasse benannt:
+**stale derived state.**
+
+### 7. Rotation: Runde 74 hat Zeilen gelöscht
+
+Der schwerste Befund dieser Runde. Die Sperre aus Runde 74 überschrieb
+`wandert` mit einem späteren Abschnitt, **ohne den ursprünglichen
+zurückzulegen**. Nachgewiesen:
+
+```
+rotiert: 2 Zeilen → TAG7_ABNAHME.archive.md
+Runde 1 im Archiv?  False
+Runde 1 im aktiven Fenster?  False
+```
+
+Der Abschnitt mit der offenen Position war **weg** — genau der
+`L[0:H]=[]`-Unfall, den die Rotation verhindern sollte, neu gebaut in
+der Reparatur.
+
+Zwei Invarianten, jetzt inhaltlich geprüft statt per Index:
+
+1. **Keine Zeile verloren** — jede Vorstandszeile steht danach in Kopf,
+   aktivem Fenster oder Archiv.
+2. **Offen-Konto bleibt sichtbar** — trägt der Vorstand eine offene
+   Position, muß das aktive Fenster danach auch eine tragen.
+
+Nachweis mit Zeilennummer:
+
+| Fall | offen-Zeile im aktiven Fenster | verlorene Runden |
+|---|---|---|
+| offen in Runde 1 | Zeile **4** | keine |
+| offen in Runde 3 | Zeile **6** | keine |
+| kein offen | — | keine |
+
+### 8. `via_ir` und `optimizer` ändern Bytecode — Hash im Manifest
+
+`scripts/bytecode_manifest.py` schreibt `deployedBytecode`-Hashes je
+Contract nach `order_execution_engine/ops/bytecode_manifest.json` und
+vergleicht mit `--check`. Acht Contracts, Solc 0.8.35, `via_ir` +
+`optimizer_runs 200`.
+
+**Grenze, ehrlich benannt:** das Manifest vergleicht gegen den **letzten
+Bau**, nicht gegen das **Deployte**. `.deployed_contracts.json` trägt
+Adresse, Tx-Hash und Gas — **keinen Bytecode-Hash**. Solange das fehlt,
+ist „deploy-safe" eine Aussage über Kompilierbarkeit plus Konfiguration,
+nicht über Identität mit dem Deployment. Der nächste Schritt ist ein
+Hash im Deploy-Artefakt.
+
+### Bilanz
+
+| Größe | Wert |
+|---|---|
+| Regeln mit Gegenlauf | **13/13** (vorher als `4/13` gedruckt — falsches Maß) |
+| Code-Blöcke | 2525 (Deckel 3000, unter) |
+| `R→F` | min 0 / median 1 / n 5 |
+| `EXIT` | 0/0 |
+| Offene Kontexte | 12 auf 13 Entpackstellen — **nicht als Konstante**, siehe unten |
+| Klassifikation | 282 + 1 neu (`bytecode_manifest.py`) = **283**, gebucht |
+| Zustandsfelder | 9 (von 10 — `gegenlaeufe` und `regeldeckung` waren eins) |
+| `make compile` | 0,24 s |
+| Selbsttest | 5/5 · 0 von 106 Zahlen ohne Herkunft |
+
+**Zum Offen-Konto, ehrlich:** „12 unverändert" war in Runde 74 keine
+Bilanz. Diese Runde hat drei Positionen eröffnet — Bytecode-Parität
+gegen das Deployment, drei `paths`-Lücken, die gelöschten Rotations­zeilen
+— und vier geschlossen (Facette 6 belegt, Gate-Vier-Zustand, Kanal auf
+`exit`, Sperre inhaltlich). Die 12 steht unverändert da, weil das
+Offen-Konto der Akte **nicht** dieselbe Liste ist wie die Befunde des
+Prüfers; das ist selbst ein Befund und bleibt offen.
+
+**Der Satz der Runde:** Was in Runde 74 als Beweis aussah, war zu einem
+Drittel Erzählung — eine erfundene 283, ein falsch etikettierter Zähler,
+eine Sperre, die Zeilen löschte. Die Korrektur ist vollständig, und sie
+ist unangenehmer als der Erfolg.
 

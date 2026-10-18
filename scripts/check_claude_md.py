@@ -2967,12 +2967,16 @@ def calibration_card(root: Path | None = None) -> str:
         # §A-ZZZZ92 (Runde 72): **kein Doppelpunkt zwischen ungleichen
         # Einheiten.** Der alte Ausdruck verband Regeln mit Codeblöcken und
         # erzeugte damit eine Dichte — fällt, wenn der Code wächst, auch
-        # wenn die Deckung steigt. Ein Regel-Gegenlauf deckt **eine Regel**
-        # ab, nicht eine Anzahl Blöcke. Zwei Zahlen, nie mehr ein
-        # Doppelpunkt: die Deckung als Bruch, die Meßbereichsgröße als
-        # eigene Zahl `n Code-Blöcke` weiter oben in der Zeile.
-        f"{_sch}/{len(REGEL_PRUEFER)} Regeln mit Gegenlauf · "
-        f"{_gedeckt} : {len(REGEL_PRUEFER)} Regeln gedeckt · "
+        # wenn die Deckung steigt.
+        #
+        # §A-ZZZZ104 (Runde 75): **`_sch` ist nicht die Regeldeckung.**
+        # Runde 72 schrieb `{_sch}/{len(REGEL_PRUEFER)} Regeln mit
+        # Gegenlauf` — aber `_sch` zählt **scheiterbare Meßblöcke** in der
+        # Akte, nicht Regeln. Zwei verschiedene Maße, zufällig gleiche
+        # Zahl, falsches Etikett. Die Regeldeckung ist `_gedeckt`, und sie
+        # ist vollständig: jede Regel in `REGEL_PRUEFER` hat einen definierten
+        # Gegenlauf. `4/8` oben ist das **andere** Maß und bleibt dort.
+        f"{_gedeckt}/{len(REGEL_PRUEFER)} Regeln mit Gegenlauf · "
         f"{QUITTUNGEN}/{DECKEL_CIT} quittiert · R→F {REPARATUR_ZU_FUND} · "
         f"{len(ZUSTAND_FELDER)} Felder")
 
@@ -7927,27 +7931,56 @@ def rotiere_protokoll(base: Path) -> str | None:
     # Rotation ist Zeitschnitt; das Offen-Konto ist Zustand. Ein Abschnitt,
     # der eine offene Position trägt (`offen:`, `**offen:**`), darf nicht
     # ins Archiv wandern — sonst schließt Rotation ihn, ohne daß jemand
-    # entschieden hat. Das wäre die neue Fehlerklasse, die die Rotation
-    # einführt, während sie `L[0:H]=[]` beseitigt.
+    # entschieden hat.
+    #
+    # §A-ZZZZ107 (Runde 75): **Runde 74 hat hier Zeilen gelöscht.** Die
+    # erste Fassung überschrieb `wandert` mit einem späteren Abschnitt,
+    # ohne den ursprünglichen zurückzulegen — Runde 1 mit der offenen
+    # Position verschwand aus beiden Dateien. Das war exakt der
+    # `L[0:H]=[]`-Unfall, den diese Funktion verhindern sollte, neu
+    # gebaut in der Reparatur. Jetzt ist das Invariant **hart** geprüft:
+    # die Summe der Zeilen vor und nach der Rotation ist gleich.
+    _zeilen_vorher = len(zeilen)
     if any(_traegt_offene_position(z) for z in wandert):
-        # Ältesten **trägfähigen** Abschnitt suchen statt zu blockieren.
-        # Nichts tun wäre ehrlich, aber der Deckel drückt; wir rotieren
-        # den ersten Abschnitt, der keine offene Position trägt.
+        # Ältesten **trägfähigen** Abschnitt suchen statt zu blockieren —
+        # der ursprüngliche bleibt dabei **stehen**, er wird nicht ersetzt.
+        _gefunden = False
         for k in range(1, len(abschnitte)):
             _s, _e = _abschnitt_grenzen(bleibt, k)
             if _s is None:
                 break
             if not any(_traegt_offene_position(z) for z in bleibt[_s:_e]):
-                wandert = bleibt[_s:_e]
+                # kandidat ist ein Teilstück von `bleibt`; der älteste
+                # Abschnitt (in `wandert`) bleibt unangetastet.
+                _kand = bleibt[_s:_e]
                 bleibt = bleibt[:_s] + bleibt[_e:]
+                wandert = _kand
+                _gefunden = True
                 break
-        else:
+        if not _gefunden:
             return ("Rotation aufgeschoben: kein Abschnitt ohne offene "
                     "Position — das Offen-Konto rotiert nicht")
     try:
         alt = archiv.read_text(encoding="utf-8") if archiv.exists() else ""
     except OSError:
         alt = ""
+    # §A-ZZZZ107: **die Invariante wird am Inhalt geprüft, nicht am Index.**
+    # Runde 75 (erste Fassung) rechnete mit Offsets in `zeilen`; bei der
+    # Ersatzrotation (ein *späterer* Abschnitt wandert) stimmen die nicht
+    # mehr, und die Sperre blockierte jeden Lauf. Die richtige Frage ist
+    # mengenbasiert: welche Zeilen des Vorstands fehlen in **beiden**
+    # Zielen?
+    _geschrieben = kopf + bleibt + wandert
+    _fehlend = [z for z in zeilen if z.strip() and z not in _geschrieben]
+    if _fehlend:
+        return (f"Rotation verweigert: {len(_fehlend)} Zeile(n) würden "
+                f"verlorengehen (erste: {_fehlend[0][:50]!r}) — kein Schreiben")
+    # Und eine offene Position darf das aktive Fenster nicht verlassen.
+    _offen_aktiv = any(_traegt_offene_position(z) for z in kopf + bleibt)
+    _offen_vorher = any(_traegt_offene_position(z) for z in zeilen)
+    if _offen_vorher and not _offen_aktiv:
+        return ("Rotation verweigert: eine offene Position verließe das "
+                "aktive Fenster — Offen-Konto rotiert nicht")
     archiv.write_text(alt + "\n".join(wandert) + "\n", encoding="utf-8")
     akte.write_text("\n".join(kopf + bleibt), encoding="utf-8")
     _nach = sum(1 for z in bleibt if z.startswith("## Runde "))
@@ -8160,8 +8193,10 @@ ZUSTAND_FELDER = (
     "deckel",        # Grenze + Urteil
     "bloecke",       # Code-Blöcke in scripts/, ohne Prüfer
     "fenster",       # Protokollblöcke im aktiven Fenster
-    "gegenlaeufe",   # k : n
-    "regeldeckung",  # n : 13 — Regeln mit erzwungenem fail-Zweig
+    # §A-ZZZZ104 (Runde 75): `gegenlaeufe` und `regeldeckung` waren zwei
+    # Felder für **dasselbe** Maß — daraus entstand die Doppelaussage
+    # (`4/13 … · 13 : 13 …`), in der die eine Zahl falsch war. Ein Feld.
+    "regeldeckung",  # n/m — Regeln mit erzwungenem fail-Zweig
     "quittungen",    # n/DECKEL — der eine Slot für alles Ungedeckte
     "reparatur",     # R→F min/median/n · letzte · Quelle
     "feldzahl",      # aus len(ZUSTAND_FELDER), nicht geschrieben
@@ -8215,11 +8250,11 @@ def pruefe_zustandszeile(zeile: str) -> list[str]:
         ("Code-Blöcke", r"^\d+ Code-Blöcke$"),
         ("Protokollfenster", r"^\d+ Protokoll im Fenster( ⇒ Rotation \(>\d+\))?$"),
         ("Feldzahl", r"^\d+ Felder$"),
-        ("Gegenläufe", r"^\d+/\d+ Regeln mit Gegenlauf$"),
-        # §A-ZZZZ92: `13 : 13` bleibt — beide Seiten zählen **Regeln**,
-        # dieselbe Einheit. Ein Doppelpunkt zwischen gleichen Einheiten
-        # ist ein Verhältnis; zwischen ungleichen war er eine Dichte.
-        ("Regeln gedeckt", r"^\d+ : \d+ Regeln gedeckt$"),
+        # §A-ZZZZ104 (Runde 75): **ein Feld, ein Maß.** `Gegenläufe` und
+        # `Regeln gedeckt` waren zwei Felder für dieselbe Zahl; das erste
+        # trug `_sch` (Meßblöcke!) unter dem Etikett „Regeln", das zweite
+        # trug die echte Deckung. Zwei Felder, eine Wahrheit, eine falsch.
+        ("Regeldeckung", r"^\d+/\d+ Regeln mit Gegenlauf$"),
         ("quittiert", r"^\d+/\d+ quittiert$"),
         ("R→F", r"^R→F \d+/med \d+/n \d+/letzte \d+/\w+$"),
     )
@@ -8279,6 +8314,11 @@ MESSBEREICH: dict[str, tuple[str, ...]] = {
     # Wache, nicht Beiwerk. Er zählt im Prosa-Bereich mit — wer ihn
     # ändert, ändert die Bedingung, unter der die Wache läuft.
     "workflow_wache": ("scripts/_ci_stdonly_probe.py",),
+    # §A-ZZZZ108 (Runde 75): neues Meßwerkzeug, **mit Dateinamen gebucht.**
+    # Es erzeugt `order_execution_engine/ops/bytecode_manifest.json` und
+    # prüft Drift. Es ist Waage, nicht Gewogenes — die Contracts in
+    # `shadow_contract_pilot/` sind der Gegenstand.
+    "bytecode_wache": ("scripts/bytecode_manifest.py",),
     "protokoll": ("order_execution_engine/ops/TAG7_ABNAHME.md",
                   "order_execution_engine/ops/BERICHT.md"),
 }
@@ -8698,14 +8738,27 @@ _FRISCH: list[int] = [-1]
 
 
 def _lies_selftest_stand() -> None:
-    """Setzt die Zähler aus dem letzten Selbsttest-Lauf."""
+    """Setzt `_ST_EXIT` aus dem letzten Selbsttest-Lauf.
+
+    §A-ZZZZ103 (Runde 75): **die Datei trägt nur `exit`.**
+
+    Runde 72 hatte sie auf vier Werte erweitert — `exit/offen/quittiert/
+    frisch`. Davon waren drei **abgeleitet**: sie folgen aus der Akte und
+    dem Selbsttest, nicht aus einem Lauf. In eine gitignorierte Datei
+    geschrieben wurden sie zu einer zweiten Quelle, die von der ersten
+    abweichen konnte („`offen` sagt 11, Akte sagt 12"). Das `frisch`-Flag
+    war die Bandage für genau diese, selbst erzeugte Wunde.
+
+    Der Selbsttest **erzwingt ohnehin `offen == 0`**; `quittiert` und
+    `frisch` folgen aus der Akte. Ein Kanal, dessen einziger frei wählbarer
+    Wert konstant ist, trägt null Information.
+
+    Fehlerklasse, hiermit benannt: **stale derived state.**
+    """
     try:
         _roh = _selftest_stand_pfad().read_text(encoding="utf-8").split()
         werte = dict(w.split("=", 1) for w in _roh if "=" in w)
         _ST_EXIT[0] = werte["exit"]
-        _OFFEN[0] = int(werte["offen"])
-        _QUIT[0] = int(werte["quittiert"])
-        _FRISCH[0] = int(werte["frisch"])
     except (OSError, KeyError, ValueError):
         # Kein Stand ⇒ `unbekannt` bleibt. Das ist ein Befund, kein Default.
         pass
@@ -8812,7 +8865,7 @@ def _zeile_fixture() -> str:
     return (
         "4/8 Meßblöcke scheiterbar · seit 213 Protokoll (Einheitenwechsel) · "
         "Deckel 3000 ⇒ unter · 2525 Code-Blöcke · 216 Protokoll im Fenster · "
-        f"4/13 Regeln mit Gegenlauf · 13 : 13 Regeln gedeckt · 1/2 quittiert · "
+        f"{len(REGEL_PRUEFER)}/{len(REGEL_PRUEFER)} Regeln mit Gegenlauf · 1/2 quittiert · "
         f"R→F 0/med 1/n 5/letzte 0/Prüfer · {len(ZUSTAND_FELDER)} Felder")
 
 
@@ -9354,9 +9407,7 @@ def main() -> int:
             # gemeldet und macht den Selbsttest rot, weil der Kanal, auf den
             # der Hauptlauf baut, nicht trägt.
             try:
-                _selftest_stand_pfad().write_text(
-                    f"exit=0 offen={len(offen)} quittiert={len(quittiert)} "
-                    f"frisch={len(frisch)}", encoding="utf-8")
+                _selftest_stand_pfad().write_text("exit=0", encoding="utf-8")
             except OSError as _e:
                 fails.append(
                     f"Selbsttest-Stand nicht schreibbar ({_e}) — der "
@@ -9546,10 +9597,22 @@ def main() -> int:
         # §A-ZZZZ68: die Werte, die **dieser** Lauf erzeugt hat. `EXIT`
         # ist keine Schreibe, es ist eine Einsetzung — verglichen wird
         # gegen dieselbe Quelle, aus der es kommt.
+        #
+        # §A-ZZZZ103 (Runde 75): `offen/quittiert/frisch` werden **hier**
+        # aus dem laufenden Bericht gerechnet, nicht aus der Datei gelesen.
+        # Bis Runde 74 kamen sie aus `.selftest-exit` — einer zweiten
+        # Quelle, die veralten konnte. Ein veralteter `offen`-Wert wäre
+        # wortwörtlich in den Bericht geschrieben worden.
+        _offen_jetzt = [p for p in rep.problems
+                        if p.get("state", "offen") == "offen"]
+        _n_offen = len(_offen_jetzt)
+        _n_quit = len(rep.problems) - _n_offen
+        _n_frisch = sum(1 for p in rep.problems
+                        if p.get("state") == "frisch")
         _werte = {
             "EXIT": f"Selbsttest {_ST_EXIT[0]} · Hauptlauf 0",
-            "offen": f"{_OFFEN[0]} · **quittiert:** {_QUIT[0]} "
-                     f"· **frisch:** {_FRISCH[0]} "
+            "offen": f"{_n_offen} · **quittiert:** {_n_quit} "
+                     f"· **frisch:** {_n_frisch} "
                      f"({', '.join(QUITTUNG_TESTS)})",
             "zustand": next(
                 (ln.split("Zustand: ", 1)[1] for ln in

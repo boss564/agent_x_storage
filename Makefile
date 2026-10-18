@@ -48,6 +48,26 @@ test:
 	@echo ""
 	@echo "✅ Alle Test-Suiten durchlaufen"
 
+# ── Compile: Frühwarnung vor dem Push ────────────────────────────────
+#
+# §A-ZZZZ106 (Runde 75): **die fünf Wochen Blindheit waren die Lücke
+# zwischen Commit und CI.** Zwei Contracts trugen Konstrukte, die in
+# keiner Umgebung je gebaut haben (`external` im Modifier, Struct als
+# `immutable`) — sie lagen wochenlang im Repo, weil nichts beim Schreiben
+# kompilierte. Die CI-Wache ist die serverseitige Wahrheit; das hier ist
+# die lokale, billige Frühwarnung, die sie entlastet — kein Ersatz.
+#
+# `deploy-gate` in CI bleibt das Urteil. `make compile` verhindert nur,
+# daß ein unbaubarer Commit überhaupt entsteht.
+compile:
+	@echo "🔨 COMPILE — Foundry-Baum"
+	@echo "========================="
+	@PATH="$$HOME/.foundry/bin:$$PATH" forge build
+	@echo ""
+	@echo "🔎 Bytecode-Manifest (Drift sichtbar machen, nicht blockieren)"
+	@PATH="$$HOME/.foundry/bin:$$PATH" python3 scripts/bytecode_manifest.py --check || \
+		echo "  ⚠️  Drift — siehe oben. Kein Fehler, ein Befund."
+
 # ── Verify: Pre-Pitch-Healthcheck ─────────────────────────────────────
 
 verify:

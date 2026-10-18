@@ -25,6 +25,18 @@ on:
       - 'scripts/check_claude_md.py'
       - '.github/workflows/offgrid-test.yml'
       - 'services/**'
+      # §A-ZZZZ101 (Runde 75): **das Gate lief bei den Commits nicht, die es
+      # prüfen soll.** Der Contract-Commit der Runde 74 (`20484d47`) hat
+      # `shadow_contract_pilot/` und `foundry.toml` geändert — beides stand
+      # nicht in `paths`. Der Lauf kam nur zustande, weil `scripts/
+      # check_claude_md.py` mit im Commit lag. Ein reiner Vertrags-Fix wäre
+      # unsichtbar geblieben: `contract-compile` hätte nie gestartet.
+      - 'shadow_contract_pilot/**'
+      - 'lib/**'
+      - 'foundry.toml'
+      # Die Akte ist der Prüfgegenstand von `pruefer`. Ändert nur sie sich,
+      # muß der Prüfer laufen — sonst ist der Kopfzeilen-Abgleich blind.
+      - 'order_execution_engine/**'
   pull_request:
     branches: [main, deploy-safe-snapshot]
     paths:
@@ -401,11 +413,32 @@ jobs:
           echo "| pruefer | ${{ needs.pruefer.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| contract-compile | ${{ needs.contract-compile.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| unit-tests | ${{ needs.unit-tests.result }} |" >> $GITHUB_STEP_SUMMARY
+          # §A-ZZZZ102 (Runde 75): **`skipped` ist das neue „grün, weil nie
+          # gelaufen".** Die erste Fassung prüfte `!= success` — das war
+          # richtig, aber unbenannt: die Akte sagte nicht, welche Zustände
+          # `!= success` umfaßt. Explizit ist es überprüfbar:
+          #
+          #   success   → grün
+          #   failure   → rot
+          #   cancelled → rot   (ein abgebrochener Compile ist kein bestandener)
+          #   skipped   → rot   (ein übersprungener Job hat nichts bestätigt)
+          #
+          # Ein Gate, das nur `== failure` prüft, wäre bei `cancelled` und
+          # `skipped` grün — die Erbsünde dieser Akte, eine Ebene höher.
           rot=0
-          for r in "${{ needs.pruefer.result }}" \
-                   "${{ needs.contract-compile.result }}" \
-                   "${{ needs.unit-tests.result }}"; do
-            [ "$r" = "success" ] || rot=1
+          for paar in "pruefer:${{ needs.pruefer.result }}" \
+                      "contract-compile:${{ needs.contract-compile.result }}" \
+                      "unit-tests:${{ needs.unit-tests.result }}"; do
+            job="${paar%%:*}"; r="${paar#*:}"
+            case "$r" in
+              success) ;;
+              failure|cancelled|skipped)
+                echo "- \`$job\`: **$r** ⇒ rot" >> $GITHUB_STEP_SUMMARY
+                rot=1 ;;
+              *)
+                echo "- \`$job\`: **$r** (unbekannt) ⇒ rot" >> $GITHUB_STEP_SUMMARY
+                rot=1 ;;
+            esac
           done
           if [ "$rot" = "1" ]; then
             echo "## Gate rot — dieser Stand ist **nicht** deploy-safe" >> $GITHUB_STEP_SUMMARY

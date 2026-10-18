@@ -1,0 +1,48 @@
+{
+  "contracts": {
+    "CommodityLedger": {
+      "bytes": 3315,
+      "sha256": "e5f7b8c6120eb0bb0bcfab555c211f34bfa5a1583894ac91732200646c68fc42",
+      "source": "CommodityLedger.sol"
+    },
+    "CommodityToken": {
+      "bytes": 10330,
+      "sha256": "22dce2734fa317c15d27c183ae9f8eaa34bb276202ee7c9d51b96341db29c188",
+      "source": "CommodityToken.sol"
+    },
+    "ComplianceVerifier": {
+      "bytes": 7603,
+      "sha256": "e00c492f4eb306925a9fa7b898f3a47bf658dab2902adb3534d82f180a9581db",
+      "source": "ComplianceVerifier.sol"
+    },
+    "IoTVerifier": {
+      "bytes": 4711,
+      "sha256": "0bc2094ed879a3634d1b2ddd5126d584a52c1578b81c94f34af64910dd4bb468",
+      "source": "IoTVerifier.sol"
+    },
+    "ProtoGalaxyVerifier": {
+      "bytes": 724,
+      "sha256": "52c8e3bd2502427643fa575422d92ce92ca889005b01b5025b45d61e30ba6a09",
+      "source": "ProtoGalaxyVerifier.sol"
+    },
+    "ResourceTrader": {
+      "bytes": 5057,
+      "sha256": "6b9d576472442ad32b3fbcef990f284da4e3f07598e3140dac7bd3671ae7d60e",
+      "source": "ResourceTrader.sol"
+    },
+    "VOB_Shadow_Escrow": {
+      "bytes": 6603,
+      "sha256": "f6e197e9ed358d3e31a7f592aad2d275f94dc246d33172dda99943d3d37d81cc",
+      "source": "VOB_Shadow_Escrow.sol"
+    },
+    "ValhallaVerifier": {
+      "bytes": 4516,
+      "sha256": "5967b607b7f68ccfa9590eb7680a1e73f65f2977589364c85a3bae74f8881057",
+      "source": "ValhallaVerifier.sol"
+    }
+  },
+  "hinweis": "Erzeugt von scripts/bytecode_manifest.py. Der Hash bezieht sich auf deployedBytecode nach via_ir+optimizer (foundry.toml). Vergleich mit dem Deployten ist offen, solange kein Bytecode-Hash im Deploy-Artefakt liegt.",
+  "optimizer_runs": 200,
+  "solc": "0.8.35",
+  "via_ir": true
+}
