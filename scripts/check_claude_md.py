@@ -4481,7 +4481,7 @@ def main() -> int:
         return 0
     if "--akte-monoton" in sys.argv:
         # §A-NF (Runde 48): gehoert an den Commit, nicht in den Lauf.
-        lost = _akte_losslessness()
+        lost = _akte_losslessness(Path(__file__).resolve().parent.parent)
         if lost:
             print("Akte-Monotonie: FAIL")
             for x in lost:
