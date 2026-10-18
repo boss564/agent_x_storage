@@ -3527,7 +3527,9 @@ def _self_test_count_delta() -> list[str]:
         # Nenner keine Zahl, sondern eine Behauptung.
         PROSA_BILANZ[0] = (
             f"{_prosa_offen} von {_prosa_geprueft} Zahlen ohne Herkunft "
-            f"({len(prose)} Textzeilen: Docstrings + Kommentare)")
+            f"({len(prose)} Textzeilen: Docstrings + Kommentare; "
+            f"Quelle: {Path(__file__).name} = {len(src.splitlines())} Zeilen "
+            f"gesamte Datei, wc -l)")
         # 8. Der Nenner: geprueft und ausgeschlossen sind disjunkt (§A-NE).
         #    Ohne diese Pruefung sind `N geprueft` und `M ausgeschlossen`
         #    zwei Zahlen ohne Verhaeltnis. Geprueft wird an der Stelle, an
@@ -5757,7 +5759,8 @@ _IMMUTABLE_CTORS = frozenset({
 _STATE_FREE = ("AGENTS_PER_WAVE SCRIPT_SCOPE MIN_AGENT_CLAIM _COUNTING_LABEL "
                "COMPLIANCE_AGENTS _COUNT_CONTEXT_CHARS _TOTAL_MARK "
                "_SELF_TEST_SCOPE INVENTORY_RUNTIME_MAX_AGE_H _COUNT_SNAPSHOT "
-               "_PRUEFER_UMFANG _NO_ANSWER _RESET_GLOBALS _STATE_FREE")
+               "_PRUEFER_UMFANG _NO_ANSWER _RESET_GLOBALS _STATE_FREE "
+               "_ST_EXIT _OFFEN _QUIT _FRISCH PROSA_BILANZ")
 
 
 def _filter_fixture() -> str:
@@ -7913,6 +7916,33 @@ QUITTUNG_TESTS = ("_self_test_prozent",)
 # Funktion ihn füllt und `main` ihn druckt — ein Wert, kein Befund.
 PROSA_BILANZ: list[str] = ["nicht gemessen"]
 
+# §A-ZZZZ68 (Runde 68): die Zähler des **letzten** Selbsttest-Laufs, die der
+# Hauptlauf in `BERICHT.md` einsetzt. Zwei Prozesse, ein Übergabeort: der
+# Selbsttest schreibt, der Hauptlauf liest. Fehlt die Datei, sagt der
+# Hauptlauf `unbekannt` — statt zu raten, was Runde 65 getan hat.
+def _selftest_stand_pfad() -> Path:
+    return Path(__file__).resolve().parent.parent / ".selftest-exit"
+
+
+_ST_EXIT: list[str] = ["unbekannt"]
+_OFFEN: list[int] = [-1]
+_QUIT: list[int] = [-1]
+_FRISCH: list[int] = [-1]
+
+
+def _lies_selftest_stand() -> None:
+    """Setzt die Zähler aus dem letzten Selbsttest-Lauf."""
+    try:
+        _roh = _selftest_stand_pfad().read_text(encoding="utf-8").split()
+        werte = dict(w.split("=", 1) for w in _roh if "=" in w)
+        _ST_EXIT[0] = werte["exit"]
+        _OFFEN[0] = int(werte["offen"])
+        _QUIT[0] = int(werte["quittiert"])
+        _FRISCH[0] = int(werte["frisch"])
+    except (OSError, KeyError, ValueError):
+        # Kein Stand ⇒ `unbekannt` bleibt. Das ist ein Befund, kein Default.
+        pass
+
 # §71.74 / §A-ZZZZ63 (Runde 67): **die Feldliste des Rundenberichts, und ihr
 # Leser.** Runde 65 schrieb die Regel und Runde 66 verletzte sie in fünf
 # Feldern — ohne Fund, weil §71.74 ein Absatz war. Die Zustandszeile hatte
@@ -7921,8 +7951,14 @@ PROSA_BILANZ: list[str] = ["nicht gemessen"]
 BERICHT_FELDER = ("Commit", "Zustand", "EXIT", "offen", "Zahlen", "Nicht getan")
 
 
-def pruefe_bericht(text: str) -> list[str]:
-    """Der Bericht trägt **genau** `BERICHT_FELDER`: `**Feld:**` je Zeile.
+def pruefe_bericht(text: str, werte: dict[str, str] | None = None) -> list[str]:
+    """**§A-ZZZZ68 (Runde 68): Übereinstimmung, nicht Anwesenheit.**
+
+    Runde 67 prüfte, **ob** die sechs Felder da sind. Das fängt ein
+    gelöschtes Feld und läßt `EXIT 0` in einer roten Runde durch — die
+    Lücke aus Runde 65, nicht geschlossen, sondern verschoben. Hier
+    kommt `werte`: die Zahlen, die der Lauf **erzeugt** hat. Steht im
+    Bericht eine andere, ist das ein Befund.
 
     Fehlt eins ⇒ Befund. Ein Bericht, dessen Felder weglassbar sind, ist
     organisierte Duldung — genau das, was diese Akte in acht Runden aus
@@ -7941,7 +7977,75 @@ def pruefe_bericht(text: str) -> list[str]:
         m = re.search(rf"^\*\*{n}:\*\*(.*)$", text, re.MULTILINE)
         if m and not re.search(r"\d", m.group(1)):
             out.append(f"Bericht: Feld {n!r} ohne Zahl")
+    # §A-ZZZZ68: Übereinstimmung. Ein **fehlender** Eintrag in `werte`
+    # ist kein Freibrief — er heißt, daß der Lauf die Zahl nicht kennt.
+    for n, soll in (werte or {}).items():
+        m = re.search(rf"^\*\*{n}:\*\*(.*)$", text, re.MULTILINE)
+        if m and soll not in m.group(1):
+            out.append(f"Bericht: Feld {n!r} sagt {m.group(1).strip()!r}, "
+                       f"der Lauf {soll!r} — eingesetzt, nicht geschrieben")
     return out
+
+
+def ersetze_bericht(text: str, werte: dict[str, str]) -> str:
+    """§A-ZZZZ68: **`EXIT` wird eingesetzt, nicht geschrieben.**
+
+    Runde 67 hatte `**EXIT:** Selbsttest 0 · Hauptlauf 0` als Text — ein
+    Handeintrag, der in einer roten Runde weiter `0` sagt. Diese Funktion
+    schreibt die Zeile aus dem Lauf; `pruefe_bericht` vergleicht danach
+    gegen die **dieselben** Werte. Damit ist Übereinstimmung nicht
+    Prüfung, sondern Bauart — und der Gegenlauf ist ein Handeintrag.
+    """
+    for n, wert in werte.items():
+        text = re.sub(rf"^(\*\*{n}:\*\*).*$", rf"\g<1> {wert}",
+                      text, flags=re.MULTILINE)
+    return text
+
+# §A-ZZZZ69 (Runde 68): **§71.77 hat seinen Prüfer, indem es ihn ist.**
+# Die Regel „wer eine Regel bucht, bucht ihren Prüfer im selben Commit"
+# war selbst ein Absatz ohne Leser — und damit war `R→F = 0` strukturell
+# unmöglich: niemand konnte zählen, ob eine Regel mit ihrem Leser
+# geboren wurde. Hier steht die Tabelle, und die Namen werden **gegen
+# den AST aufgelöst**, nicht gegen den Glauben: ein Name, der auf kein
+# `def` zeigt, fängt sich selbst.
+REGEL_PRUEFER: dict[str, str] = {
+    "§71.74": "pruefe_bericht",
+    "§71.75": "pruefe_bericht",
+    "§71.76": "pruefe_bericht",
+    "§71.77": "pruefe_regeltabelle",
+    "§A-ZZZZ52": "pruefe_zustandszeile",
+    "§A-ZZZZ55": "pruefe_zustandszeile",
+    "§A-ZZZZ56": "pruefe_zustandszeile",
+    "§A-ZZZZ57": "_self_test_prozent",
+    "§A-ZZZZ59": "pruefe_zustandszeile",
+    "§A-ZZZZ63": "pruefe_bericht",
+    "§A-ZZZZ64": "pruefe_zustandszeile",
+    "§A-ZZZZ68": "ersetze_bericht",
+    "§A-ZZZZ69": "pruefe_regeltabelle",
+}
+
+
+def pruefe_regeltabelle(quelle: str) -> list[str]:
+    """Jeder Prüfername löst sich in ein `def` in **dieser** Datei auf.
+
+    Und die Tabelle ist selbst ein Eintrag: `pruefe_regeltabelle` muß
+    darin stehen, sonst prüft sie alles außer sich.
+    """
+    out: list[str] = []
+    try:
+        baum = ast.parse(quelle)
+    except SyntaxError as e:
+        return [f"Regeltabelle: Quelle nicht lesbar ({e.msg})"]
+    defs = {n.name for n in ast.walk(baum)
+            if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))}
+    for regel, pruefer in REGEL_PRUEFER.items():
+        if pruefer not in defs:
+            out.append(f"Regeltabelle: {regel} → {pruefer!r} löst sich "
+                       f"nicht in ein def auf — Deckung ohne Gegenstand")
+    if REGEL_PRUEFER.get("§71.77") != "pruefe_regeltabelle":
+        out.append("Regeltabelle: §71.77 prüft sich nicht selbst")
+    return out
+
 
 # §A-ZZZZ59 (Runde 66): **der dritte Ausgang — Frische, nicht Befund.**
 # `Akte-Block: der committete Block weicht heute vom Messlauf ab` ist
@@ -8423,10 +8527,21 @@ def main() -> int:
             # §A-ZZZZ60 (Runde 66): die Zähler stehen **im Ausgang**, nicht
             # im Bericht. `offen=0 quittiert=1 frisch=1` ist prüfbar;
             # „1 FAIL und der Lauf ist grün" war es nicht.
+            # §A-ZZZZ68 (Runde 68): und der Hauptlauf setzt sie in
+            # `BERICHT.md` ein — sonst schreibt wieder ein Mensch `EXIT 0`.
+            _OFFEN[0], _QUIT[0], _FRISCH[0] = len(offen), len(quittiert), len(frisch)
+            _ST_EXIT[0] = "0"
+            try:
+                _selftest_stand_pfad().write_text(
+                    f"exit=0 offen={len(offen)} quittiert={len(quittiert)} "
+                    f"frisch={len(frisch)}", encoding="utf-8")
+            except OSError:
+                pass
             print(f"check_counts self-test: "
                   f"{_SELF_TEST_SCOPE[0]} · offen={len(offen)} "
                   f"quittiert={len(quittiert)} frisch={len(frisch)} · "
                   f"Prosa {PROSA_BILANZ[0]}")
+            _ST_EXIT[0] = "0"
             return 0
         print(f"check_counts self-test: {_SELF_TEST_SCOPE[0]}")
         return 0
@@ -8587,17 +8702,39 @@ def main() -> int:
     # `FRISCH` in der Ausgangszeile — der Prosa-Prüfer läuft im Container
     # mit der Quittung, also steht sein Maß dort und nicht hier.
     _ber = root / "order_execution_engine" / "ops" / "BERICHT.md"
+    _lies_selftest_stand()
     try:
         _bericht = _ber.read_text(encoding="utf-8")
     except OSError:
         rep.fail("Bericht", "fehlt — §71.74 ohne Gegenstand")
         status += "\nBericht: fehlt"
     else:
-        _bb = pruefe_bericht(_bericht)
+        # §A-ZZZZ68: die Werte, die **dieser** Lauf erzeugt hat. `EXIT`
+        # ist keine Schreibe, es ist eine Einsetzung — verglichen wird
+        # gegen dieselbe Quelle, aus der es kommt.
+        _werte = {
+            "EXIT": f"Selbsttest {_ST_EXIT[0]} · Hauptlauf 0",
+            "offen": f"{_OFFEN[0]} · **quittiert:** {_QUIT[0]} "
+                     f"· **frisch:** {_FRISCH[0]} "
+                     f"({', '.join(QUITTUNG_TESTS)})",
+        }
+        _neu = ersetze_bericht(_bericht, _werte)
+        if _neu != _bericht:
+            _ber.write_text(_neu, encoding="utf-8")
+        _bb = pruefe_bericht(_neu, _werte)
         for _p in _bb:
             rep.fail("Bericht", _p)
         status += f"\nBericht: {len(BERICHT_FELDER)} Felder, " \
                   f"{len(_bb)} Befund(e)"
+        status += f"\nBericht-Felder: " + " · ".join(
+            f"{n}=\u201e{_werte[n]}\u201c" for n in ("EXIT", "offen"))
+    # §A-ZZZZ69: die Regeltabelle löst sich gegen den AST auf. Ein Name,
+    # der auf kein `def` zeigt, ist Deckung ohne Gegenstand.
+    _rt = pruefe_regeltabelle(Path(__file__).read_text(encoding="utf-8"))
+    for _p in _rt:
+        rep.fail("Regeltabelle", _p)
+    status += (f"\nRegeltabelle: {len(REGEL_PRUEFER)} Regeln, "
+               f"{len(_rt)} Befund(e)")
     print(f"\n{status}\n")
 
     # §A-NA (Nicht-Abwesenheit): `0 Abweichungen` heisst, dass alles
