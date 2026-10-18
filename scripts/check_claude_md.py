@@ -224,6 +224,8 @@ NO_TEST_SUMMARY: set[str] = {
     "scripts/test_konsument_kongruenz.py", # 8/8 K1 vs K2
     "scripts/test_frist_gate.py",          # 4/4 Verfall löst Buchung aus
     "scripts/kopfzeile.py",                # offene Posten zuerst, generiert
+    "scripts/test_unwissen_etikett.py",    # 8/8 Unwissen ist kein Etikett
+    "scripts/test_exit_vor_stdout.py",     # 4/4 Exit vor Stdout
     "scripts/test_gaeb_reference.py",  # X83-Fixtures gitignore; TMP-checkout ohne Referenzdaten
     "scripts/test_bvbs_pruefdatei.py",     # braucht externe Pruefdatei
     "scripts/export_backtest_signals.py",  # Daten-Exporter, kein Test
@@ -9897,7 +9899,13 @@ def main() -> int:
                      "Konsumenten-Kongruenz"),
                     ("test_frist_gate.py",
                      r"(\d+)/(\d+) Frist-Gate-Faelle gruen",
-                     "Frist-Gate")):
+                     "Frist-Gate"),
+                    ("test_unwissen_etikett.py",
+                     r"(\d+)/(\d+) Unwissen-ist-kein-Etikett-Faelle gruen",
+                     "Unwissen-Etikett"),
+                    ("test_exit_vor_stdout.py",
+                     r"(\d+)/(\d+) Exit-vor-Stdout-Faelle gruen",
+                     "Exit-vor-Stdout")):
                 try:
                     _r = subprocess.run(
                         [sys.executable, str(root / "scripts" / _sk)],

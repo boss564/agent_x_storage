@@ -23,7 +23,13 @@ V = Path(__file__).resolve().parent / "waechter_vertrag.json"
 
 def main() -> int:
     d = json.loads(V.read_text(encoding="utf-8"))
-    op = d["bringschuld"]["offene_posten"]["stand_r88"]
+    # §A-ZZZZ185 (Runde 89): der Stand ist die HOECHSTE Runde im Ledger —
+    # keine getippte Versionsnummer. Eine Kopfzeile, die "stand_r88" sagt,
+    # waehrend der Vertrag v9 ist, ist die "14 Zahlen"-Krankheit in gruen.
+    _op = d["bringschuld"]["offene_posten"]
+    _stand = max((k for k in _op if k.startswith("stand_r")),
+                 key=lambda k: int(k[7:]))
+    op = _op[_stand]
     fristen = {k: v for k, v in d.get("fristen", {}).items()
                if isinstance(v, dict) and v.get("endzustand")}
     print(f"OFFEN ({len(op)})")
@@ -33,7 +39,7 @@ def main() -> int:
     for k, v in fristen.items():
         neu = f" -> {v['neuer_termin']}" if v.get("neuer_termin") else ""
         print(f"  {k}: {v['endzustand']}{neu}")
-    print(f"\nVersion: v{d['_version']} | Instanzen: "
+    print(f"\nStand: {_stand} | Version: v{d['_version']} | Instanzen: "
           f"{len(d['bringschuld']['instanzen'])} | Ledger: "
           f"{len(d['versions_ledger'])}")
     return 0

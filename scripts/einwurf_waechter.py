@@ -163,7 +163,8 @@ def lese_strom(p: Path) -> list[tuple[str, str]]:
     except OSError as e:
         raise StreamUnlesbar(f"Stream nicht lesbar: {e}") from e
     out: list[tuple[str, str]] = []
-    skip: dict = {"json": 0, "kurz": 0, "envelope": 0, "json_pos": []}
+    skip: dict = {"json": 0, "kurz": 0, "envelope": 0, "json_pos": [],
+                  "unlesbar": 0}
     # §A-ZZZZ139 (Runde 84): **die unparsbare Zeile hat eine Position.**
     # Sie war ein blosser Zaehler. Ein Konsument, der eine Zeile nicht
     # pruefen konnte, muss sie markieren koennen — dafuer braucht er die
@@ -277,8 +278,14 @@ def pruefe_strom(strom: list[tuple[str, str]]) -> tuple[int, int, list[str]]:
             # §A-ZZZZ171: totaler Vergleich. `unlesbar` ist NICHT gleich.
             _cmp = ts_vergleich(strom[j][0], ts)
             gleich_ts = _cmp == "gleich"
+            # §A-ZZZZ179: **die Messachse darf Unwissen nicht als
+            # Wiederholung zaehlen.** `kanal += False` und
+            # `wiederholung += 1` behauptet eine Klassifikation, die
+            # nicht stattfand. Unlesbar zaehlt in KEINEM der beiden
+            # Eimer; die Zahl `unlesbar` steht auf der Achse.
             kanal += gleich_ts
-            art = "KANAL-DUPLIKAT" if gleich_ts else "WIEDERHOLUNG"
+            if _cmp == "unlesbar":
+                LESESTAT["unlesbar"] = LESESTAT.get("unlesbar", 0) + 1
             # §A-ZZZZ142 (Runde 84): **die Detailzeile faellt aus der
             # Messachse heraus.** Vorher hing sie mit `  KANAL-DUPLIKAT #1
             # == #2` an derselben Zeile — ein Konsument, der per `;`
@@ -302,12 +309,23 @@ def pruefe_strom(strom: list[tuple[str, str]]) -> tuple[int, int, list[str]]:
             # `WIEDERHOLT` ist ein eigener Verdict-Slot, kein stilles
             # VERWERFEN. Die Aktion dazu entscheidet der Betreiber
             # (ADJ); Default ist heute VERWERFEN, jetzt benannt.
-            urteil = "WIEDERHOLT" if not gleich_ts else "VERWERFEN"
+            # §A-ZZZZ179 (Runde 89): **Unwissen ist kein Verdict.**
+            # R88 schickte `unlesbar` durch denselben Boolschein wie
+            # `ungleich` und schrieb `WIEDERHOLT;art=WIEDERHOLUNG` — der
+            # Record behauptete eine Wiederholung fuer zwei Kopien, deren
+            # Zeitstempel nie gelesen wurden. `WIEDERHOLT` heisst seit R85
+            # "bewusste Neusendung, belegt durch anderen Zeitstempel".
+            # Ein unbelegter Fall darf diesen Token nicht tragen.
+            # Jetzt drei Verdicts aus DREI Quellen, nicht zwei aus einem Bool.
+            if _cmp == "gleich":
+                urteil, art, warum = "VERWERFEN", "KANAL-DUPLIKAT", "(gleicher Zeitstempel)"
+            elif _cmp == "ungleich":
+                urteil, art, warum = "WIEDERHOLT", "WIEDERHOLUNG", "(anderer Zeitstempel)"
+            else:
+                urteil, art, warum = "UNGEPRUEFT", "ZEITSTEMPEL-UNLESBAR", "(Zeitstempel unlesbar)"
             bericht.append(f"ZEILE {h} {urteil};pos={i + 1};art={art};")
             bericht.append(f"  # {art} #{j + 1} == #{i + 1}"
-                           f"  Δ={i - j}"
-                           f"  {'(gleicher Zeitstempel)' if gleich_ts else '(anderer Zeitstempel)'}"
-                           f"  sha {h[:12]}")
+                           f"  Δ={i - j}  {warum}  sha {h[:12]}")
         else:
             bericht.append(f"ZEILE {h} ZUSTELLEN;pos={i + 1};")
         seen[h] = i
@@ -380,7 +398,7 @@ def _dedup_regeln(strom: list[tuple[str, str]], seen: dict[str, int]) -> list[st
             f"DEDUP {h};erst=ZUSTELLEN;"
             f"rest_art=zeitstempel;anker=vorgaenger;"
             f"bei_gleich=VERWERFEN;bei_ungleich=WIEDERHOLT;"
-            f"bei_unlesbar=WIEDERHOLT;unlesbar={_unl};"
+            f"bei_unlesbar=UNGEPRUEFT;unlesbar={_unl};"
             f"gesehen={len(vor)};")
     return zeilen
 
@@ -421,7 +439,8 @@ def aggregiere(*kandidaten: int) -> int:
     return max(kandidaten, key=lambda c: _SCHWERE.get(c, 9))
 
 
-def achse(paare: int, kanal: int, wieder: int, ueber: int | None = None) -> str:
+def achse(paare: int, kanal: int, wieder: int, ueber: int | None = None,
+          unlesbar: int = 0) -> str:
     """Die Messachse — auf JEDEM Zweig, mit denselben Schluesseln.
 
     Runde 82 emittierte sie nur dort, wo der Autor sie gerade brauchte.
@@ -429,7 +448,12 @@ def achse(paare: int, kanal: int, wieder: int, ueber: int | None = None) -> str:
     stossen.
     """
     u = LESESTAT["json"] if ueber is None else ueber
+    # §A-ZZZZ179: **eigener Eimer fuer Unwissen.** `paare - kanal` zaehlte
+    # unlesbare Zeitstempel als WIEDERHOLUNG — eine Klassifikation, die
+    # nicht stattfand. Jetzt vier disjunkte Eimer:
+    # KANAL-DUPLIKAT + WIEDERHOLUNG + ZEITSTEMPEL-UNLESBAR = Paare.
     return (f"Paare={paare};KANAL-DUPLIKAT={kanal};WIEDERHOLUNG={wieder};"
+            f"ZEITSTEMPEL-UNLESBAR={unlesbar};"
             f"uebersprungen={u};json={u};")
 
 
@@ -525,7 +549,8 @@ def main(argv: list[str]) -> int:
         # (Runde 81: 8/9 rot bei reiner Textaenderung). Jetzt
         # `schluessel=wert;` mit stabilen ASCII-Schluesseln.
         print(f"Meldungen={len(strom)};"
-              + achse(paare, kanal, paare - kanal)[:-1]
+              + achse(paare, kanal, paare - kanal - LESESTAT.get("unlesbar", 0),
+                      unlesbar=LESESTAT.get("unlesbar", 0))[:-1]
               + f";kurz={LESESTAT['kurz']};envelope={LESESTAT['envelope']}")
         # §A-ZZZZ121b: **die Schwelle ist Vertrag, nicht Gefühl.**
         if LESESTAT["json"] >= JSON_SCHWELLE:

@@ -108,10 +108,13 @@ def main() -> int:
     faelle = [
         ("1 Anker (T2 nach T1)", ["T1", "T2", "T2"],
          ["ZUSTELLEN", "WIEDERHOLT", "VERWERFEN"]),
+        # §A-ZZZZ179 (R89): unlesbar ist UNGEPRUEFT, nicht WIEDERHOLT.
+        # Das Soll wurde MIT der Norm geaendert — ein Test, dessen Soll
+        # stehen bleibt, waehrend die Norm sich aendert, testet die alte.
         ("2 Drittfall unlesbar", ["T1", "T2", None],
-         ["ZUSTELLEN", "WIEDERHOLT", "WIEDERHOLT"]),
+         ["ZUSTELLEN", "WIEDERHOLT", "UNGEPRUEFT"]),
         ("2' alle unlesbar", [None, None],
-         ["ZUSTELLEN", "WIEDERHOLT"]),
+         ["ZUSTELLEN", "UNGEPRUEFT"]),
         ("4 Ordnung gespiegelt", ["T2", "T1", "T1"],
          ["ZUSTELLEN", "WIEDERHOLT", "VERWERFEN"]),
         ("5 regel-los", ["T1", "T2"],

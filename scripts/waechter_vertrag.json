@@ -1,5 +1,5 @@
 {
-  "_version": 8,
+  "_version": 9,
   "_zweck": "Maschinenlesbarer Vertrag des Einwurf-Waechters. Single source of truth fuer Repo und externe Ingestion. Wer hier eine Zeile aendert, aendert das Tor ausserhalb dieses Repos mit.",
   "_stand": "Runde 84 (2026-10-18)",
   "_geltung": "Der Runner (scripts/vertrags_runner.py) importiert diese Datei; die externe Ingestion MUSS sie einlesen. Solange sie es nicht tut, zertifiziert N/N einen Vertrag, den draussen niemand benutzt.",
@@ -444,7 +444,18 @@
       "endzustand": "akzeptiert_mit_neuem_termin",
       "neuer_termin": "R90",
       "begruendung": "Injektivitaet der Normalisierung ist NICHT bewiesen. Entschaerft durch R88: der dritte Zweig `bei_unlesbar=WIEDERHOLT` nimmt der Annahme die lasttragende Kante fuer den Fall 'Zeitstempel nicht lesbar'. Was bleibt: zwei LESBARE Rohwerte, die auf dieselbe Normalform fallen (z.B. trailing space) und dadurch `gleich` werden. Dann VERWERFEN — der ADJ-Datenverlust. Beweis bis R90: Injektivitaetsprobe ueber den echten Strom (alle Rohwerte -> Normalform, Kollisionen zaehlen). Faellt sie, muss der Vergleich auf Rohwerte umgestellt werden — dann ist die Normalisierung nicht mehr lasttragend.",
-      "rest": "Der Fix (Vergleich auf Rohwert statt Normalform) ist plausibel, aber nicht gebucht — er aendert, was `gleich` heisst, und damit jede bestehende Regel."
+      "rest": "Der Fix (Vergleich auf Rohwert statt Normalform) ist plausibel, aber nicht gebucht — er aendert, was `gleich` heisst, und damit jede bestehende Regel.",
+      "blocker": "Die Injektivitaetsprobe braucht den ECHTEN Strom mit Normalformen. Der laufende Transcript-Strom ist nicht einfrierbar (Harness-Zaun), und ein Fixture kann Kollisionen nicht zeigen, die es nicht enthaelt. Ohne eingefrorenen Schnappschuss mit bekannter Kollisionszahl ist die Probe nicht falsifizierbar.",
+      "beweisversuch": "R88: dritter Zweig bei_unlesbar eingefuehrt — entschaerft den Fall 'Zeitstempel nicht lesbar', beruehrt aber NICHT den Kernfall (zwei LESBARE Rohwerte, gleiche Normalform). Kein Injektivitaetsbeweis gefuehrt.",
+      "datums_herleitung": "R90 folgt aus: ein Runde fuer den eingefrorenen Schnappschuss (R89), eine Runde fuer die Kollisionszaehlung (R90). Nicht Wunschtermin."
+    },
+    "ORDNUNG": {
+      "gesetzt": "R89",
+      "frist": "R91",
+      "endzustand": null,
+      "blocker": "Ohne Entscheidung, ob die Engine den Produzenten kontrolliert, ist eine Sequenznummer (Variante b) nicht bewertbar; ohne Transportvertrag ist FIFO (Variante a) nicht pruefbar.",
+      "beweisversuch": "R89: die drei Varianten (a FIFO, b Sequenznummer, c Batch) gegeneinander gestellt. Sie sind NICHT aequivalent — (a) verlagert in den Transport, (b) aendert das Eingabeformat, (c) widerspricht R87 (frieren). Eine Wahl ohne Messung waere geraten.",
+      "befund": "Norm 1 (Anker vorgaenger) und Norm 4 (Ordnung nicht garantiert) sind strukturell inkonsistent; erst=ZUSTELLEN erzwingt die Annahme, die Norm 4 verbietet."
     }
   },
   "mock_selbstreferenz": {
@@ -716,6 +727,14 @@
         "Mutation: Varianz jetzt ueber Strom-Reihenfolge/Kopien — Zufallsquelle im DETEKTOR weiterhin fehlend",
         "Vergleichsanker: normiert, aber nur von K1/K2 geteilt — ING unabhaengig fehlt",
         "Ordnung: FIFO im Transport nicht garantiert, nur normiert"
+      ],
+      "stand_r89": [
+        "ORDNUNG/ANKER: Formatloesung offen, Frist R91, Blocker benannt",
+        "NRM: Injektivitaet unbewiesen, Frist R90, Blocker benannt",
+        "Frist-Gate: Datum ist noch Wunschtermin mit Herleitung, nicht aus Blocker-Dauer abgeleitet",
+        "Zwei Autoritaeten: normative_quelle deklariert (Code), Falsifikator (ING) fehlt",
+        "K2 ist Spiegel, kein Falsifikator — der '?'-Bug waere in beiden gewesen",
+        "Umgebungsvarianz gebaut (4 Seeds); Scheduling/Race-Varianz nicht"
       ]
     }
   },
@@ -947,6 +966,18 @@
       "commit": "—",
       "runde": 88,
       "aenderung": "VERWORFEN: `?` als Sentinel fuer fehlenden Zeitstempel. Grund: `'?' == '?'` ist True — zwei Meldungen ohne Timestamp wurden damit `gleich` und VERWORFEN. Jetzt eigenes Sentinel-Objekt, das mit nichts gleich ist (ts_vergleich). Anlass: eigene Messung /tmp/n3.jsonl."
+    },
+    {
+      "version": 9,
+      "commit": "(diese Runde)",
+      "runde": 89,
+      "aenderung": "Unwissen ist kein Etikett (bei_unlesbar=UNGEPRUEFT, ZEITSTEMPEL-UNLESBAR-Eimer), die boolesche Falle mit-geschlossen (vergleich_pflicht), Frist-Gate mit Blocker+Beweisversuch, Exit-vor-Stdout-Norm, PYTHONHASHSEED-Varianz, normative_quelle deklariert"
+    },
+    {
+      "version": "9-verworfen",
+      "commit": "—",
+      "runde": 88,
+      "aenderung": "VERWORFEN: bei_unlesbar=WIEDERHOLT. Grund: WIEDERHOLT heisst seit R85 'bewusste Neusendung, BELEGT durch anderen Zeitstempel'. Ein unlesbarer TS belegt nichts. Steht im Ledger, weil es plausibel klingt ('markieren ist reversibel') und ohne den Eintrag neu erfunden wuerde."
     }
   ],
   "kreuz_record_invarianten": {
@@ -981,8 +1012,8 @@
       "unlesbar"
     ],
     "vergleich_begruendung": "{gleich, ungleich} ist nicht total. Ein fehlender oder unlesbarer Zeitstempel ist keines von beiden. Der dritte Zweig heisst `bei_unlesbar` und wird vom Detektor BEANTWORTET, weil er den Strom kennt.",
-    "bei_unlesbar": "WIEDERHOLT",
-    "bei_unlesbar_begruendung": "Loeschen ohne gelesenen Zeitstempel ist Datenverlust; markieren ist reversibel und sichtbar. Die Vorgabe folgt aus ADJ (R86: zustellen mit Marke), nicht aus einer neuen Politik.",
+    "bei_unlesbar": "UNGEPRUEFT",
+    "bei_unlesbar_begruendung": "R89-Korrektur: R88 setzte WIEDERHOLT. Falsch, weil WIEDERHOLT seit R85 'bewusste Neusendung, BELEGT durch anderen Zeitstempel' heisst. Ein unlesbarer Zeitstempel belegt nichts. Der epistemische Token existiert bereits: UNGEPRUEFT. Aktion bleibt 'zustellen mit Marke' — aber die Marke heisst jetzt 'ungeprueft', nicht 'wiederholt'.",
     "vorrang": "ZEILE>DEDUP",
     "vorrang_begruendung": "ZEILE ist ein EREIGNIS ueber DIESEN Strom; DEDUP ist eine VORSCHRIFT fuer kuenftige Kopien. Ein Ereignis ueber eine gesehene Zeile ist konkreter als eine Vorschrift fuer Raenge, die der Detektor nicht sah. Koexistenz ist erlaubt — der Vorrang entscheidet.",
     "ordnung": "FIFO im Detektor-Strom. Der Konsument darf NICHT annehmen, dassdie erste Kopie seines Stroms die Originalmeldung ist — er wendet die Vorschrift auf seine Reihenfolge an; `anker=vorgaenger` macht das explizit.",
@@ -1000,7 +1031,36 @@
       "default": "KEINE-REGEL  — kein Record, sondern der benannte Nicht-Fall"
     },
     "referenz": "scripts/konsumenten_semantik.py — Norm als ausfuehrbarer Code",
-    "test": "scripts/test_konsument_kongruenz.py — K1 (Norm) gegen K2 (Nachbau aus dem Vertragstext)"
+    "test": "scripts/test_konsument_kongruenz.py — K1 (Norm) gegen K2 (Nachbau aus dem Vertragstext)",
+    "vergleich_pflicht": "Der Zeitstempel-Vergleich erfolgt AUSSCHLIESSLICH ueber ts_vergleich() (drei Ausgaenge: gleich|ungleich|unlesbar). Boolescher ==/!= ist verboten: `_Unlesbar() != _Unlesbar()` ist True und wuerde zwei unlesbare Werte als UNGLEICH klassifizieren — also als 'belegte andere Neusendung'.",
+    "verdict_aktion_trennung": "Verdict (was wissen wir?) und Aktion (was tun wir?) sind getrennte Spalten. UNGEPRUEFT -> zustellen + ALARM. WIEDERHOLT -> zustellen + Marke. VERWERFEN -> verwerfen. Ein Token aus der Verdict-Spalte darf nie Unwissen behaupten; ein Token aus der Aktions-Spalte darf nie Wissen vortaeuschen.",
+    "ordnung_konflikt": {
+      "befund": "Norm 1 begruendet den Anker `vorgaenger` mit der Adjazenz des Detektors; Norm 4 erklaert genau diese Adjazenz beim Konsumenten fuer ungarantiert. `erst=ZUSTELLEN` erzwingt strukturell die Annahme, die Norm 4 verbietet: unter Reorder stellt der Konsument eine Kopie zu und markiert das Original.",
+      "gemessen": {
+        "reorder_T2_T1_T1": [
+          "ZUSTELLEN",
+          "WIEDERHOLT",
+          "VERWERFEN"
+        ],
+        "korrekt_T1_T1_T2": [
+          "ZUSTELLEN",
+          "VERWERFEN",
+          "WIEDERHOLT"
+        ],
+        "lesart": "Position 1 traegt in beiden Faellen ZUSTELLEN — welches Element dort steht, entscheidet der Transport, nicht der Vertrag."
+      },
+      "nicht_loesbar_per_text": "Mehr Normierung schliesst die Luecke nicht. Sie liegt im Format, nicht im Normtext.",
+      "architektur": "ordnungsunabhaengige Identitaet: `erst` darf nicht an der Ankunftsreihenfolge haengen, sondern an einem ordnungs-Stabilen Merkmal der Klasse. Kandidaten: (a) FIFO end-to-end im Transport, (b) Produzenten-Sequenznummer im Record, (c) eingefrorener Batch mit Objekt-Hash.",
+      "entscheidung_r89": "NICHT gebaut — bewusst. Die drei Varianten sind nicht aequivalent: (a) verlagert das Problem in den Transport (ausserhalb dieses Vertrags), (b) aendert das Eingabeformat (Produzentenseite), (c) friert den Report ein (widerspricht R87). Eine Wahl ohne Messung waere geraten. Die Frist ist auf R91 gesetzt mit benanntem Blocker.",
+      "blocker": "Ohne Entscheidung, ob die Engine den Produzenten kontrolliert, ist (b) nicht bewertbar; ohne Transportvertrag ist (a) nicht pruefbar.",
+      "frist": "R91"
+    },
+    "exit_vor_stdout": "Konsumenten pruefen zuerst den Exit-Code. Bei Exit != 0 ist stdout undefiniert; ein Konsument darf ihn nicht als Ereignisstrom interpretieren. Ein leerer stdout ist ambig zwischen 'nichts zu berichten' und 'Lauf gescheitert' — nur der Exit loest die Ambiguitaet. Anlass R88: relativer Pfad -> Exit 3 -> leerer stdout -> Test las 'keine Ereignisse'.",
+    "normative_quelle": {
+      "entscheidung": "Der AUSFUEHRBARE CODE (scripts/konsumenten_semantik.py) ist normativ. Die Prosa im Vertrag ist eine Ableitung daraus und muss bei Divergenz korrigiert werden.",
+      "begruendung": "Zwei Autoritaeten ohne Vorrang sind die Zwei-Wahrheiten-Krankheit auf Dokumentationsebene. Eine muss gewinnen; der Code ist testbar, die Prosa ist es nicht.",
+      "grenze": "K1 (Code) gegen K2 (Nachbau aus dem Text) misst nur DOKUMENTATIONS-Treue, keine Semantik. K2 stammt aus derselben Hand und ist ein Spiegel, kein Falsifikator. Der '?'-Bug waere in beiden gewesen — gefunden wurde er nur extern. Das ist die Rolle, die ING spaeter spielt."
+    }
   },
   "frist_instrument": {
     "konstruktionsfehler": "Verfall loest keine Buchung aus. Dreimal belegt: ADJ (R84->R86), NRM (R86->R87 ungebucht), Mutationsvarianz.",

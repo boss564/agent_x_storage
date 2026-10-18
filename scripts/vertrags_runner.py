@@ -63,9 +63,21 @@ def _dir_hash(p: Path) -> str:
     return h.hexdigest()
 
 
-def _lauf(args: list[str], cwd: Path, script: Path = SCRIPT) -> tuple[int, str, str]:
+def _lauf(args: list[str], cwd: Path, script: Path = SCRIPT,
+          seed: str | None = None) -> tuple[int, str, str]:
+    # §A-ZZZZ184 (Runde 89): **Umgebungsvarianz, kein Zufall im Detektor.**
+    # R88 schrieb als offenen Punkt "Zufallsquelle im DETEKTOR fehlt" —
+    # das ist der falsche Fix: Nichtdeterminismus in Produktionscode ist
+    # genau der Defekt, den ein robustes System nicht haben darf. Was
+    # fehlt, ist Harness-Varianz: PYTHONHASHSEED aendert die
+    # Set-/Dict-Iterationsreihenfolge. Ein Mutant, der nur darunter
+    # entkommt, ist dann sichtbar.
+    import os
+    env = dict(os.environ)
+    if seed is not None:
+        env["PYTHONHASHSEED"] = seed
     r = subprocess.run([sys.executable, str(script), *args],
-                       capture_output=True, text=True, cwd=cwd)
+                       capture_output=True, text=True, cwd=cwd, env=env)
     return r.returncode, r.stdout, r.stderr
 
 
@@ -131,7 +143,7 @@ def _saat(d: Path, strom: list, neu_text: str) -> None:
 
 
 def fahre(script: Path, vertrag: dict, strom: list,
-          neu_text: str) -> tuple[int, int, list[str]]:
+          neu_text: str, seed: str | None = None) -> tuple[int, int, list[str]]:
     """Führt alle Vertragsfälle aus. Liefert (ok, gesamt, meldungen)."""
     ok = 0
     gesamt = 0
@@ -148,7 +160,7 @@ def fahre(script: Path, vertrag: dict, strom: list,
                                  f"Argument-Bauer im Runner")
                 continue
             vorher = _dir_hash(d)
-            code, out, err = _lauf(a, d, script)
+            code, out, err = _lauf(a, d, script, seed=seed)
             nachher = _dir_hash(d)
             if vorher != nachher:
                 meldungen.append(f"FAIL {name}: Speicher verändert (Blutung)")
@@ -330,9 +342,11 @@ def mutationssuite(vertrag: dict, strom: list, neu_text: str) -> tuple[int, int,
             # sonst ist der Mutant instabil — und eine instabile Probe
             # zaehlt nicht als gefangen.
             _instabil = False
+            _SEEDS = [None, "0", "1", "12345"]
             for _i in range(N - 1):
-                _v = _varianz_strom(strom, saat=hash((feld, _i)) & 0xFFFF)
-                _n2, _g2, _ = fahre(kopie, vertrag, _v, neu_text)
+                _v = _varianz_strom(strom, saat=(hash(feld) ^ _i) & 0xFFFF)
+                _n2, _g2, _ = fahre(kopie, vertrag, _v, neu_text,
+                                    seed=_SEEDS[(_i + 1) % len(_SEEDS)])
                 _gef2 = (_n2 != _g2) or _konstanten_probe(kopie)
                 if _gef2 != _gefangen:
                     _instabil = True

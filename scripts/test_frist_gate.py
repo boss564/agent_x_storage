@@ -47,10 +47,35 @@ def main() -> int:
         ok += gut
 
         if ende == "akzeptiert_mit_neuem_termin":
+            # §A-ZZZZ181 (Runde 89): **ein Gate, das jeden Freitext und jedes
+            # Datum akzeptiert, ist ein Formular.** Gefordert: benannter
+            # Blocker (was verhindert den Beweis JETZT), fehlgeschlagener
+            # Beweisversuch (was wurde versucht), und ein Termin, der aus
+            # dem Blocker folgt — nicht aus Wunschdenken.
             gesamt += 1
             gut = bool(f.get("neuer_termin")) and bool(f.get("begruendung"))
-            print(f"{'ok  ' if gut else 'FAIL'} {name}: Verschiebung "
-                  f"begruendet      {bool(f.get('begruendung'))}")
+            print(f"{'ok  ' if gut else 'FAIL'} {name}: Datum + Begruendung ")
+            ok += gut
+
+            gesamt += 1
+            gut = bool(f.get("blocker"))
+            print(f"{'ok  ' if gut else 'FAIL'} {name}: BLOCKER benannt     "
+                  f"{f.get('blocker', 'FEHLT — Verschiebung ohne Grund')!r}")
+            ok += gut
+
+            gesamt += 1
+            gut = bool(f.get("beweisversuch"))
+            print(f"{'ok  ' if gut else 'FAIL'} {name}: Beweisversuch        "
+                  f"{f.get('beweisversuch', 'FEHLT')!r}")
+            ok += gut
+
+            # Der neue Termin darf nicht frueher liegen als der alte
+            # Verfall — sonst ist "neuer Termin" Rueckdatierung.
+            gesamt += 1
+            neu = int(str(f["neuer_termin"]).lstrip("R"))
+            gut = neu > ziel
+            print(f"{'ok  ' if gut else 'FAIL'} {name}: Termin nach Verfall  "
+                  f"R{ziel} < R{neu}")
             ok += gut
 
     # Das Instrument selbst ist Normtext, nicht nur Konvention.
