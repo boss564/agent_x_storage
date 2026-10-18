@@ -6970,3 +6970,85 @@ kopfzeile: 8 gemessen · 0 nicht gemessen · 0 ohne Skript (12 entfernt) · Prü
 Karte: ee7dd282b2c7
 Bezug: root=/Volumes/THX_OS_ULTRA/Users/olivermueller/agent_x_storage, CLAUDE.md sha256:50fff349a031, Baum 668d5596+dirty
 ```
+
+### §71.64 — Die leere Menge war grün, und kein Gegenlauf hat sie gefragt
+
+**Runde 56. Ein echter Fehler — in genau der Zeile, die Runde 55 zitiert hat.**
+
+**1. `<= 1` faltet null Messungen grün.** `len(set()) == 0`. Eine
+Funktion namens „grün" sagte „grün", wenn es nichts zu prüfen gab:
+dieselbe Form wie `if root is not None` (Runde 49, §A-ZW) — vierter
+Auftritt derselben Zeile. Der Gegenlauf 3 hat es **nicht** gefangen: er
+entfernt beide Blöcke und bekommt rot, weil der **Aufrufer** vorher
+„nicht gemessen" feststellt. `_falte_gruen` sah in keinem der drei Läufe
+eine leere Liste. Die Probe prüfte den Aufrufer, nicht die Funktion.
+
+Behoben mit `raise` statt `== 1`: der Aufrufer **muß** vor der Faltung
+entschieden haben. Der Fall hat jetzt einen eigenen Gegenlauf (Nr. 0), und
+er ist der erste, den ich fahre.
+
+**2. Die 0/3-Deckung war eine Kopplung, kein Pech.** Die Auswahl braucht
+Blöcke und eine Karte — beides Werte. Daß `_akt_block_mismatch` sie sich
+selbst aus dem Baum holte, war die versteckte Abhängigkeit. Jetzt:
+`_auswahl_fehler(bloecke, karte)` als reine Funktion, `_akt_block_mismatch`
+als dünner Wrapper mit Injektionspfad `bloecke=`/`karte=`. Halb injiziert
+ist rot, nicht halb geraten.
+
+**3. Feldtaxonomie: Einschlußliste statt Ausschlußliste.** Runde 55 hat
+`kopfzeile:` „ausgenommen". Das hält bis zum nächsten neuen Feld. Jetzt
+gibt es drei Sorten Feld, benannt in `_WERT_FELDER`:
+
+| Sorte | Beispiel | Rolle |
+|---|---|---|
+| Werte | `total=`, `37/37` | verglichen |
+| Identität | `Karte: <fp>` | ausgewählt |
+| Notizen | Prüfer-Hash, Datum, `dirty` | nirgends |
+
+Was nicht in der Einschlußliste steht, ist Notiz — und ein neues Feld ist
+damit automatisch harmlos, statt bis zum nächsten Selbstfund schädlich.
+
+**4. Kopfzeile dreiwertig.** „37/37 Selbsttests, Akte grün" bei
+`7 gemessen · 1 nicht gemessen` ist eine Zusammenfassung mit zwei
+Zuständen über eine Messung mit drei. Dieselbe Form wie „gemittelt"
+(Runde 44). Die Regel steht in `ops/KOPFZEILE.md`: alle drei Zahlen,
+immer; kein Feld weglassen, weil es 0 ist — **die Null ist die
+Nachricht**.
+
+**5. Blockzähler: 57 → 69 aufgelöst.** Zwei verschiedene Zähler, in
+Runde 55 in einem Satz vermischt. Die Akte hat **201 Blöcke**, davon
+**69 mit `§71.`-Titel**; die 57 aus Runde 54 zählte klassifizierte
+Messblöcke. Ich habe nie 12 Blöcke verschwiegen — ich habe zwei Skalen
+addiert, die nicht zusammengehören.
+
+**6. `forensik/` ist draußen und bleibt draußen.** Ungetrackt, also nicht
+im Index und nicht im Bezugsraum der Differenzmessung — nur im
+`dirty`-Vermerk. Der Prüfer kennt den Fall seit Runde 46 und läßt ihn
+liegen; das ist die Entscheidung, nicht die Duldung. Ein fremdes Repo
+mit eigenem `.git` gehört nicht in diese Akte.
+
+**7. Selbstfunde dieser Runde.** Der Selbsttest hat mich dreimal
+erwischt: eine Wertsonde als `f"{...}"` (abgeleitet, kein Literal), ein
+Fixture, das sich selbst gemessen hätte, und ein Gegenlauf, den ich mit
+`or True` immer grün geschrieben hatte — **derselbe Fehler, den ich in
+dieser Runde behebe, in dem Test, der ihn beheben soll.** Gefahren wurde
+er am Ende ohne `or True`.
+
+**8. Was offen bleibt.** `_akt_block_mismatch` selbst steht bei 0/1
+Deckung — der Wrapper braucht `.git/`. Die reine Funktion hat 3/3. Der
+Unterschied ist genau der Befund aus Punkt 2: was am Baum hängt, ist
+nicht gedeckt; was nicht hängt, ist es.
+
+```
+total=2 chain_total=0 reported=2 unclassified=-2 unchecked=0 unclassified_checkers=0
+  Fließtext-Brüche: 2
+  Zeilen: 0
+  Referenzen: 0
+  Wellen: 0
+  Tests ohne Skript: 0
+  Inventare: 0
+  Testpfade: 0
+  Schreibmodus: 0
+kopfzeile: 8 gemessen · 0 nicht gemessen · 0 ohne Skript (12 entfernt) · Prüfer 3ce8e25f373f
+Karte: ee7dd282b2c7
+Bezug: root=/Volumes/THX_OS_ULTRA/Users/olivermueller/agent_x_storage, CLAUDE.md sha256:50fff349a031, Baum 2853ae9b+dirty
+```

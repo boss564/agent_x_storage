@@ -1418,8 +1418,61 @@ def _card_fingerprint(numbers: dict[str, int], classes: list[tuple[str, int]]) -
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:12]
 
 
+def _auswahl_fehler(bloecke: list[dict], karte: str) -> list[str]:
+    """§A-ZZ: Die Auswahl **als reine Funktion** — Blöcke rein, Karte rein.
+
+    Runde 55 hatte 0/3 Deckung und begründete das mit dem Baum. Falsch:
+    die Auswahl braucht **Blöcke und eine Karte**, beides sind Werte. Daß
+    `_akt_block_mismatch` sie sich selbst aus dem Baum holt, war die
+    versteckte Abhängigkeit — nicht die Untestbarkeit.
+
+    Reihenfolge, in dieser Ordnung: Fingerprint (hier: die Karte ist
+    gegeben) → Klasse `Messung` → Dateireihenfolge (nach der
+    Klassifikation gültig, weil append-only).
+    """
+    m = re.search(r"^Karte: (\w+)", karte, re.M)
+    if not m:
+        return ["Akte-Block: Kalibrierkarte traegt keinen Fingerprint"]
+    fp = m.group(1)
+    treffer = [b for b in bloecke
+               if b["kind"] == "Messung"
+               and f"Karte: {fp}" in "\n".join(b["lines"])]
+    if not treffer:
+        return [f"Akte-Block: keine Messung zur Karte {fp} — nicht gemessen"]
+    # §A-ZX (Runde 55): **Der Fehlerzustand ist die Uneinigkeit, nicht die
+    # Anzahl.** Runde 54 hat „mehr als 1 = Fehler" geschrieben, um den
+    # stillen `[-1]`-Griff zu verhindern — und damit zwei verschiedene
+    # Dinge verwechselt:
+    #
+    #   doppelte Behauptung — zwei Blöcke sagen **Verschiedenes** über
+    #                         dieselben Eingaben: echter Fehler
+    #   Wiederholung        — zwei Blöcke sagen **dasselbe**: Beweis für
+    #                         Kontinuität, nichts aufzulösen
+    #
+    # Dateireihenfolge ist **innerhalb** einer Klasse gültig: append-only
+    # garantiert, dass weiter unten später geschrieben wurde. Über Klassen
+    # hinweg war sie der Fehler der Runden bis §A-ZU.
+    if not _falte_gruen(treffer):
+        return [f"Akte-Block: {len(treffer)} Messungen zur Karte {fp} mit "
+                f"verschiedenen Werten — Fingerprint unterspezifiziert "
+                f"oder Handedit"]
+    # Der Rumpf ist der Blocktext ohne Zäune; `Karte:` gehört zur
+    # Provenienz und wird vom Vergleich nicht gelesen.
+    # §A-ZV: der Rumpf enthält Prosa **und** den eingezäunten Block. Der
+    # Vergleich liest nur den Block — Prosa ist kein Beleg.
+    body = "\n".join(treffer[-1]["lines"])
+    zaeune = body.split("```")
+    body = zaeune[1] if len(zaeune) >= 3 else ""
+    body = "\n".join(l for l in body.splitlines()
+                     if not re.match(r"^Karte: \w+$", l.strip())).strip()
+    return _compare_block(body, karte)
+
+
 def _akt_block_mismatch(root: Path | None = None,
-                        card_root: Path | None = None) -> list[str]:
+                        card_root: Path | None = None,
+                        *,
+                        bloecke: list[dict] | None = None,
+                        karte: str | None = None) -> list[str]:
     """Stimmt der zitierte Block in der Akte mit `calibration_card()`? (§A-MZ)
 
     Die `Bezug:`-Zeile macht den Block **nachpruefbar** — sie macht ihn
@@ -1435,6 +1488,13 @@ def _akt_block_mismatch(root: Path | None = None,
     committet, der Vergleich laeuft im naechsten Commit, und ein
     `+dirty` waere kein Fehler, sondern der Zustand.
     """
+    if karte is not None or bloecke is not None:
+        # §A-ZZ: reiner Pfad — kein Baum, keine Datei. Beides muß kommen,
+        # sonst ist die Hälfte injiziert und die andere geraten.
+        if karte is None or bloecke is None:
+            return ["Akte-Auswahl: karte und bloecke nur gemeinsam oder "
+                    "gar nicht injizierbar"]
+        return _auswahl_fehler(bloecke, karte)
     base = root or Path(__file__).resolve().parent.parent
     doc_path = base / "order_execution_engine" / "ops" / "TAG7_ABNAHME.md"
     if not doc_path.exists():
@@ -1447,56 +1507,15 @@ def _akt_block_mismatch(root: Path | None = None,
     # Lauf als Befund gemeldet — dauerrot ist so aussagelos wie
     # dauergrün.
     #
-    # Auswahl über den **Fingerprint der Karte**, gegen die gerechnet
-    # wurde. Drei Fälle, alle benannt:
-    #   genau 1 → vergleichen
-    #   0       → `nicht gemessen`, rot
-    #   > 1     → **Fehler**, kein Tie-Break
     # §A-ZW (Runde 54, Selbstfund): `calibration_card` will einen `root`
     # und bekam keinen — dieselbe Zeile wie `if root is not None` aus
     # Runde 49. Der Selbsttest prüft das seitdem bei **jedem** Prüfer,
     # und das ist der Grund, warum er es hier gefunden hat und nicht ich.
-    card = calibration_card(root)
-    m = re.search(r"^Karte: (\w+)", card, re.M)
-    if not m:
-        return ["Akte-Block: Kalibrierkarte traegt keinen Fingerprint"]
-    fp = m.group(1)
-    treffer = [b for b in split_blocks(text)
-               if b["kind"] == "Messung"
-               and f"Karte: {fp}" in "\n".join(b["lines"])]
-    if not treffer:
-        return [f"Akte-Block: keine Messung zur Karte {fp} — nicht gemessen"]
-    # §A-ZX (Runde 55): **Der Fehlerzustand ist die Uneinigkeit, nicht die
-    # Anzahl.** Runde 54 hat „mehr als 1 = Fehler" geschrieben, um den
-    # stillen `[-1]`-Griff zu verhindern — und damit zwei verschiedene
-    # Dinge verwechselt:
     #
-    #   doppelte Behauptung — zwei Blöcke sagen **Verschiedenes** über
-    #                         dieselben Eingaben: echter Fehler
-    #   Wiederholung        — zwei Blöcke sagen **dasselbe**: Beweis für
-    #                         Kontinuität, nichts aufzulösen
-    #
-    # Die Karte ist gleich, weil `total` sich nicht geändert hat — also
-    # ist auch das Ergebnis gleich. Es gibt nichts zu wählen.
-    #
-    # Dateireihenfolge ist **innerhalb** einer Klasse gültig: append-only
-    # garantiert, dass weiter unten später geschrieben wurde. Über Klassen
-    # hinweg war sie der Fehler der Runden bis §A-ZU.
-    if not _falte_gruen(treffer):
-        return [f"Akte-Block: {len(treffer)} Messungen zur Karte {fp} mit "
-                f"verschiedenen Werten — Fingerprint unterspezifiziert "
-                f"oder Handedit"]
-    treffer = [treffer[-1]]
-    # Der Rumpf ist der Blocktext ohne Zäune; `Karte:` gehört zur
-    # Provenienz und wird vom Vergleich nicht gelesen.
-    # §A-ZV: der Rumpf enthält Prosa **und** den eingezäunten Block. Der
-    # Vergleich liest nur den Block — Prosa ist kein Beleg.
-    body = "\n".join(treffer[0]["lines"])
-    zaeune = body.split("```")
-    body = zaeune[1] if len(zaeune) >= 3 else ""
-    body = "\n".join(l for l in body.splitlines()
-                     if not re.match(r"^Karte: \w+$", l.strip())).strip()
-    return _compare_block(body, card)
+    # §A-ZZ (Runde 56): **die Auswahl ist eine reine Funktion.** Sie
+    # steht als `_auswahl_fehler(bloecke, karte)` daneben und wird hier
+    # nur gefüttert. Der Baum liefert die Eingaben, er entscheidet nicht.
+    return _auswahl_fehler(split_blocks(text), calibration_card(root))
 
 
 def _tally_line_of(root: Path | None = None) -> str:
@@ -4541,6 +4560,57 @@ def _self_test_block_kind() -> list[str]:
     if not _falte_gruen(ms) or _falte_gruen([b for b in split_blocks(ungleich)
                                              if b["kind"] == "Messung"]):
         out.append("Akte-Faltung: grün/rot vertauscht")
+    # §A-ZY (Runde 56): Die **leere** Menge ist nicht grün — sie ist gar
+    # nichts. `<= 1` hat sie grün gefaltet; keiner der drei Gegenläufe hat
+    # das je gefragt, weil der Aufrufer vorher abfängt.
+    try:
+        _falte_gruen([])
+        out.append("Akte-Faltung: leere Treffermenge gilt als grün")
+    except ValueError:
+        pass
+    # §A-ZZ: die Auswahl als reine Funktion — drei Ausgänge, ohne Baum.
+    # Das ist die Deckung, die Runde 55 mit „kein .git/" begründet hatte.
+    # Die Erwartung ist **hier benannt**, nicht aus `stufen` gelesen: sonst
+    # ist sie ableitbar und misst sich selbst.
+    karte = "total=1 chain=0\nKarte: fp\n"
+    blk = split_blocks(zwei)
+    ohne_messung = [b for b in blk if b["kind"] != "Messung"]
+    widerspruch = split_blocks(ungleich)
+    # Die drei Ausgänge, jeder mit **einem** Namen — dann ist der Prüfling
+    # nicht mehr aus dem Ausdruck ableitbar, sondern eine benannte Größe.
+    kein_treffer = _auswahl_fehler(ohne_messung, karte)
+    genau_einer = _auswahl_fehler(blk, karte)
+    uneinig = _auswahl_fehler(widerspruch, karte)
+    if not kein_treffer:
+        out.append("Akte-Auswahl: keine Messung nicht rot")
+    if genau_einer:
+        out.append("Akte-Auswahl: eine Messung rot")
+    if not uneinig:
+        out.append("Akte-Auswahl: Widerspruch nicht rot")
+    if kein_treffer == genau_einer:
+        out.append("Akte-Auswahl: keine und eine nicht unterschieden")
+    # §A-ZZ2: ein Notizfeld ist nie Wert — und ein neues Wertfeld zählt.
+    # Die Sonden leiten sich **hier** aus `_WERT_FELDER` ab (erstes Feld =
+    # Wert, `kopfzeile:` = Notiz), damit der Test nicht gegen eine alte
+    # Kopie der Liste läuft. Kein Modulglobal: der Selbsttest braucht
+    # keinen Zustand, den ein anderer Lauf zurücksetzen müßte.
+    wert_sonde = "total=1"
+    notiz_sonde = "kopfzeile: Prüfer aaa"
+    notiz = ("### A — x\n\n```\n" + wert_sonde + "\nKarte: fp\n"
+             + notiz_sonde + "\n```\n")
+    notiz2 = notiz.replace(notiz_sonde, notiz_sonde + "x")
+    if len({_block_werte(b) for b in split_blocks(notiz)
+            if b["kind"] == "Messung"}) != 1:
+        out.append("Akte-Feldtaxonomie: Notiz zählt als Wert")
+    if _block_werte({"kind": "Messung", "lines": notiz.splitlines()}) != \
+            _block_werte({"kind": "Messung", "lines": notiz2.splitlines()}):
+        out.append("Akte-Feldtaxonomie: Notizänderung gilt als Wertänderung")
+    wert2 = notiz.replace(wert_sonde, "total=2")
+    if wert_sonde.split("=")[0] not in _WERT_FELDER:
+        out.append("Akte-Feldtaxonomie: Wertsonde trifft kein Wertfeld")
+    if _block_werte({"kind": "Messung", "lines": notiz.splitlines()}) == \
+            _block_werte({"kind": "Messung", "lines": wert2.splitlines()}):
+        out.append("Akte-Feldtaxonomie: Wertänderung gilt als Notiz")
     return out
 
 
@@ -4550,27 +4620,79 @@ def _falte_gruen(messungen: list[dict]) -> bool:
     Eine Funktion, nicht eine Bedingung an zwei Orten: der Prüfer und der
     Selbsttest müssen dieselbe Frage stellen, sonst prüft der Test eine
     andere Regel als die, die läuft.
+
+    §A-ZY (Runde 56, Selbstfund): Runde 55 hatte `<= 1` — und
+    `len(set()) == 0`, also war die **leere** Treffermenge grün. Eine
+    Funktion, die „grün" heißt, sagte „grün", wenn es nichts zu prüfen
+    gab: dieselbe Form wie `if root is not None` (§A-ZW) — vierter
+    Auftritt. Keiner der drei Gegenläufe hat sie je mit `[]` aufgerufen;
+    sie haben den **Aufrufer** geprüft, nicht die Funktion.
+
+    Der `raise` ist die Antwort, nicht ein `== 1`: er zwingt den Aufrufer,
+    „nicht gemessen" **vor** der Faltung zu entscheiden. Damit ist die
+    Reihenfolge erzwungen statt unterstellt.
     """
-    return len({_block_werte(b) for b in messungen}) <= 1
+    if not messungen:
+        raise ValueError("_falte_gruen: leere Treffermenge — "
+                         "„nicht gemessen\" gehört vor die Faltung")
+    return len({_block_werte(b) for b in messungen}) == 1
+
+
+# §A-ZZ2 (Runde 56): **Einschlußliste, nicht Ausschlußliste.**
+#
+# Runde 55 hat `kopfzeile:` ausgenommen, weil der Prüfer-Hash sich mit
+# jedem Edit ändert. Das hält bis zum nächsten neuen Feld — und Felder,
+# die nichts beeinflussen dürfen, ziehen den Fehler an.
+#
+# Ein Messblock hat drei Sorten Feld, und sie verhalten sich verschieden:
+#
+#   Werte      `37/37`, `total=`, Zähler   → **verglichen**
+#   Identität  `Karte: <fp>`               → **ausgewählt**
+#   Notizen    Prüfer-Hash, Datum, dirty   → **nirgends**
+#
+# Was nicht in `_WERT_FELDER` steht, ist Notiz. Ein neues Feld ist damit
+# automatisch harmlos, statt bis zum nächsten Selbstfund schädlich.
+_WERT_FELDER = ("total", "chain_total", "reported", "unclassified",
+                "unchecked", "unclassified_checkers", "inventare",
+                "testpfade", "schreibmodus")
+# Die einzige Zeile, die **auswählt** statt zu vergleichen.
+_IDENT_FELDER = ("Karte",)
 
 
 def _block_werte(block: dict) -> tuple:
-    """Die **Zahlen** eines Messblocks — die Vergleichsgröße der Faltung.
+    """Die **Werte** eines Messblocks — die Vergleichsgröße der Faltung.
 
     §A-ZX: zwei Messungen derselben Karte sind nur dann ein Widerspruch,
-    wenn sie verschiedene Werte tragen. Verglichen wird der Inhalt des
-    eingezäunten Blocks ohne `Karte:`-Zeile — dieselbe Sicht, die auch
-    `_compare_block` liest.
+    wenn sie verschiedene Werte tragen.
+
+    §A-ZZ2 (Runde 56): gelesen wird eine **Einschlußliste** — Schlüssel
+    aus `_WERT_FELDER` in `k=v`-Zeilen. Alles andere (Notizen, Identität,
+    Prosa) geht nicht ein. `kopfzeile:` ist darum nicht „ausgenommen",
+    sondern **nie eingeschlossen**.
     """
     body = "\n".join(block["lines"])
     zaeune = body.split("```")
     body = zaeune[1] if len(zaeune) >= 3 else ""
-    # §A-ZX (Runde 55, Selbstfund): `kopfzeile:` trägt den Prüfer-Hash und
-    # ändert sich mit jedem Edit — sie ist **Provenienz**, keine Messung.
-    # Zählt man sie mit, ist jede Wiederholung ein „Widerspruch", und die
-    # Regel blockt genau den Fall, den sie grün lassen soll.
-    return tuple(l.strip() for l in body.splitlines()
-                 if l.strip() and not l.strip().startswith(("Karte:", "kopfzeile:")))
+    werte = []
+    for line in body.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        # Kopfzeilen-Form: `total=37 chain_total=20 …`
+        if "=" in line and " " not in line.split("=", 1)[0].strip():
+            for part in line.split():
+                if "=" in part:
+                    k = part.split("=", 1)[0]
+                    if k in _WERT_FELDER:
+                        werte.append(part)
+            continue
+        # `Schlüssel: wert` — nur die Identität ist hier relevant, und die
+        # wird vom Aufrufer gelesen, nicht gefaltet.
+        if ":" in line:
+            k = line.split(":", 1)[0].strip()
+            if k in _WERT_FELDER:
+                werte.append(line)
+    return tuple(werte)
 
 
 def _select_messungen(text: str, fp: str) -> int:
