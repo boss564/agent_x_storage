@@ -9218,3 +9218,114 @@ konsumieren sollen.
 nicht in dem Wert stecken, der die Klasse unterscheidet — sonst gibt es
 die Klasse nur im Kommentar.
 
+
+## Runde 81 — Messung und Annotation, Eigner und Frist
+
+### 0. Zum Anhang
+
+Der Anhang dieser Runde war meine eigene Antwort — kein neuer Satz.
+Ich habe darauf zuerst mit einer Rückfrage reagiert. Das war falsch:
+ein Dialog über den eigenen Text ist Zustands-Blutung in der höchsten
+Schicht. Die Arbeit unten stammt aus den Buchungen 5, 7 und 8 der
+Runde 80, nicht aus dem Anhang.
+
+### 1. `bewußt` ist aus der Zählachse entfernt (Buchung 5)
+
+```
+vorher:  | davon Kanal-Duplikate: 37 | bewußt: 1
+nachher: | KANAL-DUPLIKAT: 37 | WIEDERHOLUNG: 1
+```
+
+Der Detektor sieht Inhalt und Zeitstempel — **Absicht sieht er
+nicht**. Wer eine Absichts-Kategorie in die Zählachse setzt, wird als
+Nächstes versuchen, sie ausgeben zu lassen. Das ist der
+Zeitstempel-Fehler eine Etage höher: Annotation leckt in Messung.
+
+Die Interpretation (`bewusst` oder nicht) gehört in eine getrennte
+Spalte, die ein Mensch füllt — nicht in den Detektor-Bericht.
+
+### 2. Die Fieber-Grenze (Buchung 7)
+
+```
+JSON_SCHWELLE = 1
+ab 1 unparsbarer Zeile → WARNUNG auf stderr
+Exit bleibt 0 (gültige Zeilen wurden geprüft)
+```
+
+| Strom | Ausgabe |
+|---|---|
+| echt (0 Müll) | keine Warnung |
+| 2 Müll-Zeilen | `WARNUNG: 2 unparsbare Zeile(n) — Schwelle 1 erreicht` |
+
+Ein Zähler ohne Schwelle mißt und alarmiert nicht. Der Exit bleibt 0,
+weil die gültigen Zeilen geprüft wurden — die Warnung ist die Marke,
+nicht der Abbruch.
+
+### 3. Identitäts-Audit (Buchung 3) — Ergebnis
+
+```
+Top-Level-Felder: role(7265), message(7265), type(5), status(5)
+message-Felder:   content(7265)
+```
+
+Nur `message.content` geht in den Hash. `role` filtert (kein Inhalt),
+`timestamp` ist Metadatum, `type`/`status` kommen nur in 5
+Steuerzeilen vor. **Kein weiteres Diagnose-Feld leckt.**
+
+Ehrliche Formulierung: die Invariante ist damit **leer erfüllt**, nicht
+bewiesen. Sie gilt, weil es nichts zu verletzen gibt — nicht, weil sie
+geprüft wurde. Das steht so im Vertrag.
+
+### 4. Die Negativkontrolle hat zugeschlagen — an mir
+
+Ich habe die Ausgabe von `Kanal-Duplikate:` zu `KANAL-DUPLIKAT:`
+geändert und den Vertrag nicht mitgezogen:
+
+```
+FAIL strom-alle: Text fehlt — erwartet 'Kanal-Duplikate:',
+                 bekam 'Meldungen: 259 | … | KANAL-DUPLIKAT: 37'
+FAIL Negativkontrolle: unveränderte Quelle 8/9
+     — Gate defekt, Mutationen wertlos
+0/4 Mutationen gefangen
+```
+
+Genau der Mechanismus, den Runde 80 gebaut hat: **eine Änderung an
+der Ausgabe ohne Vertrags-Update wird rot, und die Mutationen werden
+gar nicht erst bewertet.** Nach Nachziehen: 9/9, 4/4.
+
+Das ist der erste Fall, in dem eine Wache *mich* gefangen hat, bevor
+ich sie gefangen habe.
+
+### 5. Altposten mit Eigner und Fälligkeit (Buchung 8)
+
+„Offen, mit Eigner" ohne Namen war Form ohne Gegenstand — dieselbe
+Klasse, die 7-von-7-inline zu Fall brachte. Jetzt:
+
+| Posten | Eigner | fällig |
+|---|---|---|
+| Runde-73-Lücke | Buchungsmechanismus in `check_claude_md.py` (Rundenzähler muß Lücken erzwingen) | Runde 83 |
+| Bytecode-Blocknummer | `scripts/bytecode_manifest.py` (Feld `block_number` je Contract) | Runde 83 |
+| Normalisierungs-Grenze (Buchung 4/80) | `normalisiere()` — Kollisions-Testfall fehlt | Runde 82 |
+| Adjudikation bewußte WIEDERHOLUNG (Buchung 6/80) | **Entscheidung des Betreibers**, nicht des Codes | vor jeder Ingestion-Verdrahtung |
+| Vertrags-Versionierung / Mock-Konsument | `waechter_vertrag.json` v2 | Runde 84 |
+
+**Zur Adjudikation:** Ich habe sie in dieser Runde nicht entschieden.
+Die Frage „blockiert eine bewusste Neusendung?" ist eine Politik, keine
+Messung, und sie gehört dem Betreiber. Der Vertrag sagt heute Exit 1
+für beide Etiketten — das ist die **konservative** Vorgabe, und sie
+gilt, bis jemand sie ändert.
+
+### 6. Stand
+
+| Größe | Wert |
+|---|---|
+| Vertragsfälle | 9/9 |
+| Negativkontrolle | 9/9 |
+| Mutationen | 4/4 |
+| Identitäts-Audit | kein Diagnose-Feld im Hash (leer erfüllt) |
+| Messung/Annotation | getrennt |
+| Offene Posten | 5, alle mit Eigner und Runde |
+
+**Der Satz der Runde:** Eine Wache, die eine Ausgabe prüft, die ich
+ohne sie geändert habe, ist die erste Wache, die mich gefangen hat.
+

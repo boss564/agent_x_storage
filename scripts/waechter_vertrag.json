@@ -62,7 +62,17 @@
     "uebersprung": {
       "regel": "Was nicht gehasht wurde, wird gezaehlt und im Bericht genannt.",
       "begruendung": "Ein Lauf, der Zeilen wegwirft und schweigt, sieht geprueft aus.",
-      "semantik_gleichklang": "Die Ingestion MUSS defekte Zeilen genauso behandeln wie der Waechter (ueberspringen+zaehlen). Sonst ist der Lauf gruen und die Zeile ungeprueft zugestellt."
+      "semantik_gleichklang": "Die Ingestion MUSS defekte Zeilen genauso behandeln wie der Waechter (ueberspringen+zaehlen). Sonst ist der Lauf gruen und die Zeile ungeprueft zugestellt.",
+      "schwelle": {
+        "json": 1,
+        "wirkung": "Ab 1 unparsbarer Zeile warnt der Lauf auf stderr. Exit bleibt 0 (gueltige Zeilen wurden geprueft), die Warnung ist nicht uebersehbar.",
+        "begruendung": "Ein Zaehler ohne Schwelle misst und alarmiert nicht."
+      }
+    },
+    "messung_annotation": {
+      "regel": "Der Detektor gibt ausschliesslich messbare Kategorien aus: KANAL-DUPLIKAT (Zeitstempel gleich) und WIEDERHOLUNG (Zeitstempel verschieden).",
+      "verboten": "'bewusst' o.ae. Absichts-Kategorien in der Zaehlachse. Der Detektor sieht Inhalt und Zeitstempel, keine Absicht.",
+      "begruendung": "Annotation in der Messachse war die Krankheit des Zeitstempels eine Etage hoeher."
     }
   },
   "normalisierung": {
@@ -76,7 +86,7 @@
     {
       "name": "strom-alle",
       "erwarteter_exit": 1,
-      "text": "Kanal-Duplikate:"
+      "text": "KANAL-DUPLIKAT:"
     },
     {
       "name": "einwurf-bekannt",
@@ -118,5 +128,10 @@
       "erwarteter_exit": 0,
       "text": "übersprungen: 2 (JSON 2"
     }
-  ]
+  ],
+  "identitaets_audit": {
+    "stand": "Runde 81",
+    "befund": "Nur message.content geht in den Hash. role filtert, timestamp ist Metadatum, type/status nur in 5 Steuerzeilen.",
+    "offen": "Kein weiteres Diagnose-Feld vorhanden — die Invariante ist derzeit leer erfuellt, nicht bewiesen."
+  }
 }

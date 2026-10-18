@@ -43,6 +43,15 @@ from pathlib import Path
 
 MIN_LAENGE = 400          # kürzere Einträge sind Steuertexte, keine Meldungen
 
+# §A-ZZZZ121b (Runde 81): **die Fieber-Grenze.** Ein Zähler ohne Schwelle
+# ist ein Thermometer, das mißt und nicht alarmiert. Ab dieser Zahl
+# unparsbarer Zeilen warnt der Lauf — er bleibt Exit 0 (die gültigen
+# Zeilen wurden geprüft), aber die Warnung steht auf stderr und ist
+# damit nicht übersehbar. Begründung der Zahl: heute 0 am echten Strom;
+# 1 wäre ein einzelner beschädigter Schreibvorgang, 10 deutet auf einen
+# Formatbruch. Die Schwelle ist Vertragsgegenstand, nicht Code-Gefühl.
+JSON_SCHWELLE = 1
+
 
 class StreamUnlesbar(Exception):
     """Der Stream fehlt oder ist nicht lesbar — Exit 3, nicht Traceback.
@@ -221,15 +230,29 @@ def main(argv: list[str]) -> int:
             print(f"DIE WACHE TRÄGT NICHT: {e}", file=sys.stderr)
             return 3
         paare, kanal, bericht = pruefe_strom(strom)
-        # §A-ZZZZ118: **die Übersprung-Zahl steht im Bericht.** Ein Lauf,
-        # der Zeilen wegwirft und das nicht nennt, sieht geprüft aus.
+        # §A-ZZZZ121 (Runde 81): **Messung und Annotation in getrennte
+        # Spalten.** Bis Runde 80 stand hier `bewußt: {paare - kanal}` —
+        # eine Kategorie, die der Detektor nicht messen kann. Er sieht
+        # Inhalt und Zeitstempel; Absicht sieht er nicht. Wer Annotation
+        # in die Zählachse setzt, wird als Nächstes versuchen, sie
+        # ausgeben zu lassen. Deshalb steht links der Detektor-Fakt
+        # (`WIEDERHOLUNG: 1`) und rechts, klar abgesetzt, die
+        # Interpretation, die ein Mensch später einträgt.
+        _us = ""
         _ue = sum(LESESTAT.values())
-        _us = (f" | übersprungen: {_ue} (JSON {LESESTAT['json']}, "
-               f"<{MIN_LAENGE}Z {LESESTAT['kurz']}, "
-               f"Envelope {LESESTAT['envelope']})") if _ue else ""
+        if _ue:
+            _us = (f" | übersprungen: {_ue} (JSON {LESESTAT['json']}, "
+                   f"<{MIN_LAENGE}Z {LESESTAT['kurz']}, "
+                   f"Envelope {LESESTAT['envelope']})")
         print(f"Meldungen: {len(strom)} | Paare: {paare} "
-              f"| davon Kanal-Duplikate: {kanal} | bewußt: {paare - kanal}"
+              f"| KANAL-DUPLIKAT: {kanal} | WIEDERHOLUNG: {paare - kanal}"
               f"{_us}")
+        # §A-ZZZZ121b: **die Schwelle ist Vertrag, nicht Gefühl.**
+        if LESESTAT["json"] >= JSON_SCHWELLE:
+            print(f"WARNUNG: {LESESTAT['json']} unparsbare Zeile(n) — "
+                  f"Schwelle {JSON_SCHWELLE} erreicht. Diese Zeilen "
+                  f"wurden nicht geprüft und dürfen nicht als geprüft "
+                  f"gelten.", file=sys.stderr)
         for z in bericht:
             print(z)
         return 1 if paare else 0
