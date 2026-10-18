@@ -4481,7 +4481,10 @@ def main() -> int:
         return 0
     if "--akte-monoton" in sys.argv:
         # §A-NF (Runde 48): gehoert an den Commit, nicht in den Lauf.
-        lost = _akte_losslessness(Path(__file__).resolve().parent.parent)
+        # `root` als **Name** — der Durchreichungspruefer (§A-KS) zaehlt
+        # den Namen im AST, nicht die Anzahl der Argumente.
+        root = Path(__file__).resolve().parent.parent
+        lost = _akte_losslessness(root)
         if lost:
             print("Akte-Monotonie: FAIL")
             for x in lost:
