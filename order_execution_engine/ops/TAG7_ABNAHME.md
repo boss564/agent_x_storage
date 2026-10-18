@@ -9486,3 +9486,191 @@ nicht, ist grün aus dem falschen Grund — und es brauchte eine
 Mutationssuite, die mein eigenes Loch fängt, um einen Vertrag zu
 finden, der `KANAL-DUPLIKAT=0` akzeptiert hätte.
 
+
+## Runde 83 — Aggregation, Konstanten, Zaun
+
+### 1. Der Satz der Vorrunde war der Befund
+
+> „… ein Duplikat, das den Exit maskiert."
+
+Wer zugibt, dass eine Bedingung eine andere maskiert, gibt zu: **der
+Detektor reduziert mehrere gleichzeitige Wahrheiten auf einen Exit,
+ohne dass der Vertrag sagt, welche gewinnt.** Das war kein Nebensatz,
+das war der Hauptbefund.
+
+Jetzt gilt eine Regel an **einer** Stelle:
+
+```
+_SCHWERE = {0: 0, 1: 1, 4: 2, 3: 3, 2: 4}
+def aggregiere(*k): return max(k, key=lambda c: _SCHWERE[c])
+```
+
+| Konstellation | vorher | jetzt |
+|---|---|---|
+| nur unparsbar | 4 | 4 |
+| **unparsbar + Duplikat** | **1 — Alarm verschluckt** | **4, aktion=blockieren+marke** |
+| unparsbar + neu | 4 | 4 |
+
+**Exit-Codes sind nominal, nicht ordinal.** `1 < 4` numerisch, aber 4
+ist das strengere Urteil. Der Vertrag verbietet den Vergleich
+ausdrücklich; `mock_ingestion.py` bildet jede Zahl einzeln ab.
+
+### 2. Die 3/4-Inversion
+
+Unter der Achse „Sicherheit des Urteils" ist 3 (nichts geprüft) der
+**Extrempunkt**, 4 der Mittelpunkt. Vorher trug der Extrempunkt keinen
+Alarm, der Mittelpunkt schon. Jetzt alarmieren beide — und 3 trägt die
+Begründung im Vertrag: *„nichts geprüft ist ein Zustand, kein Urteil."*
+
+### 3. Der Konstanten-Mutant — Ihre Vorhersage, bestätigt
+
+Sie sagten: „Ein hartkodiertes 37 besteht, weil erwartet = 37."
+
+Ich habe den Mutanten gebaut (`KANAL-DUPLIKAT={kanal}` →
+`KANAL-DUPLIKAT=37`). Ergebnis:
+
+```
+FAIL Mutation Konstante: **unbeobachtbar** — keine assertierte Ausgabe verändert
+```
+
+**Er bestand alle 10 Vertragsfälle.** Der Vertrag der R82 prüfte den
+Wert nur im Einwurf-Zweig, wo 1 erwartet wird — und dort greift die
+Konstante 37 nicht.
+
+`scripts/test_konstanten.py` fährt drei Fixtures mit **abweichenden**
+Soll-Werten (0 / 1 / 2), hergeleitet aus der Fixture-Konstruktion, nicht
+aus der Prüflingsausgabe. Der Mutant fällt in allen drei:
+
+```
+FAIL A: ... ABWEICHUNG soll/ist {'KANAL-DUPLIKAT': (0, 37)}
+FAIL B: ... ABWEICHUNG soll/ist {'KANAL-DUPLIKAT': (1, 37)}
+```
+
+Damit ist der Mutant gefangen — durch die **Probe**, nicht durch den
+Vertrag. Genau die Lücke, die Sie benannt haben.
+
+**Nebenwirkung behoben:** der Live-Snapshot (38/37/1) steht **nicht**
+in der Vertrags-Invariante. Er wandert mit jeder Meldung und würde CI
+rot färben ohne Defekt. Die Vertragsfälle nutzen weiter den echten
+Strom — aber die Konstanten-Probe ist synthetisch und stabil.
+
+### 4. „Reihenfolge stabil" — zurückgenommen
+
+Sie hatten recht: Wer Schlüssel vertraglich behandelt, braucht keine
+Reihenfolge. Reihenfolge ist jetzt **FREI**, der Konsument schlägt per
+Schlüssel nach.
+
+### 5. Die Normalisierungs-Grenze war verschwunden
+
+Sie fragten: *„Ist der Posten geschlossen oder verschwunden?"* Antwort:
+**verschwunden.** Er stand weder in der R82-Buchung noch im Stand.
+
+Gemessen — die Grenze explizit:
+
+| Fall | Verhalten | Begründung |
+|---|---|---|
+| Leerzeilen 1× vs 3× | **KOLLISION** | Formatierung |
+| Trailing spaces | **KOLLISION** | folgenlos |
+| CRLF == LF | **KOLLISION** | Transportformat |
+| Tab vs Space | getrennt | in Code bedeutungstragend |
+| Groß-/Klein | getrennt | Namen unterscheiden sich |
+| Satzzeichen | getrennt | Satz ≠ Frage |
+| Wortstellung | getrennt | Rollen |
+
+`scripts/test_normalisierung.py` assertiert **beide Richtungen** — ein
+Test, der nur Kollisionen fordert, würde aggressive Normalisierung
+befürworten.
+
+Offen (R85): Unicode-NFC/NFD. Dasselbe Wort in anderer Normalform
+kollidiert **nicht** → Flanke 1 (Redundanz), nicht Flanke 2 (Verlust).
+Deshalb nicht blockierend, aber benannt.
+
+### 6. Schema-Invarianz über alle Zweige
+
+Der Mock fand in R82 **einen** Zweig ohne Messachse. Verallgemeinert:
+
+```
+FAIL aufruf -> verwerfen   Schema-Luecke auf exit=2: [Paare, KANAL-DUPLIKAT, ...]
+FAIL fehlt -> ungeprueft   Schema-Luecke auf exit=3: [...]
+```
+
+Drei Zweige emittierten keine Achse. Jetzt: **jeder** Exit emittiert
+`Paare;KANAL-DUPLIKAT;WIEDERHOLUNG;uebersprungen;json` — auch wenn alle
+Werte 0 sind. Ein Feld darf nicht existieren, weil der Exit zufällig 0
+ist.
+
+**Nebenfund des Tests, gegen mich:** `KANAL-DUPLIKAT` enthält einen
+Bindestrich. Mein Regex `[A-Za-z_]+` zerlegte ihn in `DUPLIKAT` — der
+Schlüssel war nie lesbar. Der Test fand es, bevor der Vertrag ihn
+festschrieb.
+
+### 7. Der Zaun, nicht der Fang
+
+Zwei Runden hintereinander fing der Prüfer ein Skript **nachdem** es
+existierte. Prävention statt Detektion:
+
+```
+scripts/.skript_baseline.json  = 162 Skripte (Vorzustand)
+alles andere                   = Befund
+```
+
+Erster Versuch war eine Musterliste — 162 → 91 → … Befunde. Das ist
+Musterjagd mit Rundenverbrauch. Die Baseline ist der **Vorzustand**,
+nicht die Erlaubnis: ein neues `scripts/foo.py` fällt sofort auf,
+unabhängig vom Namen.
+
+Probe:
+
+```
+$ touch scripts/zz_zaunprobe.py
+  Skript ohne Korb  Doku: scripts/zz_zaunprobe.py
+$ rm scripts/zz_zaunprobe.py
+  0 Befunde
+```
+
+**Und der Zaun hat seinen eigenen Aufbau gefangen:** die erste Fassung
+filterte auf `count("/") == 2`, während `scripts/x.py` **einen** hat —
+die Prüfung lief ins Leere und meldete 0 Befunde. Eine Prüfung, die
+existiert und nicht greift, ist schlimmer als keine.
+
+### 8. Sperre ersetzt, Fristen begrenzt
+
+Die Sperre war eine **Pause**, kein Zaun — zwei Brüche in zwei Runden.
+Jetzt gilt eine **Bringschuld**: ein neuer Vertragsfall braucht einen
+**nachgewiesenen blinden Fleck** (ein Fall, der grün war, obwohl er rot
+sein musste), keinen Abdeckungswunsch.
+
+| Nachweis | Runde |
+|---|---|
+| `uebersprung` exit=0 grün | R82 |
+| keiner | R83 (nur Präzisierung) |
+
+Fristen: `ADJ` (Adjudikation) **R84** — läuft sie ab, gilt der Default
+weiter und das Datenverlust-Risiko wird als **akzeptiert** gebucht.
+Nicht mehr „bis entschieden".
+
+### 9. Der Mock bleibt ein Werkzeug
+
+`mock_selbstreferenz` steht jetzt im Vertrag: der Mock beweist
+Konsistenz zwischen Code und Vertrag — nicht Konsumierbarkeit durch
+Dritte. **`ING` bleibt der einzige externe Validator**, und er hat noch
+keine Zeile gelesen.
+
+### 10. Stand
+
+| Größe | Wert |
+|---|---|
+| Vertragsfälle | 10/10 |
+| Mutationen | **6/6** |
+| Hash-Eingang | 6/6 |
+| Konsument | **7/7** |
+| Konstanten | **3/3** |
+| Normalisierung | **8/8** |
+| Skripte ohne Korb | 0 (Baseline 162) |
+| Vertrag | v3 |
+
+**Der Satz der Runde:** Ein Mutant, der die richtige Zahl rät, ist
+unbeobachtbar, solange nur ein Fixture sie verlangt — und eine Prüfung,
+die existiert und ins Leere läuft, meldet 0 Befunde und ist damit
+schlimmer als keine.
+

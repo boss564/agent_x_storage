@@ -176,8 +176,15 @@ MUTATIONEN = [
     # nichts mehr und der Runner meldete "Muster nicht gefunden" — ein
     # Mutationsloch, kein gruener Lauf. Das ist Runde 79 eine Etage hoeher.
     ("Text", "KANAL-DUPLIKAT={kanal}", "KANAL-DUPLIKAT=0"),      # Zaehler stumm
-    ("Exit", "return 1 if paare else 0", "return 0"),            # Duplikat nicht blockiert
-    ("Exit4", "return 4", "return 0"),                           # unvollstaendig als grün
+    # §A-ZZZZ130 (Runde 83): **die Konstante, die richtig raet.** Der
+    # Mutant setzt den Zaehler auf 37 statt zu zaehlen. Er besteht jedes
+    # Fixture, das 37 erwartet — und muss an test_konstanten.py
+    # scheitern, wo Fixture A 0 und B 1 verlangt.
+    ("Konstante", "KANAL-DUPLIKAT={kanal}", "KANAL-DUPLIKAT=37"),
+    # Die Exit-Mutation prueft, dass ein Duplikat wirklich blockiert:
+    # der Strom-Zweig muss ohne Duplikat 0 liefern.
+    ("Exit", "return aggregiere(1, 4 if _u else 1)", "return aggregiere(0, 0)"),
+    ("Exit4", "4 if LESESTAT[\"json\"] >= JSON_SCHWELLE else 0", "0"),
     ("stderr", "DIE WACHE TRÄGT NICHT", "WACHE LAEUFT"),         # Wort weg
     ("Zweig", None, None),  # Reihenfolge, s. _mutiere_zweig
 ]
@@ -200,6 +207,21 @@ def _mutiere(feld: str, src: str) -> str | None:
             # Reichweite.
             return src.replace(alt, neu) if alt in src else None
     return None
+
+
+def _konstanten_probe(script: Path) -> bool:
+    """True, wenn der Mutant die drei Konstanten-Proben NICHT besteht."""
+    import tempfile as _tf
+    with _tf.TemporaryDirectory() as td:
+        d = Path(td)
+        t = d / "konst.py"
+        t.write_text(
+            (ROOT / "scripts" / "test_konstanten.py").read_text(encoding="utf-8")
+            .replace('Path(__file__).resolve().parent / "einwurf_waechter.py"',
+                     f'Path({str(script)!r})'), encoding="utf-8")
+        r = subprocess.run([sys.executable, str(t)], capture_output=True,
+                           text=True, cwd=d)
+        return r.returncode != 0
 
 
 def mutationssuite(vertrag: dict, strom: list, neu_text: str) -> tuple[int, int, list[str]]:
@@ -240,7 +262,12 @@ def mutationssuite(vertrag: dict, strom: list, neu_text: str) -> tuple[int, int,
             kopie = Path(td) / "waechter_mutiert.py"
             kopie.write_text(mutiert, encoding="utf-8")
             nok, nges, nmsg = fahre(kopie, vertrag, strom, neu_text)
-            if nok == nges:
+            # §A-ZZZZ131 (Runde 83): **zwei Fixtures statt einer.** Der
+            # Konstanten-Mutant besteht jeden Vertragsfall, der nur 1
+            # erwartet. Er scheitert erst an abweichenden Soll-Werten.
+            _konst_rot = _konstanten_probe(kopie)
+            _gefangen = (nok != nges) or _konst_rot
+            if not _gefangen:
                 # Verändert der Mutant überhaupt eine assertierte Ausgabe?
                 if not any(m.startswith("FAIL") for m in nmsg):
                     meldungen.append(
@@ -251,8 +278,9 @@ def mutationssuite(vertrag: dict, strom: list, neu_text: str) -> tuple[int, int,
                                  f"({nok}/{nges} grün)")
                 continue
         ok += 1
-        meldungen.append(f"ok   Mutation {feld:8s} gefangen "
-                         f"({nok}/{nges} grün)")
+        _wie = (f"{nok}/{nges} grün" if nok != nges
+                else "Vertrag grün, Konstanten-Probe rot")
+        meldungen.append(f"ok   Mutation {feld:9s} gefangen ({_wie})")
     return ok, len(MUTATIONEN), meldungen
 
 

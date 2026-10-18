@@ -74,6 +74,14 @@ werktest:
 	@echo "📥 KONSUMENT — liest die Ingestion die Exit-Codes"
 	@echo "================================================="
 	@python3 scripts/mock_ingestion.py
+	@echo ""
+	@echo "🔢 KONSTANTEN — die Zahl folgt der Eingabe"
+	@echo "=========================================="
+	@python3 scripts/test_konstanten.py
+	@echo ""
+	@echo "🧭 NORMALISIERUNG — beide Flanken"
+	@echo "================================="
+	@python3 scripts/test_normalisierung.py
 
 compile:
 	@echo "🔨 COMPILE — Foundry-Baum"

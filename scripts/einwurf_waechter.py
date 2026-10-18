@@ -196,6 +196,44 @@ def pruefe_strom(strom: list[tuple[str, str]]) -> tuple[int, int, list[str]]:
     return paare, kanal, bericht
 
 
+# §A-ZZZZ129 (Runde 83): **die Schwere-Ordnung als Gesetz, nicht als
+# Reihenfolge im Code.** Bis Runde 82 entschied die Stelle, an der ein
+# `return` stand, welcher Befund gewann — bei "Duplikat + unparsbar"
+# gewann das Duplikat, weil sein `return` zuerst kam. Der Vertrag sagte
+# dazu nichts.
+#
+# Die Achse ist **Sicherheit des Urteils**, nicht Haerte:
+#
+#   2  kein Urteil ueber die Meldung      (Aufruffehler)
+#   3  gar nichts geprueft                 (Stream unlesbar)
+#   4  geprueft, aber unvollstaendig       (Meldungsbefund + Luecke)
+#   1  vollstaendig geprueft: Duplikat     (Meldungsbefund, kein Zweifel)
+#   0  vollstaendig geprueft: neu          (kein Befund)
+#
+# **Exit-Codes sind nominal, nicht ordinal.** Numerisch ist 1 < 4, aber
+# 4 ist das strengere Urteil. Wer `exit > 1` vergleicht, baut falsch.
+# Deshalb ist die Rangfolge hier als Tabelle hinterlegt, und genau eine
+# Funktion entscheidet — jeder zweite Vergleichsort waere ein Fehler.
+_SCHWERE = {0: 0, 1: 1, 4: 2, 3: 3, 2: 4}
+
+
+def aggregiere(*kandidaten: int) -> int:
+    """Der strengste Urteils-Exit gewinnt. Reihenfolge sonst irrelevant."""
+    return max(kandidaten, key=lambda c: _SCHWERE.get(c, 9))
+
+
+def achse(paare: int, kanal: int, wieder: int, ueber: int | None = None) -> str:
+    """Die Messachse — auf JEDEM Zweig, mit denselben Schluesseln.
+
+    Runde 82 emittierte sie nur dort, wo der Autor sie gerade brauchte.
+    Ein Konsument, der `Paare` liest, darf je nach Exit nicht auf None
+    stossen.
+    """
+    u = LESESTAT["json"] if ueber is None else ueber
+    return (f"Paare={paare};KANAL-DUPLIKAT={kanal};WIEDERHOLUNG={wieder};"
+            f"uebersprungen={u};json={u};")
+
+
 def main(argv: list[str]) -> int:
     # §A-ZZZZ111a: **`--einwurf` zuerst prüfen.** Die erste Fassung fragte
     # `--strom` zuerst ab, und weil `--einwurf` den Strom als Referenz
@@ -204,6 +242,7 @@ def main(argv: list[str]) -> int:
     # Lesen: der Test war grün aus dem falschen Grund.
     if "--einwurf" in argv:
         if "--strom" not in argv:
+            print(achse(0, 0, 0), end="")
             print("--einwurf braucht --strom als Referenz", file=sys.stderr)
             return 2
         try:
@@ -211,6 +250,13 @@ def main(argv: list[str]) -> int:
             text = Path(argv[argv.index("--einwurf") + 1]).read_text(
                 encoding="utf-8")
         except (StreamUnlesbar, OSError) as e:
+            # §A-ZZZZ128 (Runde 83): **das Schema ist ueber alle Urteile
+            # invariant.** Runde 82 liess den Exit-3-Zweig ohne Messachse
+            # — ein Konsument, der immer `Paare=` liest, stiess hier auf
+            # nichts. Jetzt emittiert JEDER Exit die volle Achse, auch
+            # wenn alle Werte 0 sind. Ein Feld darf nicht existieren,
+            # weil der Exit zufaellig 0 ist.
+            print(achse(0, 0, 0), end="")
             print(f"DIE WACHE TRÄGT NICHT: {e}", file=sys.stderr)
             return 3
         h = digest(text)
@@ -224,19 +270,33 @@ def main(argv: list[str]) -> int:
                 # Messachse. Der Mock-Konsument fragte `Paare==1` und
                 # fand nichts — Befund des Konsumenten, nicht des
                 # Detektors. Jetzt dieselbe Achse wie der Strom-Lauf.
-                print(f"Paare=1;KANAL-DUPLIKAT={'1' if ts_gleich else '0'};"
-                      f"WIEDERHOLUNG={'0' if ts_gleich else '1'};"
-                      f"WIEDERHOLUNG;treffer={i + 1};"
-                      f"sha={h[:12]};aktion=blockieren")
-                return 1
-        print(f"NEU;sha={h[:12]};aktion=zustellen")
-        return 0
+                # §A-ZZZZ129 (Runde 83): **Aggregation, nicht Maskierung.**
+                # Unparsbare Zeilen im referenzierten Strom heben das
+                # Urteil auf Exit 4: das Duplikat ist ein Teilbefund, der
+                # Gesamtstrom wurde nicht vollstaendig geprueft. Bis
+                # Runde 82 verschluckte Exit 1 den Alarm, fuer den Exit 4
+                # gebaut wurde. Die Regel ist EINE Funktion (aggregiere),
+                # nicht ein Vorrang-If.
+                _u = LESESTAT["json"] >= JSON_SCHWELLE
+                print(achse(1, 1 if ts_gleich else 0,
+                            0 if ts_gleich else 1, LESESTAT["json"]),
+                      end="")
+                print(f"{'KANAL-DUPLIKAT' if ts_gleich else 'WIEDERHOLUNG'};"
+                      f"treffer={i + 1};"
+                      f"sha={h[:12]};aktion="
+                      f"{'blockieren' if not _u else 'blockieren+marke'}")
+                return aggregiere(1, 4 if _u else 1)
+        print(achse(0, 0, 0, LESESTAT["json"]), end="")
+        print(f"NEU;sha={h[:12]};aktion="
+              f"{'zustellen' if LESESTAT['json'] < JSON_SCHWELLE else 'zustellen+marke'}")
+        return aggregiere(0, 4 if LESESTAT["json"] >= JSON_SCHWELLE else 0)
 
     if "--strom" in argv:
         p = Path(argv[argv.index("--strom") + 1])
         try:
             strom = lese_strom(p)
         except StreamUnlesbar as e:
+            print(achse(0, 0, 0, 0), end="")
             print(f"DIE WACHE TRÄGT NICHT: {e}", file=sys.stderr)
             return 3
         paare, kanal, bericht = pruefe_strom(strom)
@@ -259,8 +319,9 @@ def main(argv: list[str]) -> int:
         # musste Etiketten parsen — jedes Relabel brach den Vertrag
         # (Runde 81: 8/9 rot bei reiner Textaenderung). Jetzt
         # `schluessel=wert;` mit stabilen ASCII-Schluesseln.
-        print(f"Meldungen={len(strom)};Paare={paare};"
-              f"KANAL-DUPLIKAT={kanal};WIEDERHOLUNG={paare - kanal}{_us}")
+        print(f"Meldungen={len(strom)};"
+              + achse(paare, kanal, paare - kanal)[:-1]
+              + f";kurz={LESESTAT['kurz']};envelope={LESESTAT['envelope']}")
         # §A-ZZZZ121b: **die Schwelle ist Vertrag, nicht Gefühl.**
         if LESESTAT["json"] >= JSON_SCHWELLE:
             print(f"WARNUNG: {LESESTAT['json']} unparsbare Zeile(n) — "
@@ -274,10 +335,11 @@ def main(argv: list[str]) -> int:
         # Tor-Verbraucher, der nur den Exit-Code liest, stellte den Inhalt
         # zu und sah die Warnung nie. Exit 3 = gar nicht geprueft,
         # Exit 4 = geprueft, aber nicht vollstaendig.
-        if LESESTAT["json"] >= JSON_SCHWELLE:
-            return 4
-        return 1 if paare else 0
+        # §A-ZZZZ129: EINE Aggregationsstelle, nicht drei ifs.
+        return aggregiere(1 if paare else 0,
+                          4 if LESESTAT["json"] >= JSON_SCHWELLE else 0)
 
+    print(achse(0, 0, 0, 0), end="")
     print(__doc__.strip(), file=sys.stderr)
     return 2
 

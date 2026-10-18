@@ -1,7 +1,7 @@
 {
-  "_version": 2,
+  "_version": 3,
   "_zweck": "Maschinenlesbarer Vertrag des Einwurf-Waechters. Single source of truth fuer Repo und externe Ingestion. Wer hier eine Zeile aendert, aendert das Tor ausserhalb dieses Repos mit.",
-  "_stand": "Runde 82 (2026-10-18)",
+  "_stand": "Runde 83 (2026-10-18)",
   "_geltung": "Der Runner (scripts/vertrags_runner.py) importiert diese Datei; die externe Ingestion MUSS sie einlesen. Solange sie es nicht tut, zertifiziert N/N einen Vertrag, den draussen niemand benutzt.",
   "exit_codes": {
     "0": {
@@ -22,9 +22,10 @@
     },
     "3": {
       "urteil": "ungeprueft",
-      "aktion": "zustellen, markiert als UNGEPRUEFT",
+      "aktion": "zustellen, markiert als UNGEPRUEFT, alarmieren",
       "beschreibung": "Der Waechter konnte nicht pruefen (Stream unlesbar, interner Fehler). Fail-open waere ein Loch, fail-closed legt den Kanal still — deshalb zustellen mit sichtbarer Marke. Der Empfaenger dedupliziert manuell.",
-      "begruendung": "Drei Fehler in zwei Runden belegen: Abstuerze sind die dominante Fehlerart, nicht die Ausnahme. Ein fail-closed-Waechter haette den Kanal dreimal stillgelegt."
+      "begruendung": "Runde 83: Exit 3 ist die maximale Urteils-Unsicherheit. Bis v2 trug er keinen Alarm, waehrend das mildere 4 alarmierte — Inversion unter der eigenen Achse. Umbenannt statt umbewertet: 'nichts geprueft' ist ein Zustand, kein Urteil, und ein Konsument, der ihn nicht sieht, stellt blind zu.",
+      "alarm": true
     },
     "4": {
       "urteil": "unvollstaendig_geprueft",
@@ -106,7 +107,8 @@
     {
       "name": "einwurf-bekannt",
       "erwarteter_exit": 1,
-      "text": "WIEDERHOLUNG;treffer="
+      "text": "KANAL-DUPLIKAT;treffer=1",
+      "warum": "Fixture-Strom ohne <timestamp>, Einwurf ohne <timestamp> => beide '?' => Zeitstempel gleich => KANAL-DUPLIKAT, nicht WIEDERHOLUNG. Der Erwartungswert der Runde 82 war falsch, nicht der Code."
     },
     {
       "name": "einwurf-neu",
@@ -173,52 +175,211 @@
       "Detailzeile '  <ETIKETT> #a == #b'"
     ],
     "regel": "Die Messachse (Meldungen=;Paare=;KANAL-DUPLIKAT=;WIEDERHOLUNG=;uebersprungen=;json=) ist Vertrag: Schluessel und Reihenfolge sind stabil. Alles darueber hinaus (Prosa, deutsche Dativformen, Doppelpunkte, Klammern) ist Praesentation und wird NICHT assertiert.",
-    "konsequenz": "Ein Relabel der Praesentation ist kein v3. Eine Aenderung der Schluessel ist ein v3."
+    "konsequenz": "Ein Relabel der Praesentation ist kein v3. Eine Aenderung der Schluessel ist ein v3.",
+    "reihenfolge": "FREI — Praesentation. Ein Konsument schlaegt per Schluessel nach (dict(part.split('=') for part in zeile.split(';') if '=' in part)). Runde 82 hatte 'Reihenfolge stabil' gesagt und damit Praesentation zurueck in den Vertrag gezogen.",
+    "werte": "Messung. Assertiert, aber NIE aus der Ausgabe des Prueflings — siehe fixtures_mit_soll."
   },
   "verantwortliche": {
-    "regel": "Jeder offene Posten hat einen Menschen mit Rolle, nicht eine Datei mit Pfad.",
+    "regel": "Jeder Posten hat einen Menschen mit Rolle. 'Betreiber' nur fuer POLITIK; Code-Posten gehoeren dem Betreiber als Maintainer.",
     "posten": [
       {
         "id": "R73",
         "posten": "Runde-73-Luecke",
-        "eigner": "Betreiber (Buchungsmechanismus)",
-        "faellig": "R83"
+        "eigner": "Betreiber (Maintainer check_claude_md)",
+        "disziplin": "code",
+        "faellig": "R85"
       },
       {
         "id": "BC",
         "posten": "Bytecode-Blocknummer",
-        "eigner": "Betreiber (bytecode_manifest)",
-        "faellig": "R83"
+        "eigner": "Betreiber (Maintainer bytecode_manifest)",
+        "disziplin": "code",
+        "faellig": "R85"
       },
       {
         "id": "NRM",
         "posten": "Normalisierungs-Grenze",
-        "eigner": "Betreiber",
-        "faellig": "R82"
+        "eigner": "Betreiber (Maintainer normalisiere)",
+        "disziplin": "code",
+        "faellig": "R83"
       },
       {
         "id": "ADJ",
         "posten": "Adjudikation bewusste Neusendung",
         "eigner": "Betreiber",
-        "faellig": "vor Ingestion",
+        "disziplin": "politik",
+        "faellig": "R84 oder vor Ingestion — was frueher eintritt",
         "vorlaeufig": {
-          "wert": "beide Etiketten Exit 1",
+          "wert": "beide Etiketten Exit 1 (Duplikat)",
           "risiko": "bewusste Neusendung wird unterdrueckt (Datenverlust)",
-          "annahme_bis": "Betreiber entscheidet"
+          "annahme_bis_runde": "R84"
         }
       },
       {
         "id": "VRT",
         "posten": "Vertrags-Versionierung",
-        "eigner": "Betreiber",
-        "faellig": "R84"
+        "eigner": "Betreiber (Maintainer waechter_vertrag)",
+        "disziplin": "code",
+        "faellig": "R85"
       },
       {
         "id": "ING",
-        "posten": "Ingestion liest Exit 4 und Messachse",
+        "posten": "Ingestion liest Exit-Codes und Achse",
         "eigner": "Betreiber (externer Konsument)",
+        "disziplin": "extern",
         "faellig": "vor Go-Live"
       }
     ]
+  },
+  "aggregation": {
+    "regel": "Ein Lauf hat EINE Exit. Bei mehreren gleichzeitigen Befunden gewinnt der strengste nach _SCHWERE.",
+    "rangfolge": [
+      "2 (kein Urteil)",
+      "3 (nichts geprueft)",
+      "4 (unvollstaendig)",
+      "1 (Duplikat)",
+      "0 (neu)"
+    ],
+    "implementiert_in": "einwurf_waechter.aggregiere() — genau eine Stelle",
+    "fall_muell_plus_duplikat": {
+      "bis_runde_82": "exit 1 — der Alarm, fuer den 4 gebaut wurde, wurde verschluckt",
+      "seit_runde_83": "exit 4, aktion=blockieren+marke",
+      "warum": "Das Duplikat bleibt ein Teilbefund (Paare=1), der Gesamtstrom ist aber nicht vollstaendig geprueft."
+    },
+    "fall_muell_plus_neu": {
+      "bis_runde_82": "exit 0",
+      "seit_runde_83": "exit 4, aktion=zustellen+marke"
+    },
+    "verbote": [
+      "Drei ifs mit verschiedenen return-Stellen. Genau eine Aggregationsfunktion.",
+      "Exit-Codes numerisch/ordinal vergleichen. 1 < 4 im Alphabet der Zahlen, aber 4 ist das strengere Urteil."
+    ]
+  },
+  "nominal_nicht_ordinal": {
+    "regel": "Exit-Codes sind Namen, keine Rangzahlen. `exit > 1` ist ein Defekt, nicht eine Abkuerzung.",
+    "konsument_muss": "Exit-Code als Schluessel nachschlagen (dict), nicht vergleichen.",
+    "geprueft_durch": "scripts/mock_ingestion.py — jede Zahl einzeln abgebildet, kein Vergleich"
+  },
+  "unbekannter_exit": {
+    "regel": "Ein Exit-Code, den der Konsument nicht kennt, ist fail-closed zu behandeln: verwerfen + alarmieren.",
+    "grund": "Ein v1-Konsument kennt 0/1/3. Trifft er 4 und laesst durch, hat er einen Alarm verschluckt. Trifft er 4 und blockiert, verliert er einen Teilbefund — aber sichtbar.",
+    "bekannt_bei_v1": [
+      0,
+      1,
+      3
+    ]
+  },
+  "schema_invarianz": {
+    "regel": "JEDER Exit emittiert dieselben Messachsen-Schluessel: Paare, KANAL-DUPLIKAT, WIEDERHOLUNG, uebersprungen, json.",
+    "grund": "Runde 82 emittierte die Achse nur dort, wo der Autor sie brauchte — Exit 3 und der Aufrufzweig hatten keine. Ein Feld darf nicht existieren, weil der Exit zufaellig 0 ist.",
+    "geprueft_durch": "scripts/mock_ingestion.py prueft die Achse auf allen Zweigen"
+  },
+  "fixtures_mit_soll": {
+    "regel": "Mindestens ZWEI Fixtures mit unterschiedlichen Soll-Werten. Ein einziger Wert faengt nur falsche Konstanten.",
+    "fixture_a": {
+      "strom": "1 Meldung, 0 Duplikate",
+      "soll": "Paare=0;KANAL-DUPLIKAT=0;WIEDERHOLUNG=0"
+    },
+    "fixture_b": {
+      "strom": "2 identische + 1 verschieden",
+      "soll": "Meldungen=3;Paare=1;KANAL-DUPLIKAT=1"
+    },
+    "fixture_c": {
+      "strom": "3 identische, ts verschieden",
+      "soll": "Paare=2;WIEDERHOLUNG=2"
+    },
+    "warum": "Ein hartkodiertes 37 besteht jedes Fixture, das 37 erwartet. Erst abweichende Soll-Werte binden die Rechnung an die Eingabe.",
+    "nicht_im_echten_strom": "Die Werte 38/37/1 des Live-Stroms sind ein Snapshot und gehoeren NICHT in die Vertrags-Invariante — neue Meldungen wuerden CI rot faerben ohne Defekt."
+  },
+  "normalisierungs_grenze": {
+    "stand": "Runde 83 — der Posten war in R82 weder geschlossen noch offen, er war verschwunden.",
+    "flanke_1_zu_wenig_normalisiert": {
+      "risiko": "Metadatum leckt in den Hash -> echtes Duplikat wird als neu zugestellt (Redundanz).",
+      "geprueft_durch": "scripts/test_hash_eingang.py (timestamp, seq, channel)"
+    },
+    "flanke_2_zu_viel_normalisiert": {
+      "risiko": "Inhaltsunterschied verschwindet -> FALSCHES Duplikat -> Datenverlust durch Verwerfen.",
+      "warum_gefaehrlicher": "Flanke 1 kostet Redundanz, Flanke 2 kostet Inhalt. Ein falsches Duplikat ist irreversibel.",
+      "geprueft_durch": "scripts/test_normalisierung.py"
+    },
+    "bewusste_kollisionen": [
+      {
+        "fall": "Leerzeilen kollabiert (1 vs 3)",
+        "grund": "Zeilenumbrueche sind Formatierung, nicht Inhalt"
+      },
+      {
+        "fall": "Trailing spaces entfernt",
+        "grund": "folgenlose Formatierung am Zeilenende"
+      },
+      {
+        "fall": "CRLF == LF",
+        "grund": "Transportformat, kein Inhalt"
+      }
+    ],
+    "bewusst_getrennt": [
+      {
+        "fall": "Tab vs Space",
+        "grund": "in Code/Tabellen bedeutungstragend"
+      },
+      {
+        "fall": "Gross-/Kleinschreibung",
+        "grund": "Namen und Pfade unterscheiden sich darin"
+      },
+      {
+        "fall": "Umlaut NFC vs NFD",
+        "grund": "UNBEKANNT, nicht entschieden — offener Posten"
+      },
+      {
+        "fall": "Satzzeichen",
+        "grund": "Bedeutung (Satz vs Frage)"
+      },
+      {
+        "fall": "Wortstellung",
+        "grund": "Bedeutung"
+      }
+    ],
+    "offen": {
+      "fall": "Unicode-Normalform",
+      "status": "nicht entschieden",
+      "eigner": "Betreiber",
+      "faellig": "R85",
+      "problem": "NFC und NFD desselben Wortes haben verschiedene Hashes -> dasselbe Wort gilt als neu. Das ist Flanke 1, nicht Flanke 2, also Redundanz statt Verlust — deshalb nicht blockierend."
+    }
+  },
+  "vertragsfaelle_sperre": {
+    "stand": "Runde 83 — die Sperre war eine Pause, kein Zaun.",
+    "befund": "Zwei Brueche in zwei Runden (9 -> 10 Faelle). Jeder einzeln begruendet (der alte Fall konnte nicht rot werden), aber ohne Meta-Entscheid sammeln sich die Ausnahmen still.",
+    "regel": "Ein neuer Vertragsfall ist zulaessig, wenn ein BLINDER FLECK NACHGEWIESEN ist: ein Fall, der gruen war, obwohl er rot sein musste. Der Nachweis ist ein konkreter Lauf, kein Argument. Ein Fall, der nur 'zusaetzliche Abdeckung' verspricht, ist kein blinder Fleck.",
+    "ersetzt": "Nicht mehr 'Sperre bei N Faellen', sondern 'Bringschuld: Blindspot-Nachweis'.",
+    "nachweise_r82": [
+      "uebersprung war exit=0 gruen (Ausgang nicht geprueft) -> uebersprung-allein"
+    ],
+    "nachweise_r83": [
+      "keiner — keine neuen Faelle, nur Praezisierung"
+    ]
+  },
+  "fristen": {
+    "regel": "Jede Frist ist eine Runde oder ein Trigger. 'Bis entschieden' ist keine Frist.",
+    "posten": {
+      "ADJ": "R84 — Entscheidung des Betreibers, nicht des Codes. Laeuft R84 ohne Entscheidung ab, gilt der dokumentierte Default weiter und das Datenverlust-Risiko wird als AKZEPTIERT gebucht.",
+      "NRM": "R83 — geschlossen (test_normalisierung.py, beide Flanken)",
+      "R73": "R85",
+      "BC": "R85",
+      "VRT": "R85",
+      "ING": "vor Go-Live (externer Trigger)"
+    }
+  },
+  "mock_selbstreferenz": {
+    "befund": "mock_ingestion.py stammt vom selben Autor wie der Detektor und traegt dessen Modell des Vertrags. Er beweist Konsistenz zwischen Code und Vertrag, nicht Konsumierbarkeit durch Dritte.",
+    "was_er_leistet": [
+      "Schema-Invarianz ueber alle Exit-Codes",
+      "Exit->Aktion-Mapping als Referenz",
+      "Regression bei jeder Vertragsaenderung"
+    ],
+    "was_er_nicht_leistet": [
+      "Beweis, dass die echte Ingestion so gebaut ist",
+      "Beweis, dass ein Dritter den Vertrag ohne Autor liest"
+    ],
+    "einziger_externer_validator": "ING (echte Ingestion, noch keine Zeile gelesen)"
   }
 }

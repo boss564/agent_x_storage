@@ -197,7 +197,9 @@ NO_TEST_SUMMARY: set[str] = {
     # Beide registriert, weil sie im Makefile-Ziel `werktest` laufen und
     # ihre Zahlen in die Berichtszeile gerendert werden.
     "scripts/test_hash_eingang.py",        # 6/6 Hash-Eingang (Signatur+Trennung)
-    "scripts/mock_ingestion.py",           # 6/6 Konsument (Exit→Aktion)
+    "scripts/mock_ingestion.py",           # 7/7 Konsument (Exit→Aktion, alle Zweige)
+    "scripts/test_konstanten.py",          # 3/3 abweichende Soll-Werte (Konstanten)
+    "scripts/test_normalisierung.py",      # 8/8 Normalisierungs-Grenze (2 Flanken)
     "scripts/test_gaeb_reference.py",  # X83-Fixtures gitignore; TMP-checkout ohne Referenzdaten
     "scripts/test_bvbs_pruefdatei.py",     # braucht externe Pruefdatei
     "scripts/export_backtest_signals.py",  # Daten-Exporter, kein Test
@@ -5783,17 +5785,81 @@ def check_doc_inventories(root: Path, rep: Report) -> None:
                     rep.ok()
 
 
+# §A-ZZZZ135 (Runde 83): **der Zaun, nicht der Fang.**
+#
+# Bis Runde 82 prueften wir `scripts/test_*.py` gegen TEST_SCRIPTS.
+# Das fing zwei Runden hintereinander das Skript, das der Autor gerade
+# angelegt hatte — nachdem es existierte. Und es uebersah per Muster
+# alles, was nicht `test_` heisst: `mock_ingestion.py` fiel durch.
+#
+# Jetzt gilt die **Umkehr der Bringschuld**: jede .py unter scripts/,
+# die NICHT in einem der drei anerkannten Koerbe liegt, ist ein Befund.
+# Ein neues Artefakt ist damit standardmaessig sichtbar, nicht
+# standardmaessig geduldet.
+#
+# Die Koerbe:
+#   TEST_SCRIPTS        Test- oder Messlauf mit x/y-Bilanz
+#   NO_TEST_SUMMARY     Test ohne x/y-Bilanz (eigener Berichtsblock)
+#   SKRIPT_OHNE_LAUF    Werkzeug/Demo/CLI, das nicht als Test laufen muss
+# Uebergangsregel statt Massenausnahme: die Werkzeug-Koerbe werden aus
+# dem Dateinamen abgeleitet, nicht einzeln gepflegt. Damit ist ein NEUES
+# `test_*.py` sofort meldepflichtig (das war der Fang), waehrend die
+# bestehenden 120 Werkzeuge nicht 120 Zeilen Registrierung brauchen.
+# Was NICHT durch Muster faellt, bleibt ein Befund.
+#
+# §A-ZZZZ136 (Runde 83): **Baseline statt Musterjagd.**
+# Der erste Versuch (Musterliste) erzeugte 162 -> 91 -> ... Befunde:
+# jedes Muster deckte ein Praefix ab und liess das naechste durch. Das
+# ist Musterjagd mit Rundenverbrauch. Der Zaun ist stattdessen:
+#
+#   scripts/.skript_baseline.json  = die HEUTE vorhandenen Skripte.
+#   Alles, was NICHT in der Baseline steht, ist meldepflichtig.
+#
+# Die Baseline ist der Vorzustand, nicht die Erlaubnis. Ein neues
+# `scripts/foo.py` faellt sofort auf, unabhaengig vom Namen. Wird ein
+# Baseline-Skript geloescht, schrumpft die Datei beim naechsten
+# `--baseline-neu`; sie waechst nie von selbst.
+BASELINE_DATEI = "scripts/.skript_baseline.json"
+
+
+def _lade_baseline(root: Path) -> set[str]:
+    f = root / BASELINE_DATEI
+    try:
+        import json as _j
+        return set(_j.loads(f.read_text(encoding="utf-8")))
+    except (OSError, ValueError):
+        return set()
+
+
+def _ist_werkzeug(name: str) -> bool:
+    return False  # Muster abgeschafft; die Baseline entscheidet.
+
+
+SKRIPT_OHNE_LAUF: set[str] = set()
+
+
 def check_undocumented_tests(root: Path, rep: Report) -> None:
-    """Find all scripts/test_*.py files and check they're registered."""
+    """Jede .py unter scripts/ muss in einem der drei Koerbe liegen."""
     on_disk = sorted(
         p.relative_to(root).as_posix()
-        for p in root.glob("scripts/test_*.py")
+        for p in root.rglob("*.py")
+        if "__pycache__" not in p.parts
     )
-    registered = {t[0] for t in TEST_SCRIPTS} | NO_TEST_SUMMARY
+    known = ({t[0] for t in TEST_SCRIPTS} | NO_TEST_SUMMARY
+             | SKRIPT_OHNE_LAUF | _lade_baseline(root))
+    # Nur der Wurzelordner scripts/ — Unterordner haben eigene Strukturen.
+    # §A-ZZZZ135b: `scripts/x.py` hat EINEN Schraegstrich, nicht zwei.
+    # Die erste Fassung filterte auf count("/")==2 und lief ins Leere —
+    # eine Pruefung, die existiert und nicht greift, ist schlimmer als
+    # keine: sie meldet 0 Befunde. Gefunden durch Nachzaehlen der Liste,
+    # nicht durch Lesen.
+    on_disk = [s for s in on_disk
+               if s.startswith("scripts/") and s.count("/") == 1]
     for script in on_disk:
-        if script not in registered:
-            rep.fail(None, "Testskript nicht registriert",
-                     script, "fehlt in TEST_SCRIPTS oder NO_TEST_SUMMARY")
+        if script in known or _ist_werkzeug(script):
+            continue
+        rep.fail(None, "Skript ohne Korb",
+                 script, "weder Test noch Werkzeug — Korb fehlt")
 
 
 _COUNT_SNAPSHOT = ".check_claude_md.last.json"
@@ -9698,7 +9764,13 @@ def main() -> int:
                      "Hash-Eingang"),
                     ("mock_ingestion.py",
                      r"(\d+)/(\d+) Konsumenten-Faelle gruen",
-                     "Konsument")):
+                     "Konsument"),
+                    ("test_konstanten.py",
+                     r"(\d+)/(\d+) Konstanten-Proben gruen",
+                     "Konstanten"),
+                    ("test_normalisierung.py",
+                     r"(\d+)/(\d+) Normalisierungs-Grenzen gruen",
+                     "Normalisierung")):
                 try:
                     _r = subprocess.run(
                         [sys.executable, str(root / "scripts" / _sk)],
@@ -9709,8 +9781,10 @@ def main() -> int:
                           else f"{_lab} ohne Ergebnis")
                     if _sk.startswith("test_hash"):
                         _hh = f" · {_t}"
-                    else:
+                    elif _sk.startswith("mock"):
                         _mk = f" · {_t}"
+                    else:
+                        _mk += f" · {_t}"
                     if _r.returncode != 0:
                         _bb.append(f"Bericht: {_lab} rot")
                 except (OSError, subprocess.SubprocessError, re.error):

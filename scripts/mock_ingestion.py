@@ -39,7 +39,7 @@ W = Path(__file__).resolve().parent / "einwurf_waechter.py"
 
 def konsumiere(code: int, stdout: str, stderr: str) -> dict:
     """Die Schnittstelle. Aendert sich hier etwas, aendert sich der Vertrag."""
-    mess = dict(re.findall(r"([A-Za-z_]+)=(\d+)", stdout))
+    mess = dict(re.findall(r"(?:^|;)([A-Za-z_\-]+)=(\d+)", stdout))
     if code == 0:
         aktion, marke = "zustellen", None
     elif code == 1:
@@ -47,6 +47,10 @@ def konsumiere(code: int, stdout: str, stderr: str) -> dict:
     elif code == 2:
         aktion, marke = "verwerfen", "AUFRUFFEHLER"
     elif code == 3:
+        # §A-ZZZZ133 (Runde 83): **3 alarmiert wie 4.** Unter der Achse
+        # "Sicherheit des Urteils" ist 3 der Extrempunkt (nichts geprueft),
+        # 4 der Mittelpunkt. Vorher trug der Extrempunkt keinen Alarm und
+        # der Mittelpunkt schon — Inversion unter der eigenen Achse.
         aktion, marke = "zustellen", "UNGEPRUEFT"
     elif code == 4:
         aktion, marke = "zustellen", "UNVOLLSTAENDIG"
@@ -54,7 +58,7 @@ def konsumiere(code: int, stdout: str, stderr: str) -> dict:
         aktion, marke = "verwerfen", "UNBEKANNT_FAIL_CLOSED"
     return {"exit": code, "aktion": aktion, "marke": marke,
             "alarm": marke in ("AUFRUFFEHLER", "UNVOLLSTAENDIG",
-                               "UNBEKANNT_FAIL_CLOSED"),
+                               "UNGEPRUEFT", "UNBEKANNT_FAIL_CLOSED"),
             "messung": mess, "warnung": bool(stderr.strip())}
 
 
@@ -79,7 +83,14 @@ def main() -> int:
                                        encoding="utf-8")
         (d / "nurmuell.jsonl").write_text("KEIN JSON\n", encoding="utf-8")
 
+        # §A-ZZZZ132 (Runde 83): **Muell + Duplikat.** Der Fall, den
+        # Runde 82 offen liess: Exit 1 verschluckte den Exit-4-Alarm.
+        (d / "dupmuell.jsonl").write_text(zeile + "\nKEIN JSON\n",
+                                          encoding="utf-8")
         proben = [
+            ("muell+duplikat -> 4", ["--einwurf", str(d / "duplikat.md"),
+                                     "--strom", str(d / "dupmuell.jsonl")],
+             4, "zustellen", "UNVOLLSTAENDIG"),
             ("neu -> zustellen", ["--einwurf", str(d / "neu.md"),
                                   "--strom", str(d / "strom.jsonl")],
              0, "zustellen", None),
@@ -100,8 +111,17 @@ def main() -> int:
             faelle += 1
             code, out, err = _lauf(args, d)
             k = konsumiere(code, out, err)
+            k_mess = k["messung"]
             gut = (code == exit_soll and k["aktion"] == aktion_soll
                    and k["marke"] == marke_soll)
+            # §A-ZZZZ132: Schema-Invarianz — die Achse muss auf JEDEM
+            # Exit lesbar sein, nicht nur dort, wo der Autor sie brauchte.
+            fehlend = [k for k in ("Paare", "KANAL-DUPLIKAT",
+                                   "WIEDERHOLUNG", "uebersprungen", "json")
+                       if k not in k_mess]
+            if gut and fehlend:
+                gut = False
+                print(f"     Schema-Luecke auf exit={code}: {fehlend}")
             if gut and code == 4:
                 # Die Messachse muss die Unvollstaendigkeit tragen.
                 gut = k["messung"].get("json") == "2" or \
