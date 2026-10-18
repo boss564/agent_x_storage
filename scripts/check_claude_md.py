@@ -706,6 +706,8 @@ def self_test_check_counts() -> list[str]:
     # §A-ZZZZ79 (Runde 70): jeder `fail`-Zweig einer Regel läuft.
     failures.extend(gegenlaeufe_fahren())
     failures.extend(pruefe_deckung(list(REGEL_PRUEFER), GEGENLAUF_JE_REGEL))
+    # §A-ZZZZ81 (Runde 71): der Meßbereich ist eine Liste, nicht ein Glob.
+    failures.extend(pruefe_messbereich())
     failures.extend(_self_test_fehlend_vs_leer())
     # §A-ZZZZ56 (Runde 65): **die Liste hat einen Leser.** Runde 64 legte
     # `ZUSTAND_FELDER` an, und keine Zeile las sie — die Zeile hatte
@@ -8067,6 +8069,59 @@ def pruefe_zustandszeile(zeile: str) -> list[str]:
 # diesen Namen `QUITTIERT` statt `FAIL`. Ein `FAIL` heißt dann und nur
 # dann: hier ist etwas offen.
 QUITTUNG_TESTS = ("_self_test_prozent",)
+
+# §A-ZZZZ81 (Runde 71): **der Meßbereich ist eine Liste, nicht ein
+# Verzeichnis.** Zwei Messungen zählen über Bestände, und keiner der
+# beiden darf still wachsen, weil die Akte wächst:
+#
+#   Prosa-Zahlen   — Quelle ist `Path(__file__)`, also **eine Datei**.
+#                    `TAG7_ABNAHME.md` und `BERICHT.md` sind nicht drin.
+#   Blockzahl      — Quelle ist `TAG7_ABNAHME.md`. Wer dort einen Block
+#                    schreibt, verändert die Zahl, die er berichtet.
+#
+# Das ist keine Ausnahme, das ist **Glück mit einer Zahl**: solange
+# niemand einen Glob über `order_execution_engine/ops/` laufen läßt,
+# stimmt der Prosa-Nenner. Deshalb steht der Umfang hier als Liste, mit
+# Test, statt als Annahme im Kopf des Lesers.
+MESSBEREICH: dict[str, tuple[str, ...]] = {
+    "prosa": ("scripts/check_claude_md.py",),
+    "blockzahl": ("order_execution_engine/ops/TAG7_ABNAHME.md",),
+    "protokoll": ("order_execution_engine/ops/TAG7_ABNAHME.md",
+                  "order_execution_engine/ops/BERICHT.md"),
+}
+
+
+def pruefe_messbereich(root: Path | None = None) -> list[str]:
+    """§A-ZZZZ81: die Liste wird gegen die Wirklichkeit gehalten.
+
+    Eine Liste, die behauptet, das Protokoll sei ausgenommen, obwohl der
+    nächste Zähler darüber läuft, ist eine Ausnahme auf Papier. Geprüft
+    werden zwei Dinge: die genannten Dateien existieren, und **kein
+    Glob** wird für die Prosa benutzt.
+    """
+    base = root or Path(__file__).resolve().parent.parent
+    out: list[str] = []
+    for name, dateien in MESSBEREICH.items():
+        for d in dateien:
+            if not (base / d).exists():
+                out.append(f"Meßbereich {name!r}: {d} fehlt — die Liste "
+                           f"steht für einen Bestand, der nicht da ist")
+    # Die Prosa-Quelle ist im Code `Path(__file__)` — genau eine Datei.
+    # Behauptete die Liste mehr oder weniger, wäre sie falsch.
+    _src = Path(__file__).resolve()
+    prosa = MESSBEREICH.get("prosa", ())
+    if len(prosa) != 1:
+        out.append(f"Meßbereich 'prosa': {len(prosa)} Dateien — der "
+                   f"Zähler liest `Path(__file__)`, also genau eine")
+    elif (base / prosa[0]).resolve() != _src:
+        out.append(f"Meßbereich 'prosa': nennt {prosa[0]!r}, der Zähler "
+                   f"liest aber {_src.name!r}")
+    # Und die Gegenprobe: das Protokoll ist **nicht** im Prosa-Bereich.
+    for p in MESSBEREICH.get("protokoll", ()):
+        if p in prosa:
+            out.append(f"Meßbereich: {p} steht zugleich im Prosa-Bereich "
+                       f"— das Protokoll zählt sich dann selbst")
+    return out
 
 # §A-ZZZZ61 (Runde 66): der Nenner des Prosa-Prüfers. Eine Liste, weil die
 # Funktion ihn füllt und `main` ihn druckt — ein Wert, kein Befund.
