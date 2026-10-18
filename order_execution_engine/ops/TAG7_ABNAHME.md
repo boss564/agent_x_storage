@@ -5680,3 +5680,80 @@ letzten. Ältere Rundenblöcke dürfen abweichen und niemand merkt es. Das
 ist die nächste Stelle, an der eine Zahl verschwinden kann; ich habe sie
 hier nicht zugemacht, weil ein Vergleich über alle Blöcke eine Aussage
 über die *Historie* verlangt, die diese Datei nicht führt.
+
+### §71.54 — Runde 48: `None` statt `0`, und eine eigene Fehldiagnose
+
+**1. `0` ist die Zahl, die „grün" und „blind" gemeinsam haben.**
+`_checker_gap` hatte drei Zustände und zwei davon gaben `0` zurück:
+
+| Zustand | vorher | jetzt |
+|---|---|---|
+| Kette und Klassen gleich | `0` | `0` |
+| Kette und Klassen verschieden | `1` | `1` |
+| **Register nicht auflösbar** | **`0`** | **`None`** |
+
+Gemessen vor dem Umbau: `CHECKS = tuple(c for c in (check_a, check_b))`
+lieferte `0`. Jetzt `None`. Der Selbsttest verlangt `isinstance(..., int)`
+für die **eigenen** Richtungen und `is None` für das dynamische Register —
+beide Erwartungen als Literal.
+
+**2. Das Register wird über das Objekt der Iteration aufgelöst.** `_ALL`
+funktioniert genauso wie `CHECKS`. Und die erste Fassung hatte einen
+echten Fehler: sie meldete **jede** `for`-Schleife als unauflösbares
+Register — `for p in rep.problems` inklusive. Die eigene Datei lieferte
+prompt `None`. Die Eigenschaft ist nicht „iteriert", sondern „iteriert
+**und ruft das Iterat als Funktion**":
+
+```
+statisch      1
+dynamisch     None
+anderer Name  1     (_ALL statt CHECKS)
+daten         0     (for p in rep.problems — kein Register)
+```
+
+**3. Die Fehldiagnose der letzten Runde, nachgemessen.** §71.53 hat
+`root=None` als „die Signatur des Fehlers" bezeichnet. `check_counts` war
+kein Fall — sein Fehler war der **Aufruf** `check_counts(text, waves,
+AGENTS_PER_WAVE, rep)` ohne `root`. Der Prüfer für Aufrufe existierte
+nicht; `_reader_calls_without_root` ist er jetzt. Die erste Messung
+lieferte **elf** Fundstellen, davon **eine echte**: genau jener Aufruf in
+der Fixture — er stand seit Runde 44 im Code und ist jetzt mit
+`root=Path(__file__).resolve().parent.parent)` versehen. Die übrigen zehn
+tragen `§A-KR-ANCHOR` und sind Negativtests, die den Default **prüfen
+sollen**; der Prüfer liest die Deklaration aus derselben Zeile.
+
+Der Unterschied, der den Prüfer lebensfähig macht: eine Funktion, die
+`root` annimmt und **nicht braucht** (`_snapshot_path`), ist kein Leser —
+ihr Aufruf ohne `root` ist kein Fehler. `_uses_root_as_path` entscheidet
+das am Rumpf, nicht am Namen.
+
+**4. `_CWD_READERS` ist jetzt lebendig.** Jeder Eintrag muss (a) im
+Modul existieren und (b) tatsächlich `cwd` lesen. Die Probe mit einem
+gelöschten und einem nicht mehr lesenden Eintrag liefert zwei Meldungen —
+ohne sie könnte die Liste nur wachsen.
+
+**5. Verlustfreiheit.** Die Akte verliert keine Blöcke gegen `HEAD~1`:
+`Bezug`-Zeilen, Zeilen und `total=`-Blöcke sind monoton. Der Test ist
+**nicht** im Standardlauf — er gehört an den Commit (`--akte-monoton`),
+weil eine bewusste Kürzung rot werden soll.
+
+**6. Gitlink.** `mode 160000` rot nur ohne `.gitmodules`-Eintrag; die
+Gegenrichtung (deklariert, aber nicht im Baum) bleibt ungeprüft.
+
+**Stand:** Selbsttest **34/34**, Suite **216 passed**.
+
+```
+total=0 chain_total=0 reported=0 unclassified=0 unchecked=0 unclassified_checkers=0
+  Zeilen: 0
+  Referenzen: 0
+  Wellen: 0
+  Tests ohne Skript: 0
+  Inventare: 0
+Bezug: root=/Volumes/THX_OS_ULTRA/Users/olivermueller/agent_x_storage, CLAUDE.md sha256:69159540db89, Baum b247b608+dirty
+```
+
+**Was offen bleibt:** `unchecked` und `unclassified_checkers` sind im
+eigenen Baum `0`, weil `main` und `calibration_run` dieselben sechs
+Prüfer fahren. Das ist heute wahr und morgen nicht mehr geprüft — ein
+Prüfer, der nur im Kalibrierlauf steht, wird erst sichtbar, wenn er dort
+**meldet**. Der Zähler sieht die Registrierung, nicht die Wirkung.

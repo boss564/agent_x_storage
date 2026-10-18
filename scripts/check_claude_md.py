@@ -571,7 +571,10 @@ def self_test_check_counts() -> list[str]:
     failures: list[str] = []
     for text, should_pass, expected_real in cases:
         rep = Report()
-        check_counts(text, waves, AGENTS_PER_WAVE, rep)
+        # §A-NE (Runde 48): `root` explizit — ein Aufruf ohne
+        # liest im Klon relativ und meldet dort andere Zahlen.
+        check_counts(text, waves, AGENTS_PER_WAVE, rep,
+                     root=Path(__file__).resolve().parent.parent)
         ok = not rep.problems
         if ok != should_pass:
             failures.append(
@@ -597,17 +600,19 @@ def self_test_check_counts() -> list[str]:
     failures.extend(_self_test_default_root())
     failures.extend(_self_test_gitlink())
     failures.extend(_self_test_akt_block())
+    failures.extend(_self_test_cwd_readers())
+    failures.extend(_self_test_reader_calls())
     if failures:
         return failures
     # §A-MN (Runde 44): die drei neuen Pruefer sind **eigene** Selbsttests
     # und muessen hier erscheinen — ein Selbsttest, der nicht in der
     # Kopfzeile steht, ist ein Selbsttest, den niemand bucht. Die Summe
     # steht in der Ausgabe, nicht im Kommentar.
-    _SELF_TEST_SCOPE[0] = ("32/32 (5 Zaehlung + 5 Bezugsraum + 14 "
+    _SELF_TEST_SCOPE[0] = ("34/34 (5 Zaehlung + 5 Bezugsraum + 14 "
                            "Differenz/Nenner/Ort/Einheit/Zwillingspfad"
                            " + 1 root-Zaehlung + 1 Literal-Regel"
                            " + 1 Klassenliste + 1 Selbstprobe"
-                           " + 1 Lesepfad + 1 Default-Ort + 1 Gitlink + 1 Akte-Block, 28 Zusagen live)")
+                           " + 1 Lesepfad + 1 Default-Ort + 1 Gitlink + 1 Akte-Block + 1 CWD-Rollen + 1 Leser-Aufruf, 28 Zusagen live)")
 
 
 def _self_test_root_counts() -> list[str]:
@@ -938,7 +943,7 @@ def calibration_run(root: Path, text: str | None = None,
     }
 
 
-def _checker_gap(fn_a: str, fn_b: str, src: str | None = None) -> int:
+def _checker_gap(fn_a: str, fn_b: str, src: str | None = None) -> int | None:
     """Pruefer, die `fn_a` faehrt und `fn_b` nicht kennt.
 
     Dieselbe Regel wie `_rules_run`, aber zwischen zwei **Funktionen**:
@@ -951,20 +956,36 @@ def _checker_gap(fn_a: str, fn_b: str, src: str | None = None) -> int:
     ein Pruefer namens `_reads_without_root` stand in keiner der beiden
     Mengen, und eine Registry (`for c in CHECKS: c(root)`) machte beide
     Differenzen `0/0` — der Pruefer konservierte die Vervielfaeltigung,
-    die er abschaffen soll. Deshalb fragt `_module_functions` nach der
-    **Rolle**, nicht nach dem Namen.
+    die er abschaffen soll.
+
+    §A-NB (Runde 48): **`0` ist die Zahl, die „gruen" und „blind"
+    gemeinsam haben.** Ein dynamisch gebautes Register
+    (`CHECKS = tuple(c for c in (...))`) kann dieser Pruefer nicht
+    aufloesen — und gab bisher `0` zurueck, also Freispruch. Drei
+    Zustaende, zwei davon `0`, ist dieselbe Krankheit wie Runde 44, eine
+    Ebene hoeher. Darum:
+
+      int   — gezaehlt, das Register ist aufgeloest
+      None  — der Pruefer **kennt** das Muster (eine `for`-Schleife ueber
+              einen Namen), findet das Ziel aber nicht. Das ist ein
+              Befund, kein Freispruch. Der Selbsttest verlangt
+              `isinstance(..., int)` fuer die echten Richtungen.
     """
     import ast
     text = src if src is not None else Path(__file__).read_text(encoding="utf-8")
     tree = ast.parse(text)
 
-    def calls(fn_name: str) -> set[str]:
+    def calls(fn_name: str) -> tuple[set[str], bool]:
+        """(Menge, blind) — `blind` heisst: Muster gesehen, Ziel nicht."""
         for n in tree.body:
             if isinstance(n, ast.FunctionDef) and n.name == fn_name:
                 return _called_checkers(n, tree)
-        return set()
+        return set(), False
 
-    a, b = calls(fn_a), calls(fn_b)
+    a, blind_a = calls(fn_a)
+    b, blind_b = calls(fn_b)
+    if blind_a or blind_b:
+        return None     # Muster bekannt, Ziel unaufloesbar: nicht bewertbar
     if not a or not b:
         return 0        # Testprobe ohne beide Funktionen: nichts zu beweisen
     return len(a - b)
@@ -998,44 +1019,96 @@ _NOT_CHECKERS = frozenset({"chain", "main", "calibration_run", "_run_all",
                            "run", "run_kw", "check_all"})
 
 
-def _called_checkers(fn: ast.FunctionDef, tree=None) -> set[str]:
+def _called_checkers(fn: ast.FunctionDef, tree=None) -> tuple[set[str], bool]:
     """Welche Pruefer faehrt eine Funktion — einzeln **oder** als Registry?
 
-    §A-MW (Runde 47): die zweite Haelfte der Buchung. Wenn jemand die
-    sechs Aufrufe durch eine Registry ersetzt —
+    §A-MW (Runde 47): wenn jemand die sechs Aufrufe durch eine Registry
+    ersetzt —
 
         CHECKS = (check_a, check_b, ...)
         def main():
             for c in CHECKS: c(root)
 
     — ist das die bessere Architektur und macht jede namensbasierte
-    Zaehlung blind. Erkannt wird darum beides: ein direkter `check_*`-
-    Aufruf **und** eine `for`-Schleife ueber einen Namen, dessen Tuple
-    im selben Modul als Menge von Pruefernamen aufgeloest werden kann.
+    Zaehlung blind. Erkannt wird beides: ein direkter `check_*`-Aufruf
+    **und** eine `for`-Schleife ueber einen Namen.
+
+    §A-NC (Runde 48): aufgeloest wird ueber das **Objekt der Iteration**,
+    nicht ueber den Namen `CHECKS` — `for fn in _ALL:` muss genauso
+    funktionieren. Dazu die zweite Haelfte der Buchung: gibt es fuer den
+    iterierten Namen im Modul **keine** Tuple-Definition, ist das
+    `blind = True`. Ein Muster, das der Pruefer kennt, dessen Ziel er
+    aber nicht findet, darf nicht dieselbe Zahl liefern wie ein sauberer
+    Lauf.
+
+    Rueckgabe: `(Menge, blind)`.
     """
     got: set[str] = set()
-    registry = {}
+    blind = False
+    registry: dict[str, set[str]] = {}
     if tree is not None:
-        for n in tree.body:
-            if (isinstance(n, ast.Assign) and len(n.targets) == 1
-                    and isinstance(n.targets[0], ast.Name)):
-                v = n.value
-                if isinstance(v, (ast.Tuple, ast.List)):
-                    registry[n.targets[0].id] = {
-                        e.id for e in v.elts if isinstance(e, ast.Name)}
-                elif isinstance(v, ast.Call):
-                    for a in v.args:
-                        if isinstance(a, (ast.Tuple, ast.List)):
-                            registry[n.targets[0].id] = {
-                                e.id for e in a.elts if isinstance(e, ast.Name)}
+        registry = _registry_tables(tree)
     for c in ast.walk(fn):
         if isinstance(c, ast.Call) and isinstance(c.func, ast.Name):
             if c.func.id.startswith("check_"):
                 got.add(c.func.id)
-        # `for c in CHECKS: c(root)` → die Registry aufloesen
-        if isinstance(c, ast.For) and isinstance(c.iter, ast.Name):
-            got |= registry.get(c.iter.id, set())
-    return got
+        # `for c in <etwas>: c(root)` → nur wenn das Iterat **als
+        # Funktion gerufen** wird, ist es ein Register. `for c in
+        # rep.problems:` ist eine Schleife ueber Daten. Diese
+        # Unterscheidung ist der Unterschied zwischen „Objekt der
+        # Iteration" und „jede Schleife im Rumpf" — ohne sie meldet der
+        # Pruefer `blind` fuer jede Aufzaehlung.
+        if isinstance(c, ast.For) and isinstance(c.target, ast.Name):
+            var = c.target.id
+            if not _calls_var(c.body, var):
+                continue
+            target = c.iter
+            if isinstance(target, ast.Name) and target.id in registry:
+                got |= registry[target.id]
+            else:
+                blind = True        # Muster gesehen, Ziel unbekannt
+    return got, blind
+
+
+def _calls_var(body: list[ast.AST], var: str) -> bool:
+    """Wird `var` im Schleifenrumpf als Funktion gerufen?"""
+    for n in body:
+        for c in ast.walk(n):
+            if (isinstance(c, ast.Call) and isinstance(c.func, ast.Name)
+                    and c.func.id == var):
+                return True
+    return False
+
+
+def _registry_tables(tree) -> dict[str, set[str]]:
+    """Alle Namen, die im Modul als Tuple/Liste von Funktionsnamen stehen.
+
+    `CHECKS = (check_a, check_b)` und `CHECKS = tuple((check_a, check_b))`
+    und `CHECKS = [check_a, check_b]` — der Name ist beliebig; das
+    **Objekt** ist eine statische Sammlung von Namen. Ein dynamisch
+    gebautes (`tuple(c for c in ...)`) landet nicht hier, und genau
+    darum meldet der Aufrufer dann `blind`.
+    """
+    out: dict[str, set[str]] = {}
+    for n in tree.body:
+        if not (isinstance(n, ast.Assign) and len(n.targets) == 1
+                and isinstance(n.targets[0], ast.Name)):
+            continue
+        name, v = n.targets[0].id, n.value
+        names: set[str] = set()
+        if isinstance(v, (ast.Tuple, ast.List)):
+            names = {e.id for e in v.elts if isinstance(e, ast.Name)}
+            if len(names) != len(v.elts):
+                continue        # Ausdruecke darin: nicht statisch lesbar
+        elif isinstance(v, ast.Call) and v.args:
+            a = v.args[0]
+            if isinstance(a, (ast.Tuple, ast.List)):
+                names = {e.id for e in a.elts if isinstance(e, ast.Name)}
+                if len(names) != len(a.elts):
+                    continue
+        if names:
+            out[name] = names
+    return out
 
 
 
@@ -1216,6 +1289,226 @@ def _self_test_akt_block() -> list[str]:
     if _compare_block(card, card):
         out.append("Akte-Block: identischer Block wird als abweichend "
                    "gemeldet")
+    return out
+
+
+def _self_test_reader_calls() -> list[str]:
+    """Findet der Pruefer den **Aufruf** ohne `root`? (§A-NE)
+
+    Die Buchung gegen die eigene Fehldiagnose der letzten Runde: der
+    Fehler von Runde 44 war der Aufruf, nicht die Signatur. Vier Faelle:
+
+      Leser + Aufruf ohne `root`          -> rot (1)
+      Leser + Aufruf mit `root`           -> still
+      Nicht-Leser + Aufruf ohne `root`    -> still (er *braucht* es nicht)
+      Aufruf mit `§A-KR-ANCHOR`           -> still (Negativtest)
+    """
+    probe = (
+        "def load_thing(root=None):\n"
+        "    return (root / 'x').read_text()\n"
+        "def not_a_reader(root=None):\n"
+        "    return 1\n"
+        "def caller():\n"
+        "    load_thing()\n"
+        "    load_thing(Path('/tmp'))\n"
+        "    not_a_reader()\n"
+        "    load_thing()  # §A-KR-ANCHOR bewusst: Default\n"
+    )
+    got = _reader_calls_without_root(probe)
+    out: list[str] = []
+    if len(got) != 1:
+        out.append(f"Leser-Aufruf: {len(got)} Meldungen, erwartet 1")
+    elif "@L6" not in got[0]:
+        out.append(f"Leser-Aufruf: Meldung zeigt nicht auf @L6: {got[0]}")
+    # Und die eigene Datei: keine Leser-Aufrufe ohne root.
+    mine = _reader_calls_without_root()
+    if mine:
+        out.append(f"Leser-Aufruf: {len(mine)} im eigenen Baum — "
+                   f"{mine[0]}")
+    return out
+
+
+def _self_test_cwd_readers(src: str | None = None) -> list[str]:
+    """Ist jeder Eintrag in `_CWD_READERS` lebendig? (§A-ND, Runde 48)
+
+    Eine Deklaration auf Funktionsebene ist reviewbar — aber ein Eintrag,
+    dessen Funktion verschwindet, bleibt stehen. Wird `_snapshot_path`
+    geloescht, ist die Liste um einen toten Eintrag laenger und der Test
+    gruen. **Die Liste kann nur wachsen, nie schrumpfen** — dieselbe
+    Einbahnstrasse wie eine Baseline.
+
+    Zwei Zusicherungen, beide noetig:
+
+      a) jeder Eintrag existiert im Modul,
+      b) jeder Eintrag liest tatsaechlich `cwd`.
+
+    (b) faengt den zweiten toten Fall: eine Funktion, die bleibt, aber
+    `cwd` nicht mehr liest. Dann ist der Eintrag eine Ausnahme ohne
+    Gegenstand — und Ausnahmen ohne Gegenstand wachsen.
+    """
+    import ast
+    text = src if src is not None else Path(__file__).read_text(encoding="utf-8")
+    tree = ast.parse(text)
+    defined = {n.name: n for n in tree.body if isinstance(n, ast.FunctionDef)}
+    out: list[str] = []
+    for name in sorted(_CWD_READERS):
+        fn = defined.get(name)
+        if fn is None:
+            out.append(f"_CWD_READERS: `{name}` existiert nicht im Modul "
+                       f"— toter Eintrag")
+            continue
+        reads = any(
+            isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
+            and n.func.attr == "cwd"
+            for n in ast.walk(fn))
+        if not reads:
+            out.append(f"_CWD_READERS: `{name}` liest kein `cwd` — "
+                       f"Ausnahme ohne Gegenstand")
+    return out
+
+
+def _reader_calls_without_root(src: str | None = None) -> list[str]:
+    """Wird ein *Leser* ohne `root` gerufen? (§A-NE, Runde 48)
+
+    **Diese Buchung korrigiert eine eigene Fehldiagnose.** §71.53 hat
+    `root=None` als „die Signatur des Fehlers" bezeichnet und eine Regel
+    darauf gebaut. Nachgemessen ist `check_counts` kein Fall: sein
+    `root=None` ist fort, der Fehler der Runde 44 war der **Aufruf**
+    `check_counts(doc, waves, per, rep)` ohne `root` — und den haette
+    `_git_callers_without_cwd` gefunden, wenn er nicht nur `git`-Aufrufe
+    pruefte.
+
+    Der Pruefer fuer die Signaturen existiert (`_default_root_errors`).
+    Der Pruefer fuer die **Aufrufe** fehlte. Er fragt:
+
+      eine Funktion in diesem Modul, die einen Ortsparameter hat
+      (`root`, `doc_root`, `repo`), hat einen Default `None`, und wird
+      an einer Stelle **ohne** diesen Parameter gerufen — wobei der Ort
+      im Rumpf tatsaechlich gebraucht wird (Lesen, `open`, `glob`,
+      `subprocess`-`cwd`).
+
+    Der letzte Halbsatz ist die Lehre aus `_snapshot_path`: eine
+    Funktion, die `root` annimmt und **nicht braucht**, ist kein Leser,
+    und ihr Aufruf ohne `root` ist kein Fehler.
+    """
+    import ast
+    text = src if src is not None else Path(__file__).read_text(encoding="utf-8")
+    tree = ast.parse(text)
+    readers: dict[str, tuple[int, bool]] = {}   # name -> (pos, hat_default)
+    for n in tree.body:
+        if not isinstance(n, ast.FunctionDef):
+            continue
+        args = n.args.args
+        names = [a.arg for a in args]
+        pos = None
+        for want in ("root", "doc_root", "repo"):
+            if want in names:
+                pos = names.index(want)
+                break
+        if pos is None or n.name in _NOT_CHECKERS:
+            continue
+        if not _uses_root_as_path(n, names[pos]):
+            continue        # nimmt root an, braucht es nicht
+        ndef = len(n.args.defaults)
+        has_default = pos >= len(args) - ndef
+        readers[n.name] = (pos, has_default)
+
+    out: list[str] = []
+    lines = text.splitlines()
+    for n in ast.walk(tree):
+        if not (isinstance(n, ast.Call) and isinstance(n.func, ast.Name)):
+            continue
+        if n.func.id not in readers:
+            continue
+        pos, has_default = readers[n.func.id]
+        if not has_default:
+            continue        # Pflichtparameter: der Aufruf muss ihn liefern
+        given = len(n.args) + sum(1 for k in n.keywords if k.arg)
+        if given <= pos:
+            # §A-NE: ein Aufruf, der **selbst deklariert**, dass er den
+            # Default pruefen soll, ist der Test — nicht der Fehler. Die
+            # Deklaration steht in derselben Zeile wie der Aufruf, und
+            # sie ist damit reviewbar am Fund, nicht am Pruefer.
+            src_line = lines[n.lineno - 1] if n.lineno <= len(lines) else ""
+            if _KR_ANCHOR in src_line:
+                continue
+            out.append(f"{n.func.id}(...) @L{n.lineno}: Leser ohne "
+                       f"`root` gerufen — Leseort ist der Default")
+    return out
+
+
+# §A-NE: Markierung fuer einen Aufruf, der den Default **absichtlich**
+# prueft. Dieselbe Form wie ein Negativtest: der Fund ist das Ziel.
+_KR_ANCHOR = "§A-KR-ANCHOR"
+
+
+def _uses_root_as_path(fn: ast.AST, name: str) -> bool:
+    """Wird `name` zu einem Pfad oder an einen Pfadzugriff gegeben?"""
+    import ast
+    for n in ast.walk(fn):
+        if isinstance(n, ast.BinOp) and isinstance(n.op, ast.Div):
+            for side in (n.left, n.right):
+                if isinstance(side, ast.Name) and side.id == name:
+                    return True
+        if isinstance(n, ast.Call) and isinstance(n.func, ast.Name):
+            if n.func.id in ("Path", "open") and n.args:
+                if isinstance(n.args[0], ast.Name) and n.args[0].id == name:
+                    return True
+        if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute):
+            if n.func.attr in ("glob", "rglob", "read_text", "exists",
+                               "is_dir", "resolve"):
+                if isinstance(n.func.value, ast.Name) and n.func.value.id == name:
+                    return True
+            if n.func.attr == "run":
+                for k in n.keywords:
+                    if k.arg == "cwd" and isinstance(k.value, ast.Name) \
+                            and k.value.id == name:
+                        return True
+    return False
+
+
+def _akte_losslessness(root: Path | None = None) -> list[str]:
+    """Verliert die Akte Bloecke gegenueber dem Vorgaenger-Commit? (§A-NF)
+
+    §71.53 hat gesagt: „ein Vergleich ueber alle Bloecke verlangt eine
+    Aussage ueber die Historie, die diese Datei nicht fuehrt". Die
+    Diagnose stimmt, die Schlussfolgerung war zu stark. Zwei Fragen, und
+    nur die zweite ist heute pruefbar:
+
+      War der alte Block **richtig**?        braucht Interpretation  ✗
+      Ist der alte Block noch **da**?        braucht die Datei       ✓
+
+    Eine Sammlung, die nichts verliert, **ist** eine Historie. Die eine
+    Eigenschaft, die sie ohne Interpretation belegen kann, ist
+    Verlustfreiheit — und genau die fehlte. Drei monotone Groessen gegen
+    `HEAD~1`:
+
+      Bezug-Zeilen  >=  Vorgaenger
+      Zeilen        >=  Vorgaenger
+      `total=`-Bloecke >= Vorgaenger
+
+    **Nebenwirkung, gewollt:** der Test wird rot, wenn die Akte bewusst
+    gekuerzt oder umstrukturiert wird. Darum gehoert er nicht in den
+    normalen Lauf, sondern an den Commit (`--akte-monoton`).
+    """
+    base = root or Path(__file__).resolve().parent.parent
+    rel = "order_execution_engine/ops/TAG7_ABNAHME.md"
+    cur = base / rel
+    if not cur.exists():
+        return []
+    now = cur.read_text(encoding="utf-8")
+    prev = subprocess.run(["git", "show", f"HEAD~1:{rel}"], cwd=str(base),
+                          capture_output=True, text=True)
+    if prev.returncode != 0:
+        return []       # erster Commit der Datei: nichts zu vergleichen
+    old = prev.stdout
+    out: list[str] = []
+    for label, fn in (("Bezug-Zeilen", lambda t: t.count("\nBezug: root=")),
+                      ("Zeilen", lambda t: len(t.splitlines())),
+                      ("`total=`-Bloecke", lambda t: t.count("```\ntotal="))):
+        a, b = fn(now), fn(old)
+        if a < b:
+            out.append(f"Akte: {label} {b} -> {a} — Block verloren")
     return out
 
 
@@ -1677,12 +1970,36 @@ def _self_test_calibration_classes() -> list[str]:
         out.append("Pruefer-Differenz: `unclassified_checkers` findet den "
                    "unproduktiven Pruefer nicht (erwartet 1)")
     # Und die eigene Datei: beide Differenzen sind heute 0.
-    if _checker_gap("main", "calibration_run") != 0:
+    # §A-NB (Runde 48): die **eigene** Datei muss eine Zahl liefern.
+    # `None` heisst „Register gesehen, Ziel nicht gefunden" — ein Befund,
+    # kein Freispruch, und im eigenen Baum besonders verdaechtig.
+    fwd = _checker_gap("main", "calibration_run")
+    bwd = _checker_gap("calibration_run", "main")
+    if not isinstance(fwd, int):
+        out.append("Pruefer-Differenz: unchecked ist None — Register im "
+                   "eigenen Baum nicht aufloesbar")
+    elif fwd != 0:
         out.append("Pruefer-Differenz: main ruft einen Pruefer, den der "
                    "Kalibrierlauf nicht kennt")
-    if _checker_gap("calibration_run", "main") != 0:
+    if not isinstance(bwd, int):
+        out.append("Pruefer-Differenz: unclassified_checkers ist None — "
+                   "Register im eigenen Baum nicht aufloesbar")
+    elif bwd != 0:
         out.append("Pruefer-Differenz: der Kalibrierlauf ruft einen Pruefer, "
                    "den main nicht faehrt")
+    # Und die Gegenprobe: ein **dynamisches** Register liefert `None`.
+    dyn = ("CHECKS = tuple(c for c in (check_a, check_b))\n"
+           "def main():\n    for c in CHECKS:\n        c(root)\n"
+           "def calibration_run():\n    check_a(root)\n")
+    if _checker_gap("main", "calibration_run", dyn) is not None:
+        out.append("Pruefer-Differenz: dynamisches Register liefert eine "
+                   "Zahl statt None — blind und gruen sehen gleich aus")
+    # Und die andere Haelfte: Daten-Schleifen sind **kein** Register.
+    data = ("def main():\n    for p in rep.problems:\n        pass\n"
+            "def calibration_run():\n    check_a(root)\n")
+    if _checker_gap("main", "calibration_run", data) is None:
+        out.append("Pruefer-Differenz: `for p in rep.problems` gilt als "
+                   "unaufloesbares Register")
     # §A-MW (Runde 47): die Registry. Ersetzt jemand die sechs Aufrufe
     # durch `for c in CHECKS`, darf der Pruefer nicht blind werden. Die
     # Probe ist die bessere Architektur — der Pruefer muss sie lesen.
@@ -4161,6 +4478,16 @@ def main() -> int:
                 print(f"  {f}")
             return 1
         print(f"check_counts self-test: {_SELF_TEST_SCOPE[0]}")
+        return 0
+    if "--akte-monoton" in sys.argv:
+        # §A-NF (Runde 48): gehoert an den Commit, nicht in den Lauf.
+        lost = _akte_losslessness()
+        if lost:
+            print("Akte-Monotonie: FAIL")
+            for x in lost:
+                print(f"  {x}")
+            return 1
+        print("Akte-Monotonie: keine Blockverluste gegen HEAD~1")
         return 0
 
     # Filtere Flags und deren Werte (--json-report <path>)
