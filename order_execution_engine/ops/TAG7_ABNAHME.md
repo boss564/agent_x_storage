@@ -5591,3 +5591,92 @@ niemand erwartet hatte, und die erste Reaktion war nicht „Ausnahme",
 sondern die Zählung. Was offen bleibt: `unchecked` prüft **heute** die
 eigene Datei, nicht die Historie. Ein Prüfer, der in Runde 44 fehlte und
 in Runde 45 nachgetragen wurde, ist in keiner der beiden Zahlen sichtbar.
+
+### §71.53 — Runde 47: die Handliste war ein Regex, und der Block wird verglichen
+
+**1. Die Registry überlebt.** `_checker_gap` bildete seine Mengen aus dem
+Namensmuster `check_*` — eine Handliste in Regex-Form. Ein Prüfer namens
+`_reads_without_root` stand in keiner der beiden Mengen, und die
+naheliegende Verbesserung `for c in CHECKS: c(root)` machte beide
+Differenzen `0/0`. Gemessen vor dem Umbau: `checked 0, unclassified 0`
+für die Registry-Probe — blind.
+
+Jetzt löst `_called_checkers` zwei Formen auf: direkte `check_*`-Aufrufe
+**und** `for`-Schleifen über einen Namen, dessen Tuple im **selben** AST
+als Namensmenge steht. Die Registry-Probe liefert `1`; die eigene Datei
+bleibt `0/0`. Die Grenze ist ehrlich: ein **dynamisch** gebautes Register
+kann der Prüfer nicht lesen — er meldet dann `0`, was dieselbe Blindheit
+wäre. Ein Kommentar an `CHECKS` ist die Bedingung dafür, dass das nicht
+passiert.
+
+Zusätzlich fragt `_report_functions` nach der **Rolle** statt nach dem
+Namen: jede Funktion mit `rep`/`report` in der Signatur ist ein Prüfer.
+Die Probe mit `_weird_name(rep)` liefert genau `['_weird_name']`.
+
+**2. Die Regel gehört auf die Kombination.** `root=None` allein ist
+Aufrufkomfort — `repo_root(root=None)` löst den Ort intern auf und liest
+nichts relativ. Der Fehler ist `root=None` **und** ein Pfad, der ohne
+`root` entsteht. Zwei Ebenen:
+
+| Ebene | Form | rot |
+|---|---|---|
+| A | `Path.cwd()`/`os.getcwd()` im Rumpf | immer — kein Aufrufer steuert ihn |
+| B | `root=None` **mit** `or Path.cwd()` / `or "."` / `or Path()` | die Kombination |
+| — | `root=None` ohne Fallback (`repo_root`, `_snapshot_path`, `_tree_ref`) | nicht |
+
+Damit fällt die Baseline weg. `_CWD_READERS` deklariert zwei **Rollen**
+statt Ausnahmen am Fund: `_self_test_count_delta` prüft `chdir` und muß
+`cwd` lesen, `main` ist der Aufrufer, der den Default setzt. Stand nach
+dem Schnitt: **0 Fundstellen** — die Zusicherung ist `== 0`, nicht
+`<= 19`.
+
+Nebenwirkung, die bestehen bleibt: `check_counts` steht **nicht** mehr in
+der Liste. Sein `root=None` ist verschwunden, weil der Fehler der Runde 44
+der **Aufruf** ohne `root` war, nicht die Signatur. Der Prüfer meldet ihn
+in der Probe weiterhin (`2`), in der eigenen Datei nicht.
+
+**3. Der Block wird verglichen, nicht zitiert.** `_akt_block_mismatch`
+liest den letzten `total=`-Block der Akte und hält ihn gegen
+`calibration_card()`: sechs Zahlen der Kopfzeile plus `Bezug`-Felder
+`root` und `CLAUDE.md sha256`. Der Baum-Hash nicht — der Block ist
+committet, der Vergleich läuft im nächsten Commit.
+
+Gegenprobe von Hand, vor dem Eintrag: `chain_total=0` in der Akte durch
+`chain_total=7` ersetzt → `['Akte-Block: chain_total 7 zitiert, 0
+gemessen']`. Zurückgesetzt. Der Selbsttest macht dasselbe mit `total=999`
+und verlangt **eine** Meldung, die die Zahl nennt.
+
+**4. `mode 160000` ist rot, wenn es nicht deklariert ist.** Pauschal wäre
+die Regel an der ersten Stelle falsch: `lib/openzeppelin-contracts` und
+`-upgradeable` sind deklarierte Forge-Submodule. `_gitlink_errors`
+vergleicht gegen `.gitmodules`; rot ist der Gitlink, den niemand kennt —
+der Fall `forensik` aus Runde 46. Die Probe baut ein temporäres Repo mit
+einem deklarierten und einem fremden Gitlink und verlangt genau eine
+Meldung, die `fremd` nennt.
+
+**5. Die Literal-Regel.** Der Prüfer hat **fünf** Fremdfunde gegen meinen
+neuen Code gemeldet, vier davon echte Fehler: ein Ueberrest
+`_REGISTRY_CALLS` mit Zustand, ein `root`-Durchreichungsfehler in
+`_akt_block_mismatch`, und zwei Prosa-Zahlen ohne Herkunft. Der fünfte
+(`role` als Konstruktionskonstante) war derselbe Fall wie `probe` in
+Runde 46 — behoben über `_CONSTRUCTION_CONSTS`, nicht über eine Ausnahme.
+
+**Stand:** Selbsttest **32/32**, Suite **216 passed**, voller Lauf ohne
+Abweichung. Der Block unten ist `calibration_card()` und wird vom
+Selbsttest gegen die Akte gehalten — er ist kopiert **und** geprüft.
+
+```
+total=0 chain_total=0 reported=0 unclassified=0 unchecked=0 unclassified_checkers=0
+  Zeilen: 0
+  Referenzen: 0
+  Wellen: 0
+  Tests ohne Skript: 0
+  Inventare: 0
+Bezug: root=/Volumes/THX_OS_ULTRA/Users/olivermueller/agent_x_storage, CLAUDE.md sha256:69159540db89, Baum 2cde5abe+dirty
+```
+
+**Was offen bleibt:** der Vergleich kennt nur **einen** Block — den
+letzten. Ältere Rundenblöcke dürfen abweichen und niemand merkt es. Das
+ist die nächste Stelle, an der eine Zahl verschwinden kann; ich habe sie
+hier nicht zugemacht, weil ein Vergleich über alle Blöcke eine Aussage
+über die *Historie* verlangt, die diese Datei nicht führt.

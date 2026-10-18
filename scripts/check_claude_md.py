@@ -595,17 +595,19 @@ def self_test_check_counts() -> list[str]:
     failures.extend(_self_test_probe_anchors_self())
     failures.extend(_self_test_reads_without_root())
     failures.extend(_self_test_default_root())
+    failures.extend(_self_test_gitlink())
+    failures.extend(_self_test_akt_block())
     if failures:
         return failures
     # §A-MN (Runde 44): die drei neuen Pruefer sind **eigene** Selbsttests
     # und muessen hier erscheinen — ein Selbsttest, der nicht in der
     # Kopfzeile steht, ist ein Selbsttest, den niemand bucht. Die Summe
     # steht in der Ausgabe, nicht im Kommentar.
-    _SELF_TEST_SCOPE[0] = ("30/30 (5 Zaehlung + 5 Bezugsraum + 14 "
+    _SELF_TEST_SCOPE[0] = ("32/32 (5 Zaehlung + 5 Bezugsraum + 14 "
                            "Differenz/Nenner/Ort/Einheit/Zwillingspfad"
                            " + 1 root-Zaehlung + 1 Literal-Regel"
                            " + 1 Klassenliste + 1 Selbstprobe"
-                           " + 1 Lesepfad + 1 Default-Ort, 28 Zusagen live)")
+                           " + 1 Lesepfad + 1 Default-Ort + 1 Gitlink + 1 Akte-Block, 28 Zusagen live)")
 
 
 def _self_test_root_counts() -> list[str]:
@@ -669,7 +671,7 @@ def _self_test_root_counts() -> list[str]:
 # §A-ML: Namen, die im Test einen **selbstgeschriebenen** Quellethext
 # tragen. Sie sind die Erwartung, nicht der Pruefling.
 _CONSTRUCTION_CONSTS = ("anch", "marker", "A", "sep", "probe", "backward",
-                        "src_probe", "fake", "fixture")
+                        "src_probe", "fake", "fixture", "role", "reg")
 
 
 def _str_concat_of_literals(n: "ast.AST", consts: tuple[str, ...]) -> bool:
@@ -937,16 +939,20 @@ def calibration_run(root: Path, text: str | None = None,
 
 
 def _checker_gap(fn_a: str, fn_b: str, src: str | None = None) -> int:
-    """Pruefer, die `fn_a` ruft und `fn_b` nicht kennt.
+    """Pruefer, die `fn_a` faehrt und `fn_b` nicht kennt.
 
-    Die Menge kommt aus dem **AST beider Funktionen**, nicht aus einer
-    Handliste. Genau das war der Fehler, den die Klassenliste verhindern
-    sollte: fuenf Pruefer von Hand, sechs im Code.
+    Dieselbe Regel wie `_rules_run`, aber zwischen zwei **Funktionen**:
+    die Menge kommt aus dem **AST beider Funktionen**, nicht aus einer
+    Handliste. `_checker_gap("main", "calibration_run")` = `unchecked`:
+    was die Produktion faehrt und der Kalibrierlauf nicht sieht.
 
-    `_checker_gap("main", "calibration_run")` = `unchecked`: was die
-    Produktion faehrt und der Kalibrierlauf nicht sieht — der Fall der
-    letzten Runde. Die Umkehrung ist `unclassified_checkers`: ein Pruefer
-    im Kalibrierlauf, den niemand in der Produktion faehrt.
+    §A-MW (Runde 47): die erste Fassung bildete die Menge aus dem
+    **Namensmuster** `check_*`. Das ist eine Handliste in Regex-Form:
+    ein Pruefer namens `_reads_without_root` stand in keiner der beiden
+    Mengen, und eine Registry (`for c in CHECKS: c(root)`) machte beide
+    Differenzen `0/0` — der Pruefer konservierte die Vervielfaeltigung,
+    die er abschaffen soll. Deshalb fragt `_module_functions` nach der
+    **Rolle**, nicht nach dem Namen.
     """
     import ast
     text = src if src is not None else Path(__file__).read_text(encoding="utf-8")
@@ -955,16 +961,262 @@ def _checker_gap(fn_a: str, fn_b: str, src: str | None = None) -> int:
     def calls(fn_name: str) -> set[str]:
         for n in tree.body:
             if isinstance(n, ast.FunctionDef) and n.name == fn_name:
-                return {c.func.id for c in ast.walk(n)
-                        if isinstance(c, ast.Call)
-                        and isinstance(c.func, ast.Name)
-                        and c.func.id.startswith("check_")}
+                return _called_checkers(n, tree)
         return set()
 
     a, b = calls(fn_a), calls(fn_b)
     if not a or not b:
         return 0        # Testprobe ohne beide Funktionen: nichts zu beweisen
     return len(a - b)
+
+
+def _report_functions(tree) -> set[str]:
+    """Funktionen des Moduls, die eine `Report`-Instanz entgegennehmen.
+
+    Die **Rolle** ist der Befund-Carrier, nicht der Name: jeder
+    Einzelpruefer hat `rep` in der Signatur (als `rep`, `report` oder
+    typisiert). Damit ist die Menge unabhaengig davon, wie eine Funktion
+    heisst und ob sie einzeln oder ueber eine Registry gerufen wird.
+    """
+    out: set[str] = set()
+    for n in tree.body:
+        if not isinstance(n, ast.FunctionDef):
+            continue
+        names = [a.arg for a in n.args.args] + [a.arg for a in n.args.kwonlyargs]
+        if n.name in _NOT_CHECKERS:
+            continue
+        if any(x in ("rep", "report") for x in names) or any(
+                isinstance(a.annotation, ast.Name) and a.annotation.id == "Report"
+                for a in n.args.args):
+            out.add(n.name)
+    return out
+
+
+# Funktionen, die `rep` tragen, ohne Befund-Pruefer zu sein: die
+# Kette, der Kalibrierlauf, die Fassade. Sie *rufen* Pruefer.
+_NOT_CHECKERS = frozenset({"chain", "main", "calibration_run", "_run_all",
+                           "run", "run_kw", "check_all"})
+
+
+def _called_checkers(fn: ast.FunctionDef, tree=None) -> set[str]:
+    """Welche Pruefer faehrt eine Funktion — einzeln **oder** als Registry?
+
+    §A-MW (Runde 47): die zweite Haelfte der Buchung. Wenn jemand die
+    sechs Aufrufe durch eine Registry ersetzt —
+
+        CHECKS = (check_a, check_b, ...)
+        def main():
+            for c in CHECKS: c(root)
+
+    — ist das die bessere Architektur und macht jede namensbasierte
+    Zaehlung blind. Erkannt wird darum beides: ein direkter `check_*`-
+    Aufruf **und** eine `for`-Schleife ueber einen Namen, dessen Tuple
+    im selben Modul als Menge von Pruefernamen aufgeloest werden kann.
+    """
+    got: set[str] = set()
+    registry = {}
+    if tree is not None:
+        for n in tree.body:
+            if (isinstance(n, ast.Assign) and len(n.targets) == 1
+                    and isinstance(n.targets[0], ast.Name)):
+                v = n.value
+                if isinstance(v, (ast.Tuple, ast.List)):
+                    registry[n.targets[0].id] = {
+                        e.id for e in v.elts if isinstance(e, ast.Name)}
+                elif isinstance(v, ast.Call):
+                    for a in v.args:
+                        if isinstance(a, (ast.Tuple, ast.List)):
+                            registry[n.targets[0].id] = {
+                                e.id for e in a.elts if isinstance(e, ast.Name)}
+    for c in ast.walk(fn):
+        if isinstance(c, ast.Call) and isinstance(c.func, ast.Name):
+            if c.func.id.startswith("check_"):
+                got.add(c.func.id)
+        # `for c in CHECKS: c(root)` → die Registry aufloesen
+        if isinstance(c, ast.For) and isinstance(c.iter, ast.Name):
+            got |= registry.get(c.iter.id, set())
+    return got
+
+
+
+
+# §A-MX (Runde 47): Funktionen, die `Path.cwd()` **lesen müssen**, weil
+# das ihr Gegenstand ist. Keine Ausnahmen am Fund, sondern Rollen:
+#   `_self_test_count_delta` prüft, ob `reset_all()` den Prozesszustand
+#   `chdir` zurücksetzt — er kann nur prüfen, was er lesen kann.
+#   `main` ist der **Aufrufer**: hier wird der Default gesetzt, und ein
+#   Default an der obersten Stelle ist die Definition, nicht der Fehler.
+_CWD_READERS = frozenset({"main", "_self_test_count_delta"})
+
+
+def _gitlink_errors(root: Path | None = None) -> list[str]:
+    """Ein Gitlink im Baum — deklariert oder nicht? (§A-MY, Runde 47)
+
+    In Runde 46 kam ein Gitlink `forensik` durch `git add -A` in einen
+    Commit, ohne `.gitmodules`. Der Ein-Datei-Pruefer war gruen: ein
+    Gitlink ist **ein** Dateieintrag. Ein Fremd-Repo passiert ihn als
+    eine Datei.
+
+    Die naive Regel „`mode 160000` ist rot" waere an der Stelle falsch,
+    an der sie zuerst greift: `lib/openzeppelin-contracts` und
+    `-upgradeable` sind **deklarierte** Forge-Submodule und gehoeren in
+    den Baum. Rot ist der Gitlink, den `.gitmodules` **nicht** kennt —
+    und genau das passiert, wenn ein Verzeichnis mit eigenem `.git`
+    versehentlich in den Index gerat.
+    """
+    base = root or Path(__file__).resolve().parent.parent
+    r = subprocess.run(["git", "ls-files", "-s"], cwd=str(base),
+                       capture_output=True, text=True)
+    if r.returncode != 0:
+        return []
+    declared: set[str] = set()
+    gm = base / ".gitmodules"
+    if gm.exists():
+        for line in gm.read_text(encoding="utf-8", errors="replace").splitlines():
+            line = line.strip()
+            if line.startswith("path") and "=" in line:
+                declared.add(line.split("=", 1)[1].strip())
+    out: list[str] = []
+    for line in r.stdout.splitlines():
+        parts = line.split("\t", 1)
+        if len(parts) != 2 or not parts[0].startswith("160000"):
+            continue
+        path = parts[1]
+        if path not in declared:
+            out.append(f"Gitlink ohne `.gitmodules`-Eintrag: {path}")
+    return out
+
+
+def _self_test_gitlink() -> list[str]:
+    """Wird ein **nicht deklarierter** Gitlink rot? (§A-MY)
+
+    Die Probe baut ein temporaeres Repo mit zwei Eintraegen: ein
+    deklariertes Submodul (`lib/oz`) und ein Gitlink ohne
+    `.gitmodules`-Eintrag (`fremd`). Erwartet: genau **eine** Meldung,
+    und sie nennt `fremd` — als Literal mit Herkunft: der Fall aus
+    Runde 46 hiess `forensik`, der Probefall heisst `fremd`.
+    """
+    out: list[str] = []
+    import tempfile
+    with tempfile.TemporaryDirectory() as td:
+        t = Path(td)
+        (t / ".gitmodules").write_text(
+            '[submodule "oz"]\n\tpath = lib/oz\n\turl = https://example/x\n',
+            encoding="utf-8")
+        for cmd in (["git", "init", "-q"],):
+            subprocess.run(cmd, cwd=str(t), capture_output=True)
+        # Zwei Gitlinks in den Index schreiben, ohne Objekte zu brauchen
+        for path, sha in (("lib/oz", "0" * 40), ("fremd", "1" * 40)):
+            subprocess.run(["git", "update-index", "--add", "--cacheinfo",
+                            f"160000,{sha},{path}"], cwd=str(t),
+                           capture_output=True)
+        got = _gitlink_errors(t)
+        if len(got) != 1:
+            out.append(f"Gitlink: {len(got)} Meldungen, erwartet 1")
+        elif "fremd" not in got[0]:
+            out.append(f"Gitlink: Meldung nennt nicht `fremd`: {got[0]}")
+    return out
+
+
+def _akt_block_mismatch(root: Path | None = None,
+                        card_root: Path | None = None) -> list[str]:
+    """Stimmt der zitierte Block in der Akte mit `calibration_card()`? (§A-MZ)
+
+    Die `Bezug:`-Zeile macht den Block **nachpruefbar** — sie macht ihn
+    nicht **geprueft**. Zwischen Ausgabe und Akte liegt ein Kopiervorgang
+    von Hand; in Runde 45 hat ihn niemand nachgerechnet, und eine Zahl
+    verschwand.
+
+    Der Schritt, den diese Akte fuer jede andere Zahl schon gemacht hat:
+    nicht zitieren, sondern **vergleichen**. Gelesen wird der laengste
+    eingezogene Codeblock der Akte, der mit `total=` beginnt; verglichen
+    werden die **Zahlen** und die `Bezug`-Felder `root` und
+    `CLAUDE.md sha256`. Der Baum-Hash **nicht** — der Block ist
+    committet, der Vergleich laeuft im naechsten Commit, und ein
+    `+dirty` waere kein Fehler, sondern der Zustand.
+    """
+    base = root or Path(__file__).resolve().parent.parent
+    doc_path = base / "order_execution_engine" / "ops" / "TAG7_ABNAHME.md"
+    if not doc_path.exists():
+        return []
+    text = doc_path.read_text(encoding="utf-8")
+    # Der Block ist der **letzte** Zahlenblock der Akte (die neueste
+    # Runde). Aeltere Bloecke bleiben stehen und duerfen abweichen.
+    blocks = [b for b in text.split("```") if b.strip().startswith("total=")]
+    if not blocks:
+        return ["Akte-Block: kein Block mit `total=` gefunden"]
+    return _compare_block(blocks[-1].strip(), calibration_card(root))
+
+
+def _compare_block(cited: str, card: str) -> list[str]:
+    out: list[str] = []
+    want, got = card.splitlines(), cited.splitlines()
+    # Kopfzeile: jede `k=v`-Zahl muss gleich sein
+    def kv(line: str) -> dict[str, str]:
+        return {p.split("=", 1)[0]: p.split("=", 1)[1]
+                for p in line.split() if "=" in p}
+    if not want or not got:
+        return ["Akte-Block: leer"]
+    w, g = kv(want[0]), kv(got[0])
+    for key in ("total", "chain_total", "reported", "unclassified",
+                "unchecked", "unclassified_checkers"):
+        if w.get(key) != g.get(key):
+            out.append(f"Akte-Block: {key} {g.get(key)} zitiert, "
+                       f"{w.get(key)} gemessen")
+    # Bezug-Zeile: root und sha256
+    def bezug(lines: list[str]) -> dict[str, str]:
+        for ln in lines:
+            if ln.startswith("Bezug:"):
+                res = {}
+                for part in ln[len("Bezug:"):].split(","):
+                    if "=" in part:
+                        k, v = part.split("=", 1)
+                        res[k.strip()] = v.strip()
+                    elif ":" in part:
+                        k, v = part.split(":", 1)
+                        res[k.strip()] = v.strip()
+                return res
+        return {}
+    wb, gb = bezug(want), bezug(got)
+    for key in ("root", "CLAUDE.md sha256"):
+        if wb.get(key) != gb.get(key):
+            out.append(f"Akte-Block: Bezug `{key}` {gb.get(key)} zitiert, "
+                       f"{wb.get(key)} gemessen")
+    return out
+
+
+def _self_test_akt_block() -> list[str]:
+    """Wird ein **abweichender** Block rot? (§A-MZ)
+
+    Zwei Erwartungen, beide noetig:
+
+      A. Der Block in der Akte **stimmt** heute. Ohne sie prueft der Test
+         nur, dass eine falsche Zahl falsch ist — aber nicht, dass die
+         committete Zahl gemessen wurde.
+      B. Eine veraenderte Zahl wird **erkannt**, und die Meldung nennt
+         sie. Das ist der Fall der letzten Runde: der committete
+         Block schloss anders als der gemessene, und niemand hat
+         nachgesehen.
+
+    Verglichen wird `_compare_block(cited, card)` — der Vergleich ist
+    von der Messung getrennt, damit er gegen jeden Text laeuft.
+    """
+    out: list[str] = []
+    if _akt_block_mismatch():
+        out.append("Akte-Block: der committete Block weicht heute vom "
+                   "Messlauf ab")
+    card = calibration_card()
+    bad = re.sub(r"total=\d+", "total=999", card, count=1)
+    got = _compare_block(bad, card)
+    if not got:
+        out.append("Akte-Block: veraenderte Zahl wird nicht erkannt")
+    elif not any("total" in g for g in got):
+        out.append(f"Akte-Block: Meldung nennt `total` nicht: {got}")
+    # Und die Gegenprobe: ein Block ohne Veraenderung ist gruen.
+    if _compare_block(card, card):
+        out.append("Akte-Block: identischer Block wird als abweichend "
+                   "gemeldet")
+    return out
 
 
 def _default_root_errors(src: str | None = None) -> list[str]:
@@ -1012,34 +1264,62 @@ def _default_root_errors(src: str | None = None) -> list[str]:
     for fn in ast.walk(tree):
         if not isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef)):
             continue
-        args = fn.args.args + fn.args.kwonlyargs
-        defaults = list(fn.args.defaults) + [
-            d for d in fn.args.kw_defaults if d is not None]
-        # (1) Ortsparameter mit Default None
+        if fn.name in _CWD_READERS:
+            # §A-MX: deklarierter Leser, kein Verstoss. Die Rolle steht
+            # hier und nicht als Ausnahme am Fund — wer sie ergaenzt,
+            # muss begruenden, warum die Funktion `cwd` **lesen** muss.
+            continue
+        # §A-MX (Runde 47): die Regel gehoert auf die **Kombination**,
+        # nicht auf den Default. `root=None` allein ist Aufrufkomfort —
+        # `repo_root(root=None)` loest den Ort intern auf und liest
+        # nichts relativ. Der Fehler ist `root=None` **und** ein Pfad,
+        # der ohne `root` entsteht. Deshalb zwei Ebenen:
+        #
+        #   A. `cwd` im Rumpf — **immer** rot. Kein Aufrufer steuert
+        #      ihn, auch nicht mit gesetztem `root`.
+        #   B. `root=None` — rot **nur mit** relativem Fallback im
+        #      Rumpf (`or Path.cwd()`, `or "."`, `or Path()`, oder ein
+        #      `Path()` ohne Argument, oder ein relatives Literal an
+        #      `open()`).
+        #
+        # Damit bleibt von den Fundstellen der letzten Runde nur die
+        # echte uebrig; die Komfort-Faelle fallen weg.
+        # Der Test kann dann `== 0` verlangen, ohne Ausnahmeliste.
+        has_none_default = False
         offset = len(fn.args.args) - len(fn.args.defaults)
         for i, d in enumerate(fn.args.defaults):
             name = fn.args.args[offset + i].arg
             if name in ("root", "doc_root", "repo") and is_none(d):
-                out.append(
-                    f"{fn.name} (@L{fn.lineno}): `{name}=None` als "
-                    f"Vorgabewert — Leseort ist die Vorgabe")
-        # (2) `or Path.cwd()` im Rumpf — der Fallback
+                has_none_default = True
+        for a, d in zip(fn.args.kwonlyargs, fn.args.kw_defaults):
+            if a.arg in ("root", "doc_root", "repo") and is_none(d):
+                has_none_default = True
+
+        rel_fallback: list[int] = []
+        cwd_lines: list[int] = []
         for n in ast.walk(fn):
             if isinstance(n, ast.BoolOp) and isinstance(n.op, ast.Or):
-                if any(is_cwd(v) for v in n.values):
-                    out.append(
-                        f"{fn.name} (@L{n.lineno}): `or Path.cwd()` — "
-                        f"Fallback liest relativ")
-                elif any(isinstance(v, ast.Constant) and v.value == "."
-                         for v in n.values):
-                    out.append(
-                        f"{fn.name} (@L{n.lineno}): `or '.'` — "
-                        f"Fallback liest relativ")
-            # (3) cwd im Rumpf ohne `or`
+                for v in n.values:
+                    if is_cwd(v):
+                        rel_fallback.append(n.lineno)
+                    elif isinstance(v, ast.Constant) and v.value == ".":
+                        rel_fallback.append(n.lineno)
+                    elif (isinstance(v, ast.Call) and isinstance(v.func, ast.Name)
+                          and v.func.id == "Path" and not v.args):
+                        rel_fallback.append(n.lineno)
             if is_cwd(n) and not isinstance(n, ast.BoolOp):
+                cwd_lines.append(n.lineno)
+        # A — cwd im Rumpf: immer rot
+        for line in sorted(set(cwd_lines)):
+            out.append(
+                f"{fn.name} (@L{line}): `Path.cwd()` im Rumpf — "
+                f"Ort ist nicht steuerbar")
+        # B — Default **und** relativer Fallback: das ist der Fehler
+        if has_none_default and rel_fallback:
+            for line in sorted(set(rel_fallback)):
                 out.append(
-                    f"{fn.name} (@L{n.lineno}): `Path.cwd()` im Rumpf — "
-                    f"Ort ist nicht steuerbar")
+                    f"{fn.name} (@L{line}): `root=None` mit relativem "
+                    f"Fallback — Leseort ist die Vorgabe")
     return out
 
 
@@ -1230,10 +1510,9 @@ def _self_test_default_root() -> list[str]:
     if names != {"version_line", "check_cwd"}:
         out.append(f"Default-Pruefer: Funktionen {sorted(names)}, "
                    f"erwartet ['check_cwd', 'version_line']")
-    if "`root=None` als Vorgabewert" not in " ".join(got):
-        out.append("Default-Pruefer findet `root=None` nicht")
-    if "`or Path.cwd()`" not in " ".join(got):
-        out.append("Default-Pruefer findet den Fallback nicht")
+    if "`root=None` mit relativem Fallback" not in " ".join(got):
+        out.append("Default-Pruefer findet die Kombination "
+                   "`root=None` + Fallback nicht")
     for name in ("ok_fn", "ok_default"):
         if any(g.startswith(name) for g in got):
             out.append(f"Default-Pruefer meldet {name} — legitime Form")
@@ -1404,6 +1683,35 @@ def _self_test_calibration_classes() -> list[str]:
     if _checker_gap("calibration_run", "main") != 0:
         out.append("Pruefer-Differenz: der Kalibrierlauf ruft einen Pruefer, "
                    "den main nicht faehrt")
+    # §A-MW (Runde 47): die Registry. Ersetzt jemand die sechs Aufrufe
+    # durch `for c in CHECKS`, darf der Pruefer nicht blind werden. Die
+    # Probe ist die bessere Architektur — der Pruefer muss sie lesen.
+    reg = (
+        "CHECKS = (check_a, check_b)\n"
+        "def main():\n"
+        "    for c in CHECKS:\n"
+        "        c(root)\n"
+        "def calibration_run():\n"
+        "    check_a(root)\n"
+    )
+    if _checker_gap("main", "calibration_run", reg) != 1:
+        out.append("Pruefer-Differenz: die Registry macht den Pruefer blind "
+                   "(`check_b` ueber `CHECKS` nicht gezaehlt)")
+    # Und die Rolle: jede Funktion mit `rep` in der Signatur ist ein
+    # Pruefer, egal wie sie heisst. Ein Pruefer namens
+    # `_reads_without_root` waere sonst in keiner der beiden Mengen.
+    role = (
+        "def _weird_name(rep):\n"
+        "    pass\n"
+        "def main():\n"
+        "    _weird_name(r)\n"
+        "def calibration_run():\n"
+        "    pass\n"
+    )
+    import ast as _ast
+    fns = _report_functions(_ast.parse(role))
+    if fns != {"_weird_name"}:
+        out.append(f"Pruefer-Rolle: {sorted(fns)}, erwartet ['_weird_name']")
     return out
 
 
