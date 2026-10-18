@@ -703,6 +703,8 @@ def self_test_check_counts() -> list[str]:
     # prüft `pruefe_zustandszeile` **Gleichheit**; der Selbsttest darunter
     # hält die drei Gegenläufe (vollständig, fehlend, zuviel).
     failures.extend(_self_test_zustandsfelder())
+    # §A-ZZZZ63 (Runde 67): §71.74 ist kein Absatz mehr. Vier Gegenläufe.
+    failures.extend(_self_test_bericht())
     failures.extend(_self_test_name_bases())
     failures.extend(_self_test_anchor_uniqueness())
     if failures:
@@ -3516,8 +3518,16 @@ def _self_test_count_delta() -> list[str]:
                         f"Zahl {num} ohne Herkunft in Prosa (Zeile {lineno}): "
                         f"{text_.strip()[:70]!r}")
         # Der Nenner gehört in die Ausgabe, nicht in den Befund: sonst
-        # erscheint er nur, wenn etwas rot ist.
-        PROSA_BILANZ[0] = f"{_prosa_offen} von {_prosa_geprueft} Zahlen ohne Herkunft"
+        # erscheint er nur, wenn etwas rot ist. Und er nennt seine
+        # **Operanden** (§A-ZZZZ66, Runde 67): der Nenner allein war der
+        # erste Wert dieser Akte ohne Herkunft — Zahlen in welchen
+        # Quellen? Gemessen: Docstring-Zeilen + Kommentarzeilen dieses
+        # Prüfers, ausschließlich der zitierten (`...`) und der
+        # historischen (Runde N, Datum, Hash). Ohne diesen Satz ist der
+        # Nenner keine Zahl, sondern eine Behauptung.
+        PROSA_BILANZ[0] = (
+            f"{_prosa_offen} von {_prosa_geprueft} Zahlen ohne Herkunft "
+            f"({len(prose)} Textzeilen: Docstrings + Kommentare)")
         # 8. Der Nenner: geprueft und ausgeschlossen sind disjunkt (§A-NE).
         #    Ohne diese Pruefung sind `N geprueft` und `M ausgeschlossen`
         #    zwei Zahlen ohne Verhaeltnis. Geprueft wird an der Stelle, an
@@ -7803,6 +7813,28 @@ REPARATUR_ZU_FUND_STAND: tuple[tuple[str, int, str], ...] = (
     # wären bei der ersten Abweichung auseinandergelaufen.
 )
 REPARATUR_QUELLEN = ("eigen", "Maschine", "Prüfer")
+
+
+def _self_test_bericht() -> list[str]:
+    """§A-ZZZZ63 (Runde 67): **der Leser des Berichts hat Gegenläufe.**
+
+    Vier Fälle: vollständig (grün), ein Feld fehlt (rot), EXIT ohne Zahl
+    (rot), `offen` mit `unbekannt` (rot). Ohne diese vier wäre
+    `pruefe_bericht` wieder nur eine Funktion mit einem Aufrufer.
+    """
+    out: list[str] = []
+    gut = ("**Commit:** abc1234\n**Zustand:** 4/8\n**EXIT:** 0\n"
+           "**offen:** 0\n**Zahlen:** 212\n**Nicht getan:** die 12\n")
+    if pruefe_bericht(gut):
+        out.append("Bericht: vollständiger Kopf gilt als Befund")
+    for name, text in (
+            ("fehlendes Feld", gut.replace("**Nicht getan:** die 12\n", "")),
+            ("EXIT ohne Zahl", gut.replace("**EXIT:** 0", "**EXIT:** grün")),
+            ("offen unbekannt", gut.replace("**offen:** 0", "**offen:** unbekannt")),
+    ):
+        if not pruefe_bericht(text):
+            out.append(f"Bericht: {name} schlägt nicht an")
+    return out
 # §A-ZZZZ55 (Runde 65): **ein Rekord ist keine Messung.** Runde 64 baute
 # `R→F` als `min()` ein — ein Minimum fällt monoton und kann nur besser
 # werden, nie schlechter. Es hätte in jeder künftigen Runde noch bei 1
@@ -7881,6 +7913,36 @@ QUITTUNG_TESTS = ("_self_test_prozent",)
 # Funktion ihn füllt und `main` ihn druckt — ein Wert, kein Befund.
 PROSA_BILANZ: list[str] = ["nicht gemessen"]
 
+# §71.74 / §A-ZZZZ63 (Runde 67): **die Feldliste des Rundenberichts, und ihr
+# Leser.** Runde 65 schrieb die Regel und Runde 66 verletzte sie in fünf
+# Feldern — ohne Fund, weil §71.74 ein Absatz war. Die Zustandszeile hatte
+# in Runde 65 dasselbe Problem und es wurde im selben Lauf gefunden, weil
+# `pruefe_zustandszeile` existierte. Dieselbe Bauart, eine Ebene höher.
+BERICHT_FELDER = ("Commit", "Zustand", "EXIT", "offen", "Zahlen", "Nicht getan")
+
+
+def pruefe_bericht(text: str) -> list[str]:
+    """Der Bericht trägt **genau** `BERICHT_FELDER`: `**Feld:**` je Zeile.
+
+    Fehlt eins ⇒ Befund. Ein Bericht, dessen Felder weglassbar sind, ist
+    organisierte Duldung — genau das, was diese Akte in acht Runden aus
+    der Zustandszeile herausoperiert hat.
+    """
+    out: list[str] = []
+    felder = re.findall(r"^\*\*([^*]+):\*\*", text, re.MULTILINE)
+    for n in BERICHT_FELDER:
+        if n not in felder:
+            out.append(f"Bericht: Feld {n!r} fehlt — ein Feld, das man "
+                       f"weglassen kann, ist nicht gemessen")
+    for n in ("EXIT", "offen"):
+        # "keine Angabe"/"unbekannt" ist die Form, die diese Akte gerade
+        # gebucht hat: eine Zahl, deren Operand fehlt. Hier: ein Feld,
+        # das da ist und nichts sagt.
+        m = re.search(rf"^\*\*{n}:\*\*(.*)$", text, re.MULTILINE)
+        if m and not re.search(r"\d", m.group(1)):
+            out.append(f"Bericht: Feld {n!r} ohne Zahl")
+    return out
+
 # §A-ZZZZ59 (Runde 66): **der dritte Ausgang — Frische, nicht Befund.**
 # `Akte-Block: der committete Block weicht heute vom Messlauf ab` ist
 # **wahr**, sobald ein Block committet ist: die Akte wuchs danach, also
@@ -7888,9 +7950,17 @@ PROSA_BILANZ: list[str] = ["nicht gemessen"]
 # selbst trägt, kann nicht stimmen) — und trotzdem machte es den
 # Selbsttest nach jedem Commit rot und `EXIT=1`, während der Hauptlauf
 # `EXIT=0` meldete. Genau die Zeile aus Runde 61 mit echten Zähnen.
-# Der Ausgang heißt **FRISCH**: nicht grün (er hat etwas gefunden), nicht
-# FAIL (es ist offen), sondern **erwartet** — und damit zählbar.
+#
+# §A-ZZZZ64 (Runde 67): **BRAUCHT_AKTE — der Gegenlauf fehlte.** Runde 66
+# baute `FRISCH` als Ausgang ohne Deckel und ohne Gegenlauf; §71.73 war
+# eine Ebene zu tief angewendet. Der Gegenlauf ist jetzt da: `FRISCH`
+# feuert **nur**, wenn die Akte existiert und nicht leer ist. Fehlt die
+# Akte oder ist sie leer, ist der Block nicht „veraltet", sondern
+# **unprüfbar** — und das ist rot. Damit ist `FRISCH` nicht mehr
+# konstant: es hängt an einer Bedingung, die nicht immer gilt.
 FRISCHE_TESTS = ("Akte-Block",)
+FRISCHE_BEDINGUNG = "Akte existiert und ist nicht leer"
+DECKEL_FRISCH = 2
 
 
 def _self_test_zustandsfelder() -> list[str]:
@@ -8336,6 +8406,15 @@ def main() -> int:
                 print(f"  QUITTIERT: {f}")
             for f in frisch:
                 print(f"  FRISCH: {f}")
+            # §A-ZZZZ64 (Runde 67): der Deckel. Wie `quittiert` ist der
+            # Ausgang beschränkt — mehr als `DECKEL_FRISCH` gleichzeitig
+            # heißt: die Kategorie wächst, statt zu schrumpfen.
+            if len(frisch) > DECKEL_FRISCH:
+                print(f"check_counts self-test: "
+                      f"{len(frisch)} FRISCH über Deckel {DECKEL_FRISCH} — FAIL")
+                for f in frisch:
+                    print(f"  FAIL: {f}")
+                return 1
             if offen:
                 print(f"check_counts self-test: {len(offen)} FAIL")
                 for f in offen:
@@ -8502,10 +8581,23 @@ def main() -> int:
     dl = _delta_line(rep.checked, root)
     if dl:
         status += "\n" + dl
-    # §A-ZZZZ61 (Runde 66): der Nenner des Prosa-Prüfers steht in **jeder**
-    # Ausgabe. `2 gefunden` ist ein Erfolg, der nicht scheitern kann;
-    # `0 von 98` ist ein Meßwert.
-    status += f"\nProsa: {PROSA_BILANZ[0]}"
+    # §A-ZZZZ61 (Runde 66): der Nenner des Prosa-Prüfers steht in der
+    # **Selbsttest**-Ausgabe, nicht hier. §A-ZZZZ65 (Runde 67): eine Zeile,
+    # die „nicht gemessen" sagen kann und trotzdem grün läßt, ist ein
+    # `FRISCH` in der Ausgangszeile — der Prosa-Prüfer läuft im Container
+    # mit der Quittung, also steht sein Maß dort und nicht hier.
+    _ber = root / "order_execution_engine" / "ops" / "BERICHT.md"
+    try:
+        _bericht = _ber.read_text(encoding="utf-8")
+    except OSError:
+        rep.fail("Bericht", "fehlt — §71.74 ohne Gegenstand")
+        status += "\nBericht: fehlt"
+    else:
+        _bb = pruefe_bericht(_bericht)
+        for _p in _bb:
+            rep.fail("Bericht", _p)
+        status += f"\nBericht: {len(BERICHT_FELDER)} Felder, " \
+                  f"{len(_bb)} Befund(e)"
     print(f"\n{status}\n")
 
     # §A-NA (Nicht-Abwesenheit): `0 Abweichungen` heisst, dass alles
