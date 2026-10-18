@@ -50,9 +50,13 @@ def _pos(out: str) -> dict[int, str]:
             re.findall(r"ZEILE \S+ ([A-Z]+);pos=(\d+);", out)}
 
 
-def _dedup(out: str) -> dict[tuple[str, int], str]:
-    return {(h, int(r)): a for h, r, a in
-            re.findall(r"DEDUP (\S+);rang=(\d+);art=\S+;aktion=([A-Z]+);", out)}
+def _dedup(out: str) -> dict[str, dict[str, str]]:
+    """sha -> Vorschrift. Kein Rang mehr: die Vorschrift ist im JEDEM
+    Strom identisch, gerade weil sie keine Anzahl traegt."""
+    return {h: {"erst": e, "gleich": g, "ungleich": u}
+            for h, e, g, u in re.findall(
+                r"DEDUP (\S+);erst=([A-Z]+);rest_art=zeitstempel;"
+                r"bei_gleich=([A-Z]+);bei_ungleich=([A-Z]+);", out)}
 
 
 def main() -> int:
@@ -84,10 +88,11 @@ def main() -> int:
     d_base = _dedup(_lauf(base))
     d_mitte = _dedup(_lauf(mitte))
     ha = _h(A)
-    gut = (d_base.get((ha, 2)) == "VERWERFEN"
-           and d_mitte.get((ha, 2)) == "VERWERFEN")
-    print(f"{'ok  ' if gut else 'FAIL'} (A,rang=2) vorher/nachher    "
-          f"{d_base.get((ha, 2))} -> {d_mitte.get((ha, 2))}")
+    gut = (d_base.get(ha, {}).get("gleich") == "VERWERFEN"
+           and d_mitte.get(ha, {}).get("gleich") == "VERWERFEN")
+    print(f"{'ok  ' if gut else 'FAIL'} (A,bei_gleich) vorher/nachher  "
+          f"{d_base.get(ha, {}).get('gleich')} -> "
+          f"{d_mitte.get(ha, {}).get('gleich')}")
     ok += gut
 
     # 3. Beide Zeiger nebeneinander: genau EINER ist stabil.

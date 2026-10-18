@@ -212,6 +212,14 @@ NO_TEST_SUMMARY: set[str] = {
     "scripts/test_regel_gegen_pos.py",     # 3/3 Regel trifft, pos nicht
     "scripts/test_escaping.py",            # 3/3 freie Felder bleiben ein Feld
     "scripts/test_projektion_echt.py",     # 3/3 Projektion nicht tautologisch
+    "scripts/test_katalog_naht.py",        # 5/5 DEDUP ohne Katalog
+    "scripts/test_naht_beweis.py",         # 5/5 Konsument auf ungesehenem Strom
+    "scripts/test_kreuz_record.py",        # 10/10 Record-Komposition + Exit-Ableitung
+    "scripts/test_harness_zaun.py",        # 3/3 kein Test liest Live-Pfad
+    # §A-ZZZZ167: Waage ohne Sollwert. Liest den Vertrag ueber explizite
+    # Pfade und gibt aus, was drinsteht — die Zahl im Bericht wird hier
+    # GENERIERT statt getippt.
+    "scripts/vertragszahlen.py",
     "scripts/test_gaeb_reference.py",  # X83-Fixtures gitignore; TMP-checkout ohne Referenzdaten
     "scripts/test_bvbs_pruefdatei.py",     # braucht externe Pruefdatei
     "scripts/export_backtest_signals.py",  # Daten-Exporter, kein Test
@@ -8449,6 +8457,10 @@ MESSBEREICH: dict[str, tuple[str, ...]] = {
     # §A-ZZZZ119/120 (Runde 80): Vertrag als Artefakt + Vertrags-Runner.
     "waechter_vertrag": ("scripts/waechter_vertrag.json",),
     "vertrags_runner": ("scripts/vertrags_runner.py",),
+    # §A-ZZZZ167 (Runde 87): **Waage, nicht Gewogenes.** Gibt die Zahlen
+    # des Vertrags aus Pfaden aus, statt sie zu tippen. Genau deshalb ist
+    # es ein Werkzeug ohne Sollwert: ein Sollwert hier waere wieder Hand.
+    "vertragszahlen": ("scripts/vertragszahlen.py",),
     "protokoll": ("order_execution_engine/ops/TAG7_ABNAHME.md",
                   "order_execution_engine/ops/BERICHT.md"),
 }
@@ -9863,7 +9875,19 @@ def main() -> int:
                      "Escaping"),
                     ("test_projektion_echt.py",
                      r"(\d+)/(\d+) Projektions-Echtheits-Faelle gruen",
-                     "Projektion-echt")):
+                     "Projektion-echt"),
+                    ("test_katalog_naht.py",
+                     r"(\d+)/(\d+) Katalog-Naht-Faelle gruen",
+                     "Katalog-Naht"),
+                    ("test_naht_beweis.py",
+                     r"(\d+)/(\d+) Naht-Faelle gruen",
+                     "Naht-Beweis"),
+                    ("test_kreuz_record.py",
+                     r"(\d+)/(\d+) Kreuz-Record-Faelle gruen",
+                     "Kreuz-Record"),
+                    ("test_harness_zaun.py",
+                     r"(\d+)/(\d+) Harness-Zaun-Faelle gruen",
+                     "Harness-Zaun")):
                 try:
                     _r = subprocess.run(
                         [sys.executable, str(root / "scripts" / _sk)],

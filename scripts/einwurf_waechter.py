@@ -309,14 +309,29 @@ def _dedup_regeln(strom: list[tuple[str, str]], seen: dict[str, int]) -> list[st
         klassen.setdefault(h, []).append((ts, i))
     zeilen: list[str] = []
     for h, vor in klassen.items():
-        for rang, (ts, i) in enumerate(vor, start=1):
-            if rang == 1:
-                art, aktion = "NEU", "ZUSTELLEN"
-            else:
-                gleich = vor[rang - 2][0] == ts
-                art = "KANAL-DUPLIKAT" if gleich else "WIEDERHOLUNG"
-                aktion = "VERWERFEN" if gleich else "WIEDERHOLT"
-            zeilen.append(f"DEDUP {h};rang={rang};art={art};aktion={aktion};")
+        # §A-ZZZZ161 (Runde 87): **kein `n` mehr im Katalog.**
+        # R86 publizierte je Vorkommen eine Regel `rang=1..n`. `n` war ein
+        # Schnappschuss: eine Kopie, die nach der Messung eintraf, hatte
+        # rang=n+1 und fiel in einen stillen Default — derselbe Fehler wie
+        # die Konstante 38, nur an der Naht statt im Fixture.
+        #
+        # Jetzt: EINE Regel je Klasse, ohne Anzahl. Der Konsument wendet
+        # `aktion_erst` auf Rang 1 an und `aktion_rest` auf jeden Rang > 1
+        # — egal wie viele es sind, auch die, die er erst später sieht.
+        # Der Katalog kann nicht mehr veralten, weil er keine Anzahl
+        # enthaelt.
+        # §A-ZZZZ162 (Runde 87): **auch `rest=` darf nicht vom Gesehenen
+        # abhaengen.** Die erste Fassung setzte `rest=VERWERFEN` wenn alle
+        # gesehenen Kopien denselben Zeitstempel trugen — eine Kopie, die
+        # der Detektor NICHT sah, kippte damit die Aktion fuer alle Raenge
+        # > 1. Die Entscheidung "Duplikat oder Wiederholung" haengt am
+        # Zeitstempel-Vergleich, und den kann nur der Konsument fuehren:
+        # er hat die Kopie und ihren Vorgaenger. Der Katalog liefert nur
+        # die VORSCHRIFT, nicht das Urteil.
+        zeilen.append(
+            f"DEDUP {h};erst=ZUSTELLEN;"
+            f"rest_art=zeitstempel;bei_gleich=VERWERFEN;bei_ungleich=WIEDERHOLT;"
+            f"gesehen={len(vor)};")
     return zeilen
 
 

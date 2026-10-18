@@ -103,7 +103,12 @@ def main() -> int:
     #    Vorkommens-Rang) ODER ein frozen-object-Hash. Verboten: alles,
     #    was ueber pos= aufgeloest werden muss.
     gesamt += 1
-    regel_zeiger = re.search(r"REGEL |regel=|rang=|vorkommen=", out) is not None
+    # §A-ZZZZ161: die Aufloesung ist jetzt eine VORSCHRIFT je Klasse
+    # (erst/rest_art), nicht eine Rang-Tabelle. `rang=` war der
+    # Schnappschuss und ist entfallen.
+    regel_zeiger = re.search(
+        r"DEDUP \S+;erst=\S+;rest_art=zeitstempel;bei_gleich=\S+;"
+        r"bei_ungleich=\S+;", out) is not None
     frozen = re.search(r"INPUT_SHA=|objekt=", out) is not None
     aufgeloest = regel_zeiger or frozen
     gut = aufgeloest

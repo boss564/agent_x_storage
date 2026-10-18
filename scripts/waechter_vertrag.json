@@ -1,5 +1,5 @@
 {
-  "_version": 6,
+  "_version": 7,
   "_zweck": "Maschinenlesbarer Vertrag des Einwurf-Waechters. Single source of truth fuer Repo und externe Ingestion. Wer hier eine Zeile aendert, aendert das Tor ausserhalb dieses Repos mit.",
   "_stand": "Runde 84 (2026-10-18)",
   "_geltung": "Der Runner (scripts/vertrags_runner.py) importiert diese Datei; die externe Ingestion MUSS sie einlesen. Solange sie es nicht tut, zertifiziert N/N einen Vertrag, den draussen niemand benutzt.",
@@ -619,9 +619,46 @@
         "instanz": "grund= freies Feld ohne Escaping (latent, kein Test betrat Semikolon)",
         "code": "einwurf_waechter.escape",
         "test": "test_escaping.py"
+      },
+      {
+        "runde": 87,
+        "instanz": "DEDUP-Katalog rang=1..n war Schnappschuss; rang>n ohne Regel",
+        "code": "einwurf_waechter._dedup_regeln",
+        "test": "test_katalog_naht.py, test_naht_beweis.py"
+      },
+      {
+        "runde": 87,
+        "instanz": "UNGEPRUEFT fehlte im aktion-Enum (lebt im ZEILE-Record) — Spezifikationsluecke",
+        "code": "einwurf_waechter._unparsbar_zeilen",
+        "test": "test_kreuz_record.py"
+      },
+      {
+        "runde": 87,
+        "instanz": "AUFRUF-Exklusivitaet deklariert, nicht erzwungen",
+        "code": "einwurf_waechter.main",
+        "test": "test_kreuz_record.py"
+      },
+      {
+        "runde": 87,
+        "instanz": "Harness ohne Zaun: Testsuite konnte Live-Pfad lesen",
+        "code": "— Harness",
+        "test": "test_harness_zaun.py"
+      },
+      {
+        "runde": 87,
+        "instanz": "Mutation 1 Lauf/Mutant — statistisch blind",
+        "code": "vertrags_runner.mutationssuite",
+        "test": "MUTANT_LAEUFE=3"
+      },
+      {
+        "runde": 87,
+        "instanz": "Versionssprung v4->v6 ohne v5-Eintrag",
+        "code": "waechter_vertrag.json",
+        "test": "versions_ledger (R87 nachgetragen)"
       }
     ],
-    "stand_r86": 14
+    "stand_r86": 14,
+    "stand_r87": 20
   },
   "orakel": {
     "befund": "Die Konstanten-Probe 0/1/2 beweist Anti-Hardcoding, nicht Zaehl-Richtigkeit. Sie zeigt, dass der Code nicht 37 ausgibt — nicht, dass 0 richtig IST.",
@@ -729,11 +766,11 @@
     "regel": "Baseline waechst nie von selbst; jeder neue Skriptpfad ist meldepflichtig."
   },
   "dedup_regel": {
-    "syntax": "DEDUP <sha>;rang=<1..n>;art=<NEU|KANAL-DUPLIKAT|WIEDERHOLUNG>;aktion=<ZUSTELLEN|VERWERFEN|WIEDERHOLT>;",
-    "architektur": "Regel statt Tabelle: der Detektor publiziert Klassenregeln, der Konsument exekutiert sie auf SEINEM Strom.",
-    "rang": "klassenlokal, 1-basiert; (sha, rang) ist unter Bewegung stabil, pos= nicht",
-    "kein_pos": "DEDUP traegt KEINE Position. Wer sie hinzufuegt, baut die R85-Mehrdeutigkeit wieder ein.",
-    "test": "test_regel_gegen_pos.py (3/3), regel_konsument.py (4/4)"
+    "syntax": "DEDUP <sha>;erst=<aktion>;rest_art=zeitstempel;bei_gleich=<aktion>;bei_ungleich=<aktion>;gesehen=<n>;",
+    "architektur": "Regel ohne Anzahl. Der Detektor liefert die VORSCHRIFT, der Konsument fuehrt das Urteil (Zeitstempel-Vergleich).",
+    "katalog_abgeschafft": "R86 trug rang=1..n; n war ein Schnappschuss. Eine Kopie danach hatte rang=n+1 ohne Regel. Jetzt deckt rest_art JEDEN Rang > 1 ab, auch den, den der Detektor nie sah.",
+    "gesehen": "Telemetrie ueber die Messung — KEINE Autoritaet. Ein Konsument, der `gesehen` als Ereignis liest, meldet bei einer einzigen Meldung ein Duplikat (Fehler im Test test_kreuz_record beim ersten Lauf).",
+    "test": "test_katalog_naht.py (5/5), test_naht_beweis.py (5/5)"
   },
   "zweig_ledger": {
     "regel": "Jeder Kontrollfluss-Zweig im Detektor traegt den Namen des Tests, der ihn betritt. Kein Prozentwert — Zeiger auf Zweige, wie bei den Flecken.",
@@ -790,5 +827,70 @@
       }
     ],
     "latent_ohne_test": []
+  },
+  "versions_ledger": [
+    {
+      "version": 1,
+      "commit": "670e8ebc",
+      "runde": 79,
+      "aenderung": "Vertrag angelegt: 8 Vertragsfaelle, Mutationen, Exit-Skala"
+    },
+    {
+      "version": 2,
+      "commit": "9caad516",
+      "runde": 82,
+      "aenderung": "Messachse schluessel=wert, Verantwortliche mit Fristen"
+    },
+    {
+      "version": 3,
+      "commit": "e3d9fd49",
+      "runde": 83,
+      "aenderung": "Aggregation _SCHWERE, Schema-Invarianz 7/7 (Aktionsaenderung 3/4 ohne Versionsnennung — Befund R85)"
+    },
+    {
+      "version": 4,
+      "commit": "d9a3f23e",
+      "runde": 84,
+      "aenderung": "Zeilen-Identitaet ZEILE n, Exit 2 Meta-Achse, Ausgabe-Grammatik"
+    },
+    {
+      "version": 5,
+      "commit": "2a0fac3a",
+      "runde": 85,
+      "aenderung": "Zeiger inhaltlich ZEILE sha, exit_aus_zeilen, WIEDERHOLT, Eingabe-Grammatik — Version im Bericht NIE genannt (Befund R87)"
+    },
+    {
+      "version": 6,
+      "commit": "3e77f42f",
+      "runde": 86,
+      "aenderung": "DEDUP-Regeln rang/aktion, escape(), AUFRUF-Union, Aktions-Vertrag"
+    },
+    {
+      "version": 7,
+      "commit": "(diese Runde)",
+      "runde": 87,
+      "aenderung": "DEDUP ohne Katalog (erst/rest_art/bei_gleich/bei_ungleich), Kreuz-Record-Invarianz, Harness-Zaun, N-Laeufe-Mutation, Versionen-Ledger"
+    }
+  ],
+  "kreuz_record_invarianten": {
+    "AUFRUF_exklusiv": "ZEILE AUFRUF darf nie mit Inhalts-Records im selben Bericht stehen.",
+    "UNGEPRUEFT_bei_4": "Jeder Exit 4 traegt mindestens einen ZEILE pos:<n> UNGEPRUEFT-Record.",
+    "exit_ableitbar": "Exit ist aus den emittierten Records allein ableitbar, ohne interne Zustaende.",
+    "test": "test_kreuz_record.py (10/10)"
+  },
+  "harness_zaun": {
+    "regel": "Kein Test in scripts/ darf gegen einen Live-Pfad (Transcript, data_root) assertieren. Ausnahmen nur mit Begruendung in test_harness_zaun.py AUSNAHMEN.",
+    "anlass": "strom-alle lief R85 gegen den laufenden Transcript mit Konstante 38/37, war beim Commit schon 39/38.",
+    "test": "test_harness_zaun.py (3/3)"
+  },
+  "mutation_protokoll": {
+    "laeufe_pro_mutant": "MUTANT_LAEUFE (Default 3)",
+    "klassen": [
+      "gefangen (in allen Laeufen)",
+      "INSTABIL (nicht in allen)",
+      "unbeobachtbar",
+      "nicht gefangen"
+    ],
+    "anlass": "Ein Lauf/Mutant kann 'deterministisch gefangen' nicht von 'gelegentlich entkommen' trennen."
   }
 }

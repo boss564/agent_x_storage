@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -245,6 +246,13 @@ def _konstanten_probe(script: Path) -> bool:
         return r.returncode != 0
 
 
+def _laeufe_pro_mutant() -> int:
+    try:
+        return max(1, min(20, int(os.environ.get("MUTANT_LAEUFE", "3"))))
+    except ValueError:
+        return 3
+
+
 def mutationssuite(vertrag: dict, strom: list, neu_text: str) -> tuple[int, int, list[str]]:
     ok = 0
     meldungen: list[str] = []
@@ -265,6 +273,14 @@ def mutationssuite(vertrag: dict, strom: list, neu_text: str) -> tuple[int, int,
     meldungen.append(f"ok   Negativkontrolle     {nok}/{nges} grün "
                      f"(unverändert)")
 
+    # §A-ZZZZ166 (Runde 87): **ein Lauf pro Mutant ist keine Messung.**
+    # Ein Mutant, der nur gelegentlich entkommt (Zeit, Ordnung, Seed),
+    # wurde mit einem Lauf als "deterministisch gefangen" verbucht. Jetzt
+    # N Laeufe; nur wenn JEDER faengt, gilt er als gefangen. Ein Mutant,
+    # der mal faengt und mal nicht, wird als INSTABIL gemeldet — das ist
+    # eine eigene Klasse, schlimmer als "entkommen", weil sie sich als
+    # fangbar tarnt.
+    N = _laeufe_pro_mutant()
     for feld, _, _ in MUTATIONEN:
         mutiert = _mutiere(feld, quelle)
         if mutiert is None or mutiert == quelle:
@@ -288,6 +304,22 @@ def mutationssuite(vertrag: dict, strom: list, neu_text: str) -> tuple[int, int,
             # erwartet. Er scheitert erst an abweichenden Soll-Werten.
             _konst_rot = _konstanten_probe(kopie)
             _gefangen = (nok != nges) or _konst_rot
+            # §A-ZZZZ166: N-1 weitere Laeufe. Ergebnis muss identisch sein,
+            # sonst ist der Mutant instabil — und eine instabile Probe
+            # zaehlt nicht als gefangen.
+            _instabil = False
+            for _ in range(N - 1):
+                _n2, _g2, _ = fahre(kopie, vertrag, strom, neu_text)
+                _gef2 = (_n2 != _g2) or _konstanten_probe(kopie)
+                if _gef2 != _gefangen:
+                    _instabil = True
+                    break
+            if _instabil:
+                meldungen.append(
+                    f"FAIL Mutation {feld}: **INSTABIL** — faengt in "
+                    f"{N} Laeufen nicht immer; N=1 haette sie als gefangen "
+                    f"verbucht")
+                continue
             if not _gefangen:
                 # Verändert der Mutant überhaupt eine assertierte Ausgabe?
                 if not any(m.startswith("FAIL") for m in nmsg):

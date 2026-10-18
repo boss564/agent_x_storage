@@ -29,9 +29,12 @@ def _z(ts: str, txt: str) -> str:
         ensure_ascii=False)
 
 
-def _regeln(out: str) -> dict[tuple[str, int], str]:
-    return {(h, int(r)): a for h, r, a in
-            re.findall(r"DEDUP (\S+);rang=(\d+);art=\S+;aktion=([A-Z]+);", out)}
+def _regeln(out: str) -> dict[str, dict[str, str]]:
+    """sha -> {erst, bei_gleich, bei_ungleich}. Keine Anzahl mehr."""
+    return {h: {"erst": e, "gleich": g, "ungleich": u}
+            for h, e, g, u in re.findall(
+                r"DEDUP (\S+);erst=([A-Z]+);rest_art=zeitstempel;"
+                r"bei_gleich=([A-Z]+);bei_ungleich=([A-Z]+);", out)}
 
 
 def _lauf(zeilen: list[str]) -> str:
@@ -52,6 +55,7 @@ def konsumiere(strom: list[str], regeln: dict[tuple[str, int], str]) -> list[str
     """
     import hashlib
     rang: dict[str, int] = {}
+    ts: dict[str, str] = {}
     aktionen: list[str] = []
     for zeile in strom:
         try:
@@ -59,11 +63,21 @@ def konsumiere(strom: list[str], regeln: dict[tuple[str, int], str]) -> list[str
         except (ValueError, KeyError, TypeError):
             aktionen.append("UNGEPRUEFT")
             continue
-        norm = re.sub(r"<timestamp>.*?</timestamp>", "", txt)
-        norm = " ".join(norm.split())
+        m = re.search(r"<timestamp>(.*?)</timestamp>", txt)
+        jetzt = m.group(1) if m else "?"
+        norm = " ".join(re.sub(r"<timestamp>.*?</timestamp>", "", txt).split())
         h = hashlib.sha256(norm.encode("utf-8")).hexdigest()
         rang[h] = rang.get(h, 0) + 1
-        aktionen.append(regeln.get((h, rang[h]), "KEINE-REGEL"))
+        r = regeln.get(h)
+        if r is None:
+            aktionen.append("KEINE-REGEL")
+        elif rang[h] == 1:
+            aktionen.append(r["erst"])
+        else:
+            # §A-ZZZZ162: der Konsument entscheidet, ob Kopie oder
+            # Neusendung — er hat den Vorgaenger-Zeitstempel.
+            aktionen.append(r["gleich"] if ts[h] == jetzt else r["ungleich"])
+        ts[h] = jetzt
     return aktionen
 
 
@@ -105,9 +119,10 @@ def main() -> int:
     #    es eine Regel ueber Raenge ist, keine Aussage ueber Positionen.
     gesamt += 1
     def _rang1_zustellbar(regeln):
-        return all(regeln[(h, 1)] == "ZUSTELLEN" for h, _ in regeln)
+        return all(r["erst"] == "ZUSTELLEN" for r in regeln.values())
     def _kein_rang_gt1_zustellbar(regeln):
-        return all(a != "ZUSTELLEN" for (h, r), a in regeln.items() if r > 1)
+        return all(r["gleich"] != "ZUSTELLEN" and r["ungleich"] != "ZUSTELLEN"
+                   for r in regeln.values())
     gut = (_rang1_zustellbar(r_base) and _rang1_zustellbar(r_shift)
            and _kein_rang_gt1_zustellbar(r_base)
            and _kein_rang_gt1_zustellbar(r_shift))
