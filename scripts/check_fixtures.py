@@ -619,18 +619,27 @@ def _auswahl_fehler_fixture(kind=False) -> int:
     if kind in stufen:
         text, karte_x, rot = stufen[kind]
         r = _auswahl_fehler(split_blocks(text), karte_x)
-        # §A-ZZZZ: „richtig" heißt hier **rot**, und rot heißt eine
-        # Meldung. §A-ZZZZ21 (Runde 60, §71.68): **auf Wirkung umgestellt.**
-        # Bis Runde 59 las der Sammler nur ein `int`; die Tupel-Form war
-        # damit zementiert, und ein `Auswahl(ok=…)` scheiterte an dieser
-        # Form statt an der Logik. Jetzt: `got` ist die Wirkung — die
-        # Rückgabe bleibt `(zahl, liste)`, aber die **Zahl ist das
-        # Ergebnis**, nicht ein Nebenprodukt der Form.
-        got = bool(r)
-        if got != rot:
+        # §A-ZZZZ23 (Runde 60, zweiter Schritt): **das Dataclass.**
+        # In §71.68 wurde der Aufrufer auf Wirkung umgestellt und das
+        # Dataclass bewusst **nicht** im selben Commit gesetzt — bei Rot
+        # wäre nicht entscheidbar gewesen, ob die Fixture oder die
+        # Signatur es war. Die Vorhersage war: es geht jetzt durch.
+        #
+        # `ok` ist ein Feld, kein Wert. `if not r.ok` ist die einzige Form,
+        # die das Objekt zulässt — ein Truthy-Tupel kann man falsch lesen,
+        # ein Objekt mit `ok`-Feld nicht.
+        from dataclasses import dataclass
+
+        @dataclass(frozen=True, slots=True)
+        class Auswahl:
+            ok: bool
+            meldungen: list
+
+        a = Auswahl(ok=bool(r), meldungen=r)
+        if a.ok != rot:
             return 0, [(f"Akte-Auswahl-Fixture: {kind} erwartet "
-                        f"{'rot' if rot else 'grün'}, bekam {got}")]
-        return (1 if got else 0), r
+                        f"{'rot' if rot else 'grün'}, bekam {a.ok}")]
+        return (1 if a.ok else 0), a.meldungen
     # `False` = heiler Lauf, `True` = kaputter Lauf (Standard von
     # `measure()`): beide fahren **alle** Stufen. Der Unterschied ist die
     # Erwartung, nicht der Eingang — `False` prüft die grünen, `True` die
