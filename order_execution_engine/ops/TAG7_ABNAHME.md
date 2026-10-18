@@ -5749,7 +5749,7 @@ total=0 chain_total=0 reported=0 unclassified=0 unchecked=0 unclassified_checker
   Wellen: 0
   Tests ohne Skript: 0
   Inventare: 0
-Bezug: root=/Volumes/THX_OS_ULTRA/Users/olivermueller/agent_x_storage, CLAUDE.md sha256:69159540db89, Baum b247b608+dirty
+Bezug: root=/Volumes/THX_OS_ULTRA/Users/olivermueller/agent_x_storage, CLAUDE.md sha256:69159540db89, Baum ceb8d12d
 ```
 
 **Was offen bleibt:** `unchecked` und `unclassified_checkers` sind im
