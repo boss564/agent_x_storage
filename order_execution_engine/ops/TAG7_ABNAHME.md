@@ -7368,3 +7368,30 @@ kopfzeile: 8 gemessen · 0 nicht gemessen · 0 ohne Skript (12 entfernt) · Prü
 Karte: ee7dd282b2c7
 Bezug: root=/Volumes/THX_OS_ULTRA/Users/olivermueller/agent_x_storage, CLAUDE.md sha256:50fff349a031, Baum 90639fbb+dirty
 ```
+
+```
+total=2 chain_total=0 reported=2 unclassified=-2 unchecked=0 unclassified_checkers=0
+  Fließtext-Brüche: 2
+  Zeilen: 0
+  Referenzen: 0
+  Wellen: 0
+  Tests ohne Skript: 0
+  Inventare: 0
+  Testpfade: 0
+  Schreibmodus: 0
+kopfzeile: 8 gemessen · 0 nicht gemessen · 0 ohne Skript (12 entfernt) · Prüfer 1ff37da95fac
+Karte: c8ed33b7f7e0
+Bezug: root=/Volumes/THX_OS_ULTRA/Users/olivermueller/agent_x_storage, CLAUDE.md sha256:50fff349a031, Baum c00bcbd5+dirty
+```
+
+**§71.67a — Korrektur zu §71.67: die Karte war zu grob, und der Prüfer hat
+es gemeldet.** Acht Blöcke trugen `ee7dd282b2c7` mit *verschiedenen*
+Bezugsraum-Hashes. Nicht Handedit — die Karte nahm die Zahlen und die
+Klassen, aber nicht die **Eingaben**. Die Herkunft (CLAUDE.md-Hash,
+Prüfer-Hash) gehört hinein: zwei Läufe mit denselben Zahlen über
+verschiedenen Eingaben sind dieselbe Zahl und nicht dieselbe Messung.
+
+Die alte Karte ist damit **nicht falsch, sondern zu grob** — der Block
+darüber bleibt als Vorzustand stehen, §71.64/§71.65 ebenso. Der neue
+Prüfer meldete zuerst „keine Messung zur Karte" statt „Handedit" — das
+ist die richtige Reihenfolge: erst sagen, daß nichts paßt, dann raten.

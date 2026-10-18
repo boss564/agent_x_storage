@@ -1404,18 +1404,30 @@ def split_blocks(text: str) -> list[dict]:
     return out
 
 
-def _card_fingerprint(numbers: dict[str, int], classes: list[tuple[str, int]]) -> str:
+def _card_fingerprint(numbers: dict[str, int],
+                      classes: list[tuple[str, int]],
+                      herkunft: str = "") -> str:
     """Der Fingerprint der **Eingaben**, die die Zahlen bestimmen.
 
     §A-ZU: `dirty`, Zeitstempel und Pfade gehören **nicht** hinein — ein
     Fingerprint, der sich bei jedem Lauf ändert, findet nie einen Block,
     und die Zeile wird dauerrot. Genau dieser Fehler soll nicht neu
     gebaut werden, während der alte repariert wird.
+
+    §A-ZZZZ17 (Runde 59): **die Zahlen allein sind zu grob.** Acht Blöcke
+    trugen dieselbe Karte `ee7dd282b2c7` mit *verschiedenen*
+    Bezugsraum-Hashes; der Prüfer meldete zu Recht „Fingerprint
+    unterspezifiziert oder Handedit". Die Herkunft (CLAUDE.md-Hash,
+    Prüfer-Hash) ist eine **Eingabe** der Messung, kein Laufzustand: zwei
+    Läufe mit denselben Zahlen über verschiedenen Eingaben sind nicht
+    dieselbe Messung. `dirty` bleibt draußen — der Bezugsraum wäre sonst
+    bei jedem Edit ein anderer.
     """
     import hashlib
     import json
     payload = json.dumps({"n": sorted(numbers.items()),
-                          "c": sorted(classes)}, sort_keys=True)
+                          "c": sorted(classes),
+                          "h": herkunft}, sort_keys=True)
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:12]
 
 
@@ -2791,11 +2803,18 @@ def calibration_card(root: Path | None = None) -> str:
     # Er ist Herkunft (nicht ableitbar aus dem Blocktext) und gehört
     # darum hierher; `dirty`/Pfad/Zeit bleiben draußen, sonst trifft
     # kein Block je einen Lauf.
+    # §A-ZZZZ17 (Runde 59): die Karte war **zu grob**. Acht Blöcke trugen
+    # `ee7dd282b2c7` mit *verschiedenen* Bezugsraum-Hashes — der Prüfer
+    # meldete „Fingerprint unterspezifiziert oder Handedit". Beides ist
+    # wahr, und die Auflösung ist nicht „Handedit": die **Herkunft** der
+    # Zahlen (CLAUDE.md-Hash, Prüfer-Hash) gehört in die Karte, weil sie
+    # die Eingaben der Messung sind. `dirty`/Pfad/Zeit bleiben draußen —
+    # sonst trifft kein Block je einen Lauf.
     fp = _card_fingerprint({k: int(rep[k]) for k in
                             ("total", "chain_total", "reported",
                              "unclassified", "unchecked",
                              "unclassified_checkers")},
-                           rep["classes"])
+                           rep["classes"], herkunft=f"{sha}/{_pruefer_hash()[:8]}")
     lines.append(f"Karte: {fp}")
     lines.append(f"Bezug: root={base}, CLAUDE.md sha256:{sha}, "
                  f"Baum {_tree_ref(base)}")
