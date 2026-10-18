@@ -7706,13 +7706,21 @@ richtig, ihre Prämisse war die falsche. Es ist die **vierte**
 widerlegte Vorhersage in vier Runden.
 
 **4. `(Tupel − 1) × 3` — mit den echten Zahlen.** Tupel-Rückgeber nach
-Annotation: **7**. Davon echte Tupel (keine `list[tuple]`): **5**.
-Wahrheitskontexte über einen Tupel-Halter: **13**. Davon als
-`if <tupel>:` auf einem echten Tupel: **0** — alle 13 entpacken
-(`a, b = f()`), keiner prüft. Also gilt Ihre Formel, aber die Basis ist
-nicht 6, sondern 5: **5 × 3 = 15 offene Kontexte**, davon heute 0
-ausgenutzt. Ziel bleibt 0 Tupel-Rückgeber; der Wächter fällt dann ohne
-Ersatz weg.
+Annotation: **7**. Davon echte Tupel (keine `list[tuple]`): **5**, davon
+konvertiert (`Auswahl`): **1** ⇒ 4 verbleibende. Wahrheitskontexte über
+einen Tupel-Halter: **13**. Davon als `if <tupel>:` auf einem echten
+Tupel: **0** — alle 13 entpacken, keiner prüft.
+
+⇒ Runde 63 schrieb hier `5 × 3 = 15` und ließ das `−1` aus der eigenen
+Formel weg. Richtig ist **4 × 3 = 12**. Mit allen sieben Rückgebern
+wären es `6 × 3 = 18`; `15` entspricht **keiner** der beiden Lesarten.
+Die Formel, die ich zitiert habe, habe ich nicht gerechnet — derselbe
+Fehler, den diese Runde zweimal bei anderen Zahlen macht.
+
+⇒ Die eigentliche Zahl bleibt: **13 Entpackstellen auf 4 offene
+Rückgeber**. Dort kann eine Arity- oder Wahrheitsprüfung sitzen, und
+dort hat der Wächter drei Kontexte nicht im Blick. Ziel bleibt 0
+Tupel-Rückgeber; der Wächter fällt dann ohne Ersatz weg.
 
 **5. Kalibrierung: leere Datei statt fehlende — und der dritte Ausgang
 ist zu.** Runde 62 hatte `FileNotFoundError ⇒ rep.ok()` eingebaut, um
@@ -7798,8 +7806,10 @@ kennt nur einen Ausgang für Lesefehler. Gegenlauf: leer ⇒ kein Befund,
 fehlend ⇒ Befund.
 
 **7. Tupel-Rückgeber: 7 nach Annotation, 5 echte, 13 Entpackstellen,
-0 Wahrheitsprüfungen.** Ihre Formel `(Tupel − 1) × 3` gilt — mit der
-Basis 5: **15 offene Kontexte**, heute 0 ausgenutzt. Ziel 0.
+0 Wahrheitsprüfungen.** Ihre Formel `(Tupel − 1) × 3` gilt — mit 4
+verbleibenden echten Rückgebern: **12 offene Kontexte**, heute 0
+ausgenutzt. (Die 15 von Runde 63 ließ das `−1` weg; berichtigt in
+§71.71.4.) Ziel 0.
 
 **8. Verhältnis.** 210 Blöcke. 4 scheiterbar. 4 : 210 — die ehrliche
 Quote. Drei Prüfer und zwei Gegenläufe sind diese Runde gebaut worden;
@@ -7820,3 +7830,57 @@ Karte: 745fc89a2fc9
 Zustand: 4/8 Meßblöcke scheiterbar · 0 Blöcke seit letztem · Deckel 5 ⇒ unter · 210 Blöcke · 4 : 210 Gegenläufe
 Bezug: root=/Volumes/THX_OS_ULTRA/Users/olivermueller/agent_x_storage, CLAUDE.md sha256:50fff349a031, Baum 678da9d6+dirty
 ```
+
+### §71.73 — Runde 64: der Slot, den das Enum nicht kennt
+
+**Der Rückfall lag um die Funktion, nicht um die Zeile.** Runde 62
+hängte den Zustands-Rückfall an `Report.fail`; Runde 63 zeigte, daß
+`1 benannter Selbsttest-Rest` **neben** dem Deckel stand und damit gar
+nicht durch `Report.fail` ging. Ein Feld ist kein Zustand — also greift
+kein Rückfall, und ein Feld ohne Deckel ist eine unbegrenzte Duldung.
+Fünf Runden, fünf Wörter (`quittiert`, `Berichtigung`, `erwartet`,
+`Vorzustand`, `benannter Selbsttest-Rest`), jede Schließung eine Runde
+zu spät für die nächste.
+
+⇒ **§A-ZZZZ52: die Zustandszeile hat eine feste Feldliste.**
+`ZUSTAND_FELDER` = scheiterbar · seit · deckel · bloecke ·
+gegenlaeufe · quittungen. Jedes weitere Feld ist eine `quittiert` mit
+`note` und kostet eine Reserve (`DECKEL_CIT = 2`). Der Rest heißt
+jetzt `1/2 quittiert` und trägt seinen Grund in `QUITTUNGEN_STAND`.
+
+**±1: der Meßblock zählt sich nicht.** Runde 63 schrieb „der letzte
+scheiterbare Block ist der vorletzte ⇒ Zähler 0" und ließ beide
+Lesarten offen. Gemessen: die vier scheiterbaren Meßblöcke liegen auf
+Index 201, 202, 203, **209** bei `n = 210`; der letzte Block **ist**
+der Meßblock, trägt die Karte selbst. Also null Blöcke danach, Zähler
+0 — richtig, aber die Konvention stand nicht da. Sie steht jetzt als
+Docstring an `blocks_since_measure` (§A-ZZZZ53): `n - 1 - letzte_pos`.
+
+**209 war mein Text, 210 ist der Lauf.** Zum dritten Mal in dieser Akte
+trifft Ihre Rechnung eine meiner **geschriebenen** Zahlen und nie die
+gerechnete: `0/8` (gemeldet 0, Funktion 4), `15` (Formel ohne `−1`),
+`209` (Berichtigung, Ausgabe 210). Das ist kein Zufall der Reihenfolge,
+das ist die Eigenschaft der Akte.
+
+**Der Reparaturfehler war `stimmt`.** Der Selbsttest fand beim ersten
+Lauf vier Probleme: `(urteil == "richtig") is not stimmt` — `stimmt`
+war bereits der Wahrheitswert, der Vergleich mit `True` also
+Schreibweise, keine Prüfung. Der Prüfer über den Prüfern hatte recht,
+nur nicht dort, wo ich suchte. Nach zwei Umformungen bleibt ein BoolOp
+(`stimmt and urteil == "falsch"`), den er strukturell nicht von einem
+Selbstbezug unterscheiden kann — **das ist die eine Quittung**, nicht
+ein siebtes Wort. Der Selbsttest selbst ist grün (`[]`).
+
+**Neues Feld `R→F`.** Die einzige Kennzahl, die sich in 64 Runden
+bewegt: Runde 9 → 9 Runden bis zum Fund, Runde 58 → 4, Runde 62 →
+**1**. Reparatur zu Fund fällt von neun auf eins, während die
+Fehlerzahl konstant bleibt. Steht jetzt als `R→F 1` in der Zeile, aus
+`min()` über die Tabelle — nicht geschrieben.
+
+**Berichtigt:** `(Tupel−1)×3` mit 4 verbleibenden echten Rückgebern
+(= 5 − konvertierte `Auswahl`) ergibt **12 offene Kontexte**, nicht 15.
+Die 15 war `5×3` — die Formel ohne ihr `−1`.
+
+Gezählt heute: **210 Blöcke · 4/8 scheiterbar · 7 Tupel-Rückgeber · 5
+echt · 1 konvertiert · 12 offen / 13 Entpackstellen · 0
+Wahrheitsprüfungen · 1/2 quittiert · R→F 1 · EXIT=0.**

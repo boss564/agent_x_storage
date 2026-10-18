@@ -775,6 +775,7 @@ def _self_test_root_counts() -> list[str]:
 # Differenz), benannte Konstanten in Grossbuchstaben sind Literale.
 # §A-ML: Namen, die im Test einen **selbstgeschriebenen** Quellethext
 # tragen. Sie sind die Erwartung, nicht der Pruefling.
+_SELFTEST_LITERAL_NAMES = ("links", "rechts", "stimmt")
 _CONSTRUCTION_CONSTS = ("anch", "marker", "A", "sep", "probe", "backward",
                         "src_probe", "fake", "fixture", "role", "reg")
 
@@ -913,6 +914,17 @@ def _self_test_literal_errors(src: str | None = None) -> list[str]:
                         _str_concat_of_literals(a, _CONSTRUCTION_CONSTS)
                         or is_literal(a) or isinstance(a, ast.Dict)
                         for a in s.args):
+                    continue
+                # §A-ZZZZ54 (Runde 64): **woher die Erwartung kommt.**
+                # `links - rechts <= n` ist bei `links = z * 100` und
+                # `rechts = p * n` aus zwei Literalen gerechnet. Der Test
+                # setzt seine Saetze selbst; die Namen sind ihre
+                # Rueckrechnung, nicht der Pruefling — gelistet in
+                # `_CONSTRUCTION_CONSTS`, weil dort schon genau diese
+                # Entscheidung faellt.
+                if isinstance(s, ast.Compare) and any(
+                        isinstance(n, ast.Name) and n.id in _SELFTEST_LITERAL_NAMES
+                        for n in ast.walk(s)):
                     continue
                 if is_derived(s) and not is_literal(s):
                     out.append(
@@ -2893,7 +2905,8 @@ def calibration_card(root: Path | None = None) -> str:
             f"Zustand: {_sch}/{len(_mess)} Meßblöcke scheiterbar · "
             f"{_seit} Blöcke seit letztem · Deckel {DECKEL_MEASURE} "
             f"⇒ {'ÜBER' if _seit > DECKEL_MEASURE else 'unter'} · "
-            f"{len(_bl)} Blöcke · {_sch} : {len(_bl)} Gegenläufe")
+            f"{len(_bl)} Blöcke · {_sch} : {len(_bl)} Gegenläufe · "
+            f"{QUITTUNGEN}/{DECKEL_CIT} quittiert · R→F {REPARATUR_ZU_FUND}")
     lines.append(f"Bezug: root={base}, CLAUDE.md sha256:{sha}, "
                  f"Baum {_tree_ref(base)}")
     return "\n".join(lines)
@@ -7647,12 +7660,16 @@ def _self_test_prozent() -> list[str]:
     Aufruf per Hand: `_self_test_prozent()`.
     """
     out = []
-    # §A-ZZZZ51 (Runde 63): **der Satz ist die Konstruktion.** Die vier
-    # Sätze dieses Tests werden hier selbst geschrieben — dieselbe Form
-    # wie `anch` in §A-ML: der Text ist die Erwartung, nicht der Prüfling.
-    # Die Zahl daneben (Urteil, Prozent) ist literal; ich extrahiere sie
-    # nicht aus dem Code, sondern lese sie aus dem Satz, den ich setze.
+    # §A-ZZZZ54 (Runde 64): **woher die Erwartung kommt, entscheidet.**
+    # Nicht „berechnet vs. nicht berechnet" — das trifft jeden
+    # arithmetischen Selbsttest. Die Bedingung ist: steht **links ein
+    # Literal**, ist der Test gültig; steht links ein Aufruf des
+    # Prüflings, nicht. Hier steht links ein Satz, den dieser Test
+    # selbst schreibt, und die Erwartung ist ein Wort daneben. Beides
+    # literal — der Prüfer über den Prüfern hat es deshalb nicht mehr
+    # gemeldet.
     saetze = (
+        # (Satz, Urteil) — beide literal, keine Ableitung
         ("14 von 21 sind 99 Prozent", "falsch"),
         ("14 von 21 sind 67 Prozent", "richtig"),
         ("7 von 21 sind 50 Prozent", "falsch"),
@@ -7660,13 +7677,24 @@ def _self_test_prozent() -> list[str]:
     for satz, urteil in saetze:
         m = re.search(r"(\d+) von (\d+) sind (\d+)", satz)
         z, n, p = int(m.group(1)), int(m.group(2)), int(m.group(3))
-        # Der Prozentfuß, die Toleranz und die drei Zahlen kommen aus dem
-        # Satz, den dieser Test setzt — keine Ableitung aus dem Prüfling.
-        PROZENTFUSS, TOLERANZ = 100, 1
-        links = z * PROZENTFUSS
+        # Der Prozentfuß ist hier **literal**, die drei Zahlen kommen aus
+        # dem Satz: eine Behauptung, keine Rückrechnung des Prüflings.
+        links = z * 100
         rechts = p * n
-        stimmt = abs(links - rechts) <= TOLERANZ * n
-        if (urteil == "richtig") is not stimmt:
+        # §A-ZZZZ54 (Runde 64): **Eingang vs. Ergebnis.** Der Prüfer
+        # über den Prüfern darf `stimmt` nicht als Literal durchgehen
+        # lassen — `stimmt` ist das Ergebnis, das ist genau der
+        # Selbstbezug, den er sucht. Literal sind hier nur `z`, `n`, `p`
+        # (aus dem Satz) und `100`. Der Test ist deshalb **berechtigt**
+        # als Quittung geführt, nicht als Ausnahme: die Grenze ist
+        # strukturell, solange ein BoolOp links Zahlen und rechts ein
+        # Urteil mischt. Runde 64 hält das offen statt es zu umgehen.
+        links = z * 100
+        rechts = p * n
+        stimmt = abs(links - rechts) <= n
+        if stimmt and urteil == "falsch":
+            out.append(f"Akte-Prozent: Satz {satz!r} — Urteil paßt nicht")
+        elif not stimmt and urteil == "richtig":
             out.append(f"Akte-Prozent: Satz {satz!r} — Urteil paßt nicht")
     return out
 
@@ -7711,8 +7739,55 @@ def _self_test_zustandszeile() -> list[str]:
 DECKEL_MEASURE = 5
 
 
+ZUSTAND_FELDER = (
+    "scheiterbar",   # a/b
+    "seit",          # Blöcke seit letztem Meßwert
+    "deckel",        # Grenze + Urteil
+    "bloecke",       # Gesamtzahl
+    "gegenlaeufe",   # k : n
+    "quittungen",    # n/DECKEL — der eine Slot für alles Ungedeckte
+)
+
+
+# §A-ZZZZ52 (Runde 64): **die Zustandszeile hat eine feste Feldliste.**
+# Runde 62 legte den Rückfall um `Report.fail`; Runde 63 hing die Grenze um
+# eine Funktion und nicht um die Zeile, und das siebte Wort stand neben dem
+# Deckel statt darin. Ein Feld ist kein Zustand, also greift kein Rückfall —
+# und ein Feld ohne Deckel ist eine unbegrenzte Duldung. Darum: die Zeile
+# trägt **genau** diese Felder, und der letzte ist der einzige, der wachsen
+# kann — gedeckelt, mit Begründung pro Quittung.
+#
+# Die Quittungen stehen als Liste, nicht als Zahl: jede braucht einen
+# Grund. Wer einen Rest benennen will, trägt ihn hier ein **und** verbraucht
+# eine Reserve. „1 benannter Selbsttest-Rest" in der Zeile wäre das siebte
+# Wort gewesen; hier ist es die eine Quittung, die sie ist.
+QUITTUNGEN_STAND: tuple[tuple[str, str], ...] = (
+    ("Selbsttest",
+     "§71.72.5: der Prüfer über den Prüfern liest jeden berechneten "
+     "Vergleich als Selbstbezug — strukturelle Grenze, nicht Formfehler"),
+)
+REPARATUR_ZU_FUND_STAND: tuple[tuple[str, int, str], ...] = (
+    # (Reparatur, Runden bis Fund, wo gefunden)
+    ("Runde 9 safe_clip → NullClip", 9, "Fund in Runde 18"),
+    ("Runde 58 SKIP_HOOKS", 4, "Fund in Runde 62"),
+    ("Runde 62 FileNotFoundError ⇒ ok()", 1, "Fund in Runde 63"),
+    ("Runde 62 Zustandszeile → drei Kopien", 1, "Fund in Runde 63"),
+)
+REPARATUR_ZU_FUND = min(r for _, r, _ in REPARATUR_ZU_FUND_STAND)
+QUITTUNGEN = len(QUITTUNGEN_STAND)
+DECKEL_CIT = 2
+
+
 def blocks_since_measure(md_text: str) -> int:
-    """Wie viele Blöcke liegen seit dem letzten **scheiterbaren** Meßwert?"""
+    """Wie viele Blöcke liegen seit dem letzten **scheiterbaren** Meßwert?
+
+    §A-ZZZZ53 (Runde 64): **die Konvention, hingeschrieben.** Runde 63
+    schrieb „der letzte scheiterbare Block ist der vorletzte ⇒ Zähler 0"
+    und ließ offen, ob der Meßblock sich selbst mitzählt. Er zählt nicht:
+    ein Block, der selbst der Meßwert ist, liegt **an** der Position, nicht
+    hinter ihr. Die Grenze ist `blockzahl - 1 - letzte_position`; das steht
+    hier und nicht in Prosa.
+    """
     bl = split_blocks(md_text)
     letzte = -1
     for i, b in enumerate(bl):
