@@ -9659,8 +9659,28 @@ def main() -> int:
                            f"keine Übereinstimmung")
         for _p in _bb:
             rep.fail(None, "Bericht", _p, _p)
+        # §A-ZZZZ113 (Runde 78): **„0 Befunde" ist eine Beschriftung ohne
+        # Bezugsraum.** Der Prüfer prüft Form (Felder, Blockzahl, Syntax),
+        # nicht Vertrag (Argumente, Exit-Codes, Ausgabetext, Speicher).
+        # Vier Runden lang meldete er 0, während die Gegenprobe fischte.
+        # Die Zeile nennt jetzt, was sie **nicht** geprüft hat — dann ist
+        # eine Null eine Messung und keine Zusage.
+        _vertrag = "0 Vertragsfälle hier"
+        try:
+            _vr = subprocess.run(
+                [sys.executable, str(root / "scripts" / "vertrags_runner.py")],
+                capture_output=True, text=True, timeout=120, cwd=str(root))
+            _m = re.search(r"(\d+)/(\d+) Vertragsfälle grün",
+                           _vr.stdout + _vr.stderr)
+            _vertrag = (f"{_m.group(1)}/{_m.group(2)} Vertragsfälle grün"
+                        if _m else "Vertrags-Runner ohne Ergebnis")
+            if _vr.returncode != 0:
+                _bb.append("Bericht: Vertrags-Runner rot — "
+                           + (_m.group(0) if _m else "kein Ergebnis"))
+        except (OSError, subprocess.SubprocessError, re.error):
+            _vertrag = "Vertrags-Runner nicht ausführbar"
         status += f"\nBericht: {len(BERICHT_FELDER)} Felder, " \
-                  f"{len(_bb)} Befund(e)"
+                  f"{len(_bb)} Befund(e) — **nur Form** · {_vertrag}"
         status += f"\nBericht-Felder: " + " · ".join(
             f"{n}=\u201e{_werte[n]}\u201c" for n in ("EXIT", "offen"))
     # §A-ZZZZ69: die Regeltabelle löst sich gegen den AST auf. Ein Name,

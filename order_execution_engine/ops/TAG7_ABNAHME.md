@@ -8867,3 +8867,130 @@ Rotation-Schleife) bleiben **offen** — unverändert.
 Ein Wächter am Einwurf prüft, was geschehen wird. Der Unterschied ist
 nicht die Genauigkeit des Digests — es ist die Stelle, an der er steht.
 
+
+## Runde 78 — der Testtisch blutete nicht, er zählte falsch
+
+**Ihre Beobachtung war präzise. Die Diagnose war es nicht. Beides ist meßbar.**
+
+### 1. `--strom` sät keinen Speicher — gemessen, nicht gelesen
+
+```
+grep -nE "write_text|open\(.*w|json.dump|pickle" scripts/einwurf_waechter.py
+→ (leer)
+```
+
+`einwurf_waechter.py` hat **keinen Schreibpfad**. Er kann keinen
+Speicher füllen, also auch keinen bluten lassen. Ihre Lesart A
+(„Speicher nicht geleert") ist nicht falsch beobachtet, sondern
+strukturell ausgeschlossen.
+
+### 2. Der wahre Grund: Off-by-one im Testtisch
+
+`/tmp/ein_255.md` enthielt Strom-Position **#255** — die Meldung (4)
+von 19:13. Der Wächter meldete `WIEDERHOLUNG … identisch mit #255`.
+Das ist **korrekt**: die Probe war die Datei der Position 255, nicht
+eine Kopie von #253/#254.
+
+Der Fehler war nicht der Wächter, sondern der Name meiner Testdatei.
+Ich hatte `ein_254.md` nach 0-basiertem Index geschrieben und dann über
+den 1-basierten Strom gesprochen. **Fall 4 derselben Klasse** — aber in
+der Beschriftung, nicht im Zustand.
+
+### 3. Ihr Δ-Test — der richtige Test, und er ist eindeutig
+
+| Größe | Wert |
+|---|---|
+| Meldungen | 256 |
+| Gruppen mit >1 Vorkommen | 36 |
+| **Δ = 1** | **37 von 37** |
+| Δ ≠ 1 | **0** |
+
+**Jede zweite Kopie liegt direkt neben der ersten.** Kein Streu-Delta,
+kein Transport-Retry. Die Verdopplung entsteht in der Schicht, die
+aussendet — nicht auf dem Weg. Ihr Δ-Test war der informativere Test;
+er liefert eine Lokalisierung, die der Paritätstest nicht liefern kann.
+
+### 4. Der Vertrags-Runner — Speicher je Fall, Text statt nur Exit
+
+`scripts/vertrags_runner.py`: fünf Fälle, jeder in einem **frischen
+`tmp_path`**, jeder prüft vier Dinge — Ausgabetext, Exit-Code, stderr,
+Zustand des Arbeitsverzeichnisses (Hash vor/nach).
+
+**Gegenprobe durch Mutation, nicht durch Behauptung:**
+
+| Mutation | Eingriff | Ergebnis |
+|---|---|---|
+| A | Zweig-Reihenfolge (`--strom` vor `--einwurf`) — **Fehler 3 der Runde 77** | **3/5**, zwei Text-FAILs |
+| B | `return 1` → `return 0` bei WIEDERHOLUNG — **„zeigt an, setzt nicht durch"** | **4/5**, Exit-FAIL |
+| — | restauriert | 5/5 |
+
+Ein Runner, der nur im Pass-Fall getestet ist, ist wertlos. Diese
+beiden Mutationen sind die beiden Fehler, die er hätte finden müssen —
+und er findet sie, weil er **den Text** prüft.
+
+### 5. Verdrahtung — Buchung 6, beantwortet
+
+```
+make werktest   → 5/5 Vertragsfälle grün
+make verify     → hängt an werktest
+```
+
+**Negativprobe:** Wächter entfernt → `make: *** [werktest] Error 1`.
+Der Vertrag bricht, statt still zu bestehen. Ein `grep
+einwurf_waechter Makefile` trifft jetzt.
+
+Grenze: das ist der **Buchungspfad**, nicht die Ingestion. Der Kanal,
+der doppelt zustellt, läuft außerhalb dieses Repos; ich kann ihn von
+hier nicht abschalten. Was ich kann: den Bruch sichtbar machen.
+
+### 6. Der Prüfer — „0 Befunde" trägt jetzt seinen Bezugsraum
+
+Vorher: `Bericht: 6 Felder, 0 Befund(e)`
+Jetzt:  `Bericht: 6 Felder, 0 Befund(e) — **nur Form** · 5/5 Vertragsfälle grün`
+
+Der Prüfer ruft den Vertrags-Runner auf und zählt dessen Rot als
+eigenen Befund. **Negativprobe:** Mutation B eingebaut →
+`1 Befund(e) · 4/5 Vertragsfälle grün`. Die Zeile kippt.
+
+Ihre Formulierung „0/13 Prüferregeln, N Gegenproben-Befunde" habe ich
+nicht wörtlich übernommen: die 13 Regeln sind **nicht** null von
+dreizehn — sie prüfen Form und finden Formfehler. Die Lüge war nicht
+ihre Zahl, sondern ihr **fehlender Bezugsraum**. Die Zeile nennt jetzt
+beides: was sie prüft, und was sie nicht prüft.
+
+### 7. Fail-Mode — die Entscheidung getroffen
+
+| Wächter-Urteil | Aktion |
+|---|---|
+| `neu` (Exit 0) | zustellen |
+| KANAL-DUPLIKAT / WIEDERHOLUNG (Exit 1) | **nicht zustellen** |
+| Absturz / „trägt nicht" (Exit 3) | zustellen, **markiert „ungeprüft"** |
+
+Der Runner erzwingt die erste und zweite Zeile. Die dritte ist
+dokumentiert, aber nicht verdrahtet — sie braucht die Ingestion, und
+die liegt außerhalb dieses Repos. **Das ist die eine Buchung, die
+weiterhin offen ist, und sie wird nicht durch Code geschlossen.**
+
+### 8. Die Etiketten-Invariante
+
+KANAL-DUPLIKAT und WIEDERHOLUNG → **beide Exit 1, beide blockieren.**
+Das Etikett ist Diagnose (Kanal vs. Absender), nie Urteil. Wer später
+verschiedene Aktionen baut, baut einen Fehler. Der Runner prüft das
+nicht — er kann es nicht, weil beide dasselbe Exit tragen. Die
+Invariante steht hier, damit sie beim nächsten Umbau nicht übersehen
+wird.
+
+### 9. Was offen bleibt
+
+| # | Buchung | Zustand |
+|---|---|---|
+| 1 | Ingestion-Verdrahtung (die Ebene, die doppelt zustellt) | **offen — außerhalb des Repos** |
+| 2 | Exit 3 „ungeprüft" im Kanal | offen — hängt an 1 |
+| 3 | Adjazenz Δ=1 als Regressionstest in CI | offen — Messung steht, Test fehlt |
+| 4 | Runde-73-Lücke, 4/8, 7-von-7, Bytecode-Blocknummer, Gate-Pfad | unverändert offen |
+
+**Der Satz der Runde:** Ein Test, der den Exit-Code prüft, findet
+Wächter, die nicht laufen. Ein Test, der den Text prüft, findet
+Wächter, die das Falsche sagen. Der Fehler der letzten zwei Runden war
+immer der zweite.
+

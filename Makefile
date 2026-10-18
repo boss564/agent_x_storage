@@ -59,6 +59,11 @@ test:
 #
 # `deploy-gate` in CI bleibt das Urteil. `make compile` verhindert nur,
 # daß ein unbaubarer Commit überhaupt entsteht.
+werktest:
+	@echo "⚖️  WERKTEST — Verträge der Wächter"
+	@echo "==================================="
+	@python3 scripts/vertrags_runner.py
+
 compile:
 	@echo "🔨 COMPILE — Foundry-Baum"
 	@echo "========================="
@@ -70,7 +75,7 @@ compile:
 
 # ── Verify: Pre-Pitch-Healthcheck ─────────────────────────────────────
 
-verify:
+verify: werktest
 	@echo "🔍 AGENT X — PRE-PITCH VERIFICATION"
 	@echo "==================================="
 	@echo ""
