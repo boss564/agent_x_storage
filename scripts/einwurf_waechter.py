@@ -447,6 +447,22 @@ def aggregiere(*kandidaten: int) -> int:
     return max(kandidaten, key=lambda c: _SCHWERE.get(c, 9))
 
 
+
+def _escape_grund(s: str) -> str:
+    """§A-ZZZZ205: der Grund ist ein FELD, kein Zeilenumbruch.
+
+    Semikolon und Zeilenumbruch wuerden die Grammatik brechen — genau
+    der Fehler, den `escape()` fuer DEDUP schon loest. Hier dieselbe
+    Regel: %XX-Encoding statt Rohzeichen.
+    """
+    out = []
+    for ch in s:
+        if ch in ";=\n\r%":
+            out.append("%{:02X}".format(ord(ch)))
+        else:
+            out.append(ch)
+    return "".join(out)
+
 def achse(paare: int, kanal: int, wieder: int, ueber: int | None = None,
           unlesbar: int = 0) -> str:
     """Die Messachse — auf JEDEM Zweig, mit denselben Schluesseln.
@@ -489,6 +505,13 @@ def main(argv: list[str]) -> int:
             # nichts. Jetzt emittiert JEDER Exit die volle Achse, auch
             # wenn alle Werte 0 sind. Ein Feld darf nicht existieren,
             # weil der Exit zufaellig 0 ist.
+            # §A-ZZZZ205 (Runde 91): **stdout muss SAGEN, was der Exit
+            # bedeutet.** R90 normierte "stdout ist immer der Bericht" —
+            # dann ist eine Nullachse ohne Ursache ein stiller Bericht,
+            # und ein Konsument liest `Paare=0` als "keine Ereignisse".
+            # Die Ursache stand nur auf stderr, wo laut Vertrag niemand
+            # liest. Achse bleibt; die STROM-Zeile traegt den Grund.
+            print(f"STROM UNLESBAR;grund={_escape_grund(str(e))};")
             print(achse(0, 0, 0), end="")
             print(f"DIE WACHE TRÄGT NICHT: {e}", file=sys.stderr)
             return 3
@@ -529,6 +552,7 @@ def main(argv: list[str]) -> int:
         try:
             strom = lese_strom(p)
         except StreamUnlesbar as e:
+            print(f"STROM UNLESBAR;grund={_escape_grund(str(e))};")
             print(achse(0, 0, 0, 0), end="")
             print(f"DIE WACHE TRÄGT NICHT: {e}", file=sys.stderr)
             return 3

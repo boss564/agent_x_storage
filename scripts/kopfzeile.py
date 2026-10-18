@@ -39,9 +39,14 @@ def main() -> int:
     for k, v in fristen.items():
         neu = f" -> {v['neuer_termin']}" if v.get("neuer_termin") else ""
         print(f"  {k}: {v['endzustand']}{neu}")
+    # §A-ZZZZ207: jede Suite-Zahl liest aus EINER Quelle (zaehlweise).
+    _zw = d.get("zaehlweise", {})
     print(f"\nStand: {_stand} | Version: v{d['_version']} | Instanzen: "
           f"{len(d['bringschuld']['instanzen'])} | Ledger: "
           f"{len(d['versions_ledger'])}")
+    print(f"Zaehlweise: {_zw.get('n_code')} (Code) + "
+          f"{_zw.get('n_nur_vertrag')} (nur Vertrag) = "
+          f"{_zw.get('n_gesamt')} — aus test_zaehlweise.py")
     return 0
 
 

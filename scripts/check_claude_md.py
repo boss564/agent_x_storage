@@ -218,6 +218,13 @@ NO_TEST_SUMMARY: set[str] = {
     "scripts/test_determinismus.py",       # 9/9 Baseline-Determinismus + Zahlen
     "scripts/test_blocker_typisiert.py",   # 4/4 Blocker ist ausfuehrbar
     "scripts/blocker_nrm_injektivitaet.py",  # NRM-Probe (Exit 2 = UNBEWIESEN)
+    # Runde 91: die Klausel gegen die vierte Auspraegung.
+    "scripts/test_bedarfs_inventur.py",    # 5/5 wer liest ZUSTELLEN wirklich
+    "scripts/test_substanzklassen.py",     # 6/6 MESSUNG/ABLEITUNG/ENTSCHEIDUNG
+    "scripts/test_klausel.py",             # 5/5 Feld ohne Klasse ist ungueltig
+    "scripts/test_stdout_inhalt.py",       # 5/5 Exit 3 traegt die Ursache
+    "scripts/test_schwelle_herleitung.py", # 6/6 n=1418 aus N und alpha
+    "scripts/test_zaehlweise.py",          # 6/6 eine Zaehlung, keine Bruecke
     "scripts/test_klasse_mehrdeutig.py",   # 4/4 Hash ist Klasse, pos driftet
     "scripts/test_regel_gegen_pos.py",     # 3/3 Regel trifft, pos nicht
     "scripts/test_escaping.py",            # 3/3 freie Felder bleiben ein Feld

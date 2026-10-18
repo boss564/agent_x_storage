@@ -1,5 +1,5 @@
 {
-  "_version": 11,
+  "_version": 14,
   "_zweck": "Maschinenlesbarer Vertrag des Einwurf-Waechters. Single source of truth fuer Repo und externe Ingestion. Wer hier eine Zeile aendert, aendert das Tor ausserhalb dieses Repos mit.",
   "_stand": "Runde 84 (2026-10-18)",
   "_geltung": "Der Runner (scripts/vertrags_runner.py) importiert diese Datei; die externe Ingestion MUSS sie einlesen. Solange sie es nicht tut, zertifiziert N/N einen Vertrag, den draussen niemand benutzt.",
@@ -760,6 +760,14 @@
         "Der TS-Treue-Satz (zustell_zusage) ist eine ENTSCHEIDUNG, keine Messung. Sie schliesst den Widerspruch, aber nur weil der Vertrag die Zusage nie gab. Wer TS-Treue will, muss die Zusage zuerst aendern.",
         "Vier Seeds bleiben Stichprobe. Baseline-Determinismus ist separat bewiesen (test_determinismus.py), Seed-Unabhaengigkeit NICHT — nur 'keine Abweichung beobachtet'.",
         "Die 24 Waechter-Suiten sind gezaehlt, nicht getippt. Die '27' in R89 war falsch (Befund 7)."
+      ],
+      "stand_r91": [
+        "EXT-1..4 sind jetzt als externes Buch gefuehrt (Eigentuemer: keiner). Das ist Fortschritt nur als Buchfuehrung, nicht als Schliessung.",
+        "zustell_zusage ist ABLEITUNG (aus digest()), nicht ENTSCHEIDUNG — die Bedarfs-Inventur zeigt: kein Leser im Baum. Extern bleibt EXT-2 offen.",
+        "Exit 3 traegt jetzt die Ursache auf stdout (STROM-Zeile). Die R88-Falle ist geschlossen, nicht nur der Pfad gefixt.",
+        "Die Schwelle ist hergeleitet: n=1418 aus N=1e8, alpha=0.01. Die vorige 1000 war um 1.4x zu klein.",
+        "Zaehlweise: 31 Suiten mit Code-Bezug. Die R91 genannten 24/26 waren zwei Ad-hoc-Filter, keine Messung.",
+        "v12/v13/v14 sind im Ledger, aber die Prosa nennt sie nicht — das bleibt offen bis zur naechsten Runde, die sie zitieren muss."
       ]
     }
   },
@@ -981,28 +989,10 @@
       "aenderung": "Konsumenten-Semantik als Norm (Anker/Drittfall/Vorrang/Ordnung/Default), totaler TS-Vergleich, Frist-Instrument, Konsumenten-Kongruenztest"
     },
     {
-      "version": "8-verworfen",
-      "commit": "—",
-      "runde": 87,
-      "aenderung": "VERWORFEN: erst=/rest=VERWERFEN|WIEDERHOLT als Klassen-Urteil. Grund: `rest=` hing davon ab, welche Zeitstempel der Detektor SAH; eine ungesehene Kopie kippte die Aktion fuer alle Raenge > 1. Scheiterte an test_katalog_naht 3/5. Steht hier, damit die plausible falsche Alternative nicht neu erfunden wird."
-    },
-    {
-      "version": "8-verworfen-2",
-      "commit": "—",
-      "runde": 88,
-      "aenderung": "VERWORFEN: `?` als Sentinel fuer fehlenden Zeitstempel. Grund: `'?' == '?'` ist True — zwei Meldungen ohne Timestamp wurden damit `gleich` und VERWORFEN. Jetzt eigenes Sentinel-Objekt, das mit nichts gleich ist (ts_vergleich). Anlass: eigene Messung /tmp/n3.jsonl."
-    },
-    {
       "version": 9,
       "commit": "(diese Runde)",
       "runde": 89,
       "aenderung": "Unwissen ist kein Etikett (bei_unlesbar=UNGEPRUEFT, ZEITSTEMPEL-UNLESBAR-Eimer), die boolesche Falle mit-geschlossen (vergleich_pflicht), Frist-Gate mit Blocker+Beweisversuch, Exit-vor-Stdout-Norm, PYTHONHASHSEED-Varianz, normative_quelle deklariert"
-    },
-    {
-      "version": "9-verworfen",
-      "commit": "—",
-      "runde": 88,
-      "aenderung": "VERWORFEN: bei_unlesbar=WIEDERHOLT. Grund: WIEDERHOLT heisst seit R85 'bewusste Neusendung, BELEGT durch anderen Zeitstempel'. Ein unlesbarer TS belegt nichts. Steht im Ledger, weil es plausibel klingt ('markieren ist reversibel') und ohne den Eintrag neu erfunden wuerde."
     },
     {
       "version": 10,
@@ -1015,13 +1005,52 @@
       "runde": 90,
       "aenderung": "Typisierter Blocker (blocker_nrm_injektivitaet.py, Exit 2=UNBEWIESEN), Gelegenheits-Norm, Hash-Volllaenge im Record, Paar-Zaehlung n-1, Vier-Eimer-Invariante als Normsatz, Vokabular-Abbildung 7 Ebenen, Baseline-Determinismus separat bewiesen. Waechter-Suiten gezaehlt: 24 (R89 sagte 27).",
       "gebucht": "R90 Befunde 6,7,8"
+    },
+    {
+      "version": 12,
+      "runde": 91,
+      "aenderung": "Bedarfs-Inventur (zustell_zusage = PROTOKOLL, kein Leser im Baum), substanzklassen (MESSUNG/ABLEITUNG/ENTSCHEIDUNG mit Belegpflicht), per-Code-stdout-Inhalt (Exit 3 muss Fehlerzeile tragen), Schwellen-Herleitung, Gesamtzahl aus einer Quelle.",
+      "gebucht": "R91 Befunde 2,3,4,5"
+    },
+    {
+      "version": 13,
+      "runde": 91,
+      "aenderung": "schwellen_herleitung: n = ceil(sqrt(2*N*ln(1/(1-alpha)))) = 1418 aus N=1e8, alpha=0.01. Die vorige 1000 war um 1.4x zu klein. Probe liest die Schwelle statt sie zu setzen.",
+      "gebucht": "R91 Befund 5"
+    },
+    {
+      "version": 14,
+      "runde": 91,
+      "aenderung": "externes_buch (EXT-1..4, Eigentuemer keiner), zaehlweise (31 aus einer Quelle), per-Code-stdout-Inhalt (Exit 3 STROM-Zeile), schwellen_herleitung (n=1418).",
+      "gebucht": "R91 Befunde 3,4,5,7"
+    },
+    {
+      "version": "8-verworfen",
+      "commit": "—",
+      "runde": 87,
+      "aenderung": "VERWORFEN: erst=/rest=VERWERFEN|WIEDERHOLT als Klassen-Urteil. Grund: `rest=` hing davon ab, welche Zeitstempel der Detektor SAH; eine ungesehene Kopie kippte die Aktion fuer alle Raenge > 1. Scheiterte an test_katalog_naht 3/5. Steht hier, damit die plausible falsche Alternative nicht neu erfunden wird."
+    },
+    {
+      "version": "8-verworfen-2",
+      "commit": "—",
+      "runde": 88,
+      "aenderung": "VERWORFEN: `?` als Sentinel fuer fehlenden Zeitstempel. Grund: `'?' == '?'` ist True — zwei Meldungen ohne Timestamp wurden damit `gleich` und VERWORFEN. Jetzt eigenes Sentinel-Objekt, das mit nichts gleich ist (ts_vergleich). Anlass: eigene Messung /tmp/n3.jsonl."
+    },
+    {
+      "version": "9-verworfen",
+      "commit": "—",
+      "runde": 88,
+      "aenderung": "VERWORFEN: bei_unlesbar=WIEDERHOLT. Grund: WIEDERHOLT heisst seit R85 'bewusste Neusendung, BELEGT durch anderen Zeitstempel'. Ein unlesbarer TS belegt nichts. Steht im Ledger, weil es plausibel klingt ('markieren ist reversibel') und ohne den Eintrag neu erfunden wuerde."
     }
   ],
   "kreuz_record_invarianten": {
     "AUFRUF_exklusiv": "ZEILE AUFRUF darf nie mit Inhalts-Records im selben Bericht stehen.",
     "UNGEPRUEFT_bei_4": "Jeder Exit 4 traegt mindestens einen ZEILE pos:<n> UNGEPRUEFT-Record.",
     "exit_ableitbar": "Exit ist aus den emittierten Records allein ableitbar, ohne interne Zustaende.",
-    "test": "test_kreuz_record.py (10/10)"
+    "test": "test_kreuz_record.py (10/10)",
+    "substanz": "ABLEITUNG",
+    "herleitung": "Exit ist aus den Records ableitbar, weil jede Verzweigung genau einen Record emittiert.",
+    "eingangsgroesse": "ZEILE/DEDUP-Grammatik"
   },
   "harness_zaun": {
     "regel": "Kein Test in scripts/ darf gegen einen Live-Pfad (Transcript, data_root) assertieren. Ausnahmen nur mit Begruendung in test_harness_zaun.py AUSNAHMEN.",
@@ -1098,7 +1127,9 @@
       "entscheidung": "Der AUSFUEHRBARE CODE (scripts/konsumenten_semantik.py) ist normativ. Die Prosa im Vertrag ist eine Ableitung daraus und muss bei Divergenz korrigiert werden.",
       "begruendung": "Zwei Autoritaeten ohne Vorrang sind die Zwei-Wahrheiten-Krankheit auf Dokumentationsebene. Eine muss gewinnen; der Code ist testbar, die Prosa ist es nicht.",
       "grenze": "K1 (Code) gegen K2 (Nachbau aus dem Text) misst nur DOKUMENTATIONS-Treue, keine Semantik. K2 stammt aus derselben Hand und ist ein Spiegel, kein Falsifikator. Der '?'-Bug waere in beiden gewesen — gefunden wurde er nur extern. Das ist die Rolle, die ING spaeter spielt."
-    }
+    },
+    "substanz": "ENTSCHEIDUNG",
+    "mitzeichnung": "ING / Fremd-Konsument muss die Semantik mitzeichnen; bis dahin gilt sie nur fuer K1/K2"
   },
   "frist_instrument": {
     "konstruktionsfehler": "Verfall loest keine Buchung aus. Dreimal belegt: ADJ (R84->R86), NRM (R86->R87 ungebucht), Mutationsvarianz.",
@@ -1116,33 +1147,42 @@
       "0": {
         "urteil": "neu",
         "stdout_ist_bericht": true,
-        "konsument": "Zeilen-Urteile lesen und ausfuehren"
+        "konsument": "Zeilen-Urteile lesen und ausfuehren",
+        "stdout_pflicht": "Messachse (Paare=...) + ZEILE/DEDUP-Records"
       },
       "1": {
         "urteil": "duplikat",
         "stdout_ist_bericht": true,
-        "konsument": "Zeilen-Urteile lesen und ausfuehren"
+        "konsument": "Zeilen-Urteile lesen und ausfuehren",
+        "stdout_pflicht": "Messachse + ZEILE/DEDUP-Records (mind. ein Duplikat-Urteil)"
       },
       "2": {
         "urteil": "aufruf_fehler",
         "stdout_ist_bericht": true,
-        "konsument": "genau eine AUFRUF-Zeile lesen; Aufrufer korrigieren. stdout traegt KEINE Inhalts-Records."
+        "konsument": "genau eine AUFRUF-Zeile lesen; Aufrufer korrigieren. stdout traegt KEINE Inhalts-Records.",
+        "stdout_pflicht": "genau eine ZEILE AUFRUF VERWERFEN;grund=... (keine Inhalts-Records)"
       },
       "3": {
         "urteil": "ungeprueft",
         "stdout_ist_bericht": true,
-        "konsument": "Achse lesen; es gibt KEINE ZEILE-Records. Zustellen mit Marke UNGEPRUEFT; alarmieren."
+        "konsument": "Achse lesen; es gibt KEINE ZEILE-Records. Zustellen mit Marke UNGEPRUEFT; alarmieren.",
+        "stdout_pflicht": "STROM UNLESBAR;grund=...; VOR der Nullachse — die Ursache steht auf STDOUT, nicht nur stderr"
       },
       "4": {
         "urteil": "unvollstaendig_geprueft",
         "stdout_ist_bericht": true,
-        "konsument": "AUSDRUECKLICH lesen: Zeilen-Urteile ausfuehren, UNGEPRUEFT-Records markiert zustellen, alarmieren. NICHT verwerfen."
+        "konsument": "AUSDRUECKLICH lesen: Zeilen-Urteile ausfuehren, UNGEPRUEFT-Records markiert zustellen, alarmieren. NICHT verwerfen.",
+        "stdout_pflicht": "Messachse + ZEILE-Records, mind. einer mit UNGEPRUEFT/UNBEURTEILBAR"
       }
     },
     "norm_exit4": "Exit 4 bedeutet 'Bericht enthaelt Unbeurteilbares', NICHT 'Prozess gescheitert'. Der UNGEPRUEFT-Record MUSS gelesen und markiert zugestellt werden. Wer Exit 4 als Prozessausfall liest und stdout verwirft, entwertet den Fix aus R89.",
     "anlass": "R89 fuehrte Exit 4 fuer UNGEPRUEFT-Zeilen ein, ohne zu sagen, ob der Record gelesen werden soll. Zwei Lesarten, entgegengesetzte Pflichten.",
     "verhaeltnis_zu_exit_semantik": "ausgabe_grammatik.exit_semantik sagt 'Exit ist Telemetrie, nicht Handlung'. Diese Tabelle sagt WELCHE Telemetrie bei welchem Code lesbar ist. Zusammen: Exit ordnet ein, die Zeilen handeln.",
-    "test": "test_exit_taxonomie.py (7/7)"
+    "test": "test_exit_taxonomie.py (7/7)",
+    "substanz": "MESSUNG",
+    "messung_skript": "test_exit_taxonomie.py",
+    "rueckwirkend_r88": "Mit dieser Norm ist die R88-Diagnose praeziser: der Test las stdout nicht ZU FRUEH — der Waecher EMITTIERTE bei Exit 3 eine Nullachse ohne Ursache. R88 fixte den relativen Pfad (Harness), nicht den Vertrag. Jetzt traegt stdout die Ursache (STROM-Zeile), und stderr bleibt Diagnose fuer Menschen, nicht Quelle fuer Konsumenten.",
+    "vorrang_strom_zeile": "Die STROM-Zeile steht VOR der Achse, weil die Achse mit `;` endet und eine nachgestellte Zeile an sie ankleben wuerde. Ein Konsument, der zeilenweise liest, findet sie an Zeile 1."
   },
   "zustell_zusage": {
     "satz": "ZUSTELLEN garantiert den INHALT der Meldung (zeitstempel-frei gehasht), NICHT den Zeitstempel der urspruenglichen Meldung.",
@@ -1151,7 +1191,10 @@
     "warum_das_kein_widerspruch_ist": "Norm 1 (Regel) und Norm 4 (Reorder) widersprechen sich nicht: R87 hat entschieden, dass 'erst' der erste im KONSUMENTEN-Strom ist. Die Reorder-Differenz ist die erwartete Folge dieser Relativitaet, kein Datenverlust.",
     "konsequenz_fuer_varianten": "FIFO/Sequenznummer/Batch transportieren alle eine Zeitstempel-Treue, die der Vertrag nie zugesagt hat. Sie sind nur noetig, wenn TS-Treue ZUGESAGT wird — dann zuerst diese Zusage aendern, dann eine Variante waehlen.",
     "anlass": "R90: gemessener Widerspruch Norm 1 vs. Norm 4 ist im Payload keiner. Messachse war Etikett, nicht Inhalt.",
-    "test": "test_reorder_payload.py (7/7)"
+    "test": "test_reorder_payload.py (7/7)",
+    "substanz": "ABLEITUNG",
+    "herleitung": "Aus digest(): TS wird VOR dem Hash entfernt. Daraus folgt zwingend, dass ZUSTELLEN nur den Inhalt garantieren KANN, nicht den Original-TS. Der Satz ist keine Wahl, sondern die Beschreibung der Funktion.",
+    "eingangsgroesse": "digest() entfernt <timestamp> vor dem Hash (einwurf_waechter.py)"
   },
   "vergleich_schnittstelle": {
     "zweck": "Sprach-agnostische Spezifikation des Zeitstempel-Vergleichs. 'vergleich_pflicht' ist ein PYTHON-Verbot; ein Konsument in einer anderen Sprache kann ts_vergleich() nicht aufrufen und muss sie aus der Prosa nachbauen — genau dort reisst die boolesche Falle wieder auf (R90 Befund 4).",
@@ -1174,7 +1217,19 @@
     "abbildung": "UNLESBAR -> Verdict UNGEPRUEFT (nicht WIEDERHOLT, nicht VERWERFEN). GLEICH -> VERWERFEN. UNGLEICH -> WIEDERHOLT.",
     "konformitaetstest": "Wer zwei UNLESBAR als GLEICH oder UNGLEICH behandelt, ist nicht-konform. Pruefbar an der AUSGABE (test_konsument_kongruenz.py K2, test_unwissen_etikett.py C), nicht am Quelltext.",
     "verhaeltnis_zu_vergleich_pflicht": "vergleich_pflicht bleibt als Python-spezifische Praezisierung. Diese Schnittstelle ist die normative Fassung; sie ist durch Ausgaben pruefbar, das Verbot nicht.",
-    "test": "test_vergleich_nachbau.py (10/10)"
+    "test": "test_vergleich_nachbau.py (10/10)",
+    "substanz": "ABLEITUNG",
+    "herleitung": "Drei Ausgaenge folgen aus der Dreiwertigkeit: zwei lesbare Werte sind gleich oder ungleich; sobald einer unlesbar ist, ist das Ergebnis unlesbar. Die Tafel ist die vollstaendige Aufzaehlung, keine Auswahl.",
+    "eingangsgroesse": "Domaene {lesbar,unlesbar} x {lesbar,unlesbar}",
+    "abdeckung_herleitung": {
+      "domaene": "LESBAR (unendlich viele Werte) x UNLESBAR (ein Wert). Fuer die Tafel zaehlt nur die KLASSE: L x L, L x U, U x L, U x U.",
+      "klassen_paare": 4,
+      "tafel_zellen": 5,
+      "warum_5": "LxL zerfaellt in GLEICH und UNGLEICH (zwei Zellen), LxU, UxL, UxU sind je eine (drei Zellen). 2+3=5.",
+      "symmetrie": "UNGLEICH ist symmetrisch, GLEICH ist symmetrisch, UNLESBAR ist auf beiden Seiten symmetrisch. Ein Test mit (a,b) deckt (b,a) — die 10 Faelle in test_vergleich_nachbau sind 5 Zellen + 5 Gegenproben.",
+      "erschopfend": "Ja, ueber der KLASSEN-Domaene. Nein, ueber Werten — unendlich viele LESBAR-Werte.",
+      "nicht_bewiesen": "Dass die Tafel die RICHTIGE Semantik kodiert. Das braucht die zweite Hand (EXT-4)."
+    }
   },
   "version_doktrin": {
     "regel": "versions_ledger ist die einzige Versionswahrheit. _version MUSS gleich der hoechsten AKZEPTIERTEN (nicht verworfenen) Ledger-Version sein. Die Prosa nennt keine Version — sie liest kopfzeile.py.",
@@ -1182,13 +1237,19 @@
     "pruefbar": "test_version_ledger.py: _version == max(akzeptierte Ledger-Version) UND keine Luecke in 1..n.",
     "verworfene": "Eintraege mit '-verworfen' im Schluessel zaehlen NICHT fuer die Kontiguitaet — sie dokumentieren Entscheidungen, keine Staende.",
     "anlass": "R90 Befund 7: v9 ohne v8, vierte Wiederholung desselben Befunds.",
-    "test": "test_version_ledger.py (6/6)"
+    "test": "test_version_ledger.py (6/6)",
+    "substanz": "ENTSCHEIDUNG",
+    "bedarfsartefakt": "test_version_ledger.py (6/6) misst, dass _version == max(Ledger)",
+    "zitierpflicht": "Jede akzeptierte Version v_n wird von v_(n+1) im Feld `zitiert` genannt. Ein Ledger, der getestet aber nicht zitiert wird, archiviert die Zaehl-Krankheit. Explizit nachgetragen fuer R91: v8 (R88, Konsumenten-Semantik als Norm, Anker/Drittfall/Vorrang), v10 (R90, Exit-Taxonomie + zustell_zusage + vergleich_schnittstelle), v11 (R90, typisierter Blocker), v12 (R91, Bedarfs-Inventur), v13 (R91, Schwellen-Herleitung)."
   },
   "hash_vertrag": {
     "laenge": "vollen SHA-256 (64 hex) im ZEILE-Record, nicht die 12-Zeichen-Kurzform im Kommentar.",
     "kollision": "Bei voller Laenge ist eine Kollision als praktisch ausgeschlossen deklariert (2^-128 Geburtstagsschranke). Kurz-Hashes im Kommentar sind ANZEIGE, nie Schluessel.",
     "konsequenz": "Zwei verschiedene Inhalte mit gleichem <h> wuerden einen davon VERWERFEN — stiller Datenverlust. Die volle Laenge macht das praktisch unmoeglich.",
-    "test": "test_determinismus.py (9/9)"
+    "test": "test_determinismus.py (9/9)",
+    "substanz": "ABLEITUNG",
+    "herleitung": "Volle Laenge folgt aus der Kollisionsschranke; Kurzform ist Anzeige, nicht Schluessel.",
+    "eingangsgroesse": "SHA-256 (64 hex)"
   },
   "vokabular_abbildung": {
     "zustand": "ZEITSTEMPEL UNLESBAR",
@@ -1199,6 +1260,119 @@
     "record_grund": "ZEITSTEMPEL-UNLESBAR (Ursache)",
     "record_verdict": "UNGEPRUEFT",
     "norm": "Diese sieben Namen bezeichnen EINEN epistemischen Zustand auf sieben Ebenen. Die Abbildung ist Teil des Vertrags — sonst ist 'vier disjunkte Eimer' auf der einen und 'drei Zweige' auf der anderen Seite eine stillschweigende Bijektion.",
-    "test": "test_determinismus.py (9/9)"
+    "test": "test_determinismus.py (9/9)",
+    "substanz": "MESSUNG",
+    "messung_skript": "test_determinismus.py"
+  },
+  "bedarfs_inventur": {
+    "frage": "Liest IRGENDEIN Nicht-Test-Konsument den Zeitstempel AUS einem Record (ZEILE/DEDUP)?",
+    "methode": "statische Suche ueber scripts/*.py ohne test_*.py; zwei Bedingungen zugleich (Record-Praefix UND TS-Regex); Strom-Erzeuger (def _z / json.dumps role) ausgeschlossen und BENANNT, nicht still gefiltert",
+    "leser": [],
+    "ausgeschlossen": [
+      "einwurf_waechter.py (Emittent — baut die Records, liest sie nicht)",
+      "regel_konsument.py (Testaufbau, erzeugt Strome im eigenen Lauf)"
+    ],
+    "ergebnis": "Kein Downstream im Baum liest den Original-Zeitstempel aus einem Record.",
+    "status": "PROTOKOLL",
+    "warum_protokoll": "Weil kein Leser existiert, beschreibt zustell_zusage, was ohnehin gilt — keine Vertragsaenderung, keine Mitzeichnung noetig.",
+    "vorbehalt": "Die Inventur deckt nur DIESEN Baum. Ein externer Downstream (ING) ist nicht sichtbar — dort bleibt die Zusage eine Aenderung, bis er mitzeichnet.",
+    "test": "test_bedarfs_inventur.py",
+    "anlass": "R91 Hauptbefund: zustell_zusage war eine Entscheidung ohne Messung — vierte Auspraegung der Praesenz-ohne-Inhalt-Krankheit.",
+    "substanz": "MESSUNG",
+    "messung_skript": "test_bedarfs_inventur.py"
+  },
+  "substanzklassen": {
+    "regel": "Jedes normative Feld traegt im selben Commit seine Substanzklasse. Ein Feld ohne Klasse ist nicht gebucht — es ist ein Formular.",
+    "MESSUNG": {
+      "definition": "Wert kommt aus einer ausgefuehrten Probe ueber echte Daten",
+      "belegpflicht": "Skriptpfad + Exit-Code + Zahl",
+      "beispiel": "bedarfs_inventur.leser=[] (test_bedarfs_inventur)"
+    },
+    "ABLEITUNG": {
+      "definition": "Wert folgt rechnerisch aus anderen Vertragsgroessen",
+      "belegpflicht": "Formel + Eingangsgroessen im Vertrag",
+      "beispiel": "paar_zaehlung n-1 aus anker=vorgaenger"
+    },
+    "ENTSCHEIDUNG": {
+      "definition": "Wert ist gesetzt, nicht gemessen — eine Wahl",
+      "belegpflicht": "Bedarfsartefakt ODER explizite Mitzeichnungspflicht",
+      "beispiel": "zustell_zusage (Bedarfsartefakt: bedarfs_inventur)"
+    },
+    "verstoss": "Ein ENTSCHEIDUNG-Feld ohne Bedarfsartefakt ist die vierte Auspraegung: Zusage ja, Bedarf nein. Das Gate prueft die KLASSE, nicht die Praesenz.",
+    "test": "test_substanzklassen.py"
+  },
+  "schwellen_herleitung": {
+    "frage": "Wie viele Zeilen braucht die Injektivitaetsprobe, damit eine vorhandene Kollision mit 1-alpha sichtbar wird?",
+    "N": 100000000,
+    "N_bedeutung": "Sekunden ueber ~3 Jahre (realistischer Zeitstempel-Raum)",
+    "alpha": 0.01,
+    "alpha_bedeutung": "Irrtumswahrscheinlichkeit (1% Chance, eine Kollision zu uebersehen)",
+    "formel": "n = ceil(sqrt(2 * N * ln(1/(1-alpha))))",
+    "n": 1418,
+    "vorher": 1000,
+    "befund": "Die 1000 war nicht nur unhergeleitet, sondern um 1.4x zu klein. Eine 1000-Zeilen-Probe waere bei N=1e8 dauerhaft gruen aus Mangel an Gelegenheit — dieselbe Krankheit wie 3 Zeilen, nur groesser.",
+    "status_regel": "Solange n nicht erreicht ist, ist die Probe UNBEWIESEN (Exit 2). Sie ist nie BESTANDEN unterhalb von n — und nie BESTANDEN durch eine Zahl, die nicht aus N und alpha folgt.",
+    "test": "test_schwelle_herleitung.py",
+    "anlass": "R91 Befund 5: magische Zahl statt Ableitung."
+  },
+  "zaehlweise": {
+    "regel": "Es gibt EINE Zaehlung (test_zaehlweise.py). Jede Suite-Zahl im Bericht liest von dort. Zwei Zahlen ohne Bruecke sind die 291/283-Krankheit.",
+    "definition_code": "test_*.py, die waechter_vertrag.json ODER einwurf_waechter.py ODER konsumenten_semantik referenzieren",
+    "definition_nur_vertrag": "test_*.py, die NUR waechter_vertrag.json referenzieren (kein Code)",
+    "n_code": 32,
+    "n_nur_vertrag": 0,
+    "n_gesamt": 32,
+    "nur_vertrag": [],
+    "drift_r91": "R91 nannte 24 (rg-Filter) und 26/26 (Lauf). Beide waren Ad-hoc-Zaehlungen mit unterschiedlichen Filtern. Die EINE Zaehlung nennt 31 — der Unterschied zu 24 ist der Filter, nicht das Repo.",
+    "anlass": "R91 Befund 3: 24 vs 26 im selben Bericht.",
+    "selbstreferenz": "Die Zaehlweise zaehlt test_zaehlweise.py mit — sie ist selbst eine Vertrags-Suite. Das ist korrekt, aber es macht die Zahl von der Existenz des Zaehlers abhaengig: 31 vor dem Zaehler, 32 danach. Beide sind wahr fuer ihren Zeitpunkt; nur EINE Zaehlung darf gelten."
+  },
+  "externes_buch": {
+    "zweck": "Die Bringschuld-Maschine (Frist/Blocker/Gate) funktioniert fuer SELBSTverifizierbares. Fuer FREMdverifizierbares fehlt das Aequivalent. Dieses Buch fuehrt die Posten, die kein Autor selbst schliessen kann.",
+    "regel": "Ein externer Posten ist geschlossen, wenn ein FREMDER Akteur das Akzeptanzkriterium erfuellt hat. Bis dahin ist er 'offen' — nicht 'Befund', nicht 'Bestand'. Ein Posten ohne Eigentuemer ist keine Buchung.",
+    "posten": [
+      {
+        "id": "EXT-1",
+        "posten": "ING / Fremd-Konsument validiert Exit 4, vergleich_schnittstelle und zustell_zusage",
+        "eigentuemer": null,
+        "zugang": "Vertrag + Tests, kein Code-Zugriff",
+        "akzeptanz": "Ein Konsument in einer anderen Sprache baut VERGLEICH aus der Tafel nach und liest Exit 4 korrekt, ohne die Python-Tests zu kennen.",
+        "status": "offen",
+        "seit": "R86",
+        "bemerkung": "Seit 6 Runden als Bestand gefuehrt, nie als Instanz. Das ist der Kern der strukturellen Grenze."
+      },
+      {
+        "id": "EXT-2",
+        "posten": "Echter Downstream-Bedarf an Zeitstempel-Treue",
+        "eigentuemer": null,
+        "zugang": "Produktions-Downstream",
+        "akzeptanz": "Inventur ueber den echten Konsumenten: liest er den Original-TS? Wenn ja, Mitzeichnung von zustell_zusage.",
+        "status": "offen",
+        "seit": "R91",
+        "bemerkung": "bedarfs_inventur deckt nur diesen Baum. Extern unsichtbar."
+      },
+      {
+        "id": "EXT-3",
+        "posten": "Eingefrorener NRM-Strom mit n >= 1418 Zeilen",
+        "eigentuemer": null,
+        "zugang": "Harness-Zaun-konforme Quelle",
+        "akzeptanz": "blocker_nrm_injektivitaet.py liefert Exit 0 oder 1 (nicht 2).",
+        "status": "offen",
+        "seit": "R90",
+        "bemerkung": "Fixture hat 3. n=1418 ist hergeleitet, nicht gesetzt."
+      },
+      {
+        "id": "EXT-4",
+        "posten": "Tafel-Validierung durch eine zweite Hand",
+        "eigentuemer": null,
+        "zugang": "vergleich_schnittstelle.wahrheitstafel",
+        "akzeptanz": "Jemand, der den \"?\"-Bug nicht baute, bestaetigt die drei Ausgaenge aus der Semantik.",
+        "status": "offen",
+        "seit": "R91",
+        "bemerkung": "Nachbau beweist Reproduzierbarkeit, nicht Korrektheit."
+      }
+    ],
+    "grenze": "Vier externe Posten, null Eigentuemer. Das ist der ehrliche Stand: die Maschine hat die interne Bringschuld geschlossen und die externe noch nicht einmal gebucht.",
+    "anlass": "R91 Befund 7 — Selbstverifikation an ihrer Grenze."
   }
 }

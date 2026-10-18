@@ -54,13 +54,20 @@ def main() -> int:
         for nr, a, b in kollisionen[:5]:
             print(f"  Zeile {nr}: {a!r} != {b!r}")
         return 1
-    # §A-ZZZZ196: eine 3-Zeilen-Probe ist keine Injektivitaetsprobe.
-    # Zufaellige Kollisionen sind bei 3 Zeilen unwahrscheinlich; der
-    # Test waere gruen aus Mangel an Gelegenheit. Mindestgroesse noetig.
-    MINDESTENS = 1000
+    # §A-ZZZZ206 (Runde 91): die Schwelle ist ABGELEITET, nicht gesetzt.
+    # Bis R91 stand hier `MINDESTENS = 1000` — eine magische Zahl, die
+    # fuer N=1e8 um Faktor 1.4 zu klein war und aus dem Bauch stammte.
+    # Jetzt: n = ceil(sqrt(2 * N * ln(1/(1-alpha)))) aus dem Vertrag.
+    import json as _json
+    _v = _json.loads((SCRIPTS / "waechter_vertrag.json").read_text(
+        encoding="utf-8"))["schwellen_herleitung"]
+    import math as _math
+    MINDESTENS = _math.ceil(_math.sqrt(
+        2.0 * _v["N"] * _math.log(1.0 / (1.0 - _v["alpha"]))))
     if len(hashes) < MINDESTENS:
-        print(f"UNBEWIESEN: {len(hashes)} Zeilen < {MINDESTENS} — "
-              "gruen aus Mangel an Gelegenheit, nicht aus Beweis")
+        print(f"UNBEWIESEN: {len(hashes)} Zeilen < {MINDESTENS} "
+              "(n aus N und alpha) — gruen aus Mangel an Gelegenheit, "
+              "nicht aus Beweis")
         return 2
     print(f"BESTANDEN: {len(hashes)} Zeilen, 0 Kollisionen")
     return 0
