@@ -42,6 +42,17 @@ import sys
 from pathlib import Path
 
 MIN_LAENGE = 400          # kürzere Einträge sind Steuertexte, keine Meldungen
+
+
+class StreamUnlesbar(Exception):
+    """Der Stream fehlt oder ist nicht lesbar — Exit 3, nicht Traceback.
+
+    §A-ZZZZ115 (Runde 79): abgegrenzt gegen **defektes Format**. Ein
+    kaputtes JSON je Zeile wird übersprungen, nicht abgebrochen —
+    Meldungen sind zeilenweise unabhängig. `StreamUnlesbar` meint nur:
+    die Datei selbst ist nicht zu öffnen. Ein Zustand, den der Wächter
+    nicht verursacht und nicht verhindern kann.
+    """
 ENVELOPE_MARKER = ("<available_subagent_types>",)
 
 
@@ -74,9 +85,22 @@ def _text_von(nachricht: object) -> str:
 
 
 def lese_strom(p: Path) -> list[tuple[str, str]]:
-    """(zeitstempel, text) je echter Nutzermeldung, in Reihenfolge."""
+    """(zeitstempel, text) je echter Nutzermeldung, in Reihenfolge.
+
+    §A-ZZZZ115 (Runde 79): **Exit 3 hat eine Stelle, nicht nur eine
+    Absicht.** Der Wächter ist stateless — aber ein unlesbarer Stream
+    ist ein Zustand, den er nicht verursacht und nicht verhindern kann.
+    Die Exception wird hier in `StreamUnlesbar` übersetzt; `main`
+    entscheidet über den Exit-Code. Vorher wäre ein fehlender Stream
+    als Traceback gestorben — genau die Klasse, die zwei Runden
+    dominiert hat (PermissionError, Fall 1).
+    """
+    try:
+        f = p.open(encoding="utf-8")
+    except OSError as e:
+        raise StreamUnlesbar(f"Stream nicht lesbar: {e}") from e
     out: list[tuple[str, str]] = []
-    with p.open(encoding="utf-8") as f:
+    with f:
         for line in f:
             try:
                 o = json.loads(line)
@@ -108,16 +132,25 @@ def pruefe_strom(strom: list[tuple[str, str]]) -> tuple[int, int, list[str]]:
     for i, (ts, t) in enumerate(strom):
         h = digest(t)
         if h in seen:
+            # §A-ZZZZ114 (Runde 79): **Referenz auf den unmittelbaren
+            # Vorgänger, nicht auf das erste Vorkommen.** Bei A,A,A
+            # meldete die erste Fassung `#211 == #213` — wahr, aber
+            # Δ=2. Der Bericht behauptete damit eine Adjazenz, die er
+            # nicht hatte, und `seen[h]` nach dem Treffer *nicht* zu
+            # aktualisieren ließ jede weitere Kopie auf das erste
+            # Vorkommen zeigen. Jetzt: `j` ist der Vorgänger, und der
+            # Eintrag wandert mit. Damit ist Δ immer 1 und die Aussage
+            # des Berichts deckt sich mit der Messung.
             j = seen[h]
             paare += 1
             gleich_ts = strom[j][0] == ts
             kanal += gleich_ts
             art = "KANAL-DUPLIKAT" if gleich_ts else "WIEDERHOLUNG"
             bericht.append(f"  {art}: #{j + 1} == #{i + 1}"
+                           f"  Δ={i - j}"
                            f"  {'(gleicher Zeitstempel)' if gleich_ts else '(anderer Zeitstempel)'}"
                            f"  sha {h[:12]}")
-        else:
-            seen[h] = i
+        seen[h] = i
     return paare, kanal, bericht
 
 
@@ -131,8 +164,13 @@ def main(argv: list[str]) -> int:
         if "--strom" not in argv:
             print("--einwurf braucht --strom als Referenz", file=sys.stderr)
             return 2
-        strom = lese_strom(Path(argv[argv.index("--strom") + 1]))
-        text = Path(argv[argv.index("--einwurf") + 1]).read_text(encoding="utf-8")
+        try:
+            strom = lese_strom(Path(argv[argv.index("--strom") + 1]))
+            text = Path(argv[argv.index("--einwurf") + 1]).read_text(
+                encoding="utf-8")
+        except (StreamUnlesbar, OSError) as e:
+            print(f"DIE WACHE TRÄGT NICHT: {e}", file=sys.stderr)
+            return 3
         h = digest(text)
         for i, (_, t) in enumerate(strom):
             if digest(t) == h:
@@ -144,7 +182,11 @@ def main(argv: list[str]) -> int:
 
     if "--strom" in argv:
         p = Path(argv[argv.index("--strom") + 1])
-        strom = lese_strom(p)
+        try:
+            strom = lese_strom(p)
+        except StreamUnlesbar as e:
+            print(f"DIE WACHE TRÄGT NICHT: {e}", file=sys.stderr)
+            return 3
         paare, kanal, bericht = pruefe_strom(strom)
         print(f"Meldungen: {len(strom)} | Paare: {paare} "
               f"| davon Kanal-Duplikate: {kanal} | bewußt: {paare - kanal}")

@@ -1,6 +1,14 @@
 #!/usr/bin/env python3
 """Meldungs-Digest: kein neuer Befund ohne neue Bytes.
 
+**DEPRECATED seit Runde 79 — ersetzt durch `scripts/einwurf_waechter.py`.**
+Grund: dieser Wächter liest die **Akte**, nicht den **Einwurf**. Er war
+nie verdrahtet (grep auf Makefile/CI/hooks leer) und hätte den Fall
+(3)==(4) nicht gesehen, weil er den Eingangskanal nicht liest.
+Ein Wächter, ein Name: wer hier etwas verdrahtet, verdrahtet den
+falschen. Der Nachfolger prüft Text, Exit, stderr und Speicherzustand
+gegen `scripts/waechter_vertrag.json` (`make werktest`).
+
 §A-ZZZZ109 (Runde 76): **die Wiederholung als Prüfgegenstand.**
 
 Runde 75 hat einen Fall offengelegt, den keine Regel dieser Akte bisher

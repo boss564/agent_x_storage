@@ -8994,3 +8994,111 @@ Wächter, die nicht laufen. Ein Test, der den Text prüft, findet
 Wächter, die das Falsche sagen. Der Fehler der letzten zwei Runden war
 immer der zweite.
 
+
+## Runde 79 — die Zahl wandert jetzt von selbst
+
+### 1. Ihre Arithmetik — Folgerung richtig, Rechnung falsch
+
+Sie schlossen aus **36 Gruppen / 37 zweite Kopien**, es *müsse* eine
+Dreiergruppe geben. Die Rechnung trägt nicht: 36 Gruppen können 36
+zweite Kopien tragen, wenn 35 Paare und eine Dreiergruppe — dann sind
+es 37 Kopien bei 36 Gruppen. Die Zahl 37 ist **konsistent**, sie ist
+kein Beweis.
+
+**Aber Sie hatten recht:** es *gibt* eine Dreiergruppe.
+
+| Größe | Wert |
+|---|---|
+| Gruppen mit >1 | 36 |
+| zweite Kopien (Σ len−1) | 37 |
+| Dreiergruppen | **1** — `[211, 212, 213]` |
+
+### 2. Und dort war der Wächter falsch
+
+```
+vorher:  #211 == #212   #211 == #213
+nachher: #211 == #212   #212 == #213   beide Δ=1
+```
+
+Der Bericht referenzierte **das erste Vorkommen**, nicht den
+Vorgänger — `#211 == #213` ist wahr, aber Δ=2. Damit behauptete der
+Text „neben" und meinte „zwei weiter". Ihre Buchung 2, exakt getroffen:
+`seen[h]` wurde nach einem Treffer nicht nachgeführt.
+
+### 3. Exit 3 — der Fall, der zwei Runden dominierte, war ungetestet
+
+```
+--strom /nicht/da        → "DIE WACHE TRÄGT NICHT: …"  Exit 3
+--strom /tmp (Verzeichnis) → Exit 3
+--strom /tmp/defekt.jsonl → Exit 0, JSON-Müll übersprungen
+```
+
+`StreamUnlesbar` trennt **unlesbare Datei** (Exit 3) von **defektem
+Format** (übersprungen — Meldungen sind zeilenweise unabhängig).
+Fall 6 im Vertrag: `strom-fehlt` → Exit 3.
+
+**Ihr Caveat zum grep ist geschlossen:** auch `write_bytes` und
+`print(file=…)` geprüft — kein Dateischreibpfad. `stderr` ist keiner.
+
+### 4. Der Vertrag ist jetzt eine Datei, nicht eine Tabelle
+
+`scripts/waechter_vertrag.json`: Exit-Codes 0–3 mit Aktion, Etiketten
+mit Invariante, Δ-Definition („unmittelbarer Vorgänger"), Hash-Regel
+(längenunabhängig), Normalisierung, Fail-Mode-Zeile 3. Der Runner
+**importiert** die Fälle von dort.
+
+### 5. Die 5/5-Zeile wird gerendert — 4/8 ist durch Mechanismus geschlossen
+
+| Schritt | Zeile |
+|---|---|
+| vorher | `7/7 Vertragsfälle grün · 4/4 Mutationen gefangen` |
+| 8. Fall ergänzt, **keine Zahl angefaßt** | `8/8 Vertragsfälle grün · 4/4 Mutationen gefangen` |
+| restauriert | `7/7 Vertragsfälle grün · 4/4 Mutationen gefangen` |
+
+Das ist der Nachweis, den 4/8 verlangte: die Zahl folgt der
+Wirklichkeit, nicht dem Tippenden.
+
+### 6. Mutationssuite in `make werktest` — 4/4
+
+| Mutation | Feld | gefangen |
+|---|---|---|
+| `identisch mit #` → `gleich wie` | Text | 6/7 |
+| `return 1` → `return 0` | Exit | 6/7 |
+| `DIE WACHE TRÄGT NICHT` → `WACHE LAEUFT` | stderr | 6/7 |
+| Zweig-Reihenfolge | Argument | 5/7 |
+
+**Drei Anläufe, drei Befunde am Testgerät selbst** — und sie sind
+dieselbe Klasse wie alles davor:
+
+1. Die Text-Mutation ersetzte einen Satz, den kein Fall prüft. Der
+   Vertrag war zu schwach, nicht der Runner.
+2. Die stderr-Mutation traf `count=1` von zwei `print`-Stellen. Die
+   **halbe** Mutation ist kein Beweis über den Runner, sondern über
+   ihre eigene Reichweite.
+3. Die erste Fassung meldete „2/4 nicht gefangen", während der Runner
+   korrekt war. Ein Test, der den Prüfling für seinen eigenen Fehler
+   tadelt, ist schlimmer als kein Test.
+
+### 7. Hygiene — ein Wächter, ein Name
+
+`meldung_digest.py` trägt jetzt **DEPRECATED** im Kopf, mit Grund und
+Nachfolger. Nicht gelöscht: die Akte der Runden 76–78 verweist darauf,
+und ein verschwundener Befund ist ein gelöschter Befund.
+
+### 8. Offen
+
+| # | Buchung | Zustand |
+|---|---|---|
+| 1 | Ingestion-Verdrahtung (Tor, nicht Prüfung) | **offen — außerhalb des Repos** |
+| 2 | 400er-Filter: Hash längenunabhängig | **jetzt geprüft** — `_text_von` filtert vor dem Hash nicht |
+| 3 | Δ=1 als CI-Regression | **erlöst** — `dreiergruppe` im Vertrag, `make werktest` |
+| 4 | Runde-73-Lücke, 7-von-7, Bytecode-Blocknummer, Gate-Pfad | unverändert offen |
+
+Zu 2: der `MIN_LAENGE`-Filter sitzt in `lese_strom` (Zählung), **nicht**
+in `digest`. Ein kurzer Einwurf wird gehasht. Damit ist Ihre Buchung 7
+geschlossen — nicht durch Prosa, durch die Lage der Zeile.
+
+**Der Satz der Runde:** Eine Zahl, die von Hand geschrieben wird,
+veraltet still. Eine Zahl, die aus dem Ausgang gelesen wird, veraltet
+laut — oder gar nicht.
+

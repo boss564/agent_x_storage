@@ -1,0 +1,102 @@
+{
+  "_version": 1,
+  "_zweck": "Maschinenlesbarer Vertrag des Einwurf-Waechters. Single source of truth fuer Repo und externe Ingestion. Wer hier eine Zeile aendert, aendert das Tor ausserhalb dieses Repos mit.",
+  "_stand": "Runde 79 (2026-10-18)",
+  "_geltung": "Der Runner (scripts/vertrags_runner.py) importiert diese Datei; die externe Ingestion SOLL sie einlesen. Solange sie es nicht tut, zertifiziert 5/5 einen Vertrag, den draussen niemand benutzt.",
+  "exit_codes": {
+    "0": {
+      "urteil": "neu",
+      "aktion": "zustellen",
+      "beschreibung": "Der Hash ist im Referenzstrom nicht vorhanden."
+    },
+    "1": {
+      "urteil": "duplikat",
+      "aktion": "nicht zustellen",
+      "beschreibung": "Hash bereits im Strom. Etikett (KANAL-DUPLIKAT oder WIEDERHOLUNG) ist Diagnose, nie Urteil.",
+      "invariante": "KANAL-DUPLIKAT und WIEDERHOLUNG muessen dieselbe Aktion ausloesen. Wer fuer die beiden verschiedene Aktionen baut, baut einen Fehler."
+    },
+    "2": {
+      "urteil": "aufruf_fehler",
+      "aktion": "nicht zustellen, Aufrufer korrigieren",
+      "beschreibung": "Argumente fehlen oder sind ungueltig. Kein Urteil ueber die Meldung."
+    },
+    "3": {
+      "urteil": "ungeprueft",
+      "aktion": "zustellen, markiert als UNGEPRUEFT",
+      "beschreibung": "Der Waechter konnte nicht pruefen (Stream unlesbar, interner Fehler). Fail-open waere ein Loch, fail-closed legt den Kanal still — deshalb zustellen mit sichtbarer Marke. Der Empfaenger dedupliziert manuell.",
+      "begruendung": "Drei Fehler in zwei Runden belegen: Abstuerze sind die dominante Fehlerart, nicht die Ausnahme. Ein fail-closed-Waechter haette den Kanal dreimal stillgelegt."
+    }
+  },
+  "etiketten": {
+    "KANAL-DUPLIKAT": {
+      "bedingung": "Hash gleich UND Zeitstempel gleich",
+      "ursache": "Doppel-Emission in der Aussende-Schicht",
+      "aktion": "identisch zu WIEDERHOLUNG (Exit 1)"
+    },
+    "WIEDERHOLUNG": {
+      "bedingung": "Hash gleich UND Zeitstempel verschieden",
+      "ursache": "Absender hat denselben Text erneut gesendet",
+      "aktion": "identisch zu KANAL-DUPLIKAT (Exit 1)"
+    }
+  },
+  "invarianten": {
+    "delta": {
+      "definition": "Δ = Position der Kopie minus Position des UNMITTELBAREN Vorgaengers",
+      "gemessen": "37 von 37 Kopien mit Δ=1, eine Dreiergruppe [211,212,213]",
+      "bedeutung": "Verdopplung entsteht in der Aussende-Schicht, nicht im Transport",
+      "nicht_ableitbar": "Δ=1 erklaert die Ursache, verkleinert NICHT den Speicher. Eine Optimierung auf Fenster-1 wuerde echte Wiederholungen in Distanz verpassen."
+    },
+    "hash": {
+      "laengenunabhaengig": true,
+      "begruendung": "Der 400-Zeichen-Filter gehoert in die Zaehlung, nicht in den Hash. Sonst rutschen kurze Duplikate durch das Tor."
+    },
+    "stateless": {
+      "schreibpfad": "keiner",
+      "geprueft_durch": "grep auf write_text, write_bytes, open(w), json.dump — alle leer"
+    }
+  },
+  "normalisierung": {
+    "zeilenenden": "CRLF und CR zu LF",
+    "trailing_whitespace": "je Zeile entfernt",
+    "leerzeilen": "Folgen zu einer kollabiert, dann Rand entfernt",
+    "zeitstempel": "NICHT entfernt — er unterscheidet KANAL-DUPLIKAT von WIEDERHOLUNG",
+    "case": "nicht veraendert; konservativ, sonst melden verschiedene Meldungen als gleich"
+  },
+  "vertragsfaelle": [
+    {
+      "name": "strom-alle",
+      "erwarteter_exit": 1,
+      "text": "Kanal-Duplikate:"
+    },
+    {
+      "name": "einwurf-bekannt",
+      "erwarteter_exit": 1,
+      "text": "identisch mit #"
+    },
+    {
+      "name": "einwurf-neu",
+      "erwarteter_exit": 0,
+      "text": "neu am Einwurf"
+    },
+    {
+      "name": "kein-argument",
+      "erwarteter_exit": 2,
+      "text": "Einwurf-Wächter"
+    },
+    {
+      "name": "einwurf-ohne-strom",
+      "erwarteter_exit": 2,
+      "text": "braucht --strom"
+    },
+    {
+      "name": "strom-fehlt",
+      "erwarteter_exit": 3,
+      "text": "DIE WACHE TRÄGT NICHT"
+    },
+    {
+      "name": "dreiergruppe",
+      "erwarteter_exit": 1,
+      "text": "Δ=1"
+    }
+  ]
+}

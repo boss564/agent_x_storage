@@ -62,7 +62,7 @@ test:
 werktest:
 	@echo "⚖️  WERKTEST — Verträge der Wächter"
 	@echo "==================================="
-	@python3 scripts/vertrags_runner.py
+	@python3 scripts/vertrags_runner.py --mutation
 
 compile:
 	@echo "🔨 COMPILE — Foundry-Baum"

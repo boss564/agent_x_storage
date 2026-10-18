@@ -9668,15 +9668,26 @@ def main() -> int:
         _vertrag = "0 Vertragsfälle hier"
         try:
             _vr = subprocess.run(
-                [sys.executable, str(root / "scripts" / "vertrags_runner.py")],
-                capture_output=True, text=True, timeout=120, cwd=str(root))
-            _m = re.search(r"(\d+)/(\d+) Vertragsfälle grün",
-                           _vr.stdout + _vr.stderr)
-            _vertrag = (f"{_m.group(1)}/{_m.group(2)} Vertragsfälle grün"
-                        if _m else "Vertrags-Runner ohne Ergebnis")
+                [sys.executable, str(root / "scripts" / "vertrags_runner.py"),
+                 "--mutation"],
+                capture_output=True, text=True, timeout=300, cwd=str(root))
+            _out = _vr.stdout + _vr.stderr
+            _vf = re.search(r"(\d+)/(\d+) Vertragsfälle grün", _out)
+            _vm = re.search(r"(\d+)/(\d+) Mutationen gefangen", _out)
+            # §A-ZZZZ117 (Runde 79): **die Zahl kommt aus dem Ausgang,
+            # nicht aus dieser Zeile.** Der Altposten 4/8 war eine Zahl,
+            # die nicht wanderte, wenn die Wirklichkeit wanderte. Wird
+            # ein Fall ergänzt, ändert sich dieser Text von selbst —
+            # weil beide Brüche aus `vertrags_runner.py` gelesen werden.
+            if _vf and _vm:
+                _vertrag = (f"{_vf.group(0)} · {_vm.group(0)}")
+            elif _vf:
+                _vertrag = f"{_vf.group(0)} · Mutationen ohne Ergebnis"
+            else:
+                _vertrag = "Vertrags-Runner ohne Ergebnis"
             if _vr.returncode != 0:
                 _bb.append("Bericht: Vertrags-Runner rot — "
-                           + (_m.group(0) if _m else "kein Ergebnis"))
+                           + (_vf.group(0) if _vf else "kein Ergebnis"))
         except (OSError, subprocess.SubprocessError, re.error):
             _vertrag = "Vertrags-Runner nicht ausführbar"
         status += f"\nBericht: {len(BERICHT_FELDER)} Felder, " \
