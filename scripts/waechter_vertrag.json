@@ -1,8 +1,8 @@
 {
-  "_version": 1,
+  "_version": 2,
   "_zweck": "Maschinenlesbarer Vertrag des Einwurf-Waechters. Single source of truth fuer Repo und externe Ingestion. Wer hier eine Zeile aendert, aendert das Tor ausserhalb dieses Repos mit.",
-  "_stand": "Runde 79 (2026-10-18)",
-  "_geltung": "Der Runner (scripts/vertrags_runner.py) importiert diese Datei; die externe Ingestion SOLL sie einlesen. Solange sie es nicht tut, zertifiziert 5/5 einen Vertrag, den draussen niemand benutzt.",
+  "_stand": "Runde 82 (2026-10-18)",
+  "_geltung": "Der Runner (scripts/vertrags_runner.py) importiert diese Datei; die externe Ingestion MUSS sie einlesen. Solange sie es nicht tut, zertifiziert N/N einen Vertrag, den draussen niemand benutzt.",
   "exit_codes": {
     "0": {
       "urteil": "neu",
@@ -25,6 +25,13 @@
       "aktion": "zustellen, markiert als UNGEPRUEFT",
       "beschreibung": "Der Waechter konnte nicht pruefen (Stream unlesbar, interner Fehler). Fail-open waere ein Loch, fail-closed legt den Kanal still — deshalb zustellen mit sichtbarer Marke. Der Empfaenger dedupliziert manuell.",
       "begruendung": "Drei Fehler in zwei Runden belegen: Abstuerze sind die dominante Fehlerart, nicht die Ausnahme. Ein fail-closed-Waechter haette den Kanal dreimal stillgelegt."
+    },
+    "4": {
+      "urteil": "unvollstaendig_geprueft",
+      "aktion": "nicht ungeprueft zustellen — Inhalt enthalten, aber mindestens eine Zeile war unparsbar",
+      "beschreibung": "Mindestens JSON_SCHWELLE Zeilen waren kein gueltiges JSON. Die gueltigen Zeilen wurden geprueft (Duplikat-Urteil gilt), das Gesamturteil ist aber unvollstaendig.",
+      "unterschied_zu_3": "3 = gar nicht geprueft (Stream unlesbar). 4 = geprueft, aber unvollstaendig. Wer beide als 'zustellen' behandelt, macht 4 sinnlos.",
+      "begruendung": "Bis Runde 81 war die Schwelle stderr-only bei Exit 0. Ein Tor, das nur den Exit liest, stellte zu und sah die Warnung nie. Der Code gehoert in die Messachse, nicht ins Log."
     }
   },
   "etiketten": {
@@ -65,14 +72,21 @@
       "semantik_gleichklang": "Die Ingestion MUSS defekte Zeilen genauso behandeln wie der Waechter (ueberspringen+zaehlen). Sonst ist der Lauf gruen und die Zeile ungeprueft zugestellt.",
       "schwelle": {
         "json": 1,
-        "wirkung": "Ab 1 unparsbarer Zeile warnt der Lauf auf stderr. Exit bleibt 0 (gueltige Zeilen wurden geprueft), die Warnung ist nicht uebersehbar.",
-        "begruendung": "Ein Zaehler ohne Schwelle misst und alarmiert nicht."
+        "exit": "4 (nicht 0)",
+        "wirkung": "Ab 1 unparsbarer Zeile: Exit 4. Der Code sagt 'geprueft, aber unvollstaendig'.",
+        "begruendung": "Ein Zaehler ohne Ausgang im Messkanal ist ein Thermometer ohne Kontakt."
       }
     },
     "messung_annotation": {
       "regel": "Der Detektor gibt ausschliesslich messbare Kategorien aus: KANAL-DUPLIKAT (Zeitstempel gleich) und WIEDERHOLUNG (Zeitstempel verschieden).",
       "verboten": "'bewusst' o.ae. Absichts-Kategorien in der Zaehlachse. Der Detektor sieht Inhalt und Zeitstempel, keine Absicht.",
       "begruendung": "Annotation in der Messachse war die Krankheit des Zeitstempels eine Etage hoeher."
+    },
+    "hash_eingang": {
+      "regel": "Der Hash enthaelt genau message.content (bzw. die Textteile davon) — nichts anderes.",
+      "timestamp": "vorhanden, NICHT im Hash, wird nach Hash-Treffer verglichen (KANAL-DUPLIKAT vs WIEDERHOLUNG).",
+      "geprueft_durch": "scripts/test_hash_eingang.py — assertiert die Argumentliste von digest() und die Projektion in _text_von()",
+      "status": "mechanisch, nicht vakuum-erfuellt: ein kuenftiges Feld bricht den Test"
     }
   },
   "normalisierung": {
@@ -86,17 +100,18 @@
     {
       "name": "strom-alle",
       "erwarteter_exit": 1,
-      "text": "KANAL-DUPLIKAT:"
+      "text": "Paare=38;KANAL-DUPLIKAT=37;WIEDERHOLUNG=1",
+      "warum_wert": "Nur der Schluessel zu assertieren hiess: eine Zaehlachse, die immer 0 sagt, besteht den Vertrag. Erst der Wert bindet den Detektor an den Befund."
     },
     {
       "name": "einwurf-bekannt",
       "erwarteter_exit": 1,
-      "text": "identisch mit #"
+      "text": "WIEDERHOLUNG;treffer="
     },
     {
       "name": "einwurf-neu",
       "erwarteter_exit": 0,
-      "text": "neu am Einwurf"
+      "text": "NEU;sha="
     },
     {
       "name": "kein-argument",
@@ -121,17 +136,89 @@
     {
       "name": "aaba",
       "erwarteter_exit": 1,
-      "text": "WIEDERHOLUNG: #2 == #4"
+      "text": "WIEDERHOLUNG #2 == #4"
     },
     {
       "name": "uebersprung",
-      "erwarteter_exit": 0,
-      "text": "übersprungen: 2 (JSON 2"
+      "erwarteter_exit": 4,
+      "text": "json=2"
+    },
+    {
+      "name": "uebersprung-allein",
+      "erwarteter_exit": 4,
+      "text": "uebersprungen="
     }
   ],
   "identitaets_audit": {
-    "stand": "Runde 81",
-    "befund": "Nur message.content geht in den Hash. role filtert, timestamp ist Metadatum, type/status nur in 5 Steuerzeilen.",
-    "offen": "Kein weiteres Diagnose-Feld vorhanden — die Invariante ist derzeit leer erfuellt, nicht bewiesen."
+    "stand": "Runde 82",
+    "befund": "Nur message.content geht in den Hash. role filtert, type/status nur in 5 Steuerzeilen.",
+    "timestamp": "vorhanden, NICHT im Hash, Vergleich nach Treffer",
+    "status": "nicht mehr vakuum — test_hash_eingang.py assertiert die Eingangsliste"
+  },
+  "schwere_ordnung": {
+    "0": "neu, vollstaendig geprueft",
+    "1": "duplikat, vollstaendig geprueft",
+    "4": "unvollstaendig geprueft (Inhalt vorhanden)",
+    "3": "ungeprueft",
+    "2": "kein Urteil ueber die Meldung",
+    "begruendung": "Die Reihenfolge ist nicht 'hart gewinnt', sondern 'Sicherheit des Urteils'. 1 ist weicher als 0, weil redundanter Inhalt harmloser ist als ein Fehlurteil ueber neuen Inhalt. 4 und 3 sind strenger als 0/1, weil dort das Urteil selbst unsicher ist."
+  },
+  "etiketten_klassifikation": {
+    "vertraglich": [
+      "KANAL-DUPLIKAT",
+      "WIEDERHOLUNG"
+    ],
+    "praesentation": [
+      "KANAAL-Spalte der Ausgabezeile",
+      "Detailzeile '  <ETIKETT> #a == #b'"
+    ],
+    "regel": "Die Messachse (Meldungen=;Paare=;KANAL-DUPLIKAT=;WIEDERHOLUNG=;uebersprungen=;json=) ist Vertrag: Schluessel und Reihenfolge sind stabil. Alles darueber hinaus (Prosa, deutsche Dativformen, Doppelpunkte, Klammern) ist Praesentation und wird NICHT assertiert.",
+    "konsequenz": "Ein Relabel der Praesentation ist kein v3. Eine Aenderung der Schluessel ist ein v3."
+  },
+  "verantwortliche": {
+    "regel": "Jeder offene Posten hat einen Menschen mit Rolle, nicht eine Datei mit Pfad.",
+    "posten": [
+      {
+        "id": "R73",
+        "posten": "Runde-73-Luecke",
+        "eigner": "Betreiber (Buchungsmechanismus)",
+        "faellig": "R83"
+      },
+      {
+        "id": "BC",
+        "posten": "Bytecode-Blocknummer",
+        "eigner": "Betreiber (bytecode_manifest)",
+        "faellig": "R83"
+      },
+      {
+        "id": "NRM",
+        "posten": "Normalisierungs-Grenze",
+        "eigner": "Betreiber",
+        "faellig": "R82"
+      },
+      {
+        "id": "ADJ",
+        "posten": "Adjudikation bewusste Neusendung",
+        "eigner": "Betreiber",
+        "faellig": "vor Ingestion",
+        "vorlaeufig": {
+          "wert": "beide Etiketten Exit 1",
+          "risiko": "bewusste Neusendung wird unterdrueckt (Datenverlust)",
+          "annahme_bis": "Betreiber entscheidet"
+        }
+      },
+      {
+        "id": "VRT",
+        "posten": "Vertrags-Versionierung",
+        "eigner": "Betreiber",
+        "faellig": "R84"
+      },
+      {
+        "id": "ING",
+        "posten": "Ingestion liest Exit 4 und Messachse",
+        "eigner": "Betreiber (externer Konsument)",
+        "faellig": "vor Go-Live"
+      }
+    ]
   }
 }

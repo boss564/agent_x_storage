@@ -188,7 +188,7 @@ def pruefe_strom(strom: list[tuple[str, str]]) -> tuple[int, int, list[str]]:
             gleich_ts = strom[j][0] == ts
             kanal += gleich_ts
             art = "KANAL-DUPLIKAT" if gleich_ts else "WIEDERHOLUNG"
-            bericht.append(f"  {art}: #{j + 1} == #{i + 1}"
+            bericht.append(f"  {art} #{j + 1} == #{i + 1}"
                            f"  Δ={i - j}"
                            f"  {'(gleicher Zeitstempel)' if gleich_ts else '(anderer Zeitstempel)'}"
                            f"  sha {h[:12]}")
@@ -214,12 +214,22 @@ def main(argv: list[str]) -> int:
             print(f"DIE WACHE TRÄGT NICHT: {e}", file=sys.stderr)
             return 3
         h = digest(text)
-        for i, (_, t) in enumerate(strom):
+        # Einwurf-Zeitstempel fuer die Etikett-Entscheidung (ts_gleich).
+        _mt = re.search(r"<timestamp>(.*?)</timestamp>", text)
+        _ein_ts = _mt.group(1) if _mt else "?"
+        for i, (ts, t) in enumerate(strom):
             if digest(t) == h:
-                print(f"WIEDERHOLUNG am Einwurf: identisch mit #{i + 1} "
-                      f"(sha {h[:12]}) — nicht zustellen.")
+                ts_gleich = ts == _ein_ts
+                # §A-ZZZZ126 (Runde 82): der Einwurf-Zweig trug keine
+                # Messachse. Der Mock-Konsument fragte `Paare==1` und
+                # fand nichts — Befund des Konsumenten, nicht des
+                # Detektors. Jetzt dieselbe Achse wie der Strom-Lauf.
+                print(f"Paare=1;KANAL-DUPLIKAT={'1' if ts_gleich else '0'};"
+                      f"WIEDERHOLUNG={'0' if ts_gleich else '1'};"
+                      f"WIEDERHOLUNG;treffer={i + 1};"
+                      f"sha={h[:12]};aktion=blockieren")
                 return 1
-        print(f"neu am Einwurf (sha {h[:12]})")
+        print(f"NEU;sha={h[:12]};aktion=zustellen")
         return 0
 
     if "--strom" in argv:
@@ -241,12 +251,16 @@ def main(argv: list[str]) -> int:
         _us = ""
         _ue = sum(LESESTAT.values())
         if _ue:
-            _us = (f" | übersprungen: {_ue} (JSON {LESESTAT['json']}, "
-                   f"<{MIN_LAENGE}Z {LESESTAT['kurz']}, "
-                   f"Envelope {LESESTAT['envelope']})")
-        print(f"Meldungen: {len(strom)} | Paare: {paare} "
-              f"| KANAL-DUPLIKAT: {kanal} | WIEDERHOLUNG: {paare - kanal}"
-              f"{_us}")
+            _us = (f";uebersprungen={_ue};json={LESESTAT['json']};"
+                   f"kurz={LESESTAT['kurz']};"
+                   f"envelope={LESESTAT['envelope']}")
+        # §A-ZZZZ122 (Runde 82): **maschinenlesbar statt Prosa.** Vorher
+        # "Meldungen: 259 | Paare: 38 | KANAL-DUPLIKAT: 37". Ein Verbraucher
+        # musste Etiketten parsen — jedes Relabel brach den Vertrag
+        # (Runde 81: 8/9 rot bei reiner Textaenderung). Jetzt
+        # `schluessel=wert;` mit stabilen ASCII-Schluesseln.
+        print(f"Meldungen={len(strom)};Paare={paare};"
+              f"KANAL-DUPLIKAT={kanal};WIEDERHOLUNG={paare - kanal}{_us}")
         # §A-ZZZZ121b: **die Schwelle ist Vertrag, nicht Gefühl.**
         if LESESTAT["json"] >= JSON_SCHWELLE:
             print(f"WARNUNG: {LESESTAT['json']} unparsbare Zeile(n) — "
@@ -255,6 +269,13 @@ def main(argv: list[str]) -> int:
                   f"gelten.", file=sys.stderr)
         for z in bericht:
             print(z)
+        # §A-ZZZZ122 (Runde 82): **unvollstaendig ist ein eigener Ausgang.**
+        # Bis Runde 81 war die Schwelle stderr-only bei Exit 0 — ein
+        # Tor-Verbraucher, der nur den Exit-Code liest, stellte den Inhalt
+        # zu und sah die Warnung nie. Exit 3 = gar nicht geprueft,
+        # Exit 4 = geprueft, aber nicht vollstaendig.
+        if LESESTAT["json"] >= JSON_SCHWELLE:
+            return 4
         return 1 if paare else 0
 
     print(__doc__.strip(), file=sys.stderr)

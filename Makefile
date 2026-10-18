@@ -66,6 +66,14 @@ werktest:
 	@echo "⚖️  WERKTEST — Verträge der Wächter"
 	@echo "==================================="
 	@python3 scripts/vertrags_runner.py --mutation
+	@echo ""
+	@echo "🔐 HASH-EINGANG — was darf in den Hash"
+	@echo "======================================"
+	@python3 scripts/test_hash_eingang.py
+	@echo ""
+	@echo "📥 KONSUMENT — liest die Ingestion die Exit-Codes"
+	@echo "================================================="
+	@python3 scripts/mock_ingestion.py
 
 compile:
 	@echo "🔨 COMPILE — Foundry-Baum"

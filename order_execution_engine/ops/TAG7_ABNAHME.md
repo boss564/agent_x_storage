@@ -9329,3 +9329,160 @@ gilt, bis jemand sie ändert.
 **Der Satz der Runde:** Eine Wache, die eine Ausgabe prüft, die ich
 ohne sie geändert habe, ist die erste Wache, die mich gefangen hat.
 
+
+## Runde 82 — Messachse, Exit 4, Konsument
+
+### 1. Der Fall, der grün war aus dem falschen Grund
+
+```
+vorher: uebersprung  exit=0  text ok  speicher isoliert   ✅
+```
+
+Der Fall prüfte den **Warnungsstring** auf stderr und den Exit 0. Er
+konnte gar nicht rot werden: die Warnung stand da, der Bericht war
+"ok". **Exit 0 heißt für ein Tor: zustellen.** Die Warnung landete in
+einem Kanal, an dem kein Tor hängt — Ihre Formulierung „nicht mehr
+stumm, aber geflüstert" war exakt.
+
+Jetzt:
+
+```
+uebersprung        exit=4  text ok  speicher isoliert
+uebersprung-allein exit=4  text ok  speicher isoliert
+```
+
+`uebersprung-allein` ist der Beleg ohne Maskierung: **nur Müll, keine
+gültige Meldung** — dann kann ein Duplikat (Exit 1) den Exit 4 nicht
+verdecken.
+
+### 2. Exit 4 und die Schwere-Ordnung
+
+| Exit | Urteil | Aktion |
+|---|---|---|
+| 0 | neu, vollständig geprüft | zustellen |
+| 1 | Duplikat, vollständig geprüft | verwerfen |
+| **4** | **geprüft, unvollständig** | **zustellen, markiert, alarmieren** |
+| 3 | gar nicht geprüft | zustellen, markiert |
+| 2 | kein Urteil über die Meldung | verwerfen, alarmieren |
+
+Die Ordnung ist **nicht** „hart gewinnt", sondern **Sicherheit des
+Urteils**:
+
+- `1` weicher als `0` — redundanter Inhalt ist harmloser als ein
+  Fehlurteil über neuen Inhalt.
+- `4` und `3` strenger als `0`/`1` — dort ist das *Urteil selbst*
+  unsicher, nicht der Inhalt.
+
+**Warum 4 ≠ 3:** `3` heißt „Stream unlesbar, gar nichts geprüft". `4`
+heißt „gültige Zeilen geprüft, mindestens eine unparsbar". Wer beide
+als „zustellen" behandelt, macht `4` sinnlos — deshalb die getrennte
+Marke `UNVOLLSTAENDIG`.
+
+### 3. Etiketten sind Präsentation, Werte sind Vertrag
+
+```
+vorher: Meldungen: 259 | Paare: 38 | KANAL-DUPLIKAT: 37
+nachher: Meldungen=261;Paare=38;KANAL-DUPLIKAT=37;WIEDERHOLUNG=1;uebersprungen=34;json=0
+```
+
+Ihre Frage aus R80 — *sind Labels Spezifikation oder Präsentation?* —
+ist damit entschieden, **und die Entscheidung ist eine**: die
+Messachse ist Vertrag (Schlüssel und Reihenfolge stabil), alles
+darüber hinaus ist Präsentation und wird nicht assertiert. Ein Relabel
+der Detailzeile ist kein v3; eine Änderung der Schlüssel ist eins.
+
+### 4. Die Mutationssuite hat mein eigenes Loch gefunden
+
+Nach dem Umbau trafen drei Mutationsmuster nichts mehr:
+
+```
+FAIL Mutation Text: Muster nicht gefunden — die Mutation prüft nichts
+FAIL Mutation Exit: Muster nicht gefunden — die Mutation prüft nichts
+2/4 Mutationen gefangen
+```
+
+Das ist Runde 79 eine Etage höher. Nach Reparatur der Muster:
+
+```
+FAIL Mutation Text: **unbeobachtbar** — keine assertierte Ausgabe verändert
+4/5 Mutationen gefangen
+```
+
+**Und das ist der wichtigere Befund:** `KANAL-DUPLIKAT=0` brach keinen
+Fall, weil der Vertrag nur den **Schlüssel** assertierte, nicht den
+**Wert**. Eine Zählachse, die immer `0` sagt, hätte den Vertrag
+bestanden. Nach Nachziehen auf `Paare=38;KANAL-DUPLIKAT=37;WIEDERHOLUNG=1`:
+**5/5**.
+
+### 5. Der Hash-Eingang ist jetzt eine Mauer (6/6)
+
+`scripts/test_hash_eingang.py` assertiert mechanisch:
+
+| Prüfung | Befund |
+|---|---|
+| `digest()` hat genau einen Parameter | `['text']` |
+| `normalisiere()` entfernt `<timestamp>` | kein Marker im Text |
+| ts-gleich, Inhalt-gleich → Hash gleich | `bcfaee547fe5 == bcfaee547fe5` |
+| ts-gleich, Inhalt-anders → Hash anders | `bcfaee547fe5 != 15038b234b21` |
+| `_text_von()` nimmt nur `content` | `len=500` |
+| zusätzliche Felder im `message`-Objekt tragen nichts bei | `seq`/`channel` neutral |
+
+**Und der Punkt, den Ihr Audit zu Recht vermißte:** der Zeitstempel ist
+jetzt ausdrücklich benannt — *vorhanden, nicht im Hash, Vergleich nach
+Treffer*. Er fehlte in meiner R81-Aufzählung, weil ich ihn als
+selbstverständlich überging; das war die Lücke, nicht die Zeile.
+
+### 6. Der Konsument — der fünfte Beleg, im Kleinen
+
+`scripts/mock_ingestion.py` fährt alle fünf Exit-Codes gegen echte
+Wächter-Läufe:
+
+| Wächter-Exit | Mock-Aktion |
+|---|---|
+| 0 neu | zustellen |
+| 1 Duplikat | verwerfen |
+| 2 Aufruffeier | verwerfen + alarmieren |
+| 3 ungeprüft | zustellen, markiert |
+| 4 unvollständig | zustellen, markiert + alarmieren |
+| sonst | fail-closed: verwerfen + alarmieren |
+
+**Der Mock hat sofort einen echten Befund gefunden:** der Einwurf-Zweig
+gab keine Messachse aus. Ein Konsument, der `Paare==1` prüfen wollte,
+fand nichts. Nach Fix: **6/6**.
+
+Das ist **nicht** der Beweis, daß die echte Ingestion so gebaut ist —
+das bleibt der harte Posten. Aber es ist die ausführbare Referenz, gegen
+die eine abweichende Ingestion benannt werden kann.
+
+### 7. Verantwortliche statt Dateien
+
+| Posten | Eigner | fällig |
+|---|---|---|
+R73 | Betreiber (Buchungsmechanismus) | R83
+BC | Betreiber (bytecode_manifest) | R83
+NRM | Betreiber | R82
+ADJ | Betreiber | vor Ingestion · **vorläufig: beide Exit 1, Risiko: Datenverlust** |
+VRT | Betreiber | R84
+ING | Betreiber (externer Konsument) | vor Go-Live
+
+**Zur Adjudikation:** Der konservative Default trägt jetzt ein
+**benanntes Risiko in der Vertragsdatei**, nicht im Kopf des
+Betreibers. Solange niemand entscheidet, ist die Vorläufigkeit
+dokumentiert und nicht still.
+
+### 8. Stand
+
+| Größe | Wert |
+|---|---|
+| Vertragsfälle | 10/10 |
+| Negativkontrolle | 10/10 |
+| Mutationen | 5/5 |
+| Hash-Eingang | 6/6 |
+| Konsument | 6/6 |
+| Vertrag | v2 |
+
+**Der Satz der Runde:** Ein Fall, der die Warnung prüft und den Ausgang
+nicht, ist grün aus dem falschen Grund — und es brauchte eine
+Mutationssuite, die mein eigenes Loch fängt, um einen Vertrag zu
+finden, der `KANAL-DUPLIKAT=0` akzeptiert hätte.
+

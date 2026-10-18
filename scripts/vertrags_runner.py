@@ -82,6 +82,7 @@ def _args(name: str, t: Path, d: Path) -> list[str] | None:
         "dreiergruppe": ["--strom", str(d / "dreier.jsonl")],
         "aaba": ["--strom", str(d / "aaba.jsonl")],
         "uebersprung": ["--strom", str(d / "muell.jsonl")],
+        "uebersprung-allein": ["--strom", str(d / "nurmuell.jsonl")],
     }.get(name)
 
 
@@ -106,6 +107,10 @@ def _saat(d: Path, strom: list, neu_text: str) -> None:
     # Zwei unparsbare Zeilen — die Uebersprung-Zahl muss im Bericht stehen.
     (d / "muell.jsonl").write_text(
         zeile + "\nKEIN JSON\n{kaputt\n", encoding="utf-8")
+    # Nur Muell, keine gueltige Meldung — dann ist Exit 4 zwingend und
+    # nicht durch ein Duplikat (Exit 1) maskiert.
+    (d / "nurmuell.jsonl").write_text(
+        "KEIN JSON\n{kaputt\n", encoding="utf-8")
 
 
 def fahre(script: Path, vertrag: dict, strom: list,
@@ -166,9 +171,13 @@ def fahre(script: Path, vertrag: dict, strom: list,
 # nichts fangen, was nicht kaputt war. Jetzt greifen sie den Satz
 # selbst an, den ein Fall prüft.
 MUTATIONEN = [
-    ("Text", "identisch mit #{i + 1} ", "gleich wie "),          # Wort weg
-    ("Exit", "nicht zustellen.\")\n                return 1",
-     "nicht zustellen.\")\n                return 0"),
+    # §A-ZZZZ124 (Runde 82): die Muster zeigen jetzt auf die MESSACHSE.
+    # Nach dem Umbau auf `schluessel=wert;` trafen die alten Prosa-Muster
+    # nichts mehr und der Runner meldete "Muster nicht gefunden" — ein
+    # Mutationsloch, kein gruener Lauf. Das ist Runde 79 eine Etage hoeher.
+    ("Text", "KANAL-DUPLIKAT={kanal}", "KANAL-DUPLIKAT=0"),      # Zaehler stumm
+    ("Exit", "return 1 if paare else 0", "return 0"),            # Duplikat nicht blockiert
+    ("Exit4", "return 4", "return 0"),                           # unvollstaendig als grün
     ("stderr", "DIE WACHE TRÄGT NICHT", "WACHE LAEUFT"),         # Wort weg
     ("Zweig", None, None),  # Reihenfolge, s. _mutiere_zweig
 ]

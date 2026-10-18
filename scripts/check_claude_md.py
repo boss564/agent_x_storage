@@ -193,6 +193,11 @@ TEST_SCRIPTS: list[tuple[str, str, str]] = [
 # Skripte ohne x/y-Testbilanz — Generatoren, Fetcher, Reports.
 # Bewusst nicht in TEST_SCRIPTS, damit die Auto-Discovery sie nicht erneut meldet.
 NO_TEST_SUMMARY: set[str] = {
+    # Runde 82: eigener Berichtsblock (`N/N ... grün`), nicht x/y-Suite.
+    # Beide registriert, weil sie im Makefile-Ziel `werktest` laufen und
+    # ihre Zahlen in die Berichtszeile gerendert werden.
+    "scripts/test_hash_eingang.py",        # 6/6 Hash-Eingang (Signatur+Trennung)
+    "scripts/mock_ingestion.py",           # 6/6 Konsument (Exit→Aktion)
     "scripts/test_gaeb_reference.py",  # X83-Fixtures gitignore; TMP-checkout ohne Referenzdaten
     "scripts/test_bvbs_pruefdatei.py",     # braucht externe Pruefdatei
     "scripts/export_backtest_signals.py",  # Daten-Exporter, kein Test
@@ -9682,8 +9687,36 @@ def main() -> int:
             # die nicht wanderte, wenn die Wirklichkeit wanderte. Wird
             # ein Fall ergänzt, ändert sich dieser Text von selbst —
             # weil beide Brüche aus `vertrags_runner.py` gelesen werden.
+            # §A-ZZZZ127 (Runde 82): auch Hash-Eingang und Mock-Konsument
+            # werden gerendert, nicht getippt. Beide Zahlen stammen aus
+            # einem eigenen Lauf — ein Vertrag ohne Konsument war die
+            # Wette, die der Mock schliessen soll.
+            _hh = _mk = ""
+            for _sk, _pat, _lab in (
+                    ("test_hash_eingang.py",
+                     r"(\d+)/(\d+) Hash-Eingangs-Pruefungen gruen",
+                     "Hash-Eingang"),
+                    ("mock_ingestion.py",
+                     r"(\d+)/(\d+) Konsumenten-Faelle gruen",
+                     "Konsument")):
+                try:
+                    _r = subprocess.run(
+                        [sys.executable, str(root / "scripts" / _sk)],
+                        capture_output=True, text=True, timeout=120,
+                        cwd=str(root))
+                    _m = re.search(_pat, _r.stdout)
+                    _t = (f"{_lab} {_m.group(0).split(' ')[0]}" if _m
+                          else f"{_lab} ohne Ergebnis")
+                    if _sk.startswith("test_hash"):
+                        _hh = f" · {_t}"
+                    else:
+                        _mk = f" · {_t}"
+                    if _r.returncode != 0:
+                        _bb.append(f"Bericht: {_lab} rot")
+                except (OSError, subprocess.SubprocessError, re.error):
+                    pass
             if _vf and _vm:
-                _vertrag = (f"{_vf.group(0)} · {_vm.group(0)}")
+                _vertrag = (f"{_vf.group(0)} · {_vm.group(0)}{_hh}{_mk}")
             elif _vf:
                 _vertrag = f"{_vf.group(0)} · Mutationen ohne Ergebnis"
             else:
