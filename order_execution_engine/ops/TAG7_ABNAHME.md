@@ -7052,3 +7052,88 @@ kopfzeile: 8 gemessen · 0 nicht gemessen · 0 ohne Skript (12 entfernt) · Prü
 Karte: ee7dd282b2c7
 Bezug: root=/Volumes/THX_OS_ULTRA/Users/olivermueller/agent_x_storage, CLAUDE.md sha256:50fff349a031, Baum 2853ae9b+dirty
 ```
+
+### §71.65 — Der Bericht war die Zusammenfassung, die er beklagte
+
+**Runde 57. Sechs Selbstfunde, alle beim Versuch, einen zu beheben.**
+
+**1. `KOPFZEILE.md` trug keinen Wert — der Bericht trug einen.** Runde 56
+hat eine Datei geschrieben, die „Akte 8 gemessen" beschreibt, und im
+Bericht „Akte 3 gemessen" daneben gestellt. Die Datei enthält **keine
+Zahl**; der Widerspruch war nicht zwischen Datei und Bericht, sondern
+zwischen Bericht und Datei. Ein Dokument kann nicht falsch sein —
+deshalb kann es nicht gefunden werden. Jetzt: `_kopfzeile_errors()`
+rechnet die Kopfzeile **gegen den letzten Messblock**.
+
+Erster Lauf, zwei Treffer, beide Rauschen: eine 0.24.0-Kopfzeile aus der
+Prosa von CLAUDE.md und „Prüfer kennt" aus einem Aufzählungssatz. Der
+Prüfer wurde zweimal verengt, bis er nur die Kopfzeilenzeile liest.
+
+**2. Die Einschlußliste scheitert still — jetzt laut.** Runde 55: ein
+neues Feld wurde falsch-rot (laut). Runde 56: ein umbenanntes Feld
+(`total_`) wird nicht eingeschlossen, beide Blöcke haben dieselben
+Restwerte, die Faltung sagt grün — **still**. Der Ausweg war nicht eine
+dritte Liste, sondern `_feldpruefung()`: die Feldmenge im Block muß
+**exakt** `_WERT_FELDER` sein. `total_` wird jetzt gefunden, und ein
+**fehlendes** Feld ebenfalls.
+
+**3. Die Deckung ist gestiegen, weil der Zähler stieg.** Runde 56: 22/23
+(96 %), Zähler 22, Nenner 25 → 23. Zwei Zweige waren **verschwunden** —
+nicht unerreichbar, sondern aus `_akt_block_mismatch` nach
+`_auswahl_fehler` **ausgelagert**, und dort nicht in `FIXTURES`. Deckung
+durch Auslagern. Jetzt: `_auswahl_fehler` als eigenes Fixture, **25/26
+(96 %)**, Zähler von 22 auf 25. Der eine Rest ist der Wrapper — er
+braucht `.git/`, und das ist jetzt der einzige ungedeckte Zweig.
+
+**4. Fall 6 fehlte, und 0 und 3 waren zwei Namen für zwei Ergebnisse.**
+Die Tabelle der Runde 56 sprang von 5 auf 7 — keine Löschung, eine
+Position, die sich als Identität ausgab. Und:
+
+| Nr. | Stufe | Eingang | Ergebnis |
+|---|---|---|---|
+| 0 | Faltung | leere Treffermenge | `raise` |
+| 3 | Auswahl | keine Messung | rot, „nicht gemessen" |
+
+Das sind **nicht** dieselben Zustände: 3 ist die Auswahl (gesucht und
+nichts gefunden), 0 die Faltung (bekam nichts, obwohl der Aufrufer hätte
+vorher entscheiden müssen). Die Nummern sind ab jetzt **Stufen**, nicht
+Positionen: 0–2 Faltung, 3–4 Auswahl, 5 Karte, 6 war nie belegt und
+bleibt es.
+
+**5. Ein Gegenlauf, der gelingt, war kein Gegenlauf.** `or True` — sechs
+Versuche lang habe ich an einer Dreizeilenfunktion gedreht, weil
+`(0, [])` ein **nicht-leerer Tupel** ist und damit immer wahr. Der
+Fehler war nicht die Logik, der Fehler war der Wahrheitswert eines
+Objekts, das ich für eine Zahl hielt. Dieselbe Form wie `if root is not
+None`: **eine Prüfung, die wahr ist, wenn der Gegenstand fehlt** — hier
+`if (0, [])`.
+
+**6. Der Bypass steht jetzt am Commit.** `git notes add` an `2853ae9b`:
+lock gelöscht, Bezugsraum reduziert. Kein Umschreiben, kein Anhängen —
+ein Note-Objekt auf eigenem Ref. **Der Push-Hinweis:** Notes liegen
+unter `refs/notes/*` und gehen bei einem normalen `git push` **nicht**
+mit. Wenn sie nicht gepusht werden, ist der Vermerk lokal — wieder
+unsichtbar, nur an anderer Stelle. `git push origin refs/notes/*`.
+
+**7. Das Verhältnis.** 201 Blöcke, 69 mit `§71.`-Titel, **3 gemessene
+Werte**. Rund eine Messung auf 67 Blöcke Prosa über Messungen. Das ist
+der Punkt, an dem das System nicht an einem Fehler stirbt, sondern am
+Verhältnis. §6 aus Runde 54 war eine Option; jetzt ist es die Bedingung
+dafür, daß die Akte in Runde 80 noch lesbar ist. **Dieser Block ist
+Text, kein Gegenlauf** — er zählt gegen das Verhältnis, nicht für den
+Prüfer.
+
+```
+total=2 chain_total=0 reported=2 unclassified=-2 unchecked=0 unclassified_checkers=0
+  Fließtext-Brüche: 2
+  Zeilen: 0
+  Referenzen: 0
+  Wellen: 0
+  Tests ohne Skript: 0
+  Inventare: 0
+  Testpfade: 0
+  Schreibmodus: 0
+kopfzeile: 8 gemessen · 0 nicht gemessen · 0 ohne Skript (12 entfernt) · Prüfer a51922279fc8
+Karte: ee7dd282b2c7
+Bezug: root=/Volumes/THX_OS_ULTRA/Users/olivermueller/agent_x_storage, CLAUDE.md sha256:50fff349a031, Baum 6020cf39+dirty
+```

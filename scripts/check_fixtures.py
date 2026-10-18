@@ -382,6 +382,10 @@ def fixtures_variants(name: str) -> list[object]:
         return list(_DOC_INV_MODE_KEYS)
     if name == "_akte_losslessness":
         return ["block_gone", "shrink", "hash_changed"]
+    if name == "_auswahl_fehler":
+        # §A-ZZZZ (Runde 57): vier Ausgänge, jeder ein eigener Eingang —
+        # das ist die Deckung, die Runde 56 durch Auslagern verloren hat.
+        return ["keine", "ohne_karte", "einer", "gleich", "ungleich"]
     if name == "_akt_block_mismatch":
         # §A-ZX: dieser Prüfer rechnet die Karte **gegen den Baum**
         # (`.git/`, Vorlauf). Ein Temp-Klon hat beides nicht und liefert
@@ -565,6 +569,78 @@ def _akte_losslessness(broken: bool) -> int:
     return len(hits), hits
 
 
+def _auswahl_fehler_fixture(kind=False) -> int:
+    """§A-ZZ/§A-ZZZZ (Runde 57): die reine Auswahl **als eigenes Fixture**.
+
+    Runde 56 zog die drei Ausgänge aus `_akt_block_mismatch` in
+    `_auswahl_fehler` heraus — und damit aus der Deckung: der Wrapper
+    hatte danach nur noch einen Meldetext, das Fixture meldete 0/1, und
+    die Gesamtmenge schrumpfte von 25 auf 23, während die Zahl 22 blieb.
+    **Deckung durch Auslagern** — der Zähler stand still, der Nenner
+    wurde kleiner.
+
+    Die Zweige gehören dem, der sie trägt. `_auswahl_fehler` trägt vier.
+    """
+    from check_claude_md import _auswahl_fehler, split_blocks
+    karte = "total=1 chain=0\nKarte: fp\n"
+    block = "```\ntotal=1 chain=0\nKarte: fp\n```\n"
+    einer = f"### A — x\n\n{block}"
+    zwei = f"### A — x\n\n{block}\n### B — y\n\n{block}"
+    stufen = {
+        "keine": ("### A — x\n\nKein Block.\n", karte, True),
+        # Karte ohne `Karte:`-Zeile — kein Fingerprint, also nicht
+        # entscheidbar. Die Stufe übergibt eine **andere** Karte, nicht eine
+        # leere: eine leere Zeichenkette ist kein Sonderfall, sie ist Text.
+        "ohne_karte": (einer, "total=1 chain=0\n", True),
+        "einer": (einer, karte, False),
+        "gleich": (zwei, karte, False),
+        "ungleich": (zwei.replace("total=1", "total=2", 1), karte, True),
+    }
+    if kind in stufen:
+        text, karte_x, rot = stufen[kind]
+        r = _auswahl_fehler(split_blocks(text), karte_x)
+        # §A-ZZZZ: „richtig" heißt hier **rot**, und rot heißt eine
+        # Meldung. Die Meldung geht durch — ihre Existenz ist die Prüfung.
+        # §A-ZZZZ1: Rückgabe ist `(zahl, liste)` — die Zahl für
+        # `measure()`, die Liste für die Deckung (§A-YB). Nur `int` oder
+        # nur `list` reicht für beides nicht.
+        if bool(r) != rot:
+            m = (f"Akte-Auswahl-Fixture: {kind} erwartet "
+                 f"{'rot' if rot else 'grün'}, bekam {bool(r)}")
+            return 0, [m]
+        return (1 if r else 0), r
+    # `False` = heiler Lauf, `True` = kaputter Lauf (Standard von
+    # `measure()`): beide fahren **alle** Stufen. Der Unterschied ist die
+    # Erwartung, nicht der Eingang — `False` prüft die grünen, `True` die
+    # roten. Beide melden eine **Zahl**, weil `measure()` zählt.
+    # §A-ZZZZ1 (Selbstfund Runde 57): `measure()` übergibt den **ersten
+    # Variant** (einen String wie `"keine"`), nicht `True`. Die
+    # `heil`-Unterscheidung muß darum am Typ hängen, nicht am Wert —
+    # sonst fährt der „kaputte" Lauf dieselben Stufen wie der heile.
+    # `clean` (kind=False) muß **0** sein: der heile Lauf meldet nichts.
+    # Geprüft werden darum nur die Stufen, die grün sein **müssen**
+    # (`rot` falsch) — eine rote Stufe im heilen Lauf zu fahren hieße,
+    # den kaputten Baum zu prüfen und ihn grün zu nennen.
+    #
+    # `broken` (True oder ein benannter Variant) muß **> 0** sein: die
+    # roten Stufen müssen eine Meldung liefern.
+    # §A-ZZZZ1 (Selbstfund Runde 57, sechster): `_auswahl_fehler_fixture`
+    # gibt jetzt einen **Tupel** `(zahl, liste)` zurück — und ein nicht-
+    # leerer Tupel ist immer wahr, auch bei `(0, [])`. Sechs Versuche lang
+    # habe ich an der Logik gedreht; der Fehler war der Wahrheitswert
+    # eines Tupels. Gelesen wird die **Zahl**, nicht das Objekt.
+    def _falsch(k: str) -> bool:
+        r = _auswahl_fehler_fixture(k)
+        n = r[0] if isinstance(r, tuple) else r
+        return int(n) > 0
+
+    if kind is False:
+        gruen = [k for k, (_, _, rot) in stufen.items() if not rot]
+        return sum(1 for k in gruen if _falsch(k)), []
+    rot_stufen = [k for k, (_, _, rot) in stufen.items() if rot]
+    return sum(1 for k in rot_stufen if _falsch(k)), []
+
+
 FIXTURES: dict[str, Callable[[bool], Any]] = {
     "check_line_counts": _line_counts,
     "check_dead_refs": _dead_refs,
@@ -572,6 +648,7 @@ FIXTURES: dict[str, Callable[[bool], Any]] = {
     "check_doc_inventories": _doc_inventories,
     "_gitlink_errors": _gitlink,
     "_akt_block_mismatch": _akt_block,
+    "_auswahl_fehler": _auswahl_fehler_fixture,
     "_akte_losslessness": _akte_losslessness,
     "_korrektur_selectors": _korrektur_selectors,
 }

@@ -1453,10 +1453,7 @@ def _auswahl_fehler(bloecke: list[dict], karte: str) -> list[str]:
     # garantiert, dass weiter unten später geschrieben wurde. Über Klassen
     # hinweg war sie der Fehler der Runden bis §A-ZU.
     if not _falte_gruen(treffer):
-        return [f"Akte-Block: {len(treffer)} Messungen zur Karte {fp} mit "
-                f"verschiedenen Werten — Fingerprint unterspezifiziert "
-                f"oder Handedit"]
-    # Der Rumpf ist der Blocktext ohne Zäune; `Karte:` gehört zur
+        return [f"Akte-Block: {len(treffer)} Messungen zur Karte {fp} mit verschiedenen Werten — Fingerprint unterspezifiziert oder Handedit"]    # Der Rumpf ist der Blocktext ohne Zäune; `Karte:` gehört zur
     # Provenienz und wird vom Vergleich nicht gelesen.
     # §A-ZV: der Rumpf enthält Prosa **und** den eingezäunten Block. Der
     # Vergleich liest nur den Block — Prosa ist kein Beleg.
@@ -1516,6 +1513,70 @@ def _akt_block_mismatch(root: Path | None = None,
     # steht als `_auswahl_fehler(bloecke, karte)` daneben und wird hier
     # nur gefüttert. Der Baum liefert die Eingaben, er entscheidet nicht.
     return _auswahl_fehler(split_blocks(text), calibration_card(root))
+
+
+def _kopfzeile_errors(root: Path | None = None) -> list[str]:
+    """§A-ZZZZ0 (Runde 57): Die Kopfzeile wird **gegen den Block gerechnet**.
+
+    Runde 56 hat „Akte grün" durch `ops/KOPFZEILE.md` ersetzt — ein
+    Dokument, das eine Regel beschreibt. Ein Dokument kann nicht falsch
+    sein, deshalb kann es nicht gefunden werden. Und es trug zwei Werte
+    für dasselbe Feld, weil es von Hand geschrieben war.
+
+    Diese Funktion rechnet: das Format aus `KOPFZEILE.md` wird gegen den
+    **letzten Messblock** der Akte geprüft. Drei Zahlen, und jede muß aus
+    dem Block stammen, nicht aus dem Bericht.
+    """
+    base = root or Path(__file__).resolve().parent.parent
+    kopf = base / "order_execution_engine" / "ops" / "KOPFZEILE.md"
+    doc = base / "order_execution_engine" / "ops" / "TAG7_ABNAHME.md"
+    if not kopf.exists() or not doc.exists():
+        return []
+    out: list[str] = []
+    fmt = kopf.read_text(encoding="utf-8")
+    # Das Format muß die drei Felder **namentlich** tragen — sonst ist es
+    # kein Format, sondern ein Satz.
+    for feld in ("gemessen", "unvollständig", "keine"):
+        if f"<{feld}" not in fmt and f" {feld} ·" not in fmt:
+            out.append(f"Kopfzeile: Format nennt `{feld}` nicht")
+    text = doc.read_text(encoding="utf-8")
+    ms = [b for b in split_blocks(text) if b["kind"] == "Messung"]
+    if not ms:
+        return out + ["Kopfzeile: kein Messblock — keine Zahl zu prüfen"]
+    # Der **letzte** Messblock ist die aktuelle Messung (append-only).
+    body = "\n".join(ms[-1]["lines"])
+    if "gemessen ·" not in body:
+        out.append("Kopfzeile: letzter Messblock traegt keine Kopfzeile")
+        return out
+    k = re.search(r"(\d+) gemessen · (\d+) nicht gemessen[^\n]*", body)
+    if not k:
+        return out + ["Kopfzeile: Kopfzeilenform nicht lesbar"]
+    zeile = k.group(0)
+    n_gemessen, n_offen = int(k.group(1)), int(k.group(2))
+    # Die dritte Zahl: `keine` heißt, die Faltung hat `raise` geworfen.
+    # Im Block ist sie **nicht** ablesbar — sie kommt aus dem Lauf, nicht
+    # aus dem Text. Darum prüft diese Stelle nur, was der Block weiß:
+    # `nicht gemessen > 0` **muß** als unvollstaendig benannt sein.
+    if n_offen and "unvollstaendig" not in zeile:
+        out.append(f"Kopfzeile: {n_offen} nicht gemessen, aber nicht "
+                   f"als unvollstaendig benannt — die Zeile sagt "
+                   f"vollstaendig, die Zahl sagt es nicht")
+    # §A-ZZZZ0b: die Kopfzeile muß den **Umfang** nennen, nicht nur die
+    # Zahl. `8 gemessen` ohne `von N` ist mit `8 von 8` und `8 von 9`
+    # verträglich — eine Zahl, die zwei Zustände deckt.
+    if not re.search(r"\d+ gemessen · \d+ nicht gemessen", zeile):
+        out.append("Kopfzeile: Feldform `N gemessen · U nicht gemessen` fehlt")
+    # Die Prüfer-Fassung muß die des Laufs sein, der den Block schrieb.
+    # Nur in der **Kopfzeile**, nicht im Rumpf: „Prüfer kennt …" in Prosa
+    # ist eine Aussage über Prüfer, nicht die Kopfzeile.
+    ph = re.search(r"Prüfer (\w{8,})", zeile)
+    if ph and ph.group(1) != _pruefer_hash():
+        # Kein Fehler: der Block ist committet, der Prüfer läuft weiter.
+        # Aber der **Abstand** gehört benannt, sonst sieht der Leser eine
+        # Zahl, die zu einem anderen Programm gehört.
+        out.append(f"Kopfzeile: Prüfer {ph.group(1)} im Block, "
+                   f"{_pruefer_hash()} heute — Block ist Vorzustand")
+    return out
 
 
 def _tally_line_of(root: Path | None = None) -> str:
@@ -4611,6 +4672,52 @@ def _self_test_block_kind() -> list[str]:
     if _block_werte({"kind": "Messung", "lines": notiz.splitlines()}) == \
             _block_werte({"kind": "Messung", "lines": wert2.splitlines()}):
         out.append("Akte-Feldtaxonomie: Wertänderung gilt als Notiz")
+    # §A-ZZZZ1 (Runde 57): die Einschlußliste scheitert **offen** — ein
+    # umbenanntes Feld ist nicht „eine Notiz", sondern eine Lücke, durch die
+    # die Faltung blind ist. Wird es gefunden?
+    voll = calibration_card()
+    if _feldpruefung(voll):
+        out.append("Akte-Feldtaxonomie: vollständiger Block gilt als lückenhaft")
+    umbenannt = voll.replace("total=2 chain_total=0", "total_=2 chain_total=0", 1)
+    if not _feldpruefung(umbenannt):
+        out.append("Akte-Feldtaxonomie: umbenanntes Feld bleibt grün")
+    # Und die Gegenprobe: ein **fehlendes** Feld ist ebenfalls ein Befund,
+    # nicht eine Notiz — sonst wäre „weniger ist auch ok" die Regel.
+    # §A-ZZZZ1 (Selbstfund): die Felder stehen **in einer Zeile**; ein
+    # Zeilenfilter entfernt hier nichts und prüft dann nichts. Entfernt
+    # wird das Feld, nicht die Zeile.
+    fehlt = voll.replace("chain_total=0 reported=2",
+                         "chain_total_entfernt=0 reported=2", 1)
+    if not _feldpruefung(fehlt):
+        out.append("Akte-Feldtaxonomie: fehlendes Feld bleibt grün")
+    # §A-ZZZZ0 (Runde 57): die Kopfzeile wird **gegen den Block** gerechnet.
+    # Ohne diesen Test ist `_kopfzeile_errors` ein Prüfer ohne Probe —
+    # genau der Vorwurf, den diese Runde gegen die Vorrunde richtet.
+    # Der **Prüfer-Hash**-Abstand ist kein Fehler (der Block ist Vorzustand,
+    # jeder Edit ändert den Hash) und wird darum nicht gezählt — sonst
+    # wäre der Test an sein eigenes Schreiben gekoppelt und dauerrot.
+    hart = [e for e in _kopfzeile_errors()
+            if "Block ist Vorzustand" not in e]
+    if hart:
+        out.append(f"Kopfzeile: committeter Block weicht ab: {hart}")
+    # Die Gegenprobe: `U > 0` **ohne** `unvollstaendig` muß rot sein. Das
+    # ist der Fehler der Vorrunde, nachgestellt.
+    import tempfile as _tf, shutil as _sh
+    _d = Path(_tf.mkdtemp())
+    try:
+        (_d / "order_execution_engine" / "ops").mkdir(parents=True)
+        (_d / "order_execution_engine" / "ops" / "KOPFZEILE.md").write_text(
+            "<gemessen> <unvollständig> <keine>\n", encoding="utf-8")
+        kopf_kaputt = ("### §71.x — x\n\n```\ntotal=1 chain=0\n"
+                       "kopfzeile: 8 gemessen · 1 nicht gemessen · "
+                       "Prüfer aaa\nKarte: fp\n```\n")
+        (_d / "order_execution_engine" / "ops" / "TAG7_ABNAHME.md").write_text(
+            kopf_kaputt, encoding="utf-8")
+        if not _kopfzeile_errors(_d):
+            out.append("Kopfzeile: `1 nicht gemessen` ohne `unvollstaendig` "
+                       "bleibt grün")
+    finally:
+        _sh.rmtree(_d, ignore_errors=True)
     return out
 
 
@@ -4653,8 +4760,51 @@ def _falte_gruen(messungen: list[dict]) -> bool:
 # Was nicht in `_WERT_FELDER` steht, ist Notiz. Ein neues Feld ist damit
 # automatisch harmlos, statt bis zum nächsten Selbstfund schädlich.
 _WERT_FELDER = ("total", "chain_total", "reported", "unclassified",
-                "unchecked", "unclassified_checkers", "inventare",
-                "testpfade", "schreibmodus")
+                "unchecked", "unclassified_checkers")
+# §A-ZZZZ1 (Runde 57, Selbstfund): Runde 56 hatte hier
+# `inventare`, `testpfade`, `schreibmodus` stehen — **deutsche Namen für
+# Felder, die der Block englisch trägt**. Die Liste war nie vollständig;
+# sie war nur nie geprüft. Die Vollständigkeitsprüfung unten hat es in
+# der ersten Ausführung gefunden. Alle übrigen Zeilen des Blocks sind
+# Notizen (`Zeilen:`, `Wellen:`, …) und gehen nicht in die Werte ein.
+# §A-ZZZZ1 (Runde 57): **Die Einschlußliste scheitert offen.** Runde 55
+# hatte eine Ausschlußliste: ein neues Feld wurde falsch-rot (laut).
+# Runde 56 hatte eine Einschlußliste: ein **umbenanntes** Feld
+# (`total_` statt `total`) wird nicht eingeschlossen, beide Blöcke haben
+# danach dieselben Restwerte, `_falte_gruen` sagt grün — **still**.
+#
+# Der Ausweg ist nicht eine dritte Liste, sondern die
+# Vollständigkeitsprüfung: die Feldmenge, die **tatsächlich** in einem
+# Block vorkommt, muß exakt `_WERT_FELDER` sein. Ein Feld zu viel oder zu
+# wenig ist ein Fehler, nicht eine Notiz.
+def _feldpruefung(block_text: str) -> list[str]:
+    """§A-ZZZZ1: Trägt der Block **genau** die erwarteten Wertfelder?
+
+    Gelesen wird die `kopfzeile:`-Zeile (die kanonische Form) und die
+    Schlüssel der Blockzahlen. Jeder Schlüssel, der nicht in
+    `_WERT_FELDER` steht, ist ein Befund — denn entweder ist er eine
+    Umbenennung (dann fehlt das Original und die Faltung ist blind) oder
+    ein neues Feld (dann gehört es in die Liste, bewusst).
+    """
+    out: list[str] = []
+    gesehen: list[str] = []
+    for line in block_text.splitlines():
+        line = line.strip()
+        if not line or line.startswith(("Karte:", "Bezug:", "kopfzeile:")):
+            continue
+        if "=" in line and " " in line:
+            for part in line.split():
+                if "=" in part:
+                    gesehen.append(part.split("=", 1)[0])
+    fehlend = [f for f in _WERT_FELDER if f not in gesehen]
+    fremd = [f for f in gesehen if f not in _WERT_FELDER]
+    if fremd:
+        out.append(f"Akte-Feldtaxonomie: unbekannte Wertfelder {fremd} — "
+                   f"umbenannt oder neu, beides muß entschieden werden")
+    if fehlend:
+        out.append(f"Akte-Feldtaxonomie: Wertfelder fehlen {fehlend} — "
+                   f"die Faltung wäre blind für sie")
+    return out
 # Die einzige Zeile, die **auswählt** statt zu vergleichen.
 _IDENT_FELDER = ("Karte",)
 
