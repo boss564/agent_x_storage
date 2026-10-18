@@ -1,14 +1,14 @@
 # BERICHT — Runde 71b
 
-# BERICHT — Runde 72
+# BERICHT — Runde 74
 
-**Commit:** Arbeitsstand Runde 72
-**Zustand:** 4/8 Meßblöcke scheiterbar · seit 213 Protokoll (Einheitenwechsel) · Deckel 3000 ⇒ unter · 2525 Code-Blöcke · 224 Protokoll im Fenster · 4 : 2525 Gegenläufe · 13 : 13 Regeln gedeckt · 1/2 quittiert · R→F 0/med 1/n 5/letzte 0/Prüfer · 10 Felder
+**Commit:** Arbeitsstand Runde 74
+**Zustand:** 4/8 Meßblöcke scheiterbar · seit 213 Protokoll (Einheitenwechsel) · Deckel 3000 ⇒ unter · 2525 Code-Blöcke · 234 Protokoll im Fenster · 4/13 Regeln mit Gegenlauf · 13 : 13 Regeln gedeckt · 1/2 quittiert · R→F 0/med 1/n 5/letzte 0/Prüfer · 10 Felder
 **EXIT:** Selbsttest 0 · Hauptlauf 0
 **offen:** 0 · **quittiert:** 1 · **frisch:** 1 (_self_test_prozent)
-**Zahlen:** Nenner = 2525 `def`/`class` in `scripts/` **ohne** den Prüfer (233 Definitionen draußen) · 224 Protokollblöcke im Fenster, Rotation ab 240 · 283 ohne Bereich: **175 CODE_UNBEWERTET / 92 TEST_UNBEWERTET / 16 CONFIG** · R→F min 0 / Median 1 / n 5
-**Nicht getan:** die 12 offenen Kontexte · `FRISCH`-Versetzung · 175 CODE_UNBEWERTET einzeln zugewiesen
-**Deckel-Entscheidung:** `_self_test_prozent` bleibt quittiert. `deploy-safe` = mit gezähltem Deckel; `make telemetry-deploy-hetzner` liest `offen` aus dieser Datei vor dem ersten `ssh` — kein Literal im Makefile.
+**Zahlen:** Nenner = 2525 `def`/`class` in `scripts/` **ohne** den Prüfer (233 Definitionen draußen) · 224 Protokollblöcke im Fenster, Rotation ab 240 · 282 ohne Bereich: **174 CODE_UNBEWERTET / 92 TEST_INSTRUMENT / 16 CONFIG** (VENDORED als vierte Klasse, greift heute nicht — `lib/` liegt außerhalb) · R→F min 0 / Median 1 / n 5
+**Nicht getan:** die 12 offenen Kontexte · `FRISCH`-Versetzung · die CODE_UNBEWERTET einzeln zugewiesen
+**Deckel-Entscheidung:** `_self_test_prozent` bleibt quittiert. `DECKEL_CODE` gilt `def`/`class` in `scripts/` **ohne** den Prüfer — die Waage ist nicht gedeckelt. `deploy-safe` = **`deploy-gate` grün** (`needs: [pruefer, contract-compile, unit-tests]`), nicht mehr ein Zweigname ohne Job; `make telemetry-deploy-hetzner` liest `offen` aus dieser Datei vor dem ersten `ssh` — kein Literal im Makefile.
 
 ## Runde 72 — Auslöser → Job
 
@@ -33,7 +33,7 @@ Zeilenverlust. `DECKEL_CODE = 3000` gilt Code, nicht der Akte.
 **Nächster Schritt:** Zähler 4 → 13 (je Regel ein erzwungener `fail`-Zweig).
 
 **Commit:** `557fb2cd` (Runde 71b) · Arbeitsstand dieser Runde
-**Zustand:** 4/8 Meßblöcke scheiterbar · seit 213 Protokoll (Einheitenwechsel) · Deckel 3000 ⇒ unter · 2525 Code-Blöcke · 224 Protokoll im Fenster · 4 : 2525 Gegenläufe · 13 : 13 Regeln gedeckt · 1/2 quittiert · R→F 0/med 1/n 5/letzte 0/Prüfer · 10 Felder
+**Zustand:** 4/8 Meßblöcke scheiterbar · seit 213 Protokoll (Einheitenwechsel) · Deckel 3000 ⇒ unter · 2525 Code-Blöcke · 234 Protokoll im Fenster · 4/13 Regeln mit Gegenlauf · 13 : 13 Regeln gedeckt · 1/2 quittiert · R→F 0/med 1/n 5/letzte 0/Prüfer · 10 Felder
 **EXIT:** Selbsttest 0 · Hauptlauf 0
 **offen:** 0 · **quittiert:** 1 · **frisch:** 1 (_self_test_prozent)
 **Zahlen:** 216 Protokollblöcke (Name sagt jetzt, was gezählt wird) · 4 scheiterbar / 8 · 13 : 13 Regeln mit erzwungenem `fail`-Zweig · 282 Dateien unter `scripts/`/`.github/workflows/` **ohne Bereich, benannt** · R→F min 0 / Median 1 / n 5

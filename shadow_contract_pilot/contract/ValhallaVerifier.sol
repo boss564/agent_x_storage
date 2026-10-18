@@ -46,7 +46,11 @@ contract ValhallaVerifier {
 
     // ── Immutable Verification Key ────────────────────────────────────────
 
-    VerifyingKey public immutable vk;
+    // §A-ZZZZ95: Structs können **nicht** `immutable` sein — `immutable`
+    // ist Werttypen vorbehalten. Der Wert wird im Constructor einmal
+    // gesetzt und nie geändert; Storage ist hier die richtige Ablage.
+    // Der Fehler fiel nie auf, weil der Contract nie kompiliert wurde.
+    VerifyingKey public vk;
 
     // ── Storage ───────────────────────────────────────────────────────────
 

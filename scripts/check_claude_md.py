@@ -2964,7 +2964,14 @@ def calibration_card(root: Path | None = None) -> str:
         f"{_seit_txt} · Deckel {DECKEL_CODE} "
         f"⇒ {'ÜBER' if _n_code > DECKEL_CODE else 'unter'} · "
         f"{_n_code} Code-Blöcke · {_fenster_txt} · "
-        f"{_sch} : {_n_code} Gegenläufe · "
+        # §A-ZZZZ92 (Runde 72): **kein Doppelpunkt zwischen ungleichen
+        # Einheiten.** Der alte Ausdruck verband Regeln mit Codeblöcken und
+        # erzeugte damit eine Dichte — fällt, wenn der Code wächst, auch
+        # wenn die Deckung steigt. Ein Regel-Gegenlauf deckt **eine Regel**
+        # ab, nicht eine Anzahl Blöcke. Zwei Zahlen, nie mehr ein
+        # Doppelpunkt: die Deckung als Bruch, die Meßbereichsgröße als
+        # eigene Zahl `n Code-Blöcke` weiter oben in der Zeile.
+        f"{_sch}/{len(REGEL_PRUEFER)} Regeln mit Gegenlauf · "
         f"{_gedeckt} : {len(REGEL_PRUEFER)} Regeln gedeckt · "
         f"{QUITTUNGEN}/{DECKEL_CIT} quittiert · R→F {REPARATUR_ZU_FUND} · "
         f"{len(ZUSTAND_FELDER)} Felder")
@@ -7828,6 +7835,16 @@ DECKEL_MEASURE = 5
 # Ein Deckel, der Kürzen erzwingt, macht aus einem Log eine Datei, die
 # umgeschrieben wird; genau das hat in Runde 71 zu `L[0:H]=[]` geführt.
 # Gezählt werden Code-Blöcke in `scripts/` ohne den Prüfer selbst.
+#
+# §A-ZZZZ94 (Runde 72): **Geltungsbereich des Deckels.** Er gilt genau der
+# Zahl, die er deckelt — den `def`/`class` in `scripts/` **ohne**
+# `check_claude_md.py`. Damit ist er konsistent mit der Zählung, die den
+# Prüfer ausschließt: sonst deckelte er das Gemessene, aber der Prüfer
+# wächst aus sich selbst und wäre die einzige Größe, die den Deckel
+# unabhängig vom Meßgegenstand verschiebt.
+#
+# Die Definitionen des Prüfers selbst sind **nicht** gedeckelt — sie sind
+# die Waage, nicht das Gewogene.
 DECKEL_CODE = 3000
 
 # §A-ZZZZ89 (Runde 72): das Protokoll wächst, es wird nicht gekürzt.
@@ -7836,6 +7853,31 @@ DECKEL_CODE = 3000
 # einer Zahl, die regelmäßig erreicht wird — und die Reaktion ist ein
 # Umzug, kein Schnitt.
 ROTATION_AB = 240
+
+
+def _traegt_offene_position(zeile: str) -> bool:
+    """Trägt diese Zeile eine **offene** Position?
+
+    §A-ZZZZ99: erkannt werden `offen:` (Zustandsfeld) und `**offen:**`
+    (Berichts-Feld) — die beiden Formen, in denen das Offen-Konto in der
+    Akte steht. `quittiert` ist **nicht** offen; es ist die Gegenprobe.
+    """
+    z = zeile.strip()
+    return bool(re.match(r"^(\*\*)?offen:\*\*|^offen:", z))
+
+
+def _abschnitt_grenzen(zeilen: list[str], k: int) -> tuple[int | None, int]:
+    """Grenzen des k-ten `## Runde`-Abschnitts innerhalb von `zeilen`."""
+    gesehen = 0
+    start = None
+    for i, z in enumerate(zeilen):
+        if z.startswith("## Runde "):
+            if gesehen == k:
+                start = i
+            elif gesehen == k + 1:
+                return start, i
+            gesehen += 1
+    return (start, len(zeilen)) if start is not None else (None, 0)
 
 
 def rotiere_protokoll(base: Path) -> str | None:
@@ -7880,6 +7922,28 @@ def rotiere_protokoll(base: Path) -> str | None:
             ende = i
             break
     wandert, bleibt = rest[:ende], rest[ende:]
+    # §A-ZZZZ99 (Runde 72): **das Offen-Konto rotiert nicht.**
+    #
+    # Rotation ist Zeitschnitt; das Offen-Konto ist Zustand. Ein Abschnitt,
+    # der eine offene Position trägt (`offen:`, `**offen:**`), darf nicht
+    # ins Archiv wandern — sonst schließt Rotation ihn, ohne daß jemand
+    # entschieden hat. Das wäre die neue Fehlerklasse, die die Rotation
+    # einführt, während sie `L[0:H]=[]` beseitigt.
+    if any(_traegt_offene_position(z) for z in wandert):
+        # Ältesten **trägfähigen** Abschnitt suchen statt zu blockieren.
+        # Nichts tun wäre ehrlich, aber der Deckel drückt; wir rotieren
+        # den ersten Abschnitt, der keine offene Position trägt.
+        for k in range(1, len(abschnitte)):
+            _s, _e = _abschnitt_grenzen(bleibt, k)
+            if _s is None:
+                break
+            if not any(_traegt_offene_position(z) for z in bleibt[_s:_e]):
+                wandert = bleibt[_s:_e]
+                bleibt = bleibt[:_s] + bleibt[_e:]
+                break
+        else:
+            return ("Rotation aufgeschoben: kein Abschnitt ohne offene "
+                    "Position — das Offen-Konto rotiert nicht")
     try:
         alt = archiv.read_text(encoding="utf-8") if archiv.exists() else ""
     except OSError:
@@ -8151,7 +8215,10 @@ def pruefe_zustandszeile(zeile: str) -> list[str]:
         ("Code-Blöcke", r"^\d+ Code-Blöcke$"),
         ("Protokollfenster", r"^\d+ Protokoll im Fenster( ⇒ Rotation \(>\d+\))?$"),
         ("Feldzahl", r"^\d+ Felder$"),
-        ("Gegenläufe", r"^\d+ : \d+ Gegenläufe$"),
+        ("Gegenläufe", r"^\d+/\d+ Regeln mit Gegenlauf$"),
+        # §A-ZZZZ92: `13 : 13` bleibt — beide Seiten zählen **Regeln**,
+        # dieselbe Einheit. Ein Doppelpunkt zwischen gleichen Einheiten
+        # ist ein Verhältnis; zwischen ungleichen war er eine Dichte.
         ("Regeln gedeckt", r"^\d+ : \d+ Regeln gedeckt$"),
         ("quittiert", r"^\d+/\d+ quittiert$"),
         ("R→F", r"^R→F \d+/med \d+/n \d+/letzte \d+/\w+$"),
@@ -8254,6 +8321,19 @@ AUSNAHME_KLASSEN: tuple[tuple[str, str], ...] = (
 #                     unser Bestand.
 #
 # Die Reihenfolge ist bedeutsam: die erste zutreffende Klasse gewinnt.
+#
+# §A-ZZZZ93 (Runde 72): **`TEST_UNBEWERTET` war der falsche Name.**
+# Tests sind das Meßinstrument, nicht der Meßgegenstand; ihre
+# Unbewertetheit ist beabsichtigt, kein offener Posten. Der Name heißt
+# jetzt, was die Sache ist: `TEST_INSTRUMENT`.
+#
+# Und `VENDORED` fehlt als vierte Klasse. Sie greift heute nicht —
+# `BEREICHSDATEIEN` ist `scripts/` + `.github/workflows/`, und `lib/`
+# liegt außerhalb. Aber sie muß **vor** den anderen stehen: fiele
+# `lib/**` je in den Bereich, wäre es sonst `CODE_UNBEWERTET`, und die
+# offene Position würde durch Drittanbieter-Code unfalsifizierbar —
+# `openzeppelin` wird nie „bewertet", also könnte die Zahl nie null
+# erreichen.
 KLASSEN_REGELN: tuple[tuple[str, str], ...] = (
     ("VENDORED", "lib/"),
     ("VENDORED", "node_modules/"),
@@ -8266,7 +8346,7 @@ KLASSEN_REGELN: tuple[tuple[str, str], ...] = (
     ("CONFIG", ".cfg"),
     ("CONFIG", ".toml"),
     ("CONFIG", ".sh"),
-    ("TEST_UNBEWERTET", "scripts/test_"),
+    ("TEST_INSTRUMENT", "scripts/test_"),
     ("CODE_UNBEWERTET", "scripts/"),
 )
 
@@ -8669,7 +8749,7 @@ def _zeile_fixture() -> str:
     return (
         "4/8 Meßblöcke scheiterbar · seit 213 Protokoll (Einheitenwechsel) · "
         "Deckel 3000 ⇒ unter · 2525 Code-Blöcke · 216 Protokoll im Fenster · "
-        f"4 : 2525 Gegenläufe · 13 : 13 Regeln gedeckt · 1/2 quittiert · "
+        f"4/13 Regeln mit Gegenlauf · 13 : 13 Regeln gedeckt · 1/2 quittiert · "
         f"R→F 0/med 1/n 5/letzte 0/Prüfer · {len(ZUSTAND_FELDER)} Felder")
 
 
@@ -9200,12 +9280,25 @@ def main() -> int:
             # `BERICHT.md` ein — sonst schreibt wieder ein Mensch `EXIT 0`.
             _OFFEN[0], _QUIT[0], _FRISCH[0] = len(offen), len(quittiert), len(frisch)
             _ST_EXIT[0] = "0"
+            # §A-ZZZZ98 (Runde 72): **ein Schreibfehler darf nicht stumm
+            # bleiben.** Runde 71 verwarf ihn mit `except OSError: pass`.
+            # Der nächste Lauf liest dann `unbekannt` und meldet rot — rot,
+            # obwohl der Selbsttest grün war. Das ist die dritte Fehlerklasse
+            # dieser Datei: nicht „grün weil nie gelaufen", nicht „rot weil
+            # nie übergeben", sondern **„rot, obwohl grün"**.
+            #
+            # Ein Schreibfehler ist ein Befund, kein Default. Er wird
+            # gemeldet und macht den Selbsttest rot, weil der Kanal, auf den
+            # der Hauptlauf baut, nicht trägt.
             try:
                 _selftest_stand_pfad().write_text(
                     f"exit=0 offen={len(offen)} quittiert={len(quittiert)} "
                     f"frisch={len(frisch)}", encoding="utf-8")
-            except OSError:
-                pass
+            except OSError as _e:
+                fails.append(
+                    f"Selbsttest-Stand nicht schreibbar ({_e}) — der "
+                    f"Hauptlauf wird `unbekannt` lesen und rot melden, "
+                    f"obwohl der Selbsttest grün ist")
             print(f"check_counts self-test: "
                   f"{_SELF_TEST_SCOPE[0]} · offen={len(offen)} "
                   f"quittiert={len(quittiert)} frisch={len(frisch)} · "

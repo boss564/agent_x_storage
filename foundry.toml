@@ -6,3 +6,25 @@ remappings = [
     "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/",
     "@openzeppelin/contracts-upgradeable/=lib/openzeppelin-contracts-upgradeable/contracts/"
 ]
+
+# §A-ZZZZ96 (Runde 72): **diese Datei hatte keine Compiler-Konfiguration.**
+#
+# Sie nannte `src`, `out`, `libs` und Remappings — aber weder Version noch
+# Optimierung noch IR-Pipeline. Der Default fiel auf die neueste solc, und
+# die Verträge wurden nie gegengeprüft. Ergebnis: drei Dateien, die
+# angeblich „mit Foundry/Solc 0.8.35 kompiliert" waren, kompilierten nicht
+# (falscher ECDSA-Import, `immutable` auf einer Struct, `external` im
+# Modifier). Gefunden erst, als CI zum ersten Mal lief.
+#
+# `via_ir` ist für ZK-Verifier Pflicht: die Pairing-Structs enthalten
+# dynamische Arrays, und der Legacy-Code-Pfad kann sie nicht nach Storage
+# kopieren (Error 1834). `--via-ir` ist die vom Compiler selbst genannte
+# Lösung, nicht ein Workaround.
+solc_version = "0.8.35"
+via_ir = true
+optimizer = true
+optimizer_runs = 200
+
+[profile.ci]
+# Der CI-Job prüft, daß der Baum überhaupt baut. Kein `--sizes`.
+via_ir = true

@@ -374,3 +374,52 @@ jobs:
           echo "| F8 DAG integrity | Full Merkle chain verifiable | ✅ |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "_\"Eine Kennzahl, die nicht rot werden kann, ist keine Sicherheit.\"_" >> $GITHUB_STEP_SUMMARY
+
+  # §A-ZZZZ97 (Runde 72): **das sechste Glied — Integration.**
+  #
+  # Runde 72 hat die Wache entkoppelt (`pruefer`, `needs: []`), und das war
+  # richtig: sie darf nicht mit `openzeppelin` sterben. Aber sie trägt
+  # dadurch **null** Information darüber, ob der Zweig deploybar ist. Ein
+  # grüner Prüfer neben einem roten `contract-compile` ist die Aussage
+  # „mein Instrument funktioniert", nicht „mein Patient ist gesund".
+  #
+  # Dieses Gate ist das einzige Signal, das `deploy-safe` heißen darf. Es
+  # ist so gesund wie sein rötestes Glied — das ist der Preis dafür, daß
+  # der Zweigname wieder eine Zusage ist und keine Erinnerung an eine.
+  deploy-gate:
+    name: "Deploy-Gate — deploy-safe heißt hier grün"
+    runs-on: ubuntu-latest
+    needs: [pruefer, contract-compile, unit-tests]
+    if: always()
+    steps:
+      - name: Gate-Auswertung
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "| Glied | Ergebnis |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|---|" >> $GITHUB_STEP_SUMMARY
+          echo "| pruefer | ${{ needs.pruefer.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| contract-compile | ${{ needs.contract-compile.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| unit-tests | ${{ needs.unit-tests.result }} |" >> $GITHUB_STEP_SUMMARY
+          rot=0
+          for r in "${{ needs.pruefer.result }}" \
+                   "${{ needs.contract-compile.result }}" \
+                   "${{ needs.unit-tests.result }}"; do
+            [ "$r" = "success" ] || rot=1
+          done
+          if [ "$rot" = "1" ]; then
+            echo "## Gate rot — dieser Stand ist **nicht** deploy-safe" >> $GITHUB_STEP_SUMMARY
+            echo "Gate rot: mindestens ein Glied ist nicht 'success'." >&2
+            exit 1
+          fi
+          echo "## Gate grün — dieser Stand darf deploy-safe heißen" >> $GITHUB_STEP_SUMMARY
+
+      - name: Deckel aus BERICHT.md (Ausnahme im Log)
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "── Deckel-Entscheidung ──────────────────────────────────────"
+          grep -E "^\*\*(offen|Deckel-Entscheidung):\*\*" \
+            order_execution_engine/ops/BERICHT.md \
+            || echo "  BERICHT.md: kein offen-/Deckel-Feld"
+          echo "────────────────────────────────────────────────────────────"

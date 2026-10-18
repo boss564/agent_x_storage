@@ -8200,3 +8200,162 @@ Der zweite Job mit defekter Abhängigkeit, fünf Wochen unentdeckt:
 `R→F` 0/med 1/n 5. **Prüfer-Job entkoppelt, Rotation gebaut, Klassen
 getrennt.** Zähler bleibt **4 von 13 Regeln gedeckt** — der Nennerwechsel
 hat die Frage nicht verändert, nur ehrlicher gestellt.
+
+## Runde 74 — welche Farbe, welcher Inhalt, und das sechste Glied
+
+**Der grüne Lauf bewies den Lauf, nicht die Wahrheit — und die Akte kann
+jetzt sagen, welche der beiden Geschichten gilt.**
+
+### 1. Welcher grüne Lauf? Die Akte belegt eine Geschichte
+
+Die Frage der Runde 73 war: lief der erste grüne CI-Lauf mit der
+`9 Felder`-Fixture oder erst nach der Korrektur? Prüfung gegen die Commits:
+
+| Lauf | Commit | Fixture | Ergebnis |
+|---|---|---|---|
+| `39143882225` | `0d6046c1` | `_zeile_fixture()`, zehn Felder | **failure** |
+| `39144166483` | `04eb08f0` | `_zeile_fixture()`, zehn Felder | **success** |
+
+`git show 0d6046c1:scripts/check_claude_md.py | grep -c _zeile_fixture`
+ergibt 7 — die abgeleitete Fixture war **schon im ersten Lauf** drin. Es
+hat also **nie** einen CI-Lauf mit hartkodierten neun Feldern gegeben.
+Die korrekte Erzählung lautet: **erster Lauf rot, zweiter grün** — die
+Farbe des zweiten war echt, aber sie bewies nur, daß der Prüfer
+entschied, nicht daß er recht hatte.
+
+### 2. `4 : 2525` — der dritte Doppelpunkt ist aufgelöst
+
+Zustandszeile vorher: `4/13 Regeln mit Gegenlauf · 2525 Code-Blöcke`
+wurden verbunden zu `4 : 2525 Gegenläufe`. Nachher:
+
+```
+2525 Code-Blöcke · 4/13 Regeln mit Gegenlauf · 13 : 13 Regeln gedeckt
+```
+
+Zähler und Nenner sind getrennt. `13 : 13` **bleibt** — dort zählen beide
+Seiten dieselbe Einheit (Regeln); ein Doppelpunkt zwischen gleichen
+Einheiten ist ein Verhältnis, zwischen ungleichen war er eine Dichte.
+Dieser Unterschied steht jetzt als §A-ZZZZ92 im Code.
+
+### 3. DECKEL_CODE — wem er gilt
+
+`DECKEL_CODE = 3000` gilt genau der Zahl, die er deckelt: `def`/`class`
+in `scripts/` **ohne** `check_claude_md.py`. Die Definitionen des Prüfers
+selbst sind nicht gedeckelt — sie sind die Waage, nicht das Gewogene.
+Ohne diese Klärung hätte der Deckel das Gemessene gekappt, während der
+Prüfer als einzige Größe aus sich selbst wächst.
+
+### 4. VENDORED als vierte Klasse — und die präzisere Diagnose
+
+Der Befund ist schärfer als vermutet: `openzeppelin` stand **nie** in den
+174 `CODE_UNBEWERTET`. `BEREICHSDATEIEN` ist `scripts/` +
+`.github/workflows/`; `lib/` liegt außerhalb. Die Klasse `VENDORED`
+greift heute nicht — aber sie steht jetzt **vor** den anderen in
+`KLASSEN_REGELN`, damit `lib/**` nie in die offene Position fallen kann,
+falls der Bereich je erweitert wird. Eine Zahl, die durch
+Drittanbieter-Code nie null erreichen kann, wäre Rauschen.
+
+`TEST_UNBEWERTET` heißt jetzt `TEST_INSTRUMENT`: Tests sind das
+Meßinstrument, nicht der Meßgegenstand.
+
+### 5. `contract-compile` — eine Wurzel, ein Fehlertext
+
+Die geforderte Diagnose, nicht die Benennung. Der Fehlertext:
+
+```
+Source "lib/openzeppelin-contracts-upgradeable/contracts/utils/
+cryptography/ECDSAUpgradeable.sol" not found: File not found.
+```
+
+Drei Befunde, die keiner der beiden Jobs benannt hatte:
+
+| # | Befund | Konsequenz |
+|---|---|---|
+| 1 | `ECDSAUpgradeable` existiert in **keiner** OZ-Version | falscher Import; ECDSA ist zustandslos, liegt in `openzeppelin-contracts` |
+| 2 | `ReentrancyGuardUpgradeable` existiert nur bis v4.9 (`security/`) | v4-Name in einem v5-Contract |
+| 3 | `foundry.toml` hatte **keine** Compiler-Konfiguration | kein `solc_version`, kein `via_ir`, kein `optimizer` |
+
+Und zwei weitere Fehler, die nie auffielen, weil **nie kompiliert wurde**:
+
+| Datei | Fehler |
+|---|---|
+| `ComplianceVerifier.sol` | `__UUPSUpgradeable_init()` existiert in v5 nicht; `external`-Funktion im Modifier |
+| `ValhallaVerifier.sol` | `VerifyingKey public immutable vk` — Structs können nicht `immutable` sein; `external` im Modifier |
+
+**Ergebnis:** `forge build` → `Compiling 40 files with Solc 0.8.35` →
+`Compiler run successful`. Der Zweig, der `deploy-safe` heißt, ist zum
+ersten Mal baubar.
+
+> **Korrektur an der Dokumentation:** Die CLAUDE.md führte mehrere
+> Contracts als „mit Foundry/Solc 0.8.35 kompiliert". Das war für
+> `ComplianceVerifier.sol` und `ValhallaVerifier.sol` **unwahr**. Die
+> Aussage ist nach diesem Lauf wahr — vorher war sie es nicht.
+
+### 6. §A-ZZZZ86 — das sechste Glied ist gebaut
+
+`deploy-gate` mit `needs: [pruefer, contract-compile, unit-tests]` und
+`if: always()`. Es wertet alle drei Ergebnisse aus und ist rot, sobald
+eines nicht `success` ist. Sein Grün allein darf `deploy-safe` heißen.
+
+Die Entkopplung war Isolierung; das Gate ist Integration. Beides, nicht
+eines. **Nebenwirkung, explizit:** das Gate ist so gesund wie sein
+rötestes Glied.
+
+### 7. `.selftest-exit` — die Datei trägt vier Werte
+
+Die Runde-73-Frage („nur 0/1 oder auch Prozent?") ist beantwortet:
+
+```
+exit=0 offen=0 quittiert=1 frisch=1
+```
+
+Vier Werte — also ein **Datenkanal**, kein reiner Cache. Damit gilt die
+zweite Alternative der Fragestellung: sie muß als Kanal benannt und ihr
+Schreiben geprüft werden. Der stille `except OSError: pass` ist ersetzt;
+ein Schreibfehler ist jetzt ein **Befund** und macht den Selbsttest rot.
+Damit ist die dritte Fehlerklasse benannt: **„rot, obwohl grün"**.
+
+### 8. Offen-Konto rotiert nicht — Sperre gebaut und bewiesen
+
+`rotiere_protokoll()` prüft vor dem Verschieben, ob der älteste Abschnitt
+eine offene Position trägt (`offen:` / `**offen:**`). Trägt er eine, sucht
+sie den ältesten **trägfähigen** Abschnitt; findet sie keinen, schiebt sie
+die Rotation auf und sagt es.
+
+Beweis (temporäres Verzeichnis, 242 Abschnitte, Runde 2 mit `**offen:** 12`):
+
+```
+rotiert: 2 Zeilen → TAG7_ABNAHME.archive.md (242 → 241 Abschnitte)
+Runde 2 im Archiv?  False
+Runde 1 im Archiv?  True
+Runde 2 noch aktiv? True
+```
+
+Das Offen-Konto ist nicht mehr durch Umlagern schließbar.
+
+### 9. `pytest-timeout` — Status, nicht Schweigen
+
+Runde 73 buchte `pytest-timeout` im Unit-Job; Runde 74 hat zunächst nicht
+gemeldet, ob es ankam. **Status: installiert** (`pip install pytest
+pytest-timeout` in `offgrid-test.yml`, Lauf `39144166483` grün).
+
+### Bilanz
+
+| Größe | Wert |
+|---|---|
+| Regeln gedeckt | **4/13** |
+| Code-Blöcke im Bereich | 2525 (Deckel 3000, unter) |
+| `R→F` | min 0 / median 1 / n 5 |
+| `EXIT` | 0/0 |
+| Offene Kontexte | 12 auf 13 Entpackstellen |
+| Prüfer in CI | **grün** (zweiter Lauf) |
+| `contract-compile` | **grün** (40 Dateien, Solc 0.8.35) |
+| `deploy-gate` | gebaut, wartet auf CI-Bestätigung |
+| Selbsttest | 5/5 · 0 von 104 Zahlen ohne Herkunft |
+
+**Der Satz der Runde:** Die Wache läuft, und das Artefakt baut. Beides
+war vorher nicht wahr. Der Unterschied zwischen heute und gestern ist
+nicht, daß eine Zahl besser aussieht — es ist, daß zum ersten Mal
+**dieselbe Datei** die Waage und das Gewogene getrennt hält und ein Job
+sie zusammenführt.
+

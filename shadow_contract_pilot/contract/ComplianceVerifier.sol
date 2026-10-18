@@ -3,10 +3,18 @@ pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/utils/cryptography/ECDSAUpgradeable.sol";
+// §A-ZZZZ95 (Runde 72): `ECDSAUpgradeable` existiert in **keiner**
+// OpenZeppelin-Version — ECDSA ist zustandslos und liegt unverändert in
+// `openzeppelin-contracts` (non-upgradeable). Der Import war falsch, und
+// weil `submodules: recursive` griff, aber das Paket auf `master` stand,
+// fiel es erst auf, als CI zum ersten Mal lief.
+import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import "@openzeppelin/contracts-upgradeable/utils/cryptography/EIP712Upgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/utils/NoncesUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
+// §A-ZZZZ95: `ReentrancyGuardUpgradeable` existiert nur bis v4.9 (unter
+// `security/`); in v5 heißt es `ReentrancyGuard` und ist zustandslos wie
+// ECDSA — der Guard hält keinen Storage, der proxyfest sein müßte.
+import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 /**
  * @title ComplianceVerifier
@@ -27,9 +35,9 @@ contract ComplianceVerifier is
     UUPSUpgradeable,
     EIP712Upgradeable,
     NoncesUpgradeable,
-    ReentrancyGuardUpgradeable
+    ReentrancyGuard
 {
-    using ECDSAUpgradeable for bytes32;
+    using ECDSA for bytes32;
 
     bytes32 public constant UPGRADER_ROLE = keccak256("UPGRADER_ROLE");
     bytes32 public constant SIGNER_ROLE = keccak256("SIGNER_ROLE");
@@ -62,7 +70,8 @@ contract ComplianceVerifier is
 
     function initialize(address initialAdmin) public initializer {
         __AccessControl_init();
-        __UUPSUpgradeable_init();
+        // §A-ZZZZ95: `__UUPSUpgradeable_init()` existiert in v5 nicht mehr —
+        // UUPSUpgradeable haelt keinen eigenen Initialisierungszustand.
         __EIP712_init("AGX Protocol Compliance Verifier", "1.0.0");
         __Nonces_init();
         _grantRole(DEFAULT_ADMIN_ROLE, initialAdmin);
@@ -72,10 +81,13 @@ contract ComplianceVerifier is
         isTradingPaused = false;
     }
 
-    function verifyAndConsumeCompliance(
+    /// @dev §A-ZZZZ95: der Kern ist `internal`, damit der Modifier ihn
+    /// rufen kann. Eine `external`-Funktion ist im Modifier nicht sichtbar —
+    /// der Fehler fiel nie auf, weil der Contract nie kompiliert wurde.
+    function _verifyAndConsumeCompliance(
         address trader, address token, uint256 amount, uint256 price,
         uint256 nonce, uint256 deadline, bytes calldata signature
-    ) external whenNotPaused nonReentrant returns (bool) {
+    ) internal {
         require(block.timestamp <= deadline, "ComplianceVerifier: Deadline expired");
         require(!usedNonces[nonce], "ComplianceVerifier: Nonce already used");
         require(trader != address(0), "ComplianceVerifier: Invalid trader");
@@ -92,6 +104,14 @@ contract ComplianceVerifier is
         usedNonces[nonce] = true;
         emit CompliancePassportUsed(trader, token, amount, price, nonce,
                                      recoveredSigner, block.timestamp);
+    }
+
+    function verifyAndConsumeCompliance(
+        address trader, address token, uint256 amount, uint256 price,
+        uint256 nonce, uint256 deadline, bytes calldata signature
+    ) external whenNotPaused nonReentrant returns (bool) {
+        _verifyAndConsumeCompliance(trader, token, amount, price, nonce,
+                                    deadline, signature);
         return true;
     }
 
@@ -99,7 +119,7 @@ contract ComplianceVerifier is
         address trader, address token, uint256 amount, uint256 price,
         uint256 nonce, uint256 deadline, bytes calldata signature
     ) {
-        verifyAndConsumeCompliance(trader, token, amount, price, nonce, deadline, signature);
+        _verifyAndConsumeCompliance(trader, token, amount, price, nonce, deadline, signature);
         _;
     }
 
