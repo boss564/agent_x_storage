@@ -383,6 +383,12 @@ def fixtures_variants(name: str) -> list[object]:
     if name == "_akte_losslessness":
         return ["block_gone", "shrink", "hash_changed"]
     if name == "_akt_block_mismatch":
+        # §A-ZX: dieser Prüfer rechnet die Karte **gegen den Baum**
+        # (`.git/`, Vorlauf). Ein Temp-Klon hat beides nicht und liefert
+        # darum immer `nicht gemessen` — das Fixture würde den anderen
+        # Baum prüfen, nicht den Prüfer. Die Faltung fährt
+        # `_self_test_block_kind`, den Baumfall belegen die Gegenläufe
+        # in §71.63.
         return ["total"]
     if name == "_korrektur_selectors":
         # §A-ZP/ZQ/ZS: vier Eingänge — Ziel fehlt (kaputt, zuerst, weil

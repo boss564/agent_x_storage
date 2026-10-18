@@ -656,6 +656,7 @@ def self_test_check_counts() -> list[str]:
     # §A-NS (Runde 52): der Beinahe-Verlust und seine Ursache.
     failures.extend(_self_test_akte_write_mode())
     failures.extend(_self_test_akte_guard())
+    failures.extend(_self_test_block_kind())
     failures.extend(_self_test_prose_fractions())
     failures.extend(_self_test_cwd_readers())
     failures.extend(_self_test_reader_calls())
@@ -1332,6 +1333,91 @@ def _self_test_gitlink() -> list[str]:
     return out
 
 
+def block_kind(title: str, body_lines: list[str]) -> str:
+    """Welche **Sorte** Block ist das? `Messung` / `Korrektur` / `Beleg` / `Text`.
+
+    §A-ZU (Runde 54). Die Akte enthält sechs Sorten, flach, ohne Typ:
+    Behauptung, falsche Zahl, Korrektur, zitiertes Zitat, alter Meßblock,
+    aktueller Meßblock. Jeder Konsument erfand seine eigene Auswahlregel,
+    und vier davon sind in vier Runden aufgefallen. Der Typ wird
+    **abgeleitet**, nicht gespeichert — dieselbe Entscheidung wie beim
+    Hash (§71.59c): ein geschriebener Typ driftet beim nächsten Kopieren.
+
+    Ableitung, ausschließlich aus dem Text:
+
+      `Korrektur zu §…` in der Überschrift      → `Korrektur`
+      `Karte: <fp>` **und** `total=` im Rumpf   → `Messung`
+      `Beleg aus §…` in der Überschrift         → `Beleg`
+      sonst                                      → `Text`
+
+    Den Beleg-Typ gibt es, weil ein alter Meßblock sonst wie ein aktueller
+    aussieht: derselbe `total=`-Anfang, dieselbe `Bezug:`-Zeile, ein
+    anderer Lauf. Fünf Runden lang hat der Selbsttest genau das
+    verglichen (§71.45 gegen §71.54) und jeden Lauf als Befund gemeldet.
+    """
+    if _selector_in(title) is not None:
+        return "Korrektur"
+    # §A-ZV: **Fließtext ist keine Messung.** Ein Absatz, der `Karte:`
+    # und `total=` *erwähnt*, sieht für einen Substring-Test aus wie ein
+    # Block. Der Typ hängt darum am **eingezäunten** Inhalt: alles
+    # zwischen zwei ```-Zeilen, nichts außerhalb. Dieselbe Grenze, die
+    # `check_prose_fractions` schon zieht (R53).
+    fenced, buf, fenced_lines = False, [], []
+    for line in body_lines:
+        if line.lstrip().startswith("```"):
+            fenced = not fenced
+            continue
+        (fenced_lines if fenced else buf).append(line)
+    body = "\n".join(fenced_lines) if fenced_lines else ""
+    if "total=" in body:
+        # §A-ZU: `Karte:` ist die Provenienz. Ein Block mit `total=`, aber
+        # ohne Fingerprint, stammt aus einer Zeit, in der es keine gab —
+        # er ist ein **Beleg**, nie eine Messung. Diese Ableitung ist der
+        # Grund, warum die alten fünf Blöcke (§71.52–§71.57) stehen
+        # bleiben dürfen: sie sind typisiert, nicht gelöscht.
+        return "Messung" if "Karte:" in body else "Beleg"
+    if "Beleg aus" in title:
+        return "Beleg"
+    return "Text"
+
+
+def split_blocks(text: str) -> list[dict]:
+    """Die Akte als Blöcke mit Typ, Überschrift und Rumpf — **ein** Ort.
+
+    §A-ZU: damit die Auswahl kein Sonderfall von `_akt_block_mismatch`
+    bleibt, sondern eine Funktion, die jeder Prüfer benutzt. Einmal
+    falsch, einmal repariert.
+    """
+    out: list[dict] = []
+    cur = {"title": "", "lines": []}
+    for line in text.splitlines():
+        if line.startswith("### "):
+            if cur["lines"] or cur["title"]:
+                out.append(cur)
+            cur = {"title": line, "lines": []}
+        else:
+            cur["lines"].append(line)
+    out.append(cur)
+    for b in out:
+        b["kind"] = block_kind(b["title"], b["lines"])
+    return out
+
+
+def _card_fingerprint(numbers: dict[str, int], classes: list[tuple[str, int]]) -> str:
+    """Der Fingerprint der **Eingaben**, die die Zahlen bestimmen.
+
+    §A-ZU: `dirty`, Zeitstempel und Pfade gehören **nicht** hinein — ein
+    Fingerprint, der sich bei jedem Lauf ändert, findet nie einen Block,
+    und die Zeile wird dauerrot. Genau dieser Fehler soll nicht neu
+    gebaut werden, während der alte repariert wird.
+    """
+    import hashlib
+    import json
+    payload = json.dumps({"n": sorted(numbers.items()),
+                          "c": sorted(classes)}, sort_keys=True)
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:12]
+
+
 def _akt_block_mismatch(root: Path | None = None,
                         card_root: Path | None = None) -> list[str]:
     """Stimmt der zitierte Block in der Akte mit `calibration_card()`? (§A-MZ)
@@ -1354,12 +1440,63 @@ def _akt_block_mismatch(root: Path | None = None,
     if not doc_path.exists():
         return []
     text = doc_path.read_text(encoding="utf-8")
-    # Der Block ist der **letzte** Zahlenblock der Akte (die neueste
-    # Runde). Aeltere Bloecke bleiben stehen und duerfen abweichen.
-    blocks = [b for b in text.split("```") if b.strip().startswith("total=")]
-    if not blocks:
-        return ["Akte-Block: kein Block mit `total=` gefunden"]
-    return _compare_block(blocks[-1].strip(), calibration_card(root))
+    # §A-ZU (Runde 54): **Position ist keine Identität.** `[-1]` ist eine
+    # Ordinalzahl; der gemeinte Block ist nicht der letzte, sondern der,
+    # der *diese* Messung ist. Fünf Runden lang hat der Selbsttest den
+    # Beleg aus §71.45 gegen den Lauf aus §71.54 verglichen und das jeden
+    # Lauf als Befund gemeldet — dauerrot ist so aussagelos wie
+    # dauergrün.
+    #
+    # Auswahl über den **Fingerprint der Karte**, gegen die gerechnet
+    # wurde. Drei Fälle, alle benannt:
+    #   genau 1 → vergleichen
+    #   0       → `nicht gemessen`, rot
+    #   > 1     → **Fehler**, kein Tie-Break
+    # §A-ZW (Runde 54, Selbstfund): `calibration_card` will einen `root`
+    # und bekam keinen — dieselbe Zeile wie `if root is not None` aus
+    # Runde 49. Der Selbsttest prüft das seitdem bei **jedem** Prüfer,
+    # und das ist der Grund, warum er es hier gefunden hat und nicht ich.
+    card = calibration_card(root)
+    m = re.search(r"^Karte: (\w+)", card, re.M)
+    if not m:
+        return ["Akte-Block: Kalibrierkarte traegt keinen Fingerprint"]
+    fp = m.group(1)
+    treffer = [b for b in split_blocks(text)
+               if b["kind"] == "Messung"
+               and f"Karte: {fp}" in "\n".join(b["lines"])]
+    if not treffer:
+        return [f"Akte-Block: keine Messung zur Karte {fp} — nicht gemessen"]
+    # §A-ZX (Runde 55): **Der Fehlerzustand ist die Uneinigkeit, nicht die
+    # Anzahl.** Runde 54 hat „mehr als 1 = Fehler" geschrieben, um den
+    # stillen `[-1]`-Griff zu verhindern — und damit zwei verschiedene
+    # Dinge verwechselt:
+    #
+    #   doppelte Behauptung — zwei Blöcke sagen **Verschiedenes** über
+    #                         dieselben Eingaben: echter Fehler
+    #   Wiederholung        — zwei Blöcke sagen **dasselbe**: Beweis für
+    #                         Kontinuität, nichts aufzulösen
+    #
+    # Die Karte ist gleich, weil `total` sich nicht geändert hat — also
+    # ist auch das Ergebnis gleich. Es gibt nichts zu wählen.
+    #
+    # Dateireihenfolge ist **innerhalb** einer Klasse gültig: append-only
+    # garantiert, dass weiter unten später geschrieben wurde. Über Klassen
+    # hinweg war sie der Fehler der Runden bis §A-ZU.
+    if not _falte_gruen(treffer):
+        return [f"Akte-Block: {len(treffer)} Messungen zur Karte {fp} mit "
+                f"verschiedenen Werten — Fingerprint unterspezifiziert "
+                f"oder Handedit"]
+    treffer = [treffer[-1]]
+    # Der Rumpf ist der Blocktext ohne Zäune; `Karte:` gehört zur
+    # Provenienz und wird vom Vergleich nicht gelesen.
+    # §A-ZV: der Rumpf enthält Prosa **und** den eingezäunten Block. Der
+    # Vergleich liest nur den Block — Prosa ist kein Beleg.
+    body = "\n".join(treffer[0]["lines"])
+    zaeune = body.split("```")
+    body = zaeune[1] if len(zaeune) >= 3 else ""
+    body = "\n".join(l for l in body.splitlines()
+                     if not re.match(r"^Karte: \w+$", l.strip())).strip()
+    return _compare_block(body, card)
 
 
 def _tally_line_of(root: Path | None = None) -> str:
@@ -2560,6 +2697,16 @@ def calibration_card(root: Path | None = None) -> str:
                               umfang=PRUEFER_UMFANG,
                               ohne_skript_entfernt=12 if not _unref else 0)
     lines.append(f"kopfzeile: {tally_line(tally)}")
+    # §A-ZU: der Fingerprint der **Zahlen-Eingaben**, nicht des Laufs.
+    # Er ist Herkunft (nicht ableitbar aus dem Blocktext) und gehört
+    # darum hierher; `dirty`/Pfad/Zeit bleiben draußen, sonst trifft
+    # kein Block je einen Lauf.
+    fp = _card_fingerprint({k: int(rep[k]) for k in
+                            ("total", "chain_total", "reported",
+                             "unclassified", "unchecked",
+                             "unclassified_checkers")},
+                           rep["classes"])
+    lines.append(f"Karte: {fp}")
     lines.append(f"Bezug: root={base}, CLAUDE.md sha256:{sha}, "
                  f"Baum {_tree_ref(base)}")
     return "\n".join(lines)
@@ -4317,6 +4464,121 @@ def _is_citation(line: str, block_title: str = "",
             return False
         return k not in sel.get("self", set())
     return False
+
+
+def _self_test_block_kind() -> list[str]:
+    """§A-ZU/ZV: Ist der Typ ableitbar — und zählt die Auswahl 1/0/mehr?
+
+    Fünf Runden Dauerrot kamen aus `[-1]`: der Selbsttest verglich den
+    **Beleg aus §71.45** mit dem Lauf aus §71.54. Dauerrot ist so
+    aussagelos wie dauergrün; beide messen den Zustand nicht.
+
+    Fünf Behauptungen, alle prüfbar ohne Dateisystem:
+      Fließtext, der `Karte:` **erwähnt**, ist keine Messung
+      `total=` ohne `Karte:` ist ein Beleg
+      `Korrektur zu §…` ist eine Korrektur
+      zwei Messungen derselben Karte sind ein **Fehler**, kein Tie-Break
+      keine Messung ist `nicht gemessen`, nicht `grün`
+    """
+    out: list[str] = []
+    # §A-ZW: die Erwartung ist **abgeleitet**, nicht getippt. Ein Literal
+    # im Test ist eine zweite Meinung über den Prüfling; der Selbsttest
+    # meldet genau das („Erwartung aus dem Pruefling"). Darum: die
+    # Blocktexte werden gezählt, die Erwartung folgt aus der Zahl.
+    fall = [
+        ("### A — x\n\nEin Absatz: `Karte: abc` und `total=1`.\n", "Text"),
+        ("### A — x\n\nBeleg\n\n```\ntotal=1\n```\n", "Beleg"),
+        ("### §71.59c — Korrektur zu §71.59\n\nText\n", "Korrektur"),
+        ("### A — x\n\n```\ntotal=1\nKarte: fp\n```\n", "Messung"),
+    ]
+    for text, want in fall:
+        got = split_blocks(text)[0]["kind"]
+        if got != want:
+            out.append(f"Akte-Typ: {got} statt {want}")
+    # Auswahl: der Text ist die Wahrheit, die Zahl folgt aus ihm.
+    eins = "### A — x\n\n```\ntotal=1 chain=0\nKarte: fp\n```\n"
+    zwei = eins.replace("### A — x", "### B — y") + "\n" + eins
+    bloecke = {"leer": "### A — x\n", "eins": eins, "zwei": zwei}
+    for name, text in bloecke.items():
+        # Die Erwartung ist die Zahl der Blöcke **dieses Textes**, die als
+        # Messung zählen — keine getippte Konstante.
+        erwartet = sum(1 for b in split_blocks(text) if b["kind"] == "Messung")
+        got = _select_messungen(text, "fp")
+        if got != erwartet or (name != "leer" and got == 0):
+            out.append(f"Akte-Auswahl: {name} nicht erkannt ({got})")
+    # §A-ZX (Runde 55): **Uneinigkeit, nicht Anzahl.** Runde 54 machte aus
+    # „zwei Blöcke" einen Fehler; richtig ist „zwei **verschiedene**
+    # Aussagen". Die Probe ist der Unterschied, und sie wird gemessen:
+    # gleiche Werte → eine Werte-Menge, verschiedene → zwei.
+    gleich = zwei
+    # §A-ZX: der ungleiche Fall wird **gebaut**, nicht ersetzt. Ein
+    # `replace` mit mehrdeutigem Anker ist selbst ein stiller Griff.
+    ungleich = ("### A — x\n\n```\ntotal=1 chain=0\nKarte: fp\n```\n\n"
+                "### B — y\n\n```\ntotal=2 chain=0\nKarte: fp\n```\n")
+    w_gleich = {_block_werte(b) for b in split_blocks(gleich)
+                if b["kind"] == "Messung"}
+    w_ungleich = {_block_werte(b) for b in split_blocks(ungleich)
+                  if b["kind"] == "Messung"}
+    if len(w_gleich) != 1:
+        out.append("Akte-Faltung: Wiederholung als Widerspruch gelesen")
+    if len(w_ungleich) != 2:
+        out.append("Akte-Faltung: Widerspruch als Wiederholung gelesen")
+    # Provenienz zählt nicht als Wert: die Kopfzeile trägt den Prüfer-Hash.
+    kopf = ("### A — x\n\n```\ntotal=1\nKarte: fp\n"
+            "kopfzeile: 8 gemessen · Prüfer aaa\n```\n")
+    if len({_block_werte(b) for b in split_blocks(kopf)
+            if b["kind"] == "Messung"}) != 1:
+        out.append("Akte-Faltung: Kopfzeile zählt als Messwert")
+    # §A-ZX: die Faltung der Treffermenge — die Entscheidung, die aus
+    # „>1 = Fehler" die richtige Regel macht. Sie hängt **nicht** am Baum
+    # und wird darum hier gefahren, nicht im Wirkungs-Fixture.
+    ms = [b for b in split_blocks(zwei) if b["kind"] == "Messung"]
+    if len({_block_werte(b) for b in ms}) != 1:
+        out.append("Akte-Faltung: gleiche Werte nicht gefaltet")
+    wd = {_block_werte(b) for b in split_blocks(ungleich) if b["kind"] == "Messung"}
+    if len(wd) != len(ms):
+        out.append("Akte-Faltung: Widerspruch nicht erkannt")
+    if not _falte_gruen(ms) or _falte_gruen([b for b in split_blocks(ungleich)
+                                             if b["kind"] == "Messung"]):
+        out.append("Akte-Faltung: grün/rot vertauscht")
+    return out
+
+
+def _falte_gruen(messungen: list[dict]) -> bool:
+    """§A-ZX: Die Treffermenge ist grün, wenn alle **dasselbe** sagen.
+
+    Eine Funktion, nicht eine Bedingung an zwei Orten: der Prüfer und der
+    Selbsttest müssen dieselbe Frage stellen, sonst prüft der Test eine
+    andere Regel als die, die läuft.
+    """
+    return len({_block_werte(b) for b in messungen}) <= 1
+
+
+def _block_werte(block: dict) -> tuple:
+    """Die **Zahlen** eines Messblocks — die Vergleichsgröße der Faltung.
+
+    §A-ZX: zwei Messungen derselben Karte sind nur dann ein Widerspruch,
+    wenn sie verschiedene Werte tragen. Verglichen wird der Inhalt des
+    eingezäunten Blocks ohne `Karte:`-Zeile — dieselbe Sicht, die auch
+    `_compare_block` liest.
+    """
+    body = "\n".join(block["lines"])
+    zaeune = body.split("```")
+    body = zaeune[1] if len(zaeune) >= 3 else ""
+    # §A-ZX (Runde 55, Selbstfund): `kopfzeile:` trägt den Prüfer-Hash und
+    # ändert sich mit jedem Edit — sie ist **Provenienz**, keine Messung.
+    # Zählt man sie mit, ist jede Wiederholung ein „Widerspruch", und die
+    # Regel blockt genau den Fall, den sie grün lassen soll.
+    return tuple(l.strip() for l in body.splitlines()
+                 if l.strip() and not l.strip().startswith(("Karte:", "kopfzeile:")))
+
+
+def _select_messungen(text: str, fp: str) -> int:
+    """Die Auswahl selbst — ein Ort, den der Prüfer und der Selbsttest
+    teilen. Zwei Implementierungen wären zwei Wahrheiten (§A-ZW)."""
+    return len([b for b in split_blocks(text)
+                if b["kind"] == "Messung"
+                and f"Karte: {fp}" in "\n".join(b["lines"])])
 
 
 def _self_test_akte_guard() -> list[str]:

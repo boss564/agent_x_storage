@@ -6732,3 +6732,241 @@ sich mit dem Text, nicht mit dem Gedächtnis des Prüfers.
 Commit, der ihn nennt. Der erste stille Bypass macht den Hook zur
 Empfehlung — und ein Hook, der eine Empfehlung ist, ist ein Kommentar
 mit Rückgabewert.
+
+### §71.61 — Karte statt Position: was ein Block ist, entscheidet sein Fingerprint
+
+**Runde 54, vierte Nachziehung.** Der Selbsttest war seit fünf Runden rot
+und meinte einen **Beleg aus §71.45** — einen historischen Meßblock, der
+nach einem aktuellen aussieht: derselbe `total=`-Anfang, dieselbe
+`Bezug:`-Zeile, ein anderer Lauf. Dauerrot ist so aussagelos wie
+dauergrün; beide messen den Zustand nicht.
+
+**1. Position ist keine Identität.** `[-1]` ist eine Ordinalzahl. Der
+gemeinte Block ist nicht der letzte, sondern **der, der diese Messung
+ist**. Auswahl jetzt über den **Fingerprint der Kalibrierkarte**: die
+Karte trägt den Hash ihrer Zahlen-Eingaben, der Prüfer rechnet ihn neu
+und vergleicht nur gegen Blöcke mit demselben Fingerprint.
+
+**2. Drei Fälle, nicht einer.**
+
+| Treffer | Bedeutung | Verhalten |
+|---|---|---|
+| genau 1 | der Lauf zu dieser Karte | vergleichen |
+| 0 | kein Lauf zu dieser Karte | `nicht gemessen` — rot |
+| mehr als 1 | zwei Messungen derselben Karte | **Fehler**, kein Tie-Break |
+
+Der dritte Fall ist der wichtige: sobald zwei Blöcke denselben
+Fingerprint tragen, hat jemand eine Messung kopiert oder die alte nicht
+ersetzt — und der Prüfer darf nicht raten, welche gilt.
+
+**3. Der Fingerprint deckt nur die Zahlen-Eingaben.** `dirty`,
+Zeitstempel und Pfade bleiben **draußen**: sie ändern sich bei jedem
+Lauf, dann trifft kein Block je, und die Zeile wird dauerrot — genau der
+Fehler, der gerade repariert wurde, nur neu gebaut. `dirty` und `Bezug`
+stehen im Block, nicht im Fingerprint.
+
+Provenienz speichern, Relationen ableiten: der Fingerprint ist Herkunft
+und muß stehen, der **Block-Hash** ist ableitbar und darf nicht stehen
+(§71.59c). Dieselbe Linie, zwei Richtungen.
+
+**4. Die Akte unterscheidet ihre Ausgaben nicht von ihren Zitaten.** Sechs
+Sorten Block lagen flach in einer Datei, und jeder Konsument erfand seine
+eigene Auswahlregel. Der Typ ist ableitbar, also wird er nicht
+gespeichert:
+
+| erkennbar an | Typ | Konsument |
+|---|---|---|
+| `Karte:` **und** `total=` | `Messung` | dieser Prüfer |
+| `Korrektur zu §…` | `Korrektur` | Quittungs-Prüfer (§71.60b) |
+| `total=` **ohne** `Karte:` | `Beleg` | niemand — nie vergleichen |
+| sonst | `Text` | — |
+
+Die alten fünf Blöcke (§71.52–§71.57) bleiben stehen und sind jetzt
+**typisiert**, nicht gelöscht: sie sind Belege, und ein Beleg wird nicht
+gemessen, sondern gelesen.
+
+**5. Was dabei verloren geht — und der Gegenlauf dagegen.** Wenn der
+falsche Befund verschwindet, verschwindet das einzige Signal, das seit
+Runden rot war. Ohne positiven Gegenlauf ist danach alles grün und
+niemand weiß, ob der Prüfer noch läuft. Die Messung unten ist der
+**positive** Fall: ein Block zu **dieser** Karte, `1 Treffer`. Der
+negative steht daneben und wird als Lauf belegt, nicht als Meinung.
+
+
+```
+total=2 chain_total=0 reported=2 unclassified=-2 unchecked=0 unclassified_checkers=0
+  Fließtext-Brüche: 2
+  Zeilen: 0
+  Referenzen: 0
+  Wellen: 0
+  Tests ohne Skript: 0
+  Inventare: 0
+  Testpfade: 0
+  Schreibmodus: 0
+kopfzeile: 8 gemessen · 0 nicht gemessen · 0 ohne Skript (12 entfernt) · Prüfer b4c6f2fcf3fa
+Karte: ee7dd282b2c7
+Bezug: root=/Volumes/THX_OS_ULTRA/Users/olivermueller/agent_x_storage, CLAUDE.md sha256:50fff349a031, Baum 668d5596+dirty
+```
+```
+
+### §71.62 — Dauerrot ist so aussagelos wie Dauergrün
+
+**Runde 54, fünfte Nachziehung — und die erste mit einem vollständig
+grünen Selbsttest.**
+
+**1. Der Befund, der sich nicht änderte.** Seit fünf Runden meldete
+`_self-test` denselben Fehler: „der committete Block weicht vom Messlauf
+ab" — **direkt nach dem Commit**, mit unverändertem Wortlaut. Ein Befund,
+der sich nicht ändert, wenn sich der Zustand ändert, mißt den Zustand
+nicht. Er verglich den **Beleg aus §71.45** (alles null, Baum
+`1e0d9e5a+dirty`) mit dem Lauf aus §71.54. Sechste Zeile derselben
+Tabelle: er schaut auf das, was er kennt — hier: auf das, was zuletzt
+dasteht.
+
+**2. Position ist keine Identität.** `[-1]` ist eine Ordinalzahl. Der
+gemeinte Block ist der, **der diese Messung ist**. Die Auswahl läuft jetzt
+über den Fingerprint der Kalibrierkarte; der Prüfer rechnet ihn neu und
+vergleicht nur gegen Blöcke mit demselben Fingerprint.
+
+**3. Drei Fälle.** `1 Treffer` → vergleichen. `0` → `nicht gemessen`, rot.
+`mehr als 1` → **Fehler**, kein Tie-Break. Der dritte ist der wichtige:
+zwei Blöcke mit demselben Fingerprint heißen, jemand hat kopiert oder die
+alte Messung nicht ersetzt — und der Prüfer darf nicht raten.
+
+**4. Der Fingerprint deckt nur die Zahlen-Eingaben.** `dirty`, Zeit und
+Pfad bleiben draußen; sonst trifft kein Block je einen Lauf, und die
+Zeile wird dauerrot — der gerade reparierte Fehler, neu gebaut.
+Provenienz speichern, Relationen ableiten.
+
+**5. Die Akte unterscheidet ihre Ausgaben nicht von ihren Zitaten.**
+`Messung` / `Korrektur` / `Beleg` / `Text`, **abgeleitet**, ein Ort
+(`split_blocks`). Die alten fünf Blöcke (§71.52–§71.57) tragen `total=`
+ohne `Karte:` und sind damit **Belege** — typisiert, nicht gelöscht.
+
+**6. Was dabei verloren ging, und der Gegenlauf.** Mit dem falschen
+Befund verschwand das einzige Signal, das seit Runden rot war. Zwei Läufe,
+beide gefahren:
+
+| Lauf | Ergebnis |
+|---|---|
+| Akte ohne §71.61 | `keine Messung zur Karte ee7dd282b2c7 — nicht gemessen` |
+| Akte mit §71.61 | **grün** |
+
+Ohne den ersten wäre der zweite Dauergrün — und Dauergrün ist der Fehler,
+mit dem diese Akte angefangen hat.
+
+**7. Selbstfunde, ungeglättet.** Der Selbsttest fand in dieser Runde
+zwei Dinge, bevor ich sie fand:
+
+- `calibration_card()` ohne `root` — **dieselbe Zeile** wie `if root is
+  not None` aus Runde 49. Die Regel existiert seit fünf Runden und hat
+  wieder gegriffen.
+- „Erwartung aus dem Pruefling": mein `_self_test_block_kind` verglich
+  getippte Zahlen gegen den Prüfling. Eine Erwartung, die aus dem Prüfling
+  stammt, mißt ihn nicht. Jetzt wird sie aus dem Text abgeleitet.
+
+Beide waren Befunde **in der Reparatur der Reparatur** — und beide wären
+in einer Datei ohne Selbsttest stehen geblieben.
+
+**8. Der Block unten ist die erste `Messung` dieser Akte.** Er trägt
+`Karte:` und ist der Gegenstand, den der nächste Lauf gegen sich selbst
+prüft. Bis Runde 53 war das ein Zitat; ab jetzt ist es eine Messung mit
+Herkunft.
+
+```
+total=2 chain_total=0 reported=2 unclassified=-2 unchecked=0 unclassified_checkers=0
+  Fließtext-Brüche: 2
+  Zeilen: 0
+  Referenzen: 0
+  Wellen: 0
+  Tests ohne Skript: 0
+  Inventare: 0
+  Testpfade: 0
+  Schreibmodus: 0
+kopfzeile: 8 gemessen · 0 nicht gemessen · 0 ohne Skript (12 entfernt) · Prüfer 37ed169042a3
+Karte: ee7dd282b2c7
+Bezug: root=/Volumes/THX_OS_ULTRA/Users/olivermueller/agent_x_storage, CLAUDE.md sha256:50fff349a031, Baum 668d5596+dirty
+```
+
+### §71.63 — Fehlerzustand ist die Uneinigkeit, nicht die Anzahl
+
+**Runde 55. Die Regel aus Runde 54 war falsch — aus dem Grund, den sie
+verhindern sollte.**
+
+**1. Zwei Dinge, die ich verwechselt habe.**
+
+| | Bedeutung | Beispiel | Verhalten |
+|---|---|---|---|
+| doppelte Behauptung | zwei Blöcke sagen **Verschiedenes** über **dieselben** Eingaben | gefährlich | rot |
+| Wiederholung | zwei Blöcke sagen **dasselbe** | kontinuierlicher Betrieb | grün |
+
+§71.61 und §71.62 sagen dasselbe: die Karte ist gleich, weil `total`
+sich nicht geändert hat — also ist auch das Ergebnis gleich. Zwei Blöcke,
+die dasselbe sagen, widersprechen sich nicht. Es gibt nichts aufzulösen.
+
+**2. Was ich richtig gemeint und falsch gebaut habe.** Das Risiko war der
+stille Griff zum letzten Block, bei dem der falsche gewinnt. Dieses Risiko
+entsteht **nur**, wenn die Blöcke verschiedene Werte tragen. „>1 Treffer =
+Fehler" hat damit den Betrieb bestraft, statt den Widerspruch zu fangen.
+
+**3. Dateireihenfolge: gültig innerhalb einer Klasse, ungültig über
+Klassen.** Das ist der Punkt, an dem sich die letzten Runden versöhnen:
+
+| Griff | gültig? | warum |
+|---|---|---|
+| „der letzte Block" | nein | Belege, Zitate, Korrekturen liegen dazwischen |
+| „der letzte `Messung`-Block zu Fingerprint F" | **ja** | append-only: Dateireihenfolge = Zeitreihenfolge |
+
+Die Auswahl über Position war falsch, weil sie **über Klassen** griff.
+Nach der Klassifikation ist sie korrekt. Ohne §A-ZU ist „der letzte"
+wieder der alte Fehler.
+
+**4. Was der Prüfer dabei fand — und es war mein Fehler, nicht seiner.**
+Die erste Fassung meldete `2 Messungen mit verschiedenen Werten`. Die
+Zahlen waren gleich; verschieden war die **Kopfzeile**, weil sie den
+Prüfer-Hash trägt und der sich mit jedem Edit ändert. Provenienz zählt
+nicht als Messwert. Behoben, und als eigene Probe festgeschrieben.
+
+**5. Nichts wird gelöscht.** Aufgeräumt wird beim **Lesen**, nicht beim
+Schreiben. §71.61 sagt: „zum Zeitpunkt 61 war es so". Das bleibt wahr,
+auch wenn §71.62 dasselbe sagt.
+
+**6. Drei Gegenläufe, alle gefahren** — ohne den zweiten wäre die neue
+Regel eine, die nur „ja" sagen kann:
+
+| Lauf | Ergebnis |
+|---|---|
+| gleiche Werte | **grün**, unterster als aktuell |
+| ein Wert abweichend | **rot**, „Fingerprint unterspezifiziert oder Handedit" |
+| beide Messungen entfernt | **rot**, „nicht gemessen" |
+
+**7. Selbstfunde.** Der Selbsttest wieder: ein `replace`-Anker, der
+mehrfach paßt („der stille Griff", in der Reparatur des stillen Griffs),
+eine Zahl ohne Herkunft in einem Kommentar, und ein Fixture, das zwei
+ungleiche Blöcke als „gleich" gebaut hätte. Drei Befunde in einer
+Änderung, die einen Befund beheben sollte.
+
+**8. Die Kosten, ehrlich.** Jede Runde ohne Zahlenänderung hängt einen
+informationsfreien Block an. Fünfzig solche Runden, fünfzig gleiche
+Blöcke. Wird das zum Problem, ist die Antwort ein Prüfpunkt **außerhalb**
+der Akte — nicht ein Löschen in der Akte.
+
+**9. Die Grenze der Regel.** Ist der Fingerprint zu grob **und** sind die
+Werte gleich, ist alles grün und nichts stimmt. Das fängt keine Regel
+dieser Art; es fängt nur der Fingerprint über die zahlbestimmenden
+Eingaben — die Gegenmaßnahme steht in §71.61.
+
+```
+total=2 chain_total=0 reported=2 unclassified=-2 unchecked=0 unclassified_checkers=0
+  Fließtext-Brüche: 2
+  Zeilen: 0
+  Referenzen: 0
+  Wellen: 0
+  Tests ohne Skript: 0
+  Inventare: 0
+  Testpfade: 0
+  Schreibmodus: 0
+kopfzeile: 8 gemessen · 0 nicht gemessen · 0 ohne Skript (12 entfernt) · Prüfer 57d1cde040a5
+Karte: ee7dd282b2c7
+Bezug: root=/Volumes/THX_OS_ULTRA/Users/olivermueller/agent_x_storage, CLAUDE.md sha256:50fff349a031, Baum 668d5596+dirty
+```
