@@ -53,6 +53,16 @@
     "stateless": {
       "schreibpfad": "keiner",
       "geprueft_durch": "grep auf write_text, write_bytes, open(w), json.dump — alle leer"
+    },
+    "referenz": {
+      "definition": "Die Referenz einer Kopie ist der UNMITTELBARE Vorgaenger mit gleichem Hash, nicht das erste Vorkommen.",
+      "fall_aaba": "A,A,B,A -> #1==#2 (KANAL-DUPLIKAT, ts gleich) und #2==#4 (WIEDERHOLUNG, ts verschieden). Die vierte Kopie wird gemeldet, weil der Hash den Zeitstempel NICHT enthaelt.",
+      "korrektur_runde_80": "Bis Runde 79 steckte der Zeitstempel im Hash; damit war WIEDERHOLUNG strukturell unerreichbar (gleicher Hash => gleicher Text => gleicher ts)."
+    },
+    "uebersprung": {
+      "regel": "Was nicht gehasht wurde, wird gezaehlt und im Bericht genannt.",
+      "begruendung": "Ein Lauf, der Zeilen wegwirft und schweigt, sieht geprueft aus.",
+      "semantik_gleichklang": "Die Ingestion MUSS defekte Zeilen genauso behandeln wie der Waechter (ueberspringen+zaehlen). Sonst ist der Lauf gruen und die Zeile ungeprueft zugestellt."
     }
   },
   "normalisierung": {
@@ -97,6 +107,16 @@
       "name": "dreiergruppe",
       "erwarteter_exit": 1,
       "text": "Δ=1"
+    },
+    {
+      "name": "aaba",
+      "erwarteter_exit": 1,
+      "text": "WIEDERHOLUNG: #2 == #4"
+    },
+    {
+      "name": "uebersprung",
+      "erwarteter_exit": 0,
+      "text": "übersprungen: 2 (JSON 2"
     }
   ]
 }

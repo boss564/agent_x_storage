@@ -59,6 +59,9 @@ test:
 #
 # `deploy-gate` in CI bleibt das Urteil. `make compile` verhindert nur,
 # daß ein unbaubarer Commit überhaupt entsteht.
+vertrag:
+	@python3 -c "import json;d=json.load(open('scripts/waechter_vertrag.json'));print(f'Vertrag v{d[\"_version\"]}: {len(d[\"exit_codes\"])} Exit-Codes, {len(d[\"vertragsfaelle\"])} Faelle')"
+
 werktest:
 	@echo "⚖️  WERKTEST — Verträge der Wächter"
 	@echo "==================================="

@@ -80,6 +80,8 @@ def _args(name: str, t: Path, d: Path) -> list[str] | None:
         # Dreiergruppe: drei identische Meldungen hintereinander. Erwartet
         # werden ZWEI Duplikat-Ereignisse, beide mit Δ=1 zum Vorgänger.
         "dreiergruppe": ["--strom", str(d / "dreier.jsonl")],
+        "aaba": ["--strom", str(d / "aaba.jsonl")],
+        "uebersprung": ["--strom", str(d / "muell.jsonl")],
     }.get(name)
 
 
@@ -92,6 +94,18 @@ def _saat(d: Path, strom: list, neu_text: str) -> None:
                        ensure_ascii=False)
     (d / "dreier.jsonl").write_text("\n".join([zeile] * 3) + "\n",
                                     encoding="utf-8")
+    # A,A,B,A — der Fall, der die Referenzsemantik beobachtbar macht.
+    def _z(ts: str, txt: str) -> str:
+        return json.dumps({"role": "user", "message": {
+            "content": f"<timestamp>{ts}</timestamp>\n{txt}"}},
+            ensure_ascii=False)
+    a, b = "A" * 500, "B" * 500
+    (d / "aaba.jsonl").write_text(
+        "\n".join([_z("T1", a), _z("T1", a), _z("T2", b), _z("T3", a)]) + "\n",
+        encoding="utf-8")
+    # Zwei unparsbare Zeilen — die Uebersprung-Zahl muss im Bericht stehen.
+    (d / "muell.jsonl").write_text(
+        zeile + "\nKEIN JSON\n{kaputt\n", encoding="utf-8")
 
 
 def fahre(script: Path, vertrag: dict, strom: list,
@@ -183,23 +197,53 @@ def mutationssuite(vertrag: dict, strom: list, neu_text: str) -> tuple[int, int,
     ok = 0
     meldungen: list[str] = []
     quelle = SCRIPT.read_text(encoding="utf-8")
+
+    # §A-ZZZZ120 (Runde 80): **Negativkontrolle zuerst.** Die
+    # unveränderte Quelle muß volles Grün ergeben. Tut sie das nicht,
+    # ist jeder Mutationsbefund wertlos — der Fehler läge im Gate, nicht
+    # im Mutanten. Das war Anlauf 3 der Runde 79: der Runner tadelte
+    # den Prüfling für seinen eigenen Defekt. Ein falsch-positives Gate
+    # blockiert gültige Arbeit und wird deshalb ignoriert — schlimmer
+    # als ein stilles.
+    nok, nges, _ = fahre(SCRIPT, vertrag, strom, neu_text)
+    if nok != nges:
+        meldungen.append(f"FAIL Negativkontrolle: unveränderte Quelle "
+                         f"{nok}/{nges} — Gate defekt, Mutationen wertlos")
+        return 0, len(MUTATIONEN), meldungen
+    meldungen.append(f"ok   Negativkontrolle     {nok}/{nges} grün "
+                     f"(unverändert)")
+
     for feld, _, _ in MUTATIONEN:
         mutiert = _mutiere(feld, quelle)
         if mutiert is None or mutiert == quelle:
             meldungen.append(f"FAIL Mutation {feld}: Muster nicht gefunden "
                              f"— die Mutation prüft nichts")
             continue
+        # §A-ZZZZ120b: **Mutanten-Validität.** Eine Mutation, die keine
+        # vom Vertrag assertierte Ausgabe ändert, ist äquivalent — sie
+        # kann nicht gefangen werden und darf nicht als Beweis zählen.
+        # Sie wird hier *nicht* als „gefangen" verbucht, sondern als
+        # ungültig gemeldet. Die zwei Anläufe der Runde 79 (Text-Mutation
+        # traf einen ungeprüften Satz, stderr-Mutation traf eine von
+        # zwei Stellen) wären damit als **unbeobachtbar** klassifiziert
+        # worden, statt den Runner zu tadeln.
         with tempfile.TemporaryDirectory() as td:
             kopie = Path(td) / "waechter_mutiert.py"
             kopie.write_text(mutiert, encoding="utf-8")
-            nok, nges, _ = fahre(kopie, vertrag, strom, neu_text)
-        if nok == nges:
-            meldungen.append(f"FAIL Mutation {feld}: nicht gefangen "
-                             f"({nok}/{nges} grün)")
-        else:
-            ok += 1
-            meldungen.append(f"ok   Mutation {feld:8s} gefangen "
-                             f"({nok}/{nges} grün)")
+            nok, nges, nmsg = fahre(kopie, vertrag, strom, neu_text)
+            if nok == nges:
+                # Verändert der Mutant überhaupt eine assertierte Ausgabe?
+                if not any(m.startswith("FAIL") for m in nmsg):
+                    meldungen.append(
+                        f"FAIL Mutation {feld}: **unbeobachtbar** — keine "
+                        f"assertierte Ausgabe verändert, Mutant ungültig")
+                    continue
+                meldungen.append(f"FAIL Mutation {feld}: nicht gefangen "
+                                 f"({nok}/{nges} grün)")
+                continue
+        ok += 1
+        meldungen.append(f"ok   Mutation {feld:8s} gefangen "
+                         f"({nok}/{nges} grün)")
     return ok, len(MUTATIONEN), meldungen
 
 

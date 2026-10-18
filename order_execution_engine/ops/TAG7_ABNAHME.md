@@ -9102,3 +9102,119 @@ geschlossen — nicht durch Prosa, durch die Lage der Zeile.
 veraltet still. Eine Zahl, die aus dem Ausgang gelesen wird, veraltet
 laut — oder gar nicht.
 
+
+## Runde 80 — der Zeitstempel saß im Hash
+
+### 1. Ihr A,A,B,A-Fall hat einen Architekturfehler freigelegt
+
+Der Fall war als Testfall für die **Referenzsemantik** gedacht. Er traf
+etwas Größeres:
+
+```
+A,A,B,A   vorher:  paare=1   (#1==#2)            #4 nie gemeldet
+          nachher: paare=2   (#1==#2, #2==#4)     #4 gemeldet
+```
+
+**Ursache:** Bis Runde 79 steckte der `<timestamp>` im normalisierten
+Text und damit im Hash. Folge:
+
+```
+gleicher Hash ⇒ gleicher Text ⇒ gleicher Zeitstempel ⇒ immer KANAL-DUPLIKAT
+```
+
+`WIEDERHOLUNG` (gleicher Hash, anderer Zeitstempel) war **strukturell
+unerreichbar**. Die Klasse stand im Vertrag und existierte im Code
+nicht. Ich hatte den Zeitstempel als *Diagnose* eingeführt und damit
+den Detektor blind für die Klasse gemacht, die die Diagnose benennen
+sollte.
+
+Jetzt: Zeitstempel wird **vor** dem Hash entfernt und **daneben**
+geführt; das Etikett entscheidet sich aus `(hash_gleich, ts_gleich)`.
+
+### 2. Der erste echte Fund am lebenden Strom
+
+Nach der Korrektur, 258 Meldungen:
+
+```
+Paare: 38 | Kanal-Duplikate: 37 | bewußt: 1
+  WIEDERHOLUNG: #15 == #16  Δ=1  (anderer Zeitstempel)
+```
+
+`#15` (20.09. 16:52) und `#16` (20.09. 16:59) sind inhaltlich
+identisch, 7 Minuten auseinander. Das war seit Runde 79 unentdeckt —
+nicht weil das Etikett fehlte, sondern weil der Hash es nicht zuließ.
+
+**Ihr A,A,B,A-Fall hat eine Meldung gefunden, keine Semantikfrage
+beantwortet.** Das ist mehr, als der Fall verlangte.
+
+### 3. Übersprung-Zahl — Buchung 3
+
+```
+Meldungen: 258 | Paare: 38 | … | übersprungen: 33 (JSON 0, <400Z 27, Envelope 6)
+mit 2 Müll-Zeilen:                          übersprungen: 2 (JSON 2, <400Z 0, Envelope 0)
+```
+
+**Am echten Strom: 0 unparsbare Zeilen.** Ihr Befund war ein
+*potenzieller*, kein eingetretener — und ich hatte ihn als eingetretenen
+gemeldet („JSON-Müll übersprungen → Exit 0" aus einem künstlichen
+Fixture). Das ist die Lüge in der Gegenrichtung: ein Befund, der
+klingt wie ein Fund und ein Testfall war.
+
+Was bleibt, ist die Regel: **was nicht gehasht wurde, wird gezählt.**
+Sie steht im Bericht und im Vertrag, mit dem Gleichklang-Gebot an die
+Ingestion.
+
+### 4. Negativkontrolle und Mutanten-Validität — Buchungen 4 und 5
+
+| Kontrolle | Probe | Ergebnis |
+|---|---|---|
+| Negativkontrolle | unveränderte Quelle | `ok 9/9 (unverändert)` |
+| Negativkontrolle | Quelle absichtlich defekt | **`FAIL … Gate defekt, Mutationen wertlos`**, Suite bricht ab |
+| Mutanten-Validität | 5. Mutation ändert nur Docstring | **`FAIL … unbeobachtbar — Mutant ungültig`**, zählt nicht als gefangen |
+
+Die dritte Zeile ist Ihr Anlauf-1-Befund, dauerhaft gefangen: ein
+Mutant, der keine assertierte Ausgabe ändert, ist **ungültig**, nicht
+„nicht gefangen". Der Unterschied ist der zwischen einem Beweis und
+einem Trugschluß.
+
+### 5. Stand
+
+| Größe | Wert |
+|---|---|
+| Vertragsfälle | **9/9** (aaba, uebersprung neu) |
+| Negativkontrolle | 9/9 |
+| Mutationen | **4/4** + Negativkontrolle |
+| `make werktest` | 9/9 · 4/4 |
+| `make vertrag` | v1, 4 Exit-Codes, 9 Fälle |
+
+### 6. Altposten — Auflösungsregel angewandt
+
+| Posten | Zustand | Grund |
+|---|---|---|
+| 4/8 (getippte Zahl) | **geschlossen** | Zahl kommt aus `vertrags_runner`-Ausgang, 7→8→7 ohne Hand |
+| 400er-Filter | **geschlossen** | `MIN_LAENGE` in `lese_strom`, nicht in `digest` |
+| grep-Caveat | **geschlossen** | `write_bytes`/`print(file=)` geprüft |
+| `meldung_digest.py` | **spezifiziert** | DEPRECATED im Kopf, Nachfolger benannt |
+| Runde-73-Lücke | **offen, Eigner: Buchungsmechanismus** | nicht nachbuchen; der Mechanismus muß Lücken erzwingen |
+| 7-von-7-Inline-Liste | **verworfen** | die Liste steht als Tabelle in §6 der Runde 76; „inline" war eine Formforderung ohne Gegenstand |
+| Bytecode-Blocknummer | **offen, Eigner: `bytecode_manifest.py`** | Manifest existiert, Blocknummer fehlt |
+| Gate-Pfad-Kopplung | **geschlossen** | `paths` enthält `shadow_contract_pilot/**`, `lib/**`, `foundry.toml`, `order_execution_engine/**` |
+| Ingestion-Verdrahtung | **offen — ausßerhalb des Repos** | der einzige Posten mit Gewicht |
+
+### 7. Ihre strategische Sperre
+
+Ich nehme sie an: **der nächste Beleg gehört der Ingestion.** Diese
+Runde war die letzte Detektor-Runde. Was ich hier noch tun konnte, war
+die Klasse zu reparieren, die Ihr Testfall freigelegt hat — nicht, den
+Detektor zu verfeinern.
+
+Die vier Fragen, die nur die Ingestion beantworten kann, stehen
+unverändert: Aufrufstelle vor der Zustellung, Exit-1-Blockade,
+Exit-3-Markierung, defekte-Zeile-Semantik. Der Vertrag liegt als
+`waechter_vertrag.json` bereit; er ist das Artefakt, das beide Seiten
+konsumieren sollen.
+
+**Der Satz der Runde:** Ein Feld, das eine Klasse benennen soll, darf
+nicht in dem Wert stecken, der die Klasse unterscheidet — sonst gibt es
+die Klasse nur im Kommentar.
+

@@ -59,13 +59,27 @@ ENVELOPE_MARKER = ("<available_subagent_types>",)
 def normalisiere(text: str) -> str:
     """Wie in `meldung_digest.py` — **eine** Normalisierung, zwei Sensoren.
 
-    Der Zeitstempel wird mitgenommen: zwei Zustellungen derselben
-    Nachricht haben denselben, zwei bewußte Wiederholungen nicht. Das
-    ist der Unterschied zwischen „Kanal dupliziert" und „Mensch
-    wiederholt" — er darf nicht wegnormalisiert werden.
+    §A-ZZZZ119 (Runde 80): **der Zeitstempel wird vor dem Hash entfernt.**
+
+    Bis Runde 79 blieb er im Text — mit der Begründung, er trenne
+    KANAL-DUPLIKAT von WIEDERHOLUNG. Das war ein Denkfehler mit
+    Folgen: gleicher Hash ⇒ gleicher Text ⇒ gleicher Zeitstempel ⇒
+    `WIEDERHOLUNG` war **strukturell unerreichbar**. Jede Meldung, die
+    ein Absender zweimal mit verschiedenem Zeitstempel sendet, bekam
+    einen anderen Hash und galt als neu — die Klasse existierte im
+    Vertrag und nicht im Code.
+
+    Der Fall `A,A,B,A` hat es aufgedeckt: Position 4 ist inhaltlich
+    identisch mit Position 1, wurde aber nie gemeldet.
+
+    Jetzt wird der Zeitstempel **vor** dem Hash entfernt und **daneben**
+    als eigenes Feld geführt. Das Etikett entscheidet sich danach aus
+    `(hash_gleich, ts_gleich)`, nicht aus dem Hash allein.
     """
-    t = text.replace("\r\n", "\n").replace("\r", "\n")
+    t = re.sub(r"<timestamp>.*?</timestamp>", "", text, flags=re.DOTALL)
+    t = t.replace("\r\n", "\n").replace("\r", "\n")
     t = re.sub(r"[ \t]+$", "", t, flags=re.MULTILINE)
+    # §A-ZZZZ110: erst kollabieren, **dann** trimmen.
     t = re.sub(r"\n{2,}", "\n", t)
     return t.strip("\n")
 
@@ -91,31 +105,50 @@ def lese_strom(p: Path) -> list[tuple[str, str]]:
     Absicht.** Der Wächter ist stateless — aber ein unlesbarer Stream
     ist ein Zustand, den er nicht verursacht und nicht verhindern kann.
     Die Exception wird hier in `StreamUnlesbar` übersetzt; `main`
-    entscheidet über den Exit-Code. Vorher wäre ein fehlender Stream
-    als Traceback gestorben — genau die Klasse, die zwei Runden
-    dominiert hat (PermissionError, Fall 1).
+    entscheidet über den Exit-Code.
+
+    §A-ZZZZ118 (Runde 80): **was übersprungen wird, wird gezählt.**
+    Runde 79 meldete bei defektem Format Exit 0 und schwieg dabei: die
+    müllige Zeile wurde nie gehasht, der Lauf sah geprüft aus. Gemessen
+    am echten Strom: 0 unparsbare Zeilen — der Befund war ein
+    **potentieller**, kein eingetretener. Ein potentieller Befund, der
+    als eingetretener gemeldet wird, ist dieselbe Lüge in der anderen
+    Richtung. Beides gehört in den Bericht: die Zahl der übersprungenen
+    Zeilen, und die Verteilung der Gründe.
     """
     try:
         f = p.open(encoding="utf-8")
     except OSError as e:
         raise StreamUnlesbar(f"Stream nicht lesbar: {e}") from e
     out: list[tuple[str, str]] = []
+    skip = {"json": 0, "kurz": 0, "envelope": 0}
     with f:
         for line in f:
             try:
                 o = json.loads(line)
             except ValueError:
+                skip["json"] += 1
                 continue
             if o.get("role") != "user":
                 continue
             t = _text_von(o.get("message"))
             if len(t) < MIN_LAENGE:
+                skip["kurz"] += 1
                 continue
             if t.lstrip().startswith(ENVELOPE_MARKER):
+                skip["envelope"] += 1
                 continue
             m = re.search(r"<timestamp>(.*?)</timestamp>", t)
             out.append((m.group(1) if m else "?", t))
+    LESESTAT.update(skip)
     return out
+
+
+# §A-ZZZZ118: die Zählung hängt am Modul, nicht am Rückgabewert — der
+# Rückgabetyp bleibt `list[tuple[str, str]]`, damit jeder Aufrufer
+# unverändert bleibt. Eine Signaturänderung für eine Statistik wäre eine
+# Kopplung, die niemand braucht.
+LESESTAT: dict[str, int] = {"json": 0, "kurz": 0, "envelope": 0}
 
 
 def pruefe_strom(strom: list[tuple[str, str]]) -> tuple[int, int, list[str]]:
@@ -188,8 +221,15 @@ def main(argv: list[str]) -> int:
             print(f"DIE WACHE TRÄGT NICHT: {e}", file=sys.stderr)
             return 3
         paare, kanal, bericht = pruefe_strom(strom)
+        # §A-ZZZZ118: **die Übersprung-Zahl steht im Bericht.** Ein Lauf,
+        # der Zeilen wegwirft und das nicht nennt, sieht geprüft aus.
+        _ue = sum(LESESTAT.values())
+        _us = (f" | übersprungen: {_ue} (JSON {LESESTAT['json']}, "
+               f"<{MIN_LAENGE}Z {LESESTAT['kurz']}, "
+               f"Envelope {LESESTAT['envelope']})") if _ue else ""
         print(f"Meldungen: {len(strom)} | Paare: {paare} "
-              f"| davon Kanal-Duplikate: {kanal} | bewußt: {paare - kanal}")
+              f"| davon Kanal-Duplikate: {kanal} | bewußt: {paare - kanal}"
+              f"{_us}")
         for z in bericht:
             print(z)
         return 1 if paare else 0

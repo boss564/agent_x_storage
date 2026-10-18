@@ -8326,6 +8326,9 @@ MESSBEREICH: dict[str, tuple[str, ...]] = {
     "meldung_wache": ("scripts/meldung_digest.py",),
     # §A-ZZZZ111 (Runde 77): Sensor am Einwurf statt am Archiv.
     "einwurf_wache": ("scripts/einwurf_waechter.py",),
+    # §A-ZZZZ119/120 (Runde 80): Vertrag als Artefakt + Vertrags-Runner.
+    "waechter_vertrag": ("scripts/waechter_vertrag.json",),
+    "vertrags_runner": ("scripts/vertrags_runner.py",),
     "protokoll": ("order_execution_engine/ops/TAG7_ABNAHME.md",
                   "order_execution_engine/ops/BERICHT.md"),
 }
