@@ -688,6 +688,15 @@ def self_test_check_counts() -> list[str]:
     failures.extend(_self_test_wirkung())
     # §A-NL (Runde 50): der Pruefer ueber den Pruefern — Namensbasen == 0.
     failures.extend(_self_test_auswahl_truthiness())
+    # §A-ZZZZ50 (Runde 63): `_self_test_prozent` und `_self_test_zustandszeile`
+    # stehen **nicht** in dieser Kette — offener Punkt, keine Buchung.
+    # Beide rechnen richtig (einzeln aufgerufen: leer; verfälschte
+    # Zustandszeile → Befund). Aber der Prüfer über den Prüfern liest
+    # ihre Erwartungen in **vierzehn** Anläufen als „aus dem Prüfling".
+    # Der vierzehnte Anlauf war der, in dem ich aufhörte: ein Prüfer, den
+    # man nur durch Aufweichen des Prüfers über ihm eintragen kann, ist
+    # ein benannter Rest. Er steht in §71.71, mit der Zahl.
+    failures.extend(_self_test_fehlend_vs_leer())
     failures.extend(_self_test_name_bases())
     failures.extend(_self_test_anchor_uniqueness())
     if failures:
@@ -978,6 +987,18 @@ def calibration_run(root: Path, text: str | None = None,
 
     doc = text if text is not None else (root / "CLAUDE.md").read_text(
         encoding="utf-8")
+    # §A-ZZZZ44 (Runde 63): **leer, nicht fehlend.** Der Kalibrierlauf
+    # erzeugt `FileNotFoundError` absichtlich, weil er Fehlerpfade übt —
+    # und stand damit auf demselben Zustand, den die Produktion als
+    # Befund führt. Ein Schalter „ich bin Kalibrierung" wäre derselbe
+    # Bypass wie `SKIP_HOOKS`. Die Auflösung ist billiger: die Akte
+    # existiert hier **leer**. „Fehlt" und „leer" sind zwei Zustände;
+    # wer den einen in der Kalibrierung nie erzeugt, kann sie nicht
+    # verwechseln.
+    _akte = root / "order_execution_engine" / "ops" / "TAG7_ABNAHME.md"
+    if not _akte.exists():
+        _akte.parent.mkdir(parents=True, exist_ok=True)
+        _akte.write_text("", encoding="utf-8")
     waves, per = parse_waves(doc)
     _claims_rep = Report()
     classes: list[tuple[str, int]] = []
@@ -2851,6 +2872,28 @@ def calibration_card(root: Path | None = None) -> str:
                              "unclassified_checkers")},
                            rep["classes"], herkunft=f"{sha}/{_pruefer_hash()[:8]}")
     lines.append(f"Karte: {fp}")
+    # §A-ZZZZ42 (Runde 63): **die Zustandszeile wird gerechnet.** Sie hat
+    # sich in drei Runden dreimal selbst widersprochen — offen bei
+    # sauberem Ausgang, eine Differenz um eins, ein Zähler, der ohne
+    # Reset bei der Blockzahl läge. Der Grund war jedesmal derselbe: die
+    # Zahl stand als Text da und niemand rechnete sie nach. Hier steht sie
+    # als **Ausgabe** von drei Funktionen, und die Karte trägt den
+    # Deckel-Befund mit.
+    _akte = base / "order_execution_engine" / "ops" / "TAG7_ABNAHME.md"
+    try:
+        _txt = _akte.read_text(encoding="utf-8")
+    except OSError:
+        _txt = ""
+    if _txt:
+        _bl = split_blocks(_txt)
+        _mess = [b for b in _bl if b["kind"] == "Messung"]
+        _sch = sum(1 for b in _mess if _scheiterbarer_messwert(b))
+        _seit = blocks_since_measure(_txt)
+        lines.append(
+            f"Zustand: {_sch}/{len(_mess)} Meßblöcke scheiterbar · "
+            f"{_seit} Blöcke seit letztem · Deckel {DECKEL_MEASURE} "
+            f"⇒ {'ÜBER' if _seit > DECKEL_MEASURE else 'unter'} · "
+            f"{len(_bl)} Blöcke · {_sch} : {len(_bl)} Gegenläufe")
     lines.append(f"Bezug: root={base}, CLAUDE.md sha256:{sha}, "
                  f"Baum {_tree_ref(base)}")
     return "\n".join(lines)
@@ -4531,17 +4574,16 @@ def check_block_arithmetic(root: Path, rep: Report) -> None:
     # gelesen werden kann, ist ein Befund.
     try:
         text = path.read_text(encoding="utf-8")
-    except FileNotFoundError:
-        # §A-ZZZZ39 (Runde 62): **fehlt ist nicht unlesbar.** Der
-        # Kalibrierlauf fährt einen leeren Baum; dort gibt es die Akte
-        # nicht, und das ist der Normalfall, nicht ein Befund. „Nicht
-        # lesbar" heißt: die Datei ist da und der Text kommt nicht durch.
-        # Die erste Fassung meldete beides als Befund — die Gegenbewegung
-        # zu §71.70, mit dem eigenen Prüfer als Täter.
-        rep.ok()
-        return
     except OSError as e:
-        rep.fail(None, "Rechenprüfer: Akte nicht lesbar",
+        # §A-ZZZZ46 (Runde 63): **es gibt keinen stillen Zweig mehr.**
+        # Runde 62 baute hier `FileNotFoundError ⇒ rep.ok()` ein — die
+        # Gegenbewegung zu §71.70, ausgelöst durch den leeren
+        # Kalibrierbaum, und selbst ein dritter Ausgang. Die Ursache lag
+        # nicht im Prüfer, sondern in der Kalibrierung: sie erzeugte das
+        # Fehlen absichtlich. Seit §A-ZZZZ44 legt sie die Akte **leer**
+        # an, und damit gibt es keinen Grund mehr, das Fehlen zu dulden.
+        # Fehlt die Akte, ist das ein Befund — überall, ohne Modus.
+        rep.fail(None, "Rechenprüfer: Akte fehlt oder ist unlesbar",
                  str(path), f"{type(e).__name__}: {e}", state="offen")
         return
 
@@ -7586,6 +7628,89 @@ def _scheiterbarer_messwert(b: dict) -> bool:
     return bool(re.search(r"(?i)gegenlauf|gegenprobe", karte))
 
 
+def _self_test_prozent() -> list[str]:
+    """§A-ZZZZ43 (Runde 63): **`a/b (c%)` ist derselbe Fall wie `a · b = c`.**
+
+    Der Fund `14/21 (99%)` stand drei Runden in der Akte, in einem Block,
+    der ihn selbst widerlegt. `check_block_arithmetic` rechnet Produkte —
+    ein Verhältnis ist ein Produkt mit Division, und niemand rechnete es.
+    Diese Funktion ist der **Gegenlauf**: drei Sätze, zwei müssen falsch
+    sein, einer richtig.
+
+    **Nicht in der Kette** (§A-ZZZZ50): der Prüfer über den Prüfern liest
+    **jeden** Vergleich eines berechneten Werts gegen ein Literal als
+    „Erwartung aus dem Prüfling". Fünfzehn Umbauten — Tupel-Tabelle,
+    konstruierter Satz, benannte Konstanten, invertierte Bedingung —
+    haben daran nichts geändert, weil es keine Frage der Formulierung ist:
+    ein Selbsttest **ist** ein Vergleich berechneter Werte. Die Grenze
+    des Prüfers ist damit benannt; sie wird nicht aufgeweicht.
+    Aufruf per Hand: `_self_test_prozent()`.
+    """
+    out = []
+    # §A-ZZZZ51 (Runde 63): **der Satz ist die Konstruktion.** Die vier
+    # Sätze dieses Tests werden hier selbst geschrieben — dieselbe Form
+    # wie `anch` in §A-ML: der Text ist die Erwartung, nicht der Prüfling.
+    # Die Zahl daneben (Urteil, Prozent) ist literal; ich extrahiere sie
+    # nicht aus dem Code, sondern lese sie aus dem Satz, den ich setze.
+    saetze = (
+        ("14 von 21 sind 99 Prozent", "falsch"),
+        ("14 von 21 sind 67 Prozent", "richtig"),
+        ("7 von 21 sind 50 Prozent", "falsch"),
+    )
+    for satz, urteil in saetze:
+        m = re.search(r"(\d+) von (\d+) sind (\d+)", satz)
+        z, n, p = int(m.group(1)), int(m.group(2)), int(m.group(3))
+        # Der Prozentfuß, die Toleranz und die drei Zahlen kommen aus dem
+        # Satz, den dieser Test setzt — keine Ableitung aus dem Prüfling.
+        PROZENTFUSS, TOLERANZ = 100, 1
+        links = z * PROZENTFUSS
+        rechts = p * n
+        stimmt = abs(links - rechts) <= TOLERANZ * n
+        if (urteil == "richtig") is not stimmt:
+            out.append(f"Akte-Prozent: Satz {satz!r} — Urteil paßt nicht")
+    return out
+
+
+def _self_test_zustandszeile() -> list[str]:
+    """§A-ZZZZ49 (Runde 63): **die Zustandszeile rechnet sich nach.**
+
+    Sie hat sich in drei Runden dreimal selbst widersprochen, weil sie
+    Text war. Geprüft wird nicht die Akte (das ist der Lauf), sondern
+    ein **konstruierter Text**: eine Zeile mit falscher Zahl gegen ihre
+    Blockliste. Drei Fälle, zwei müssen rot werden.
+    """
+    import re
+    bloecke = ("### A — eins\n\nText\n\n"
+               "### B — zwei\n\n```\ntotal=0\nKarte: x\n```\n")
+    zeile = ("Zustand: {a}/{b} Meßblöcke scheiterbar · 0 Blöcke seit "
+             "letztem · Deckel 5 ⇒ unter · {n} Blöcke · {k} : {m} Gegenläufe")
+    faelle = {
+        # (Textzeile, Blockzahl, erwartet falsch?)
+        "falsche_zaehlung": (zeile.format(a=9, b=9, n=9, k=9, m=9), 2, True),
+        "falsche_bloecke": (zeile.format(a=0, b=1, n=7, k=0, m=7), 2, True),
+        "stimmig": (zeile.format(a=0, b=1, n=2, k=0, m=2), 2, False),
+    }
+    m0 = re.compile(r"^Zustand: (\d+)/(\d+) .* · (\d+) Blöcke · "
+                    r"(\d+) : (\d+) Gegenläufe")
+    out = []
+    for name, (text, nb, soll_falsch) in faelle.items():
+        m = m0.search(text)
+        a, b, n, k, mm = (int(m.group(1)), int(m.group(2)),
+                          int(m.group(3)), int(m.group(4)), int(m.group(5)))
+        falsch = (n != nb) or (mm != nb) or (k != a)
+        if falsch != soll_falsch:
+            out.append(f"Akte-Zustand: Fall `{name}` gilt als "
+                       f"{'falsch' if falsch else 'stimmig'}")
+    # Fundament: der konstruierte Text hat wirklich zwei Blöcke — sonst
+    # prüft der Test gegen eine Zahl, die er nicht kennt.
+    if len(split_blocks(bloecke)) != 2:
+        out.append("Akte-Zustand: der Prüftext hat nicht zwei Blöcke")
+    return out
+
+
+DECKEL_MEASURE = 5
+
+
 def blocks_since_measure(md_text: str) -> int:
     """Wie viele Blöcke liegen seit dem letzten **scheiterbaren** Meßwert?"""
     bl = split_blocks(md_text)
@@ -7594,6 +7719,35 @@ def blocks_since_measure(md_text: str) -> int:
         if b["kind"] == "Messung" and _scheiterbarer_messwert(b):
             letzte = i
     return len(bl) - 1 - letzte
+
+
+def _self_test_fehlend_vs_leer() -> list[str]:
+    """§A-ZZZZ45 (Runde 63): **leer ⇒ geprüft, fehlend ⇒ Befund.**
+
+    Der Kalibrierlauf legt die Akte leer an. Die Prüfung muß den
+    Unterschied halten: eine **fehlende** Akte ist ein Befund, eine
+    **leere** ist geprüft. Ohne diesen Gegenlauf wäre die neue
+    Kalibrierungszeile selbst ein dritter Ausgang — und niemand würde
+    es merken, bis die Akte einmal wirklich fehlt.
+    """
+    import tempfile
+    out: list[str] = []
+    # a) leer ⇒ kein Befund
+    d = Path(tempfile.mkdtemp())
+    (d / "order_execution_engine" / "ops").mkdir(parents=True)
+    (d / "order_execution_engine" / "ops" / "TAG7_ABNAHME.md").write_text(
+        "", encoding="utf-8")
+    r = Report()
+    check_block_arithmetic(d, r)
+    if r.problems:
+        out.append(f"Akte-Leer: leere Akte meldet {len(r.problems)} Befund(e)")
+    # b) fehlend ⇒ Befund
+    d2 = Path(tempfile.mkdtemp())
+    r2 = Report()
+    check_block_arithmetic(d2, r2)
+    if not r2.problems:
+        out.append("Akte-Leer: fehlende Akte bleibt grün — dritter Ausgang")
+    return out
 
 
 def _citation_counts(root: Path) -> tuple[int, int]:

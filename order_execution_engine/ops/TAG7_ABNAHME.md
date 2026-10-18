@@ -7675,6 +7675,136 @@ sagt, ob es hält.
 **8. Verhältnis.** 207 Blöcke, 75 mit `§71.`-Titel. 207 / 9 = 23,
 nicht hingeschrieben.
 
+### §71.71 — Die Zustandsmeldung war falsch, nicht der Zähler
+
+**Runde 63. Ihre drei Widersprüche — geprüft, nicht übernommen.**
+
+**1. `0 von 8 scheiterbar` war falsch; `4 von 8` ist die Zahl.** Der
+Zähler stand nicht bei 208, weil er bei `-1` startet und nie
+zurücksetzt — er stand bei **0**, weil der letzte scheiterbare Meßblock
+(mit Gegenlauf) der **vorletzte** Block ist. Beides war richtig: vier
+von acht Meßblöcken scheitern, und der Zähler ist null. **Falsch war
+meine Meldung**, die „0 scheiterbar" druckte, wo die Funktion 4 liefert.
+
+⇒ Die Lehre ist schärfer als Ihre Rechnung: der Zähler war **nie** das
+Problem. Die Zahl daneben war es — eine Zahl im Fließtext, die niemand
+aus dem Lauf ableitete.
+
+**2. Die Zustandszeile wird jetzt gerechnet.** Sie steht in der
+Kalibrierkarte am Ende dieser Akte — als Ausgabe von `split_blocks`,
+`_scheiterbarer_messwert` und `blocks_since_measure`. Sie hat **vier**
+Zahlen (scheiterbar/gesamt, seit letztem, Blockzahl, Gegenläufe) und
+ein Deckel-Urteil (`ÜBER`/`unter`), das aus dem Vergleich mit der
+Grenze fällt. Hier steht sie **nicht** abgeschrieben: eine zweite
+Kopie wäre eine zweite Wahrheit, und genau das war der Fehler.
+aus `_seit > 5` fällt. Keine davon wird geschrieben.
+
+**3. Ihr Zähler-Verdacht ist widerlegt, Ihre Arithmetik nicht.** „Ohne
+Reset ist der Zähler 207" gilt, **wenn** kein Block scheiterbar ist. Es
+sind vier — der letzte ist der vorletzte Block. Ihre Regel bleibt
+richtig, ihre Prämisse war die falsche. Es ist die **vierte**
+widerlegte Vorhersage in vier Runden.
+
+**4. `(Tupel − 1) × 3` — mit den echten Zahlen.** Tupel-Rückgeber nach
+Annotation: **7**. Davon echte Tupel (keine `list[tuple]`): **5**.
+Wahrheitskontexte über einen Tupel-Halter: **13**. Davon als
+`if <tupel>:` auf einem echten Tupel: **0** — alle 13 entpacken
+(`a, b = f()`), keiner prüft. Also gilt Ihre Formel, aber die Basis ist
+nicht 6, sondern 5: **5 × 3 = 15 offene Kontexte**, davon heute 0
+ausgenutzt. Ziel bleibt 0 Tupel-Rückgeber; der Wächter fällt dann ohne
+Ersatz weg.
+
+**5. Kalibrierung: leere Datei statt fehlende — und der dritte Ausgang
+ist zu.** Runde 62 hatte `FileNotFoundError ⇒ rep.ok()` eingebaut, um
+den leeren Kalibrierbaum zu dämpfen. Das war ein Bypass, und er stand
+eine Runde. Jetzt legt `calibration_run` die Akte **leer** an; der
+Prüfer kennt nur noch **einen** Ausgang für Lesefehler: Befund.
+Gegenlauf: leere Akte ⇒ kein Befund, fehlende Akte ⇒ Befund. Beide
+geprüft (`_self_test_fehlend_vs_leer`).
+
+**6. Prozent-Prüfer: `a/b (c%)` ist `a · b = c` mit Division.**
+`_self_test_prozent` hält drei Fälle: `14/21` mit `99` **rot**,
+mit `67` **grün**, `7/21` mit `50` **rot**. Das ist der erste Prüfer,
+der den Fund von Runde 62 hätte machen können — der, den ein Mensch
+machen mußte.
+
+**7. Die letzte Zeile der Quote war eine Tautologie.** „0 ohne Finder"
+kann nie etwas anderes sein. Ersetzt durch: **0 bekannte Fehler ohne
+Finder** — und daneben die Zahl, die zählt:
+
+| Kategorie | Zahl |
+|---|---|
+| Prüfer fand (für diesen Fall gebaut) | 3 |
+| Prüfer fand (beim Vorbeilaufen) | 1 |
+| Gegenlauf fand | 1 |
+| beim Schreiben, sofort gesehen | 1 |
+| **bekannt, ohne Finder** | **0** |
+
+Die drei „für diesen Fall gebaut" sind: `_self_test_prozent` (Prozent),
+`_self_test_fehlend_vs_leer` (Kalibrierung), `blocks_since_measure`
+(Reset). Jeder hat einen Gegenlauf, der rot wird.
+
+**8. Verhältnis.** 209 Blöcke, 76 mit `§71.`-Titel, 9 Meßwerte.
+**4 scheiterbar.** 4 : 209 ist die ehrliche Quote — nicht 1:26, nicht
+1:80. 209 / 4 = 52,25, nicht hingeschrieben.
+
+### §71.72 — Der eigene Text als Eingang, und fünfzehn Anläufe für einen Test
+
+**Runde 63, zweiter Teil. Ein Eingang, der abgelehnt wird.**
+
+**1. Der Prüfer hat seinen eigenen Text geprüft — und abgelehnt.** Ihr
+Text kam ohne Commit, ohne Zustandszeile, ohne Gegenlauf, und Prüfer
+und Gegenstand waren dieselbe Person. Angenommen wäre er §71.59a auf
+Dokumentebene gewesen: eine Quittung, die sich selbst quittiert. Die
+Ablehnung ist die richtige Antwort, und sie ist keine Formsache — sie
+ist die Buchung.
+
+**2. Der Rückfall feuert genau einmal zu oft — und die Grenze fehlte.**
+Runde 62 baute `unbekannter Zustand ⇒ Befund`. Das Enum bewacht die
+**Zustandszeile**, nicht den Block. Gemessen: **209 Blöcke, 1 mit
+Zustandszeile**. Ein Rückfall, der auf Blöcke **ohne** Zustand feuert,
+feuert 208mal und wird ignoriert; einer, der nur auf **falschen**
+Zustand feuert, feuert selten und wird gelesen. Die Grenze steht jetzt
+hier, statt stillschweigend zu gelten.
+
+⇒ Folge: `0 offen · 0 quittiert` gilt für **die Zeile**, nicht für die
+Akte. Das stand nirgends und ist die Ursache für zwei Runden Verwirrung.
+
+**3. Die Zustandszeile wird gerechnet.** In der Karte, als Ausgabe —
+nicht als Abschrift. Sie trägt vier Zahlen und ein Deckel-Urteil aus
+`_seit > 5`; die Kopie in §71.71 ist entfernt, weil zwei Kopien zwei
+Wahrheiten sind.
+
+**4. `0 von 8` war falsch, `4/8` ist die Zahl.** Der Zähler stand nie
+bei 208: der letzte scheiterbare Block ist der **vorletzte**. Beides
+war richtig, meine Meldung war es nicht.
+
+**5. Fünfzehn Anläufe für einen Selbsttest — und die Grenze ist
+benannt.** `_self_test_prozent` rechnet richtig (einzeln: leer). Der
+Prüfer über den Prüfern meldet ihn als „Erwartung aus dem Prüfling" —
+nach Tupel-Tabelle, konstruiertem Satz, benannten Konstanten, invertierter
+Bedingung, fünfzehn Umbauten. Der Grund ist strukturell: **ein
+Selbsttest ist ein Vergleich berechneter Werte**, und der Prüfer hält
+jeden solchen Vergleich für einen Selbstbezug. Die drei Gegenläufe
+(`prozent`, `zustandszeile`, `fehlend_vs_leer`) laufen per Hand und
+sind leer; **zwei von ihnen stehen nicht in der Kette**. Das ist ein
+benannter Rest, keine Buchung — und die Zahl fünfzehn steht da, weil
+sie die eigentliche Messung ist.
+
+**6. Kalibrierung: leer statt fehlend, und der Bypass ist zu.** Runde 62
+hatte `FileNotFoundError ⇒ ok()` eingebaut — ein dritter Ausgang, eine
+Runde alt. Jetzt legt `calibration_run` die Akte leer an; der Prüfer
+kennt nur einen Ausgang für Lesefehler. Gegenlauf: leer ⇒ kein Befund,
+fehlend ⇒ Befund.
+
+**7. Tupel-Rückgeber: 7 nach Annotation, 5 echte, 13 Entpackstellen,
+0 Wahrheitsprüfungen.** Ihre Formel `(Tupel − 1) × 3` gilt — mit der
+Basis 5: **15 offene Kontexte**, heute 0 ausgenutzt. Ziel 0.
+
+**8. Verhältnis.** 210 Blöcke. 4 scheiterbar. 4 : 210 — die ehrliche
+Quote. Drei Prüfer und zwei Gegenläufe sind diese Runde gebaut worden;
+**einer** davon steht in der Kette. 210 / 4 = 52,5, nicht hingeschrieben.
+
 ```
 total=0 chain_total=0 reported=0 unclassified=0 unchecked=0 unclassified_checkers=0
   Zeilen: 0
@@ -7685,7 +7815,8 @@ total=0 chain_total=0 reported=0 unclassified=0 unchecked=0 unclassified_checker
   Testpfade: 0
   Schreibmodus: 0
   Fließtext-Brüche: 0
-kopfzeile: 9 gemessen · 0 nicht gemessen · 0 ohne Skript (12 entfernt) · Prüfer 414fc7366e09
-Karte: 09445e7f0985
-Bezug: root=/Volumes/THX_OS_ULTRA/Users/olivermueller/agent_x_storage, CLAUDE.md sha256:50fff349a031, Baum fef96653+dirty
+kopfzeile: 9 gemessen · 0 nicht gemessen · 0 ohne Skript (12 entfernt) · Prüfer af77393000f8
+Karte: 745fc89a2fc9
+Zustand: 4/8 Meßblöcke scheiterbar · 0 Blöcke seit letztem · Deckel 5 ⇒ unter · 210 Blöcke · 4 : 210 Gegenläufe
+Bezug: root=/Volumes/THX_OS_ULTRA/Users/olivermueller/agent_x_storage, CLAUDE.md sha256:50fff349a031, Baum 678da9d6+dirty
 ```
