@@ -620,13 +620,17 @@ def _auswahl_fehler_fixture(kind=False) -> int:
         text, karte_x, rot = stufen[kind]
         r = _auswahl_fehler(split_blocks(text), karte_x)
         # §A-ZZZZ: „richtig" heißt hier **rot**, und rot heißt eine
-        # Meldung. §A-ZZZZ4: Rückgabe ist `(zahl, liste)` — die Zahl für
-        # den Sammler (`carries_case` vergleicht `<= 0`), die Liste für
-        # Fehler. `(0, [])` ist nicht falsch: der Sammler liest ein int.
-        if bool(r) != rot:
+        # Meldung. §A-ZZZZ21 (Runde 60, §71.68): **auf Wirkung umgestellt.**
+        # Bis Runde 59 las der Sammler nur ein `int`; die Tupel-Form war
+        # damit zementiert, und ein `Auswahl(ok=…)` scheiterte an dieser
+        # Form statt an der Logik. Jetzt: `got` ist die Wirkung — die
+        # Rückgabe bleibt `(zahl, liste)`, aber die **Zahl ist das
+        # Ergebnis**, nicht ein Nebenprodukt der Form.
+        got = bool(r)
+        if got != rot:
             return 0, [(f"Akte-Auswahl-Fixture: {kind} erwartet "
-                        f"{'rot' if rot else 'grün'}, bekam {bool(r)}")]
-        return (1 if r else 0), r
+                        f"{'rot' if rot else 'grün'}, bekam {got}")]
+        return (1 if got else 0), r
     # `False` = heiler Lauf, `True` = kaputter Lauf (Standard von
     # `measure()`): beide fahren **alle** Stufen. Der Unterschied ist die
     # Erwartung, nicht der Eingang — `False` prüft die grünen, `True` die

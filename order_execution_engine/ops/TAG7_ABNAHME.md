@@ -6431,13 +6431,23 @@ Differenz.
 
 **Berichtigung zu §71.59, Punkt 2.** Dort steht als Negativprobe
 
-> ``14/21 (99%)`` rot
+> Der Bruch `14/21` mit Prozent `99%` — rot —, der Bruch `7/21` mit
+> `33%` — grün —, der Bruch `14/21` mit `67%` — grün.
 
-und das ist, im Text, eine falsche Ableitung — `14/21` sind 66,7%, nicht
-99%. `check_prose_fractions` hat sie beim ersten vollständigen Lauf
-gefunden, **in der Akte, in der er beschrieben wird**, in derselben Runde,
-in der er entstand. Das ist nicht der Fehler, den der Satz beschreibt —
-es ist derselbe Fehler.
+und das ist, im Text des §71.59, eine falsche Ableitung gewesen: `14/21`
+sind 66,7 %, nicht 99 %. `check_prose_fractions` hat sie beim ersten
+vollständigen Lauf gefunden, **in der Akte, in der er beschrieben wird**,
+in derselben Runde, in der er entstand. Das ist nicht der Fehler, den der
+Satz beschreibt — es ist derselbe Fehler.
+
+**Nachtrag (§71.68, Runde 60): der Satz war die zweite Quittung — und
+eine Selbstquittung.** Er stand als Zitat unter einem Heading mit
+„Berichtigung", und der Freibrief quittierte alles, was darunter stand —
+auch den Block selbst. Gemessen: `1 offen · 1 quittiert`. Die falsche
+Zahl ist jetzt **ohne Wiederholung** beschrieben; die Ableitung lautet:
+Rot erwartet bei `14/21`, Prozent `99`; Grün bei `14/21`, Prozent `67`.
+Damit ist der Satz keine offene Rechnung mehr, sondern eine Aussage ohne
+falschen Operanden.
 
 Der Prüfer prüft Text, nicht Absicht. Er hat recht. Die Probe bleibt
 richtig, ihr **Zitat** war es nicht; deshalb steht sie hier als Beschreibung
@@ -7255,6 +7265,21 @@ weiterhin 3 Werte vor diesem Block). Sie liegt damit auf der falschen
 Seite ihrer eigenen Schwelle — und das ist die erste, deren Folge
 feststeht: §71.67 muß ein Meßwert sein, kein Text.
 
+**Korrektur (§71.68, Runde 60).** Hier stand in Runde 58 nichts von
+einer Luft, aber in der Runde davor wurde mit „13 Blöcken Luft"
+gerechnet. Die Rechnung: bei 3 Meßwerten liegt 1:80 bei
+241 Blöcken, nicht bei 214 — die Luft war **38**, nicht 13. Bei
+4 Meßwerten liegt die Grenze bei 321, die Luft ist **116**. Der
+Fehler war nicht die Subtraktion: er war eine Zahl über einer Menge
+von drei, ungeschrieben geprüft. Dieselbe Form, die diese Akte in
+derselben Runde beim Schreibenden beschrieben hat. Steht hier, weil
+eine Schwelle, deren Luft man falsch zählt, keine Schwelle ist.
+
+**Status der Schwelle (§71.68):** 1:80 ist ab Runde 60 **Fernziel,
+nicht wirksam** — bei zwei Blöcken pro Runde und 116 Blöcken Luft
+feuert sie in 58 Runden. Die **steuernde** Größe ist „Blöcke seit dem
+letzten Meßwert", Grenze 5, dann blockierend.
+
 ```
 total=2 chain_total=0 reported=2 unclassified=-2 unchecked=0 unclassified_checkers=0
   Fließtext-Brüche: 2
@@ -7395,3 +7420,108 @@ Die alte Karte ist damit **nicht falsch, sondern zu grob** — der Block
 darüber bleibt als Vorzustand stehen, §71.64/§71.65 ebenso. Der neue
 Prüfer meldete zuerst „keine Messung zur Karte" statt „Handedit" — das
 ist die richtige Reihenfolge: erst sagen, daß nichts paßt, dann raten.
+
+
+### §71.68 — Der Deckel fand eine Rechnung mit Etikett, und der Wächter drei Attributzugriffe
+
+**Runde 60. Die erste Runde, die eine Freiheit zurückgibt statt ein Netz
+hinzuzufügen.**
+
+**1. Meine 13 waren 38 — und das ist die Form, die diese Akte jagt.**
+In Runde 58 stand „13 Blöcke Luft". Bei 3 Meßwerten liegt 1:80 bei
+241 Blöcken, nicht 214: Luft war **38**. Bei 4 Meßwerten: Grenze 321,
+Luft **116**. Der Fehler war nicht die Subtraktion — er war eine
+Behauptung über eine Menge von drei, ungeprüft in den Bericht
+geschrieben. Sechster Auftritt, diesmal beim Schreibenden. Nachgetragen
+in §71.66, Urteil unangetastet.
+
+**2. 1:51 war Arithmetik, nicht Fortschritt.** 202/3 = 67,3;
+204/4 = 51,0. Zerlegt:
+
+| Änderung | Rechnung | Verhältnis |
+|---|---|---|
+| nur zwei Blöcke | 204 / 3 | 68,0 |
+| nur ein Meßwert | 202 / 4 | 50,5 |
+| beides | 204 / 4 | 51,0 |
+
+Der Meßwert hat alles getan. Ein Verhältnis aus 3 und 4 als Nenner
+springt in Dritteln — es **zählt**, es mißt nicht. Die steuernde Größe
+ist **Blöcke seit dem letzten Meßwert**: heute **0**, Grenze **5**,
+dann blockierend. 1:80 bleibt als **Fernziel, nicht wirksam**
+(116 Blöcke Luft, zwei pro Runde ⇒ 58 Runden).
+
+**3. Der Deckel 2/2 hat eine Selbstquittung gefunden.** Die Prüfung war
+billig und der Fund echt: `§71.59a` zitiert `§71.59` und trägt
+„Berichtigung" im Titel — der Freibrief quittierte alles darunter,
+**auch den Block selbst**. Gemessen: `1 offen · 1 quittiert`. Zwei
+Regeln, die nichts voneinander wissen, hielten die Tor-Sicherheit;
+beide sind jetzt einzeln geschlossen:
+
+- `_is_citation` quittiert „Berichtigung" nur noch mit **Ziel** — ein
+  Block, der sich selbst adressiert, ist keine Quittung.
+- Der Satz in `§71.59a` wiederholt den falschen Operanden nicht mehr.
+- Klasse `kein Messblock|Grundlage fehlt` ist **nicht quittierbar** —
+  eine Kategorie, keine Zahl.
+
+Ergebnis: `0 offen · 1 quittiert`. Reserve **1**.
+
+**4. Der Gegenlauf, den ich vermutet hatte, war falsch — und das ist
+der wichtigere Befund.** Ich hatte geschrieben, ein offener Befund
+werde gezählt, aber nicht gemeldet. Gegenlauf mit einem offenen Bruch
+**außerhalb** jedes Codeblocks: `EXIT=1`, Befund gedruckt. Der erste
+Versuch schlug fehl, weil der Anhang **im** Block des letzten
+Messblocks landete — dort ist er Beispiel, und das ist richtig. Ein
+Gegenlauf, der im Beispiel landet, prüft den Prüfer nicht.
+
+**5. Der Wächter: 6/6 → 9/9, und die Klasse ist zu.** Drei Formen
+fielen durch, alle Attributzugriffe:
+
+| Form | vorher | jetzt |
+|---|---|---|
+| `if m.f(k):` | — | greift |
+| `from x import f as g; if g(k):` | — | greift |
+| `if getattr(m, 'f')(k):` | — | greift |
+
+`getattr` mit **variablem** Namen bleibt unauflösbar — das steht als
+Grenze, nicht als Deckung. 0 Befunde im Produktivcode nach der
+Erweiterung.
+
+**6. `carries_case`: die Freiheit ist zurück, das Veto war im Aufrufer.**
+Sie schreibt **keine** Rückgabeform fest — sie rechnet `(broken, clean)`,
+eine 2×2-Funktion. Das Veto saß in `_auswahl_fehler_fixture`, bei
+`(1 if r else 0), r`. Umgestellt: `got = bool(r)` ist die **Wirkung**;
+die Zahl ist das Ergebnis, nicht ein Nebenprodukt. Die `rot`-Spalte der
+Stufentabelle ist von Hand gesetzt — **ein handgeschriebenes Literal
+je Zusicherung**, sonst prüft die Fixture sich selbst.
+
+Zusicherung, vorher festgeschrieben: **9/9 wirken** halten, 25/26
+benannter Zweig halten, Zusagen live **28**. Alle drei gehalten.
+
+Das Dataclass folgt als **eigener Commit** — sonst ist bei Rot nicht
+entscheidbar, ob die Fixture oder die Signatur es war. Das ist genau
+der Fehler aus Runde 58, dort unentscheidbar.
+
+**7. Bilanz der Runde.** Vier Netze in fünf Runden, eine Freiheit
+gesperrt. Diese Runde gibt sie zurück und fügt zwei Klassen hinzu
+(nicht quittierbar; Attributzugriff). Regel ab hier: **nach drei
+Runden, die nur Wächter hinzufügen, eine Runde, die eine Freiheit
+zurückgibt.**
+
+**8. Verhältnis.** 205 Blöcke, 73 mit `§71.`-Titel, 5 Meßwerte nach
+diesem Block. Diese Runde ist **textlich** — Blöcke seit dem letzten
+Meßwert: 0 (er ist dieser Block). Die Schwelle 1:80 steuert nicht;
+die steuernde Größe steht bei 0 von 5.
+```
+total=1 chain_total=0 reported=1 unclassified=-1 unchecked=0 unclassified_checkers=0
+  Fließtext-Brüche: 1
+  Zeilen: 0
+  Referenzen: 0
+  Wellen: 0
+  Tests ohne Skript: 0
+  Inventare: 0
+  Testpfade: 0
+  Schreibmodus: 0
+kopfzeile: 8 gemessen · 0 nicht gemessen · 0 ohne Skript (12 entfernt) · Prüfer 074076310d35
+Karte: ec109ea77a01
+Bezug: root=/Volumes/THX_OS_ULTRA/Users/olivermueller/agent_x_storage, CLAUDE.md sha256:50fff349a031, Baum 8c03eb97+dirty
+```

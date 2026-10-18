@@ -4554,7 +4554,13 @@ def _is_citation(line: str, block_title: str = "",
     if quoted and role:
         return True
     if "Berichtigung" in block_title:
-        return True
+        # §A-ZZZZ20 (Runde 60): **ein Freibrief mit einem Wort.** Jeder
+        # Block mit „Berichtigung" im Titel quittierte alle seine Funde —
+        # auch sich selbst. Das war die Quelle der zweiten Quittung: ein
+        # Block, der §71.59 zitiert und die Berichtigung *zu sich selbst*
+        # ist. Ein Block mit Titelwort und ohne Ziel ist keine Quittung.
+        return _selector_in(block_title) is not None and (
+            _block_key(block_title) != _selector_in(block_title))
     # §A-ZS: **Selbstquittung ist keine Quittung.** Ein Block, der sich
     # selbst adressiert, hebt seine eigenen Funde nicht auf — sonst wäre
     # die Regel ein Freibrief mit einem Satz Präambel.
@@ -4707,7 +4713,16 @@ def _self_test_block_kind() -> list[str]:
     voll = calibration_card()
     if _feldpruefung(voll):
         out.append("Akte-Feldtaxonomie: vollständiger Block gilt als lückenhaft")
-    umbenannt = voll.replace("total=2 chain_total=0", "total_=2 chain_total=0", 1)
+    # §A-ZZZZ22 (Runde 60): hier stand `total=2` — das Literal der
+    # Messung. Als `total` auf `1` fiel, blieb das Fixture grün, weil der
+    # `replace` nichts traf. Das ist derselbe Fehler wie `carries_case`
+    # mit der Rückgabeform: **das Fixture kopiert die Messung, statt sie
+    # zu erzeugen.** Jetzt wird das erste Zahlenfeld aus der Karte
+    # gelesen und verändert — notfalls über das erste `=`-Paar.
+    import re as _re
+    m = _re.search(r"total=(\d+)", voll)
+    alt_feld = f"total={m.group(1)}" if m else voll.splitlines()[0]
+    umbenannt = voll.replace(alt_feld, "total_=2", 1)
     if not _feldpruefung(umbenannt):
         out.append("Akte-Feldtaxonomie: umbenanntes Feld bleibt grün")
     # Und die Gegenprobe: ein **fehlendes** Feld ist ebenfalls ein Befund,
@@ -4715,8 +4730,12 @@ def _self_test_block_kind() -> list[str]:
     # §A-ZZZZ1 (Selbstfund): die Felder stehen **in einer Zeile**; ein
     # Zeilenfilter entfernt hier nichts und prüft dann nichts. Entfernt
     # wird das Feld, nicht die Zeile.
-    fehlt = voll.replace("chain_total=0 reported=2",
-                         "chain_total_entfernt=0 reported=2", 1)
+    # §A-ZZZZ22: dasselbe Literal wie oben. Gelesen wird `chain_total`,
+    # nicht eine Zahlenkombination, die die Messung gerade trägt.
+    mc = _re.search(r"(chain_total)=\S+", voll)
+    fehlt = (voll.replace(mc.group(0),
+                          "chain_total_entfernt=" + mc.group(0).split("=", 1)[1],
+                          1) if mc else voll)
     if not _feldpruefung(fehlt):
         out.append("Akte-Feldtaxonomie: fehlendes Feld bleibt grün")
     # §A-ZZZZ0 (Runde 57): die Kopfzeile wird **gegen den Block** gerechnet.
@@ -4815,8 +4834,9 @@ def _truthiness_nutzungen(tree) -> list[str]:
 
     def _namen_in(node) -> set[str]:
         """Namen, deren Wert **als Ganzes** wahrheitsgeprüft wird."""
-        if isinstance(node, _ast.Call) and isinstance(node.func, _ast.Name):
-            return {node.func.id}            # f(...) — Rückgabewert geprüft
+        if isinstance(node, _ast.Call):
+            t = _ziel(node)
+            return {t} if t else set()       # f/m.f/getattr-f — geprüft
         if isinstance(node, _ast.Name):
             return {node.id}                 # §A-ZZZZ11: `x` geprüft
         if isinstance(node, _ast.BoolOp):
@@ -4861,15 +4881,47 @@ def _truthiness_nutzungen(tree) -> list[str]:
         return m
 
     zu: dict[str, str] = {}
-    # §A-ZZZZ10: **ein** Durchlauf. `_ast.walk` steigt selbst in `def`s
-    # ab — die rekursive Fassung besuchte jeden Knoten erneut und lief in
-    # `RecursionError`. Ein Name, der in **irgendeinem** Bereich ein Tupel
-    # hält, wird gemeldet: der Wächter darf über- melden, nicht unter-.
+    # §A-ZZZZ18 (Runde 60): gemessen fielen drei Formen durch, alle
+    # **Attributzugriffe** — `m._auswahl_fehler(k)` aus dem eigenen
+    # Beispiel in §71.65, `from x import f as g`, und
+    # `getattr(m, 'f')(k)`. Ein Wächter, der nur freie Namen kennt, sieht
+    # die Form nicht, die im Code wirklich steht.
+    #
+    #   `f(k)`            → `f`              (Name)
+    #   `m.f(k)`          → `f`              (Attribut, letztes Glied)
+    #   `from x import f as g` → `g` → `f`   (Alias)
+    #   `getattr(m, "f")(k)` → `f`           (dynamisches Attribut)
+    #
+    # `getattr` mit **variablem** Namen bleibt unauflösbar — das ist die
+    # Grenze, und sie steht als Grenze da, nicht als Deckung.
+    alias: dict[str, str] = {}
+    for n in _ast.walk(tree):
+        if isinstance(n, _ast.ImportFrom):
+            for a in n.names:
+                if a.asname:
+                    alias[a.asname] = a.name
     for n in _ast.walk(tree):
         if (isinstance(n, _ast.Assign) and isinstance(n.value, _ast.Call)
-                and isinstance(n.value.func, _ast.Name)
                 and isinstance(n.targets[0], _ast.Name)):
-            zu.setdefault(n.targets[0].id, n.value.func.id)
+            fn = n.value.func
+            if isinstance(fn, _ast.Name):
+                zu.setdefault(n.targets[0].id, alias.get(fn.id, fn.id))
+            elif isinstance(fn, _ast.Attribute):
+                zu.setdefault(n.targets[0].id, fn.attr)
+
+    def _ziel(call_node) -> str | None:
+        """Der **Funktionsname** eines Calls, Formen aufgelöst."""
+        fn = call_node.func
+        if isinstance(fn, _ast.Name):
+            return alias.get(fn.id, fn.id)
+        if isinstance(fn, _ast.Attribute):
+            return fn.attr
+        if (isinstance(fn, _ast.Call) and isinstance(fn.func, _ast.Name)
+                and fn.func.id == "getattr" and len(fn.args) >= 2):
+            a = fn.args[1]
+            if isinstance(a, _ast.Constant) and isinstance(a.value, str):
+                return a.value
+        return None
 
     def _pruef(test_node) -> None:
         for i in _namen_in(test_node):
@@ -4882,11 +4934,9 @@ def _truthiness_nutzungen(tree) -> list[str]:
         for n in _ast.walk(test_node):
             if isinstance(n, _ast.BoolOp):
                 for v in n.values:
-                    if (isinstance(v, _ast.Call)
-                            and isinstance(v.func, _ast.Name)
-                            and v.func.id in tupel):
+                    if isinstance(v, _ast.Call) and _ziel(v) in tupel:
                         out.append(f"`... {type(n.op).__name__.lower()} "
-                                   f"{v.func.id}(...)` in Bedingung — "
+                                   f"{_ziel(v)}(...)` in Bedingung — "
                                    "Tupel im abkürzenden Ausdruck")
 
     for n in _ast.walk(tree):
@@ -4932,8 +4982,14 @@ def _self_test_auswahl_truthiness() -> list[str]:
         "nicht": "if not f(k):\n    pass\n",
         "und": "if f(k) and g():\n    pass\n",
         "vergleich": "if f(k) != 1:\n    pass\n",
+        # §A-ZZZZ18 (Runde 60): drei Attributzugriffe — vor dieser Runde
+        # nicht gesehen, und alle drei sind die Form, die im Code steht.
+        "attribut": "if m.f(k):\n    pass\n",
+        "alias": "if h(k):\n    pass\n",
+        "getattr": "if getattr(m, 'f')(k):\n    pass\n",
     }
-    rumpf = "def f(k):\n    return 0, []\ndef g():\n    return True\n"
+    rumpf = ("import m\nfrom x import f as h\n"
+             "def f(k):\n    return 0, []\ndef g():\n    return True\n")
     gefunden = 0
     for name, src in formen.items():
         if _truthiness_nutzungen(_ast.parse(rumpf + src)):
@@ -7353,9 +7409,17 @@ def tally_line(tally: dict[str, int | None]) -> str:
     return tail
 
 
+# §A-ZZZZ19 (Runde 60): Klassen, die **nicht** quittierbar sind. Eine
+# Quittung ist eine Ausnahme; eine Ausnahme auf „die Grundlage fehlt"
+# hieße, das Tor darf geschlossen sein, ohne daß jemand es merkt.
+# Der Deckel (max. 2) und diese Klasse hängen nicht zusammen — das war
+# die Kopplung zweier Regeln, die nichts voneinander wissen.
+_NICHT_QUITTIERBAR = __import__("re").compile(
+    r"kein Messblock|Grundlage fehlt")
+
+
 def _citation_counts(root: Path) -> tuple[int, int]:
     """`(offen, quittiert)` — falsche Fließtextzahlen nach Rolle (§A-ZM).
-
     Der Prüfer meldet **beide**; nur die Kopfzeile unterscheidet. Ein
     Alarm ohne Quittung wird abgeschaltet — das ist der Grund, warum
     „rot bleiben lassen" allein nicht reicht.
@@ -7397,6 +7461,9 @@ def _citation_counts(root: Path) -> tuple[int, int]:
             for m in pair.finditer(line):
                 z, n, p = int(m.group(1)), int(m.group(2)), int(m.group(3))
                 if n == 0 or abs(100.0 * z / n - p) <= 1.0:
+                    continue
+                if _NICHT_QUITTIERBAR.search(cur):
+                    offen += 1            # §71.68: Klasse schlägt Quittung
                     continue
                 if not (". §" in cur or cur.startswith("### §")):
                     offen += 1            # keine Blocknummer ⇒ keine Quittung
