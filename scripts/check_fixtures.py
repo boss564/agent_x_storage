@@ -630,10 +630,31 @@ def _auswahl_fehler_fixture(kind=False) -> int:
         # ein Objekt mit `ok`-Feld nicht.
         from dataclasses import dataclass
 
+        # §A-ZZZZ24 (Runde 61): **der Typ, der die falsche Benutzung
+        # nicht ausführt.** Ein Tupel `(0, [])` ist wahr, ein Tupel
+        # `(1, [])` wäre auch wahr — „kein Fehler" und „Fehler" sind per
+        # `if r:` **ununterscheidbar**. Genau das hat in Runde 58 das
+        # Dataclass blockiert, und die Zeile blieb grün, weil sie in
+        # einer Fixture stand.
+        #
+        # Statische Analyse kann das nicht für `getattr(x, name)(k)`
+        # schließen. Ein Rückgabetyp kann es: `if Auswahl(...)` wirft.
+        # Der AST-Wächter wird damit vom Garanten zum **Frühwarner** —
+        # er meldet vor dem Lauf, was der Typ beim Lauf verhindert.
         @dataclass(frozen=True, slots=True)
         class Auswahl:
             ok: bool
             meldungen: list
+
+            def __bool__(self) -> bool:
+                raise TypeError(
+                    "Auswahl ist nicht wahrheitsfähig: `.ok` lesen, "
+                    "nicht `if auswahl:` — (0, []) und (1, []) sind "
+                    "beide wahr (§71.69).")
+
+            def __repr__(self) -> str:      # sauber im Debugger/Repr
+                return (f"Auswahl(ok={self.ok!r}, "
+                        f"meldungen={len(self.meldungen)})")
 
         a = Auswahl(ok=bool(r), meldungen=r)
         if a.ok != rot:

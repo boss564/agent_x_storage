@@ -934,6 +934,7 @@ def calibration_run(root: Path, text: str | None = None,
         check_counts(doc, w, per, rep, root)       # type: ignore[name-defined]
         check_undocumented_tests(root, rep)        # type: ignore[name-defined]
         check_doc_inventories(root, rep)           # type: ignore[name-defined]
+        check_block_arithmetic(root, rep)          # §71.69 · type: ignore[name-defined]
         if with_tests:
             check_tests(doc, root, rep)            # type: ignore[name-defined]
         # §A-MQ (Runde 45): Pruefer, die **nur** die Kette faehrt. Sie
@@ -4468,6 +4469,56 @@ def check_prose_fractions(root: Path, rep: Report) -> None:
                 rep.ok()
 
 
+def check_block_arithmetic(root: Path, rep: Report) -> None:
+    """Multiplikation neben dem genannten Ergebnis — §71.69 (Runde 61).
+
+    Der billigste Prüfer dieser Akte: eine Zeile, zwei Zahlen und das
+    Produkt daneben. Ein Produkt, das nicht stimmt, sieht keiner der
+    anderen: `check_counts` prüft **freie** Zahlen, nicht Rechnungen;
+    `check_prose_fractions` sieht nur `Z/N (P%)`. Eine Grenze mal einer
+    Anzahl sieht keiner.
+
+    Grenze, benannt: geprüft wird nur die Multiplikation zweier Zahlen
+    direkt vor dem Genannten — `a · b`, `a × b`, `a * b`. Addition und
+    Subtraktion sind nicht erfasst; der Preis wäre ein Parser, nicht ein
+    Prüfer.
+
+    Beispiel: der Block zum Thema in §71.68 nannte eine Grenze, die das
+    Dreifache einer Schwelle um eins überschritt. Dieser Prüfer hätte es
+    gefunden.
+    """
+    import re
+    path = root / "order_execution_engine" / "ops" / "TAG7_ABNAHME.md"
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        return
+    # §A-ZZZZ29 (Runde 61): `**fett**` ist Markdown, keine Multiplikation.
+    # Der erste Entwurf las `**früheren** Block … 14/21 (99%` als
+    # `2 × …` — der eigene Prüfer meldete den eigenen Aufrufer. Ein
+    # Operator braucht **Ziffern** auf beiden Seiten, und `*` wird nur
+    # angenommen, wenn keine `**`-Emphase danebensteht.
+    mul = re.compile(
+        r"(?<![\d.*])(\d{1,4})\s*(?:[·×]|\*(?!\*))\s*(\d{1,4})(?![\d.*])"
+        r"(?:\s*=|\s+sind|\s+ergibt|\s+macht)?\s*(\d{1,6})(?![\d.])")
+    for lineno, line in enumerate(text.splitlines(), 1):
+        if line.lstrip().startswith("```"):
+            rep.ok()
+            continue
+        hit = False
+        for m in mul.finditer(line):
+            a, b, c = int(m.group(1)), int(m.group(2)), int(m.group(3))
+            if a * b == c:
+                rep.ok()
+                continue
+            hit = True
+            rep.fail(lineno, "Rechenfehler im Block",
+                     m.group(0).strip(),
+                     f"{a} x {b} = {a * b}, nicht {c}", state="offen")
+        if not hit:
+            rep.ok()
+
+
 def _selector_in(title: str) -> str | None:
     """`### §71.59c — Korrektur zu §71.59` → `§71.59`. Sonst `None`.
 
@@ -7417,6 +7468,46 @@ def tally_line(tally: dict[str, int | None]) -> str:
 _NICHT_QUITTIERBAR = __import__("re").compile(
     r"kein Messblock|Grundlage fehlt")
 
+# §A-ZZZZ28 (Runde 61): die Steuergröße — **Blöcke seit dem letzten
+# Meßwert, der scheitern kann**. Ein Meßwert, der trivial grün ist,
+# resettet nicht: sonst genügt eine Runde Text mit einer schwachen
+# Messung, um den Zähler auf 0 zu setzen. Dasselbe Kriterium, das für
+# einen Prüfer seit Runde 55 gilt, gilt jetzt für den Zähler, der den
+# Prüfer begrenzen soll. Grenze: siehe MAX_BLOECKE_OHNE_MESSWERT.
+MAX_BLOECKE_OHNE_MESSWERT = 5
+
+
+def _scheiterbarer_messwert(b: dict) -> bool:
+    """Kann dieser Meßblock scheitern? Drei Bedingungen, alle prüfbar.
+
+    1. Er trägt eine **Zahl mit Nenner** (`N/N`) — eine Zahl ohne
+       Nenner kann nicht unter der Erwartung liegen.
+    2. Er trägt einen **Prüfer-Hash**, der nicht nur die eigene Karte
+       ist: die Kopfzeile muß den Lauf benennen.
+    3. Er hat einen Fehlerpfad: `failed=0` oder ein `FAIL`/`offen` in
+       der Kopfzeile — sonst weiß die Karte nichts über Fehler.
+
+    Grenze, benannt: ein Meßblock, der `0/0` trägt, ist formal ein
+    Verhältnis und scheiterbar benannt — die Prüfung sagt nicht, ob die
+    Zahl *echt* ist. Das prüft der Gegenlauf, nicht der Zähler.
+    """
+    import re
+    karte = "\n".join(b["lines"])
+    if not re.search(r"(?<![\d.])\d{1,3}\s*/\s*\d{1,3}(?![\d.])", karte):
+        return False
+    return ("failed=" in karte or "FAIL" in karte
+            or "offen=" in karte or "Prüfer " in karte)
+
+
+def blocks_since_measure(md_text: str) -> int:
+    """Wie viele Blöcke liegen seit dem letzten **scheiterbaren** Meßwert?"""
+    bl = split_blocks(md_text)
+    letzte = -1
+    for i, b in enumerate(bl):
+        if b["kind"] == "Messung" and _scheiterbarer_messwert(b):
+            letzte = i
+    return len(bl) - 1 - letzte
+
 
 def _citation_counts(root: Path) -> tuple[int, int]:
     """`(offen, quittiert)` — falsche Fließtextzahlen nach Rolle (§A-ZM).
@@ -7450,7 +7541,10 @@ def _citation_counts(root: Path) -> tuple[int, int]:
             continue
         fenced, cur = False, ""
         sel = _korrektur_selectors(text)
+        pos = 0                               # §71.69: Position, nicht Suche
         for line in text.splitlines():
+            hier = pos
+            pos += len(line) + 1
             if line.startswith("### "):
                 cur = line
             if line.lstrip().startswith("```"):
@@ -7468,6 +7562,19 @@ def _citation_counts(root: Path) -> tuple[int, int]:
                 if not (". §" in cur or cur.startswith("### §")):
                     offen += 1            # keine Blocknummer ⇒ keine Quittung
                     continue
+                # §A-ZZZZ26 (Runde 61): **ein Zitat zeigt nach hinten.**
+                # „fremdes Ziel" erlaubte A↔B: A zitiert B, B zitiert A,
+                # beide fremd, beide eine Quittung. In einer append-only-
+                # Akte ist früher/heute trivial entscheidbar — damit ist
+                # der Graph per Konstruktion azyklisch, ohne Zyklensuche.
+                # Nur die **Ziel**-Quittung wird geprüft. Ein wörtliches
+                # Zitat mit Rolle ist keine Auflösung, sondern eine
+                # Abschrift — es zeigt auf den Text, nicht auf einen
+                # Block, und darf deshalb nicht rückwärts zeigen müssen.
+                if (_block_key(cur) in sel["targets"]
+                        and not _ziel_ist_frueher(cur, sel, text, line, hier)):
+                    offen += 1            # Zität vorwärts = keine Auflösung
+                    continue
                 if _is_citation(line, cur, sel) or _block_key(cur) in sel["targets"]:
                     if quittiert < DECKEL:
                         quittiert += 1
@@ -7475,7 +7582,44 @@ def _citation_counts(root: Path) -> tuple[int, int]:
                         offen += 1        # der dritte wird sichtbar
                 else:
                     offen += 1
+                # §A-ZZZZ27 (Runde 61): **kein zweiter Wahrheitsort.**
+                # Diese Funktion hielt einen eigenen `quittiert`-Zähler,
+                # unabhängig vom Deckel im Report. `check_prose_fractions`
+                # meldet die Befunde in `rep`; wer hier zählt, zählt
+                # etwas anderes. Gemessen: `(1, 0)` gezählt, `2` im
+                # Report — dieselbe Klasse wie `if r:`: eine Zahl, die
+                # nicht scheitern kann. Der lokale Zähler bleibt für die
+                # Reihenfolge, aber `rep` ist der Ort, der blockiert.
     return offen, quittiert
+
+
+def _ziel_ist_frueher(cur: str, sel: dict[str, set[str]], text: str,
+                      line: str, pos_von_zeile: int = -1) -> bool:
+    """Zeigt das Zitat dieser Zeile auf einen **früheren** Block? §71.69.
+
+    Früher heißt: die Zielüberschrift steht **vor** dem Anfang dieses
+    Blocks. Der erste Entwurf suchte die Zeile per `text.find(line)` —
+    dieselbe Zeile steht aber zweimal, und er nahm das falsche
+    Vorkommen. Der zweite verglich mit dem ersten Treffer des eigenen
+    §, also mit dem Block selbst. Beides ist die Form aus §71.69: **ein
+    Prüfer liest eine andere Stelle, als er meint.** Darum nimmt er
+    jetzt die Position mit und die Grenze ist der Blockanfang.
+    """
+    ziele = sel["targets"]
+    k = _block_key(cur)
+    if pos_von_zeile < 0:
+        pos_von_zeile = text.find(line)
+    # §71.69: die Grenze ist der **Anfang dieses Blocks**. Alles davor
+    # ist ein früherer Block; der eigene Titel zählt nicht als Verweis
+    # nach hinten.
+    grenze = text.rfind("\n### ", 0, pos_von_zeile) + 1
+    for s in ziele:
+        if s == k:
+            continue              # das Ziel ist der Block selbst
+        pos = text.find("### " + s)
+        if pos != -1 and pos < grenze:    # strikt **früherer** Block
+            return True
+    return False
 
 
 def _pruefer_hash() -> str:
@@ -7774,6 +7918,7 @@ def main() -> int:
     # beiden Prozentzahlen, und kein Pruefer sah ihn — weil die Ableitung
     # daneben stand und niemand sie rechnete.
     check_prose_fractions(root, rep)
+    check_block_arithmetic(root, rep)      # §71.69
     # §A-ZZZZ3 (Runde 58): **die Kopfzeile ist ein Tor, kein Bericht.**
     # Runde 57 hat `_kopfzeile_errors()` gebaut und nur aus dem Selbsttest
     # aufgerufen — eine Prüfung, die existiert, um zu existieren (§71.45
@@ -7781,7 +7926,14 @@ def main() -> int:
     # damit am Commit.
     for _msg in _kopfzeile_errors(root):
         if "Block ist Vorzustand" in _msg:
-            continue          # kein Fehler: der Block ist committet
+            # §A-ZZZZ25 (Runde 61): **geduldet, gezählt, gedeckelt.** Das
+            # Wort „erwartet" machte einen Befund still, den der Deckel
+            # nicht sah — eine Lücke derselben Bauart wie die Selbst-
+            # quittung, nur eine Ebene tiefer. Jetzt: `state="quittiert"`,
+            # also im Deckel (2).
+            rep.fail(None, _msg, "siehe ops/KOPFZEILE.md", _msg,
+                     state="quittiert")
+            continue
         rep.fail(None, _msg, "siehe ops/KOPFZEILE.md", _msg)
     # §A-NC: --write-count schreibt den Stand mit Grund fort.
     if "--write-count" in sys.argv:

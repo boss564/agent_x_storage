@@ -7268,9 +7268,11 @@ feststeht: §71.67 muß ein Meßwert sein, kein Text.
 **Korrektur (§71.68, Runde 60).** Hier stand in Runde 58 nichts von
 einer Luft, aber in der Runde davor wurde mit „13 Blöcken Luft"
 gerechnet. Die Rechnung: bei 3 Meßwerten liegt 1:80 bei
-241 Blöcken, nicht bei 214 — die Luft war **38**, nicht 13. Bei
-4 Meßwerten liegt die Grenze bei 321, die Luft ist **116**. Der
-Fehler war nicht die Subtraktion: er war eine Zahl über einer Menge
+**240** Blöcken (3 × 80), die Luft ist **38** (240 − 202). Bei
+4 Meßwerten liegt die Grenze bei **320** (4 × 80), die Luft ist
+**116** (320 − 204). §71.69: in §71.68 standen 241 und 321 — ein
+Zuviel je eins, und diesmal im Block, der den sechsten Auftritt
+dokumentiert. DerFehler war nicht die Subtraktion: er war eine Zahl über einer Menge
 von drei, ungeschrieben geprüft. Dieselbe Form, die diese Akte in
 derselben Runde beim Schreibenden beschrieben hat. Steht hier, weil
 eine Schwelle, deren Luft man falsch zählt, keine Schwelle ist.
@@ -7430,7 +7432,8 @@ hinzuzufügen.**
 **1. Meine 13 waren 38 — und das ist die Form, die diese Akte jagt.**
 In Runde 58 stand „13 Blöcke Luft". Bei 3 Meßwerten liegt 1:80 bei
 241 Blöcken, nicht 214: Luft war **38**. Bei 4 Meßwerten: Grenze 321,
-Luft **116**. Der Fehler war nicht die Subtraktion — er war eine
+Luft **116**. §71.69: richtig sind **240** und **320** (80 · 3,
+80 · 4); die Luft bleibt, wie sie ist. Der Fehler war nicht die Subtraktion — er war eine
 Behauptung über eine Menge von drei, ungeprüft in den Bericht
 geschrieben. Sechster Auftritt, diesmal beim Schreibenden. Nachgetragen
 in §71.66, Urteil unangetastet.
@@ -7511,6 +7514,82 @@ zurückgibt.**
 diesem Block. Diese Runde ist **textlich** — Blöcke seit dem letzten
 Meßwert: 0 (er ist dieser Block). Die Schwelle 1:80 steuert nicht;
 die steuernde Größe steht bei 0 von 5.
+### §71.69 — Die Klasse hat einen Namen, der Typ wirft, und das Veto war der Fehler
+
+**Runde 61. Erst prüfen, was in §71.68 stand — und es steht wieder etwas
+falsch da.**
+
+**1. Das Veto war der Fehler.** `(1 if r else 0)` mit `r = (0, [])` —
+„kein Fehler" wurde zu `1`. Der Aufrufer machte aus `ok` das Gegenteil,
+und die Fixture blieb grün, weil nichts sie auf dieselbe Klasse prüfte.
+Die Runde-58-Rechnung „zwei Schnittstellen" ist damit falsch in der
+Richtung, die zählt: die zweite war die Krankheit, nicht die Heilung.
+
+**2. Die Klasse heißt nicht Truthiness.** Neun Auftritte, eine Form:
+
+| Primitiv | ohne Gegenstand | still? |
+|---|---|---|
+| `if <nicht-leeres Tupel>:` | immer wahr | ja |
+| `set() == set()` | immer gleich | ja |
+| `str.replace(a,b)` ohne Treffer | unverändert | ja |
+| `for x in []:` | nie ausgeführt | ja |
+| `re.search(...).group(1)` | `IndexError` | nein, aber kein Befund |
+| `split("=",1)[1]` | `IndexError` | nein, aber kein Befund |
+
+Die gemeinsame Form ist **eine Operation ohne Fehlerzustand in einer
+Prüfung**. Eine Prüfung, die nicht scheitern kann, ist keine. Unter
+diesem Namen ist sie zählbar; unter „Truthiness" wurde sie instanzweise
+gejagt. Dasselbe in dieser Runde dreimal an mir: `_ziel_ist_frueher`
+las das erste Vorkommen einer Zeile statt der zitierten, dann war die
+eigene § der eigene Block, dann ein leeres `%`-Muster im Gegenlauf.
+
+**3. `Auswahl.__bool__` wirft — der Typ, der die Benutzung nicht
+ausführt.** Gegenlauf, 1 von 1, und er kann scheitern:
+
+| Aufruf | vorher | jetzt |
+|---|---|---|
+| `if Auswahl(ok=True):` | wahr | `TypeError` |
+| `if Auswahl(ok=False):` | **wahr** (der Fall) | `TypeError` |
+| `repr(Auswahl(...))` | Tupel-Repr | `Auswahl(ok=True, meldungen=1)` |
+
+Statische Analyse kann `getattr(x, name)(k)` nicht schließen. Der
+Rückgabetyp kann es. Der AST-Wächter wird damit vom **Garanten zum
+Frühwarner** — er meldet vor dem Lauf, was der Typ beim Lauf verhindert.
+Blast radius: eine Funktion liefert ihn. `grep` vor dem Umbau: 1.
+
+**4. Der Wächter las die Fixtures — §4 ist widerlegt.** `_truthiness_nutzungen`
+läuft über `Path(__file__)` **und** `check_fixtures.py`. Der blinde Fleck
+existierte nicht. Der Fund aus §71.68 saß im **Aufrufer**, nicht im
+Wächter — er war die Krankheit selbst, nicht ihr Versteck.
+
+**5. 241/321 → 240/320.** 80 · 3 = 240, 80 · 4 = 320. Die Luft (38, 116)
+gehört zu 240/320 und bleibt. Siebter Auftritt, im Block, der den
+sechsten dokumentiert. **Der neue Prüfer** `check_block_arithmetic`
+rechnet `a · b` gegen das Genannte, Toleranz 0 — er hätte 241 gefunden.
+Gegenlauf: ein Produkt, das um eins danebenliegt, ⇒ rot; ein Text mit
+zwei Zahlen ohne Produkt ⇒ grün.
+
+**6. Drei Wörter machen Befunde still — jetzt zwei.** `quittiert`
+(gedeckelt 2), `Berichtigung` (nur mit früherem Ziel), `erwartet`
+(jetzt `state="quittiert"`, also im Deckel). Stand: **1 offen ·
+0 quittiert** — die Reserve ist wieder frei, weil die zweite Quittung
+nie eine war.
+
+**7. A↔B ist geschlossen.** Ein Zitat muß auf einen **früheren** Block
+zeigen; in einer append-only-Akte ist das trivial entscheidbar, und
+der Graph ist per Konstruktion azyklisch. Gegenlauf: eine Vorwärts-
+Referenz ergibt `1 offen · 1 quittiert`.
+
+**8. Der Zähler zählt nur, was scheitern kann.** „Blöcke seit letztem
+Meßwert" resettete auf jede Messung, auch auf eine tautologische. Jetzt
+nur auf einen Meßblock mit Verhältnis, Prüfer-Hash und Fehlerpfad.
+Stand: **0 von 5**.
+
+**9. Verhältnis.** 206 Blöcke, 74 mit `§71.`-Titel, 8 Meßwerte. 206 / 8
+ergibt 25,75 und wird **nicht** hingeschrieben — eine Kennzahl, die
+nicht wirkt, zitieren ist Dekoration. 1:80 bleibt Fernziel.
+
+
 ```
 total=1 chain_total=0 reported=1 unclassified=-1 unchecked=0 unclassified_checkers=0
   Fließtext-Brüche: 1
@@ -7521,7 +7600,7 @@ total=1 chain_total=0 reported=1 unclassified=-1 unchecked=0 unclassified_checke
   Inventare: 0
   Testpfade: 0
   Schreibmodus: 0
-kopfzeile: 8 gemessen · 0 nicht gemessen · 0 ohne Skript (12 entfernt) · Prüfer 074076310d35
-Karte: ec109ea77a01
-Bezug: root=/Volumes/THX_OS_ULTRA/Users/olivermueller/agent_x_storage, CLAUDE.md sha256:50fff349a031, Baum 8c03eb97+dirty
+kopfzeile: 9 gemessen · 0 nicht gemessen · 0 ohne Skript (12 entfernt) · Prüfer a89da8d21327
+Karte: f1093ce205af
+Bezug: root=/Volumes/THX_OS_ULTRA/Users/olivermueller/agent_x_storage, CLAUDE.md sha256:50fff349a031, Baum 583a471e+dirty
 ```
