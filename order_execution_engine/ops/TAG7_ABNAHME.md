@@ -8350,8 +8350,49 @@ pytest-timeout` in `offgrid-test.yml`, Lauf `39144166483` grün).
 | Offene Kontexte | 12 auf 13 Entpackstellen |
 | Prüfer in CI | **grün** (zweiter Lauf) |
 | `contract-compile` | **grün** (40 Dateien, Solc 0.8.35) |
-| `deploy-gate` | gebaut, wartet auf CI-Bestätigung |
+| `deploy-gate` | **grün** — Run `39145343576` |
 | Selbsttest | 5/5 · 0 von 104 Zahlen ohne Herkunft |
+
+### 10. CI-Beleg — und die Korrektur einer Akten-Aussage
+
+Run `39145343576` (Commit `20484d47`):
+
+| Job | Ergebnis |
+|---|---|
+| Prüfer check_claude_md — entkoppelt | **success** |
+| Smart Contract Compilation | **success** (vorher: failure) |
+| Wave 33 Survival | success |
+| Unit & Integration Tests | success |
+| Formal Invariant Verification | success |
+| Docker Mock-Stack | skipped |
+| Deploy-Gate | **success** |
+
+**Korrektur einer Aussage aus Abschnitt 1 dieser Runde:** Ich hatte
+notiert, Lauf `39144166483` sei im `pruefer`-Job grün gewesen. Das ist
+richtig — aber der **Gesamtlauf** stand auf `failure`, weil
+`Smart Contract Compilation` rot war. Genau das ist Ihr Punkt: die Farbe
+des Prüfers war echt, das Urteil über den Zweig war es nicht. Beide
+Zahlen stehen jetzt nebeneinander, nicht eine statt der anderen.
+
+### 11. Der Gate-Checker gegen sich selbst
+
+Ein Gate, das nie rot war, ist ein Gate, das nie geprüft wurde. Der
+Wächter über das Gate ist `pruefe_workflow()`; er wird gegen fünf
+Mutationen gehalten:
+
+| Mutation | Wächter |
+|---|---|
+| `needs:` ohne `contract-compile` | ROT ✓ |
+| ohne `if: always()` | ROT ✓ |
+| ohne Gate-Job | ROT ✓ |
+| ohne `needs.*.result` | ROT ✓ |
+| ohne `exit 1` im Rot-Fall | ROT ✓ |
+| heutiger Stand | GRÜN ✓ |
+
+Die **erste** Fassung des Wächters war blind gegen „Gate ohne
+Ergebnisvergleich" — sie akzeptierte `.result` irgendwo im Rumpf. Das ist
+dieselbe Fehlerklasse wie die Fixture der Vorrunde: der Sollwert war zu
+großzügig. Erst die Gegenprobe mit sechs Mutationen hat es gezeigt.
 
 **Der Satz der Runde:** Die Wache läuft, und das Artefakt baut. Beides
 war vorher nicht wahr. Der Unterschied zwischen heute und gestern ist

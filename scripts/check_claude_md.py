@@ -8495,6 +8495,69 @@ def pruefe_workflow(root: Path | None = None) -> list[str]:
             out.append(f"Workflow {wf.name}: kein Job enthält den "
                        f"Prüfer-Step — der `paths`-Filter nennt ihn, aber "
                        f"kein Job führt ihn aus")
+        # §A-ZZZZ100 (Runde 74): **das sechste Glied — Integration.**
+        #
+        # Runde 72 hat die Wache entkoppelt (`needs: []`), und das war
+        # richtig — aber dadurch trägt sie **null** Information darüber,
+        # ob der Zweig deploybar ist. Run 39144166483 zeigte beide
+        # Wahrheiten nebeneinander: `pruefer: success`, Lauf: `failure`.
+        #
+        # Prüffrage: gibt es einen Job, der **alle** Prüfer-Jobs *und*
+        # die Build-Glieder als `needs:` nennt? Ohne ihn ist „grün" nur
+        # eine Aussage über Instrumente.
+        _gate = re.search(
+            r"^  ([a-z0-9_-]*gate[a-z0-9_-]*):\s*$(.*?)(?=^  [a-z0-9_-]+:\s*$|\Z)",
+            jobs_txt, re.MULTILINE | re.DOTALL | re.IGNORECASE)
+        if not _gate:
+            out.append(
+                f"Workflow {wf.name}: kein Integrations-Gate — kein Job "
+                f"nennt die Prüfer-Jobs als `needs:`. Dann ist ein grüner "
+                f"Prüfer von einem roten Build nicht unterscheidbar")
+        else:
+            _gname, _grumpf = _gate.group(1), _gate.group(2)
+            _gm = re.search(r"^\s{4}needs:\s*\[([^\]]*)\]", _grumpf, re.MULTILINE)
+            _gn = set(x.strip() for x in (_gm.group(1).split(",") if _gm else []))
+            for _pj in _pruefer_jobs:
+                if _pj not in _gn:
+                    out.append(
+                        f"Workflow {wf.name}: Gate `{_gname}` nennt den "
+                        f"Prüfer-Job `{_pj}` nicht in `needs:` — das Gate "
+                        f"wäre grün, ohne die Wache gefragt zu haben")
+            # §A-ZZZZ100b: **der Gate-Check darf nicht am Wort `pruefer`
+            # hängen und nicht am bloßen Vorkommen von `.result`.**
+            # Erste Fassung filterte auf `_pruefer_jobs`; wurde der
+            # Prüfer-Job umbenannt, war die Gegenprobe blind — genau die
+            # Fehlerklasse der Fixture aus der Vorrunde. Zweite Fassung akzeptierte
+            # `.result` irgendwo im Rumpf; ein Gate, das nur *anzeigt*,
+            # aber nicht *vergleicht*, wäre grün. Geprüft wird deshalb:
+            # es gibt eine Vergleichsschleife, und sie endet in `exit 1`.
+            if not re.search(r"\.result", _grumpf):
+                out.append(
+                    f"Workflow {wf.name}: Gate `{_gname}` liest kein "
+                    f"`needs.*.result` — ohne Ergebnisvergleich ist das "
+                    f"Gate ein Anzeiger, kein Urteil")
+            elif not re.search(r"(?:for\s+\w+\s+in|\[\s*\"?success)", _grumpf):
+                out.append(
+                    f"Workflow {wf.name}: Gate `{_gname}` nennt `.result`, "
+                    f"vergleicht es aber nicht gegen `success` — ein "
+                    f"angezeigtes Ergebnis ist kein Urteil")
+            if not re.search(r"exit\s+1", _grumpf):
+                out.append(
+                    f"Workflow {wf.name}: Gate `{_gname}` ohne `exit 1` "
+                    f"im Rot-Fall — das Gate ginge durch, obwohl ein Glied "
+                    f"rot ist")
+            for _muss in ("contract-compile", "unit-tests"):
+                if _muss in _job_bloecke and _muss not in _gn:
+                    out.append(
+                        f"Workflow {wf.name}: Gate `{_gname}` nennt "
+                        f"`{_muss}` nicht in `needs:` — der Zweigname "
+                        f"`deploy-safe` verlöre genau das Glied, das baut")
+            if "always()" not in _grumpf:
+                out.append(
+                    f"Workflow {wf.name}: Gate `{_gname}` ohne "
+                    f"`if: always()` — bei einem roten `needs:` wird der "
+                    f"Job übersprungen statt rot, und ein übersprungenes "
+                    f"Gate ist kein Urteil")
     return out
 
 
