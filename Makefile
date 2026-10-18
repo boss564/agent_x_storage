@@ -229,8 +229,18 @@ print('ok=%s  alter=%ss  stale=%s' % (t['ok'], t['age_seconds'], t['stale']));\
 print('fehler=%s' % t['error']);\
 [print('  [%-8s] %s' % (a['severity'], a['message'])) for a in d.get('alerts',[])]"
 
+.PHONY: telemetry-deploy-hetzner
 telemetry-deploy-hetzner: ## Bridge + Registry auf den Remote-Host deployen
 	@echo "🚀 Deploy → $(PULL_SSH_HOST)"
+	# §A-ZZZZ71d: `deploy-safe` heißt „mit bekanntem, gezähltem Deckel" —
+	# nicht „ohne offene Position". Der Deckel steht in BERICHT.md; wer
+	# nur den Namen `deploy-safe` liest, hat die Ausnahme nicht gesehen.
+	# Kein Abbruch, keine neue Regel: die Ausnahme im Log, an der Stelle,
+	# an der sie gilt.
+	@echo "── Deckel-Entscheidung (vor dem Deploy) ──────────────────────"
+	@grep -E "^\*\*(offen|Deckel-Entscheidung):\*\*" order_execution_engine/ops/BERICHT.md || \
+		echo "  ⚠️  BERICHT.md: kein offen-/Deckel-Feld — Deckel unbekannt"
+	@echo "─────────────────────────────────────────────────────────────"
 	ssh $(PULL_SSH_HOST) 'install -d -m 0755 /opt/agent-x /etc/agent-x /var/lib/agent-x-telemetry'
 	scp dashboard/telemetry_bridge.py $(PULL_SSH_HOST):/opt/agent-x/telemetry_bridge.py
 	scp deploy/hetzner/telemetry-registry.hetzner.json $(PULL_SSH_HOST):/etc/agent-x/telemetry-registry.json

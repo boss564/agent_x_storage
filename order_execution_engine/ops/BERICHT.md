@@ -1,12 +1,45 @@
-# Rundenbericht — feste Feldliste (§71.74, Leser in Runde 67)
+# BERICHT — Runde 71b
 
-**Commit:** `8b3a902b` (Runde 69) → Commit dieser Runde unten
-**Zustand:** 4/8 Meßblöcke scheiterbar · 0 Blöcke seit 213 · Deckel 5 ⇒ unter · 213 Protokollblöcke · 4 : 213 Gegenläufe · 13 : 13 Regeln gedeckt · 1/2 quittiert · R→F 0/med 1/n 5/letzte 0/Prüfer · 9 Felder
+**Commit:** `557fb2cd` (Runde 71b) · Arbeitsstand dieser Runde
+**Zustand:** 4/8 Meßblöcke scheiterbar · 3 Blöcke seit 213 · Deckel 5 ⇒ unter · 216 Protokollblöcke · 4 : 216 Gegenläufe · 13 : 13 Regeln gedeckt · 1/2 quittiert · R→F 0/med 1/n 5/letzte 0/Prüfer · 9 Felder
 **EXIT:** Selbsttest 0 · Hauptlauf 0
 **offen:** 0 · **quittiert:** 1 · **frisch:** 1 (_self_test_prozent)
-**Zahlen:** 214 ist **verzogen** — 213 war richtig, Runde 68 addierte den Block ein zweites Mal · 4 scheiterbar / 8 Meßblöcke · 13 : 13 Regeln mit erzwungenem `fail`-Zweig · 104 Prosazahlen aus 1979 Textzeilen (Quelle: `wc -l scripts/check_claude_md.py` = 9214, **eine Datei**) · R→F min 0 / Median 1 / n 5
-**Nicht getan:** die 12 offenen Kontexte · Whitelist für Zeilennummern/Daten · `FRISCH`-Versetzung
-**Deckel-Entscheidung (Runde 71):** `_self_test_prozent` bleibt **quittiert und gedeckelt**, bewusst. Grund: der Prüfer über den Prüfern liest jeden Vergleich eines berechneten Werts gegen ein Literal als Selbstbezug — fünfzehn Umbauten haben daran nichts geändert. Der Deckel ist 2, der Test läuft (§A-ZZZZ73), und der nächste echte Fehler erscheint als `FAIL`, weil ein `FAIL` nur noch heißt: hier ist etwas offen. **Deploy-Zweig `deploy-safe-snapshot` trägt diesen Deckel bewusst** — „deploy-safe" heißt hier „mit bekanntem, gezähltem Deckel", nicht „ohne offene Position".
+**Zahlen:** 216 Protokollblöcke (Name sagt jetzt, was gezählt wird) · 4 scheiterbar / 8 · 13 : 13 Regeln mit erzwungenem `fail`-Zweig · 282 Dateien unter `scripts/`/`.github/workflows/` **ohne Bereich, benannt** · R→F min 0 / Median 1 / n 5
+**Nicht getan:** die 12 offenen Kontexte · Whitelist für Zeilennummern/Daten · `FRISCH`-Versetzung · 282 Dateien einzeln zugewiesen
+**Deckel-Entscheidung:** `_self_test_prozent` bleibt quittiert und gedeckelt (unverändert). `deploy-safe` heißt: mit bekanntem, gezähltem Deckel — jetzt **auch im Deploy-Log gedruckt**.
+
+## Runde 71b — der Auslöser als Prüfer
+
+Die Wache war gebaut, verkabelt, `continue-on-error: false` — und kein Auslöser
+nannte `scripts/check_claude_md.py`. `scripts/test_*.py` matcht den Namen nicht,
+und `branches: [main]` schloß den Zweig aus. **Der Path-Filter war
+branch-unabhängig:** auch auf `main` feuerte nichts, wenn nur der Prüfer sich
+änderte. Gelegentliche grüne Läufe (wenn `tests/` im selben Commit lag) haben fünf
+Wochen lang Deckung vorgetäuscht.
+
+§A-ZZZZ82 schließt das vierte Glied: Name → `def` → Aufruf → **Lauf → Auslöser**.
+
+**Der Beweis ist ein Lauf:** Push `557fb2cd` → Run 39142099847, Zweig
+`deploy-safe-snapshot`, erstmals seit fünf Wochen. `failure` — aber nicht wegen des
+Prüfers: fehlendes `openzeppelin-contracts-upgradeable` (Compilation),
+`--timeout=60` ohne `pytest-timeout` (Unit). Wave 33 grün.
+
+**§A-ZZZZ81b, ehrlich:** drei Versuche. 283 Einzelbefunde = Rauschen. Klasse `"/"`
+als Abdeckung = **Gegenlauf blieb grün**, Prüfer tot. Jetzt: **282 Dateien benannt,
+Zuwachs ⇒ rot** (`touch scripts/Zz_probe2.py` verifiziert).
+
+**§A-ZZZZ81c:** `Blöcke` → `Protokollblöcke`. `4 : 216` heißt jetzt: vier
+Gegenläufe auf 216 Absätze Bericht — nicht auf Deckung.
+
+## Offen nach dieser Runde (CI)
+
+1. `formal-invariants` → F8 startet nie, weil die Compilation an fehlenden
+   Submodulen scheitert. **Die Wache feuert, ihr Job nicht.**
+2. `pytest-timeout` fehlt in `requirements` des Unit-Jobs.
+3. `openzeppelin-contracts-upgradeable` fehlt im Checkout.
+
+
+# Rundenbericht — feste Feldliste (§71.74, Leser in Runde 67)
 
 ## Runde 65 war rot
 

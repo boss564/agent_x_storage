@@ -8072,3 +8072,44 @@ R→F 0/med 1/n 5/letzte 0/Prüfer · 1/2 quittiert · Prosa 0 von 104 ohne
 Herkunft (1979/9214, eine Datei) · offen 0 · EXIT 0/0.**
 
 **Nicht getan:** die 12 offenen Kontexte · Whitelist · `FRISCH`-Versetzung.
+
+## Runde 71b — Der Auslöser nannte seinen Gegenstand nicht
+
+**Ihr Fund war stärker als meiner.** Ich hatte das Pre-Commit-Gate für
+client-seitig gehalten und daraus „also fehlt die Wache" gefolgert. Beides falsch:
+die Wache war gebaut, `continue-on-error: false`, zwei Aufrufe, serverseitig. Der
+**Auslöser** erreichte sie nicht.
+
+### §A-ZZZZ82 — `pruefe_workflow()`
+
+Vier Glieder, drei geschlossen: Name → `def` (§71.77) · `def` → Aufruf (`ast.Call`) ·
+Aufruf → Lauf (Runde 64) · **Lauf → Auslöser (§71.82)**. Erster Lauf, zwei Befunde:
+`push.paths` nannte `scripts/check_claude_md.py` nicht (Filter `scripts/test_*.py`) ·
+Step ohne `shell:` (Default `bash -e` ohne `pipefail`). **Der Path-Filter war
+branch-unabhängig** — ein Commit am Prüfer feuerte auch auf `main` nichts.
+
+Geändert: `paths` + Prüfer + Workflow · `branches: [main, deploy-safe-snapshot]` ·
+`pull_request.branches` beide · `shell: bash` + `set -euo pipefail` ·
+`pruefe_workflow()` in der Kette.
+
+**Beweis:** Push `557fb2cd` → **Run 39142099847 existiert**, Zweig
+`deploy-safe-snapshot`, erstmals seit fünf Wochen. `failure` — aber nicht wegen des
+Prüfers: fehlendes `openzeppelin-contracts-upgradeable`, `--timeout=60` ohne
+`pytest-timeout`; Wave 33 **success**. **F8 lief nicht**, es steht in
+`formal-invariants`, das an der Compilation hängt. Nächste Position, nicht diese.
+
+### §A-ZZZZ81b — Vollständigkeit statt Übereinstimmung
+
+Erster Versuch: jede Datei ohne Bereich als Befund → **283**. Zweiter: Klasse `"/"`
+deckt alles → **`touch scripts/Zz_probe.py` blieb grün** — Prüfer tot, sah gesund
+aus. Jetzt: Zahl **benannt** (282), Befund nur bei **Zuwachs**; Gegenlauf ⇒
+`1 Datei(en) dazugekommen (282 → 283)`.
+
+### §A-ZZZZ81c — `Protokollblöcke`
+
+`4 : 213` sind vier Gegenläufe auf 213 Absätze Bericht — steigt beim Schreiben,
+nicht bei besserem Code. `MESSBEREICH["blockzahl"]` zeigt jetzt auf `scripts/`.
+
+**Bilanz:** 13 Regeln, 13 Gegenläufe, 8 Felder, `EXIT` 0/0, `offen 0`, `R→F`
+0/med 1/n 5. **CI-Auslöser: 2 von 2 behoben.** Neu offen: F8 unter
+`formal-invariants`, `pytest-timeout`, `openzeppelin-contracts-upgradeable`.
