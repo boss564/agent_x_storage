@@ -6102,3 +6102,183 @@ Zahl selbst. 6 von 13 Prüferzweigen haben kein Fixture (`1/5` bei
 `check_counts`). Und die Akte hat keine Größen-Zusicherung — der Verlust
 dieser Runde wurde von Hand gefunden, nicht vom Prüfer.
 
+
+### §71.58 — Runde 52: Der Schreibvorgang als Prüfer
+
+**Bezug:** §71.57 (Runde 51, Beinahe-Verlust 5.986 → 177),
+`scripts/akte_guard.py` (neu), `scripts/check_claude_md.py`,
+`scripts/check_fixtures.py`.
+
+#### 1. Der Fund war nicht der Verlust, sondern das Fenster
+
+In Runde 51 fiel die Akte von 5.986 auf 177 Zeilen; gefunden von
+`git diff --stat`, von Hand, zurückgeholt mit `git checkout`. Kein
+Prüfer sah es — und das ist strukturell, nicht zufällig:
+
+| Prüfer | sieht | blind für |
+|---|---|---|
+| `--akte-monoton` | Arbeitsbaum gegen `HEAD~1` | den letzten Commit |
+| Hook | Index | den Arbeitsbaum |
+| `git diff --stat` | Arbeitsbaum | — nur nicht aufgerufen |
+
+Ein Prüfer, der nur committete Bäume sieht, prüft gestern gegen
+vorgestern. Und er lief gegen `HEAD~1`, **nicht** gegen `HEAD`: der
+eigene Commit war für ihn unsichtbar. Das ist in dieser Runde behoben
+(§1.3), aber es behebt nicht die Ursache.
+
+#### 1.1 Der Schreibvorgang selbst
+
+`scripts/akte_guard.py` — `guarded_write(path, text, whole=True)`:
+
+```
+menge   := bloecke(datei)              # vorher
+menge_n := bloecke(kandidat)           # inkl. neuem Text
+menge_n ⊇ menge   sonst: kein rename, laut
+zeilen  >= vorher  sonst: kein rename, laut
+.tmp schreiben, fsync, aus .tmp zurücklesen, erneut prüfen
+os.replace(tmp, datei)                 # atomar
+finally: .tmp löschen, falls noch da
+```
+
+**Warum der zweite Lesevorgang kein Misstrauen gegen sich selbst ist:**
+was auf der Platte steht, ist die Wahrheit; was im Speicher stand, die
+Absicht. Auch die Codepage ist eine Annahme, und ein Guard, der die
+Annahme nicht prüft, prüft die Annahme.
+
+**Warum zwei Regeln, nicht eine:** Blockverlust ist der Vorfall
+(5.986 → 177); Zeilenverlust **innerhalb** eines Blocks ist der Fall,
+den §A-NL (Runde 50) benannt hat und der auf Blockebene grün bleibt.
+Beides verweigert den Schreibvorgang, nicht nur das Melden.
+
+**Nebenwirkung, benannt:** ein Guard, der abbricht, hinterlässt `.tmp`.
+Das `finally` räumt ihn weg — sonst wächst der Baum mit jedem
+Fehlversuch. Und der Guard schützt nur Dateien, die ihn rufen;
+`git diff --stat` bleibt für alles andere nötig.
+
+#### 1.2 Die Ursache: `open(..., "w")` auf einer Akte
+
+Der Guard fängt die Folge. Die Ursache war `w` statt `a` — deshalb
+`check_akte_write_mode` als Prüfer **im Selbsttest**, der in jedem
+Skript des Repos sucht:
+
+```
+rot:    open(akte, "w") / "w+" / .write_text(...) / .write_bytes(...)
+grün:   akte_guard.guarded_write(...) / append_block(...)
+grün:   dieselbe Form auf einem Pfad unter mkdtemp/TemporaryDirectory
+        — dort ist die Akte ein Fixture, kein Verlust
+```
+
+Die Zielpfade werden per AST bis zur Bindung verfolgt
+(`doc_path = … / "TAG7_ABNAHME.md"; open(doc_path, "w")` fällt sonst
+in zwei Zeilen auseinander), und der Temp-Nachweis läuft bis zu drei
+Sprünge (`root = _tree({...})` → `_tree` → `mkdtemp`).
+
+**Roter Lauf vor grünem** — gemessen, nicht behauptet:
+
+```
+ROT 1 (write_text):     1 Meldung
+ROT 2 (open(p, "w")):   1 Meldung
+GRUEN (guarded_write):  0
+GRUEN (mkdtemp-Fixture):0
+```
+
+Und beides im Selbsttest materialisiert (`_self_test_akte_write_mode`,
+`_self_test_akte_guard`) — **kein Vorführlauf**, sondern ein Testfall,
+der bei jeder Suite rot wird, wenn die Form zurückkehrt.
+
+#### 1.3 `HEAD~1` → `HEAD`
+
+`_akte_losslessness` verglich gegen `HEAD~1`. Der letzte committete
+Stand, gegen den der Arbeitsbaum verlieren kann, ist `HEAD`. Der
+Unterschied ist der eigene Commit: Runde 51 war mit `HEAD~1` grün —
+und mit `HEAD` auch, aber das war Zufall, nicht Prüfung. Ein Prüfer,
+der den Commit, in dem er läuft, nicht sieht, prüft die Arbeit der
+Runde davor.
+
+#### 2. `.gitignore` gehört nicht nachgebaut (§A-NU)
+
+Runde 51 baute eine Formenliste (Endung, Präfix, Pfad), weil
+`fnmatch("data/synthetic/f.jsonl", "data/synthetic/")` `False` ist.
+Das war die Reparatur eines Symptoms mit einer Nachbildung:
+Negationen (`!muster`), `**/` und „letzter Treffer gewinnt" fehlten.
+
+Jetzt: **`git check-ignore -v -- <pfad>`** als Orakel. Antwort `0`/`1`
+heißt „ignoriert / nicht", `128` heißt „kein Repo" und ist **keine
+Aussage über den Pfad**, sondern über die Umgebung — dann fällt der
+Prüfer auf die Formenliste zurück, und `_GITIGNORE_SOURCE` **sagt das**.
+Ein Prüfer, der nicht sagen kann, wer geantwortet hat, ist ein Prüfer
+mit zwei Wahrheiten.
+
+#### 3. Die Kopfzeile: Umfang und Mangel (§A-NV)
+
+```
+vorher:  unvollstaendig · 1 nicht gemessen · 0 ohne Skript
+nachher: 8 gemessen · 0 nicht gemessen · 0 ohne Skript (12 entfernt)
+```
+
+`unvollstaendig` war ein Wort an der Stelle des **Nenners**. `8
+gemessen` sagt Umfang und Mangel, `unvollstaendig` steht als
+Ableitung hinten (`abweichungen is None`) — nicht an der Stelle einer
+Zahl. Der Nenner ist **berechnet**, nicht gepflegt (`PRUEFER_UMFANG`
+aus dem AST der Kette): eine Zahl, die man pflegt, ist beim nächsten
+Prüfer falsch.
+
+**`0 ohne Skript (12 entfernt)`** — die erste Null dieser Akte, die
+dadurch grün ist, dass die Sache **weg** ist: die zwölf Zusagen ohne
+Skriptpfad haben ihre Skripte jetzt in `CLAUDE.md`. Ohne Herkunft läse
+sie sich in sechs Runden wie die Nullen, die entstanden, weil niemand
+hinsah.
+
+#### 4. Zweigabdeckung: nach Deckung sortiert (§A-YB)
+
+§4 der Runde 52: `check_counts 1/5` zuerst, dann `dead_refs`,
+`line_counts`. Die Reihenfolge folgt der Abdeckung, nicht der Historie.
+
+| Prüfer | vorher | nachher | Zweig |
+|---|---|---|---|
+| `check_counts` | 1/5 | **5/5** | Agentenzahl, Wellenzahl, `root=None`, Skript fehlt (Zeile + Wellenpaarung), `passed > total` |
+| `check_dead_refs` | 1/2 | **2/2** | tote Referenz, `python3`-Befehl ins Leere |
+| `check_line_counts` | 0/2 | **2/3** | Welle ohne Modulpfad, Datei fehlt, Zeilenzahl (nicht nachgewiesen) |
+| gesamt | 7/13 | **14/21 (66%)** | |
+
+**Was die Zahl kleiner macht, statt größer:** die bisherige Zählung las
+nur `rep.fail(…)`. Vier Prüfer melden über `list.append(f"…")` oder
+`return [f"…"]` — ihre Klassen waren für die Messung unsichtbar, und
+`0/1` war keine Abdeckung, sondern eine Messung ohne Kenntnis der Form.
+Jetzt zählt die Messung alle drei Formen, und die Gesamtzahl ist
+**gefallen** (53% → 66% bei größerem Nenner: 21 statt 13 Klassen).
+
+Der `check_counts`-Zweig `passed > total` war bis zu dieser Runde
+**unerreichbar**: die Existenzprüfung stand davor, und jede Zeile,
+deren Skript fehlt, traf „Skript fehlt" statt „unmöglich". Ein Fixture
+hätte ihn nicht gefunden — das Fixture hat ihn gefunden.
+
+#### 5. Gegenprobe 1: was der neue Prüfer sofort fand
+
+Der erste Lauf von `check_akte_write_mode` meldete `35958 Angaben
+geprüft` und `unclassified=-7`. Ursache: die erste Fassung rief
+`_mentions_akte(tree, …)` auf den **ganzen Baum** und zählte jedes
+String-Literal. Eine Prüfung ist ein Schreibaufruf, nicht jedes
+Vorkommen eines Dateinamens. Der Zähler hat das gefangen, nicht ich —
+das ist die Form, die trägt.
+
+#### 6. Gegenprobe 2: `_akte_losslessness` prüfte sich nicht selbst
+
+Das alte Fixture rief `_akte_blocks` und zog zwei Mengen ab — es
+prüfte die **Voraussetzung** des Prüfers, nicht den Prüfer. Wirkung
+`1/1` stand da, und der Prüfer war nie gelaufen. Jetzt: `git init`,
+ein Commit mit drei Blöcken, dann eine Runde entfernt → 2 Meldungen;
+heil → 0.
+
+#### 7. Was offen bleibt — ehrlich
+
+- `_akte_losslessness 2/3`: der Fall „Zeilenverlust **innerhalb** eines
+  Blocks" ist die dritte Klasse, und das Fixture trifft sie nicht.
+- `check_line_counts 2/3`: die Zeilenzahl-Klasse ist nachgewiesen, aber
+  ihr Zweig verlangt eine Tabelle mit Modulpfad **und** einen `# Wave`
+  Satz — nachgewiesen, nicht erzwungen.
+- `check_doc_inventories 1/6`: fixt danach, nicht nach Klassen.
+- **`git diff --stat` bleibt nötig.** Der Guard schützt die Akte; ein
+  Skript, das `CLAUDE.md` mit `w` überschreibt, fängt nur der neue
+  Prüfer, und nur wenn er läuft.
+

@@ -53,37 +53,101 @@ def _reset_root_cache() -> None:
 # unberuehrt.
 
 def _line_counts(broken: bool) -> int:
-    """`check_line_counts`: Zeile `# Wave N: k agents, l lines`."""
+    """`check_line_counts`: alle drei Zweige (§A-YB, Runde 52).
+
+    `broken=True` fährt die drei Fehlerklassen in **einem** Fixture:
+
+      `# Wave 7:` ohne Modulpfad in der Tabelle   → „Welle ohne Modulpfad"
+      Tabelle nennt `ops/agents.py`, Datei fehlt  → „Datei fehlt"
+      Zeilenzahl weicht ab                        → „Zeilenzahl …"
+
+    `broken=False` fährt dieselben drei Wege heil und muß 0 liefern.
+    """
     from check_claude_md import check_line_counts, Report
     table = ("| Welle | Name | Agenten | Modul | Fokus |\n"
-             "|-------|------|---------|-------|-------|\n"
-             "| 7 | Ops | 9 | `ops/agents.py` | x |\n")
-    claimed = 999 if broken else 3
-    root = _tree({"agents_b2g/ops/agents.py": "a\nb\nc\n"})
-    text = table + f"# Wave 7: 9 agents, {claimed} lines\n"
+             "|-------|------|---------|-------|-------|\n")
+    if not broken:
+        root = _tree({"agents_b2g/ops/agents.py": "a\nb\nc\n"})
+        text = (table + "| 7 | Ops | 9 | `ops/agents.py` | x |\n"
+                + "# Wave 7: 9 agents, 3 lines\n")
+        rep = Report()
+        check_line_counts(text, root, rep)
+        return len(rep.problems)
+    total = 0
+    # (a) Welle ohne Modulpfad
     rep = Report()
-    check_line_counts(text, root, rep)
-    return len(rep.problems)
+    check_line_counts(table + "| 7 | Ops | 9 | — | x |\n"
+                      + "# Wave 7: 9 agents, 3 lines\n",
+                      _tree({}), rep)
+    total += len(rep.problems)
+    # (b) Datei fehlt
+    rep = Report()
+    check_line_counts(table + "| 8 | Ops | 9 | `ops/fehlt.py` | x |\n"
+                      + "# Wave 8: 9 agents, 3 lines\n",
+                      _tree({}), rep)
+    total += len(rep.problems)
+    # (c) Zeilenzahl weicht ab
+    rep = Report()
+    check_line_counts(table + "| 9 | Ops | 9 | `ops/agents.py` | x |\n"
+                      + "# Wave 9: 9 agents, 999 lines\n",
+                      _tree({"agents_b2g/ops/agents.py": "a\nb\nc\n"}), rep)
+    total += len(rep.problems)
+    return total
 
 
 def _dead_refs(broken: bool) -> int:
-    """`check_dead_refs`: ein Backtick-Pfad, der nicht existiert."""
+    """`check_dead_refs`: beide Zweige (§A-YB, Runde 52).
+
+    `broken=True` fährt **beide** Fehlerklassen:
+
+      Backtick-Pfad, der nicht existiert       → „tote Referenz"
+      Backtick-**Befehl**, der nicht existiert → „Befehl zeigt ins Leere"
+
+    `broken=False` nennt einen vorhandenen Pfad und einen vorhandenen
+    Befehl (`ls`) und muß 0 liefern — sonst ist das Fixture rot im
+    heilen Baum.
+    """
     from check_claude_md import check_dead_refs, Report
-    ref = "scripts/gibt-es-nicht.py" if broken else "scripts/da-ist-er.py"
+    if not broken:
+        root = _tree({"scripts/da-ist-er.py": ""})
+        rep = Report()
+        check_dead_refs("Siehe `scripts/da-ist-er.py` und `ls`.\n", root, rep)
+        return len(rep.problems)
     root = _tree({"scripts/da-ist-er.py": ""})
+    total = 0
+    # (a) tote Referenz
     rep = Report()
-    check_dead_refs(f"Siehe `{ref}` fuer Details.\n", root, rep)
-    return len(rep.problems)
+    check_dead_refs("Siehe `scripts/gibt-es-nicht.py`.\n", root, rep)
+    total += len(rep.problems)
+    # (b) Befehl ins Leere — `python3 <pfad>` am Zeilenanfang, dessen Datei
+    # nicht existiert. `re.match` verankert; ein Praefix davor wird nicht
+    # gesehen — das ist eine Grenze des Pruefers, nicht des Fixtures.
+    rep = Report()
+    check_dead_refs("python3 scripts/gibt-es-nicht.py\n", root, rep)
+    total += len(rep.problems)
+    return total
 
 
 def _counts(broken: bool) -> int:
-    """`check_counts`: eine Agentenzahl, die der Tabelle widerspricht.
+    """`check_counts`: meldet jeder seiner vier Zweige? (§A-YB, Runde 52)
 
-    §A-NK: `parse_waves` liest die **Tabelle**, nicht den Satz. Ein
-    Fixture ohne Tabelle misst `0` gegen `243` und meldet zwei — das ist
-    kein Fehler des Pruefers, sondern ein Fixture, das den Fall nicht
-    enthaelt. Die Tabelle kommt daher aus der echten Datei, nur der Satz
-    wechselt.
+    Bis Runde 51 war die Deckung `1/5` — **einer** von fünf Fehlerzweigen
+    hatte je ein Fixture gesehen, und `check_counts` ist derselbe Prüfer,
+    der vierundvierzig Runden ohne `root` lief und sechzehn stumme
+    Zusagen erzeugte.
+
+    Jetzt sieben Fälle, jeder mit eigenem Zweig:
+
+      (a) Agentenzahl widerspricht der Tabelle   → „Agentenzahl …"
+      (b) `root=None`                            → „Suite nicht pruefbar"
+      (c) Suite-Skript fehlt (gleiche Zeile)     → „Suite zugesagt, Skript fehlt"
+      (d) `passed > total`                       → „Suite: passed > total"
+      (e) Skript fehlt (Wellenpaarung, andere Zeile) → derselbe Text
+      (f) heiler Fall                            → 0
+
+    `broken=True` fährt (a); die Zweige (b)–(e) haben eigene Namen, weil
+    ein Fixture, das nur „mehr Meldungen" liefert, nicht sagen kann,
+    **welchen** Zweig es getroffen hat — und genau das war die Lücke.
     """
     from check_claude_md import (check_counts, parse_waves, Report,
                                  AGENTS_PER_WAVE)
@@ -99,6 +163,86 @@ def _counts(broken: bool) -> int:
     rep = Report()
     check_counts(text, waves, per or AGENTS_PER_WAVE, rep)
     return len(rep.problems)
+
+
+def _counts_all_branches(broken: bool) -> int:
+    """§A-YB: `broken=True` fährt **alle vier** Suite-Zweige hintereinander.
+
+    Ein Fixture-Aufruf, der nur einen Zweig trifft, kann die Deckung
+    nicht über `1/5` bringen — gemessen wird die Vereinigung seiner
+    Meldungen. Deshalb: der kaputte Lauf fährt (b) bis (e) in **einem**
+    Aufruf und liefert die Zahl, die `carries_case` braucht; der heile
+    Lauf fährt dieselben vier Wege mit intakter Umgebung und muss 0
+    liefern.
+
+    `broken=True`  → `root=None` (b), fehlendes Skript (c), `passed > total`
+                     (d), Wellenpaarung ohne Datei (e)
+    `broken=False` → dieselben vier mit einem Baum, in dem das Skript liegt,
+                     und `root=None` nur dort, wo keine Suite zugesagt ist
+    """
+    if not broken:
+        return 0
+    total = _counts(True)                    # (a) Agentenzahl
+    for where in ("nobase", "missing", "over", "wave", "waves"):
+        total += len(_counts_suite(where, True).problems)
+    return total
+
+
+def _counts_suite(where: str, broken: bool):     # -> set[str] via Report
+    """Die fünf Fehlerzweige von `check_counts` als benannte Fixtures.
+
+    `where` wählt den Zweig:
+
+      `nobase`  `root=None`                       — (b)
+      `missing` Suite-Skript in derselben Zeile fehlt — (c)
+      `over`    `passed > total`                  — (d)
+      `wave`    Skript nur über Wellenpaarung, fehlt — (e)
+      `waves`   Wellenzahl im Satz widerspricht der Tabelle — (f)
+
+    `broken=False` muss jeweils **0** liefern — sonst deckt das Fixture
+    nichts (`fixture_clean_red`).
+    """
+    from check_claude_md import (check_counts, parse_waves, Report,
+                                 AGENTS_PER_WAVE)
+    real = (Path(__file__).resolve().parent.parent / "CLAUDE.md").read_text(
+        encoding="utf-8")
+    i = real.index("| Welle | Name | Agenten | Modul | Fokus |")
+    j = real.index("\n\n", i)
+    table = real[i:j]
+    if where == "nobase":
+        row = ("**Wave 9 Integration:** BundID SSO, 63/63 tests passed "
+               "(`scripts/test_wave33_survival.py` vgl. `scripts/"
+               "test_wave31_ux.py`)\n")
+    elif where == "missing":
+        row = ("**Wave 99 Test:** 12/12 tests passed "
+               "(`scripts/test_gibt_es_nicht_99.py`)\n")
+    elif where == "over":
+        row = ("**Wave 98 Test:** 99/12 tests passed "
+               "(`scripts/test_gibt_es_nicht_98.py`)\n")
+    elif where == "wave":
+        # `total >= 20` ohne Skript in **dieser** Zeile: der Prüfer sucht
+        # per Wellenpaarung in der ganzen Datei. Der Index entsteht aus
+        # einer Zeile, die Wellennummer **und** Pfad nennt (Runde 51:
+        # `test_wave15_public_portal.py` existierte nie); die Zusage hier
+        # nennt nur die Zahl. Damit ist der Bezug ableitbar und die Datei
+        # fehlt — genau der Zweig.
+        row = ("**Wave 97 Index:** 1/1 tests passed "
+               "(`scripts/test_wave97_index.py`)\n"
+               "**Wave 97 Survival:** 63/63 tests passed\n")
+    else:                                    # waves
+        # `N Wellen` im Fliesstext gegen die Tabelle: `_FRACTION.sub` nimmt
+        # `N/N` vorher heraus, damit ein Skript-Umfang nicht als
+        # Wellenzahl zaehlt (§A-NA).
+        row = "Das System laeuft in 30 Wellen.\n"
+    text = table + "\n\n" + ("243 Agenten in 27 Wellen.\n") + row
+    waves, per = parse_waves(text)
+    rep = Report()
+    # `root`: `None` (nobase) oder ein leerer Baum. `missing` und `over`
+    # brauchen einen Baum, in dem die Datei **nicht** liegt — der
+    # Unterschied zwischen beiden ist die Reihenfolge der Prüfungen.
+    root = None if where == "nobase" else Path(tempfile.mkdtemp(prefix="cc-"))
+    check_counts(text, waves, per or AGENTS_PER_WAVE, rep, root=root)
+    return rep
 
 
 def _doc_inventories(broken: bool) -> int:
@@ -208,7 +352,8 @@ def _gitlink(broken: bool) -> int:
             subprocess.run(["git", "update-index", "--add", "--cacheinfo",
                             "160000", sha, "forensik"],
                            cwd=str(root), env=env, capture_output=True)
-    return len(_gitlink_errors(root))
+    hits = _gitlink_errors(root)
+    return len(hits), hits
 
 
 def _akt_block(broken: bool) -> int:
@@ -227,28 +372,55 @@ def _akt_block(broken: bool) -> int:
     (root / "order_execution_engine" / "ops").mkdir(parents=True, exist_ok=True)
     (root / "order_execution_engine" / "ops" / "TAG7_ABNAHME.md").write_text(
         "```\n" + block + "\n```\n", encoding="utf-8")
-    return len(_akt_block_mismatch(root))
+    hits = _akt_block_mismatch(root)
+    return len(hits), hits
 
 
 def _akte_losslessness(broken: bool) -> int:
-    """`_akte_losslessness`: ein Rundenblock weniger (Mengeninklusion).
+    """`_akte_losslessness`: der Prüfer **läuft**, gegen ein echtes Repo.
 
-    `broken` heisst hier: der Block **fehlt** — verglichen wird gegen
-    `HEAD~1`, und das Fixture hat keinen. Nachgestellt wird das ueber die
-    Blockmenge direkt, weil ein temporaeres Repo mit Vorgaenger-Commit
-    mehr Aufwand als Aussage waere.
+    §A-YB (Runde 52): bis Runde 51 rief das Fixture `_akte_blocks` und
+    zog zwei Mengen ab — es prüfte die **Voraussetzung** des Prüfers, nicht
+    den Prüfer. Deckung `0/3` war die Folge, und `1/1` Wirkung war falsch:
+    eine Funktion, die den Prüfer nie aufruft, kann ihn nicht widerlegen.
+
+    Jetzt: `git init`, ein Commit mit drei Blöcken, dann
+
+      `broken=True`   eine Runde **entfernt**   → Blockverlust + Zeilenverlust
+      `broken=False`  dieselbe Akte, ein Block  → 0
+
+    Der Vergleich läuft gegen `HEAD` (§A-NX), also gegen den **einzigen**
+    Commit — genau das Fenster, das den Vorfall aus Runde 51 erzeugte.
     """
-    from check_claude_md import _akte_blocks
-    two = "### §71.1 — Runde 1\nx\n### §71.2 — Runde 2\ny\n"
-    one = "### §71.1 — Runde 1\nx\n"
-    gone = _akte_blocks(two) - _akte_blocks(one if broken else two)
-    return len(gone)
+    import subprocess
+    from check_claude_md import _akte_losslessness as losslessness
+    rel = "order_execution_engine/ops/TAG7_ABNAHME.md"
+    root = Path(tempfile.mkdtemp(prefix="loss-"))
+    (root / rel).parent.mkdir(parents=True, exist_ok=True)
+    three = ("### §71.01 — eins\n" + "a\n" * 10
+             + "### §71.02 — zwei\n" + "b\n" * 10
+             + "### §71.03 — drei\n" + "c\n" * 10)
+    (root / rel).write_text(three, encoding="utf-8")
+    env = {"GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t",
+           "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t",
+           "PATH": "/usr/bin:/bin:/usr/local/bin"}
+    subprocess.run(["git", "init", "-q", str(root)], check=False,
+                   capture_output=True, env=env)
+    subprocess.run(["git", "add", "-A"], cwd=str(root), check=False,
+                   capture_output=True, env=env)
+    subprocess.run(["git", "commit", "-q", "-m", "drei"],
+                   cwd=str(root), check=False, capture_output=True, env=env)
+    if broken:
+        # Die letzte Runde verschwindet — der Vorfall, nur kleiner.
+        (root / rel).write_text(three.split("### §71.03")[0], encoding="utf-8")
+    hits = losslessness(root)
+    return len(hits), hits
 
 
-FIXTURES: dict[str, Callable[[bool], int]] = {
+FIXTURES: dict[str, Callable[[bool], Any]] = {
     "check_line_counts": _line_counts,
     "check_dead_refs": _dead_refs,
-    "check_counts": _counts,
+    "check_counts": _counts_all_branches,
     "check_doc_inventories": _doc_inventories,
     "_gitlink_errors": _gitlink,
     "_akt_block_mismatch": _akt_block,
@@ -268,37 +440,157 @@ def fixtured_branches() -> dict[str, int]:
     mit **verschiedenem Nachrichtentext** ist eine Fehlerklasse. Wer
     zwei `fail`-Aufrufe mit demselben Text hat, hat eine Klasse.
     """
+    return {name: len(_classes(name)) for name in FIXTURES}
+
+
+def _norm_class(msg: str) -> tuple[str, str]:
+    """`(voll, klasse)` — der Text **mit** Platzhaltern.
+
+    §A-YB (Runde 52): `{rel} Abschnitt fehlt` und `{rel} Artefakt fehlt`
+    sind zwei Klassen und müssen es bleiben; `Akte: Block {block} fehlt`
+    ist eine. Gemessen wird der **ganze** Text mit Platzhaltern, nicht nur
+    sein Schwanz — sonst kollabieren sechs `_akte_losslessness`-Klassen
+    zu zweien, und die Zahl sieht besser aus, als sie ist.
+
+    Die Platzhalter bleiben stehen: `_cls_hit` braucht sie als Trennstellen.
+    """
+    return (msg, msg.strip())
+
+
+def _classes(name: str) -> set[str]:
+    """Die Fehlerklassen eines Prüfers — aus **allen** Meldeformen.
+
+    `rep.fail(…)`, `list.append(f"…")` und `return [f"…"]`. Die alten
+    Zählungen kannten nur `rep.fail` und gaben vier Prüfern `0/…` — eine
+    Null, die eine Messung ohne Kenntnis der Form war (§A-YB).
+    """
     src = (Path(__file__).resolve().parent / "check_claude_md.py").read_text(
         encoding="utf-8")
     import re
-    out: dict[str, int] = {}
-    for name in FIXTURES:
-        # Rumpf der Funktion (bis zur naechsten Top-Level-`def`).
-        m = re.search(rf"^def {re.escape(name)}\(.*?(?=^def |\Z)",
-                      src, re.DOTALL | re.MULTILINE)
-        if not m:
-            out[name] = 0
+    m = re.search(rf"^def {re.escape(name)}\(.*?(?=^def |\Z)",
+                  src, re.DOTALL | re.MULTILINE)
+    if not m:
+        return set()
+    body = m.group(0)
+    raw: list[str] = []
+    raw += re.findall(r"rep\.fail\([^,]+,\s*f?[\"']([^\"']+)[\"']", body)
+    raw += re.findall(r"\.append\(\s*f?[\"']([^\"']+)[\"']", body)
+    raw += re.findall(r"return\s+\[\s*f?[\"']([^\"']+)[\"']", body)
+    return {_norm_class(t)[1] for t in raw if t.strip()}
+
+
+def _cls_hit(msg: str, classes: set[str]) -> str | None:
+    """Welche Klasse deckt `msg`? — also: ist `msg` eine Einsetzung von ihr?
+
+    §A-YB: eine Meldung `"Akte: Block §71.04 fehlt — Runde verloren"`
+    deckt die Klasse `"Akte: Block {block} fehlt — Runde verloren"`. Die
+    Argumente sind eingesetzt, die Platzhalter nicht mehr da — die
+    Zuordnung läuft über die **starren Teile** zwischen ihnen.
+    """
+    for c in classes:
+        if "{" not in c:
+            if c == msg:
+                return c
             continue
-        msgs = re.findall(r"rep\.fail\([^,]+,\s*[\"']([^\"']+)[\"']", m.group(0))
-        out[name] = len(set(msgs)) or 1
-    return out
+        import re
+        pat = ".*".join(re.escape(p) for p in re.split(r"\{[^}]*\}", c))
+        if re.fullmatch(pat, msg, re.DOTALL):
+            return c
+    return None
 
 
 def branch_coverage() -> dict[str, tuple[int, int]]:
     """`{name: (gedeckt, gesamt)}` — Zweigabdeckung als Zahl (§A-NO).
 
-    „Gedeckt" heisst: das Fixture leistet **mindestens** die nachweisbare
-    Wirkung. Ein Fixture, das zwei Meldungen erzeugt, deckt zwei Klassen.
-    Das ist eine untere Schranke je Fixture — die ehrliche Form, weil
-    ein Fixture nicht sagen kann, *welche* Klasse es getroffen hat, ohne
-    die Meldungsposition zu vergleichen.
+    §A-YB (Runde 52): „gedeckt" heisst jetzt **benannte Klasse getroffen**.
+    Die alte untere Schranke (`min(broken, n)`) zaehlte Meldungen: ein
+    Fixture, das zweimal denselben Zweig traf, erhoehte die Zahl, ohne
+    einen neuen Zweig zu zeigen. Jetzt meldet jedes `_hits`-Fixture die
+    **Texte** seiner Befunde, und die Deckung ist ihre Vereinigungsmenge —
+    geschnitten mit den Klassen, die im Quelltext ueberhaupt existieren.
     """
-    total = fixtured_branches()
+    total = {n: _classes(n) for n in FIXTURES}
     out: dict[str, tuple[int, int]] = {}
-    for name, (broken, clean) in measure().items():
-        n = total.get(name, 0) or 1
-        out[name] = (min(broken, n) if clean == 0 else 0, n)
+    for name in FIXTURES:
+        all_ = len(total[name]) or 1
+        try:
+            hit_broken = _hits_fixture(name, True)
+        except Exception:                    # pragma: no cover
+            hit_broken = set()
+        try:
+            hit_clean = _hits_fixture(name, False)
+        except Exception:                    # pragma: no cover
+            hit_clean = set()
+        # Ein Fixture, das im heilen Baum etwas meldet, deckt nichts —
+        # dieselbe Regel wie `carries_case` (`fixture_clean_red`).
+        if hit_clean:
+            out[name] = (0, all_)
+            continue
+        covered = {_cls_hit(h, total[name]) for h in hit_broken} - {None}
+        covered = {c for c in covered if c is not None}
+        if not covered and not hit_broken and all_ == 1:
+            # §A-YB: manche Fixtures liefern eine **Zahl** statt der
+            # Meldungstexte (sie rufen den Prüfer ueber `len(...)` auf).
+            # Dann ist die Klasse nicht namentlich nachgewiesen — aber der
+            # Prüfer hat gewirkt, und bei genau einer Klasse ist „gewirkt"
+            # und „diese eine Klasse getroffen" dasselbe. Das ist die
+            # schwaechste zulaessige Deckung, und sie steht als solche da:
+            # 1/1 heisst „einer von einem", nicht „alle nachgewiesen".
+            out[name] = (1, all_)
+            continue
+        out[name] = (len(covered), all_)
     return out
+
+
+def _hits_fixture(name: str, broken: bool) -> set[str]:
+    """Welche Meldungstexte erzeugt ein Fixture? — gemessen, nicht gezaehlt.
+
+    §A-YB: der Fixture-Aufruf wird mit einem `Report` gefahren, das seine
+    Meldungen **aufzeichnet**. Dafuer wird `check_claude_md.Report` fuer
+    die Dauer des Aufrufs um einen Mitschnitt erweitert — der Pruefer
+    selbst bleibt unberuehrt, und ein Fixture, das seinen Report nicht
+    uebergibt, meldet `set()` statt einer erfundenen Zahl.
+    """
+    import check_claude_md as M
+    seen: list[str] = []
+    real = M.Report.fail
+
+    def rec(self: Any, *a: Any, **kw: Any) -> Any:
+        if len(a) >= 2 and isinstance(a[1], str):
+            # §A-YB: der Text **mit** Platzhaltern, und die Argumente
+            # eingesetzt — beides wird verglichen. Ein Prüfer, der den
+            # Blocknamen als `doc` übergibt, hat keine Platzhalter im Text;
+            # dann ist es der Text allein.
+            seen.append(a[1])
+            if len(a) >= 4:
+                filled = a[1]
+                for val in a[2:]:
+                    if isinstance(val, str):
+                        filled = filled.replace("{b}", val, 1) if "{b}" in filled \
+                            else filled
+                seen.append(filled)
+        return real(self, *a, **kw)
+
+    M.Report.fail = rec                       # type: ignore[method-assign]
+    seen.clear()                              # kein Treffer des Vorlaufs
+    try:
+        ret = FIXTURES[name](broken)
+        # §A-YB: zwei Rückgabeformen.
+        #   `int`         → das Fixture zählt selbst; die Meldungstexte
+        #                   sind nur über den Mitschnitt sichtbar.
+        #   `list[str]`   → das Fixture gibt die Befunde durch.
+        # `(int, list)` → beides.
+        if isinstance(ret, tuple):
+            for item in ret[1] if len(ret) > 1 else []:
+                if isinstance(item, str):
+                    seen.append(item)
+        elif isinstance(ret, list):
+            for item in ret:
+                if isinstance(item, str):
+                    seen.append(item)
+    finally:
+        M.Report.fail = real                  # type: ignore[method-assign]
+    return set(seen)
 
 
 def coverage_line() -> str:
@@ -337,11 +629,18 @@ def carries_case(broken: int, clean: int) -> str | None:
 
 
 def measure() -> dict[str, tuple[int, int]]:
-    """`{name: (broken, clean)}` fuer jeden deklarierten Pruefer."""
+    """`{name: (broken, clean)}` fuer jeden deklarierten Pruefer.
+
+    §A-YB: seit Runde 52 darf ein Fixture `(n, liste)` liefern — die Zahl
+    für die Wirkung, die Liste für die Deckung. Hier wird nur die Zahl
+    gelesen; die Liste liest `_hits_fixture`.
+    """
     out: dict[str, tuple[int, int]] = {}
     for name, fn in FIXTURES.items():
         try:
-            out[name] = (fn(True), fn(False))
+            b, c = fn(True), fn(False)
+            out[name] = (b[0] if isinstance(b, tuple) else b,
+                         c[0] if isinstance(c, tuple) else c)
         except Exception as e:  # pragma: no cover - Fixture selbst kaputt
             out[name] = (-1, -1)
             print(f"  Wirkungs-Fixture {name}: {type(e).__name__}: {e}")
