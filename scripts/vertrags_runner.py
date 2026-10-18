@@ -71,7 +71,9 @@ def _lauf(args: list[str], cwd: Path, script: Path = SCRIPT) -> tuple[int, str, 
 def _args(name: str, t: Path, d: Path) -> list[str] | None:
     """Argumente je Fallname. `None` heißt: unbekannter Fall → Befund."""
     return {
-        "strom-alle": ["--strom", str(t)],
+        # §A-ZZZZ159: eingefrorenes Fixture statt Live-Transcript.
+        "strom-alle": ["--strom", str(d / "fest.jsonl")],
+        "strom-live": ["--strom", str(t)],
         "einwurf-bekannt": ["--einwurf", str(d / "bekannt.md"), "--strom", str(t)],
         "einwurf-neu": ["--einwurf", str(d / "neu.md"), "--strom", str(t)],
         "kein-argument": [],
@@ -111,6 +113,20 @@ def _saat(d: Path, strom: list, neu_text: str) -> None:
     # nicht durch ein Duplikat (Exit 1) maskiert.
     (d / "nurmuell.jsonl").write_text(
         "KEIN JSON\n{kaputt\n", encoding="utf-8")
+    # §A-ZZZZ159 (Runde 86): **`strom-alle` lief gegen den LIVE-Transcript.**
+    # Der Test war damit selbst ein `pos=`: seine Erwartung 38/37 war an
+    # einen Strom gebunden, der mit jeder Konversationszeile waechst. Die
+    # Zahl war bei der Abnahme 39 — im Commit stand trotzdem "10/10".
+    # Jetzt: ein eingefrorenes Fixture mit BEKANNTER Zahl. Der Live-Strom
+    # wird separat nur ueber eine INVARIANTE geprueft (Paare <=
+    # Meldungen, Exit folgt aus Zeilen) — nie ueber eine Konstante.
+    # Zeitstempel explizit: `zeile` aus dem Live-Strom hat keinen, und
+    # ohne ts sind ALLE Vorkommen '?'-gleich, also immer KANAL-DUPLIKAT.
+    zeilen = [_z("T1", a), _z("T1", a),                        # 1 KANAL-DUPLIKAT
+              _z("T2", b), _z("T2", b),                       # 1 KANAL-DUPLIKAT
+              _z("T3", a)]                                    # 1 WIEDERHOLUNG
+    (d / "fest.jsonl").write_text("\n".join(zeilen) + "\n",
+                                  encoding="utf-8")
 
 
 def fahre(script: Path, vertrag: dict, strom: list,

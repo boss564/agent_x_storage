@@ -1,5 +1,5 @@
 {
-  "_version": 5,
+  "_version": 6,
   "_zweck": "Maschinenlesbarer Vertrag des Einwurf-Waechters. Single source of truth fuer Repo und externe Ingestion. Wer hier eine Zeile aendert, aendert das Tor ausserhalb dieses Repos mit.",
   "_stand": "Runde 84 (2026-10-18)",
   "_geltung": "Der Runner (scripts/vertrags_runner.py) importiert diese Datei; die externe Ingestion MUSS sie einlesen. Solange sie es nicht tut, zertifiziert N/N einen Vertrag, den draussen niemand benutzt.",
@@ -102,8 +102,8 @@
     {
       "name": "strom-alle",
       "erwarteter_exit": 1,
-      "text": "Paare=38;KANAL-DUPLIKAT=37;WIEDERHOLUNG=1",
-      "warum_wert": "Nur der Schluessel zu assertieren hiess: eine Zaehlachse, die immer 0 sagt, besteht den Vertrag. Erst der Wert bindet den Detektor an den Befund."
+      "text": "Paare=3;KANAL-DUPLIKAT=2;WIEDERHOLUNG=1",
+      "warum_wert": "Eingefrorenes Fixture: A,A,B,B,A -> 3 Paare, davon 2 bytegleich (KANAL-DUPLIKAT) und 1 Wiederholung. R85 lief dieser Fall gegen den LIVE-Transcript; die Zahl 38/37 war beim Commit schon 39/38, und niemand sah es, weil die Abnahme einen anderen Lauf pruefte."
     },
     {
       "name": "einwurf-bekannt",
@@ -150,6 +150,12 @@
       "name": "uebersprung-allein",
       "erwarteter_exit": 4,
       "text": "uebersprungen="
+    },
+    {
+      "name": "strom-live",
+      "erwarteter_exit": 1,
+      "text": "ZEILE ",
+      "warum_wert": "Invariante statt Konstante: der Live-Strom waechst mit jeder Konversationszeile. Geprueft wird nur, dass er ueberhaupt Zeilen-Urteile traegt und Exit 1 liefert. Eine Zahl hier waere wieder ein pos=."
     }
   ],
   "identitaets_audit": {
@@ -493,7 +499,7 @@
   },
   "bringschuld": {
     "regel": "Ein neuer Vertragsfall ist zulaessig, wenn ein BLINDER FLECK NACHGEWIESEN ist.",
-    "zaehlachse": "ALLE nachgewiesenen blinden Flecken; jeder mit Instanz, Runde und Datei — Zeiger, nicht Zahl.",
+    "zaehlachse": "ALLE nachgewiesenen blinden Flecken; jeder mit Instanz, Runde, Codeort und Test — Zeiger, nicht Zahl.",
     "nachweise": [
       {
         "runde": 82,
@@ -583,8 +589,39 @@
         "instanz": "Exit 2 ohne Zeilen (Schema-Luecke)",
         "code": "einwurf_waechter.main",
         "test": "mock_ingestion"
+      },
+      {
+        "runde": 86,
+        "instanz": "Bericht zaehlte 14 Zahlen, Zeile hatte 13",
+        "code": "Bericht/Kommunikation",
+        "test": "keiner — manuell gefunden (R86)"
+      },
+      {
+        "runde": 86,
+        "instanz": "Inhalts-Hash ist Klasse, nicht Zeile",
+        "code": "pruefe_strom:ZEILE sha",
+        "test": "test_klasse_mehrdeutig.py"
+      },
+      {
+        "runde": 86,
+        "instanz": "pos= vertauscht VERWERFEN<->WIEDERHOLT unter mittiger Einfuegung",
+        "code": "pruefe_strom:pos=",
+        "test": "test_regel_gegen_pos.py"
+      },
+      {
+        "runde": 86,
+        "instanz": "strom-alle pruefte LIVE-Transcript mit Konstante 38/37; Commit-Stand war 39/38, Abnahme sagte 10/10",
+        "code": "vertrags_runner._args:strom-alle",
+        "test": "strom-alle (eingefroren) + strom-live (Invariante)"
+      },
+      {
+        "runde": 86,
+        "instanz": "grund= freies Feld ohne Escaping (latent, kein Test betrat Semikolon)",
+        "code": "einwurf_waechter.escape",
+        "test": "test_escaping.py"
       }
-    ]
+    ],
+    "stand_r86": 14
   },
   "orakel": {
     "befund": "Die Konstanten-Probe 0/1/2 beweist Anti-Hardcoding, nicht Zaehl-Richtigkeit. Sie zeigt, dass der Code nicht 37 ausgibt — nicht, dass 0 richtig IST.",
@@ -633,6 +670,43 @@
       "projektion": "exit == exit_aus_zeilen(zeilen) (test_projektion.py)",
       "exit2": "traegt genau EINE Zeile `ZEILE AUFRUF VERWERFEN;grund=...`",
       "aktion2": "Konsument blockiert und alarmiert; keine Inhalts-Handlung moeglich."
+    },
+    "aktionen": {
+      "WIEDERHOLT": {
+        "aktion": "zustellen",
+        "marke": "WIEDERHOLUNG",
+        "begruendung": "ADJ gebucht: Wiederholung sichtbar, aber nicht unterdrueckt. Wer unterdruecken will, aendert DEN VERTRAG, nicht den Konsumenten."
+      },
+      "VERWERFEN": {
+        "aktion": "verwerfen",
+        "begruendung": "bytegleich zum Vorgaenger, gleicher Zeitstempel"
+      },
+      "ZUSTELLEN": {
+        "aktion": "zustellen",
+        "begruendung": "erstes Vorkommen"
+      },
+      "UNGEPRUEFT": {
+        "aktion": "nicht zustellen",
+        "marke": "ALARM",
+        "begruendung": "Zeile unlesbar — Inhalt unbekannt, also nicht zustellbar"
+      },
+      "AUFRUF": {
+        "aktion": "ganzen Aufruf verwerfen",
+        "begruendung": "Exit 2: Meta-Fehler. Sentinel ist KEINE Inhaltszeile."
+      }
+    },
+    "identifier_union": {
+      "typen": [
+        "sha256-hex (64)",
+        "AUFRUF (Literal)",
+        "pos:<n> (unparsebar)"
+      ],
+      "regel": "Union-Typ; Diskriminator ist die FORM, nicht ein separates Feld. Ein Parser, der nur hex kennt, ist nicht konform.",
+      "ueberladung": "VERWERFEN heisst bei AUFRUF 'den Aufruf', bei hex 'die Zeile' — deshalb darf AUFRUF nur allein auftreten."
+    },
+    "escaping": {
+      "regel": "Freitext in Maschinenfeldern (grund=...) wird per Prozent-Encoding escaped; ; = % und Zeilenumbrueche sind im Wert verboten.",
+      "grund": "Ein Semikolon in einer Fehlermeldung zerlegt sonst die key=value-Zeile."
     }
   },
   "encoding": {
@@ -653,5 +727,68 @@
     "historisch": "R83 baute die Baseline mit dem kaputten count('/')==2-Filter: 162 statt 278/283",
     "stand_r85": "283 Dateien unter os.walk",
     "regel": "Baseline waechst nie von selbst; jeder neue Skriptpfad ist meldepflichtig."
+  },
+  "dedup_regel": {
+    "syntax": "DEDUP <sha>;rang=<1..n>;art=<NEU|KANAL-DUPLIKAT|WIEDERHOLUNG>;aktion=<ZUSTELLEN|VERWERFEN|WIEDERHOLT>;",
+    "architektur": "Regel statt Tabelle: der Detektor publiziert Klassenregeln, der Konsument exekutiert sie auf SEINEM Strom.",
+    "rang": "klassenlokal, 1-basiert; (sha, rang) ist unter Bewegung stabil, pos= nicht",
+    "kein_pos": "DEDUP traegt KEINE Position. Wer sie hinzufuegt, baut die R85-Mehrdeutigkeit wieder ein.",
+    "test": "test_regel_gegen_pos.py (3/3), regel_konsument.py (4/4)"
+  },
+  "zweig_ledger": {
+    "regel": "Jeder Kontrollfluss-Zweig im Detektor traegt den Namen des Tests, der ihn betritt. Kein Prozentwert — Zeiger auf Zweige, wie bei den Flecken.",
+    "zweige": [
+      {
+        "zweig": "kein_modus",
+        "code": "einwurf_waechter.main:Ende",
+        "test": "test_exit2_zeilen.py"
+      },
+      {
+        "zweig": "einwurf_ohne_strom",
+        "code": "einwurf_waechter.main:--einwurf ohne --strom",
+        "test": "test_exit2_zeilen.py"
+      },
+      {
+        "zweig": "strom_unlesbar (einwurf)",
+        "code": "einwurf_waechter.main:except StreamUnlesbar",
+        "test": "test_exit2_zeilen.py (Achsen-Abgrenzung)"
+      },
+      {
+        "zweig": "strom_unlesbar (strom)",
+        "code": "einwurf_waechter.main:--strom",
+        "test": "test_zeilen_identitaet.py"
+      },
+      {
+        "zweig": "json<schwelle",
+        "code": "pruefe_strom:exit 0/1",
+        "test": "test_projektion.py"
+      },
+      {
+        "zweig": "json>=schwelle",
+        "code": "pruefe_strom:UNGEPRUEFT",
+        "test": "test_zeilen_identitaet.py"
+      },
+      {
+        "zweig": "duplikat gleicher ts",
+        "code": "pruefe_strom:kanal_duplikat",
+        "test": "test_adj_slot.py"
+      },
+      {
+        "zweig": "duplikat anderer ts",
+        "code": "pruefe_strom:wiederholung",
+        "test": "test_adj_slot.py"
+      },
+      {
+        "zweig": "dedup regeln",
+        "code": "_dedup_regeln",
+        "test": "regel_konsument.py, test_regel_gegen_pos.py"
+      },
+      {
+        "zweig": "escape freitext",
+        "code": "escape",
+        "test": "test_escaping.py"
+      }
+    ],
+    "latent_ohne_test": []
   }
 }

@@ -75,7 +75,10 @@ def main() -> int:
 
     # 4. Kein WIEDERHOLT darf als VERWERFEN erscheinen (Auslassung).
     gesamt += 1
-    n_w = len(re.findall(r"WIEDERHOLT;", out))
+    # Nur ZEILE-Saetze zaehlen: seit R86 traegt auch DEDUP das Wort
+    # WIEDERHOLT, und ein zaehlender Regex ueber beide Achsen sah 2
+    # wo 1 gemeint war — der Befund der Runde, im Kleinen.
+    n_w = len(re.findall(r"ZEILE \S+ WIEDERHOLT;", out))
     n_v = len(re.findall(r"ZEILE \S+ VERWERFEN;", out))
     gut = n_w == 1 and n_v == 1
     print(f"{'ok  ' if gut else 'FAIL'} keine Vermischung             "

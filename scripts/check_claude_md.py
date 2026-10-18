@@ -207,6 +207,11 @@ NO_TEST_SUMMARY: set[str] = {
     "scripts/test_projektion.py",          # 5/5 Exit folgt aus den Zeilen
     "scripts/test_exit2_zeilen.py",        # 3/3 Exit 2 traegt genau eine AUFRUF-Zeile
     "scripts/test_adj_slot.py",            # 4/4 WIEDERHOLUNG hat eigenen Verdict
+    "scripts/regel_konsument.py",          # 4/4 DEDUP-Regeln, Rang-Invariante
+    "scripts/test_klasse_mehrdeutig.py",   # 4/4 Hash ist Klasse, pos driftet
+    "scripts/test_regel_gegen_pos.py",     # 3/3 Regel trifft, pos nicht
+    "scripts/test_escaping.py",            # 3/3 freie Felder bleiben ein Feld
+    "scripts/test_projektion_echt.py",     # 3/3 Projektion nicht tautologisch
     "scripts/test_gaeb_reference.py",  # X83-Fixtures gitignore; TMP-checkout ohne Referenzdaten
     "scripts/test_bvbs_pruefdatei.py",     # braucht externe Pruefdatei
     "scripts/export_backtest_signals.py",  # Daten-Exporter, kein Test
@@ -9843,7 +9848,22 @@ def main() -> int:
                      "Exit2-Zeilen"),
                     ("test_adj_slot.py",
                      r"(\d+)/(\d+) ADJ-Slot-Faelle gruen",
-                     "ADJ-Slot")):
+                     "ADJ-Slot"),
+                    ("regel_konsument.py",
+                     r"(\d+)/(\d+) Regel-Konsumenten-Faelle gruen",
+                     "Regel-Konsument"),
+                    ("test_klasse_mehrdeutig.py",
+                     r"(\d+)/(\d+) Klassen-Mehrdeutigkeits-Faelle gruen",
+                     "Klassen-Mehrdeutigkeit"),
+                    ("test_regel_gegen_pos.py",
+                     r"(\d+)/(\d+) Regel-gegen-pos-Faelle gruen",
+                     "Regel-gegen-pos"),
+                    ("test_escaping.py",
+                     r"(\d+)/(\d+) Escaping-Faelle gruen",
+                     "Escaping"),
+                    ("test_projektion_echt.py",
+                     r"(\d+)/(\d+) Projektions-Echtheits-Faelle gruen",
+                     "Projektion-echt")):
                 try:
                     _r = subprocess.run(
                         [sys.executable, str(root / "scripts" / _sk)],

@@ -165,6 +165,19 @@ def lese_strom(p: Path) -> list[tuple[str, str]]:
 LESESTAT: dict[str, int] = {"json": 0, "kurz": 0, "envelope": 0}
 
 
+def escape(wert: str) -> str:
+    """Prozent-Encoding fuer freie Textfelder in Maschinenzeilen.
+
+    §A-ZZZZ157 (Runde 86): `grund=...` echoet Eingabedaten. Ein `;` in
+    einer Fehlermeldung zerlegte die key=value-Zeile — der Konsument
+    saehe einen Schluessel ohne `=`, also denselben Befund wie R83, nur
+    diesmal absichtlich provozierbar.
+    """
+    return "".join(
+        f"%{ord(c):02X}" if (c in ";=%\r\n" or not c.isprintable())
+        else c for c in wert)
+
+
 def exit_aus_zeilen(bericht: list[str]) -> int:
     """Leitet den Strom-Exit aus den Zeilen-Urteilen ab — die einzige Quelle.
 
@@ -258,7 +271,53 @@ def pruefe_strom(strom: list[tuple[str, str]]) -> tuple[int, int, list[str]]:
         seen[h] = i
     # Die unparsbaren Zeilen tragen ihr Urteil, ohne Inhalt zu haben.
     bericht[:0] = [z for z in _unparsbar_zeilen()]
+    # §A-ZZZZ154 (Runde 86): **Deduplikation ist eine Regel, keine
+    # Zeilen-Tatsache.** R85 gab jeder Zeile einen Hash als Zeiger — der
+    # Hash ist aber eine KLASSE: Original, Duplikat und Wiederholung
+    # tragen denselben. Ein Konsument, der nach Hash matcht, findet drei
+    # widersprechende Anweisungen, und die Auflösung fiel still auf
+    # `pos=` zurück (gemessen in test_klasse_mehrdeutig.py).
+    #
+    # Die Lösung ist keine bessere Zeilen-Adresse, sondern die Abgabe
+    # des ZUSTANDS: der Detektor publiziert die Regel, der Konsument
+    # exekutiert sie auf SEINEM Strom. Die Regel ist relativ zum
+    # Konsumenten, nicht zu einer Messzeit-Position — Bewegung ist damit
+    # strukturell irrelevant, nicht nur zufällig.
+    #
+    #   DEDUP <sha>;rang=<1..n>;art=<KANAL-DUPLIKAT|WIEDERHOLUNG|NEU>;
+    #         aktion=<ZUSTELLEN|VERWERFEN|WIEDERHOLT>;
+    #
+    # `rang=1` ist die Meldung, die der Konsument behält; jeder höhere
+    # Rang ist eine Kopie. Kein Konsument muss die Position im
+    # Detektor-Strom kennen — er zählt auf seinem eigenen.
+    bericht.extend(_dedup_regeln(strom, seen))
     return paare, kanal, bericht
+
+
+def _dedup_regeln(strom: list[tuple[str, str]], seen: dict[str, int]) -> list[str]:
+    """Erzeugt je inhaltlich verschiedener Klasse EINE Regel mit Raengen.
+
+    Bewusst nicht je Zeile: eine Regel pro Klasse ist das Gegenteil der
+    Mehrdeutigkeit. Der Rang ist zustandslos rekonstruierbar — der
+    Konsument zählt das Vorkommen seines Inhalts in seinem Strom, und
+    dieselbe Zahl trifft dieselbe physische Zeile, egal wieviel vorne
+    hinzukam.
+    """
+    klassen: dict[str, list[tuple[str, int]]] = {}
+    for i, (ts, t) in enumerate(strom):
+        h = digest(t)
+        klassen.setdefault(h, []).append((ts, i))
+    zeilen: list[str] = []
+    for h, vor in klassen.items():
+        for rang, (ts, i) in enumerate(vor, start=1):
+            if rang == 1:
+                art, aktion = "NEU", "ZUSTELLEN"
+            else:
+                gleich = vor[rang - 2][0] == ts
+                art = "KANAL-DUPLIKAT" if gleich else "WIEDERHOLUNG"
+                aktion = "VERWERFEN" if gleich else "WIEDERHOLT"
+            zeilen.append(f"DEDUP {h};rang={rang};art={art};aktion={aktion};")
+    return zeilen
 
 
 # §A-ZZZZ129 (Runde 83): **die Schwere-Ordnung als Gesetz, nicht als
@@ -319,7 +378,7 @@ def main(argv: list[str]) -> int:
         if "--strom" not in argv:
             print(achse(0, 0, 0), end="")
             # §A-ZZZZ148 (Runde 85): **Exit 2 darf nicht zeilenlos sein.**
-            print("ZEILE AUFRUF VERWERFEN;grund=einwurf_ohne_strom;")
+            print(f"ZEILE AUFRUF VERWERFEN;grund={escape('einwurf_ohne_strom')};")
             print("--einwurf braucht --strom als Referenz", file=sys.stderr)
             return 2
         try:

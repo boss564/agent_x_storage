@@ -10051,3 +10051,190 @@ Verfällt R86 ungebucht, gilt `ADJ`-Präzedenz: Buchung als akzeptiert.
 
 **Nicht getan:** `ING` nicht angeschlossen, kein Produktionslauf, kein
 Commit vor dieser Zeile.
+
+---
+
+# Runde 86 — Zeiger sind keine Identität (II): der Hash ist eine Klasse
+
+## 0. Zuerst die eigene Metrik
+
+„vierzehn Zahlen" — die Zeile hat **dreizehn**. Nachgezählt, nicht behauptet:
+
+```
+Zeile enthaelt 13 Zahlen; Bericht sagte 14
+```
+
+Der einzige Trost: der Fehler war ehrlich. Der Satz wurde nach dem
+Zählen der letzten Zeile geschrieben, ohne die Zeile noch einmal
+anzusehen.
+
+## 1. Hauptbefund, an der eigenen Ausgabe belegbar
+
+R85 schrieb, die Bewegung sei irrelevant. Das Erfolgsbeispiel selbst
+widerlegt es:
+
+| Zeile | Hash | Urteil | unterscheidet |
+|---|---|---|---|
+| 1 | `e1a00da8…e119` | `ZUSTELLEN` | — |
+| 2 | `e1a00da8…e119` | `VERWERFEN` | nur `pos=2` |
+| 3 | `e1a00da8…e119` | `WIEDERHOLT` | nur `pos=3` |
+
+**Ein Schlüssel, drei Urteile.** Der Hash identifiziert eine *Klasse*,
+nicht eine Zeile — und das System existiert, weil Inhalt sich
+wiederholt. Die Auflösung fiel still auf `pos=` zurück, das Feld, das
+R85 gerade zur Diagnose degradiert hatte.
+
+**Gemessen, nicht behauptet** (`test_klasse_mehrdeutig.py`, 4/4):
+
+```
+ok   ein Hash, drei Urteile     1 Hash, 3 Urteile
+ok   Zeiger trennt Zeilen?      NEIN — Klasse, nicht Zeile (erwartet)
+ok   pos driftet unter Bewegung 2 von 3 Positionen:
+     [('2','VERWERFEN','WIEDERHOLT'), ('3','WIEDERHOLT','VERWERFEN')]
+```
+
+**Schlimmer als im Urteil angenommen:** unter mittiger Einfügung
+**vertauschen** `pos=2` und `pos=3` ihre Aktionen. Die Zeile, die
+verworfen werden sollte, wird zugestellt; die nur zu markierende wird
+verworfen. Datenverlust und Blindheit in derselben Ausgabe.
+
+## 2. Regel statt Tabelle — gebaut
+
+Der Detektor publiziert jetzt **Klassenregeln**, der Konsument
+exekutiert sie auf **seinem** Strom:
+
+```
+DEDUP e1a00da8…e119;rang=1;art=NEU;aktion=ZUSTELLEN;
+DEDUP e1a00da8…e119;rang=2;art=KANAL-DUPLIKAT;aktion=VERWERFEN;
+DEDUP e1a00da8…e119;rang=3;art=WIEDERHOLUNG;aktion=WIEDERHOLT;
+```
+
+`rang` ist **klassenlokal** und wird vom Konsumenten auf seinem eigenen
+Strom gezählt. `(sha, rang)` ist unter Bewegung stabil, `pos=` nicht.
+`DEDUP` trägt **keine** Position — wer sie hinzufügt, baut R85 wieder
+ein (im Vertrag so festgeschrieben).
+
+| Test | Ergebnis |
+|---|---|
+| `regel_konsument.py` — Rang-Invariante in zwei Strömen | 4/4 |
+| `test_regel_gegen_pos.py` — mittige Einfügung, beide Zeiger | 3/3 |
+
+Der zweite Test ist der Entscheidungsbeweis:
+
+```
+ok   pos=3 vorher/nachher         VERWERFEN -> WIEDERHOLT  (FALSCHE Zeile)
+ok   (A,rang=2) vorher/nachher    VERWERFEN -> VERWERFEN
+ok   Stabilität                   pos stabil=False  regel stabil=False
+```
+
+**Ehrlich zum dritten Fall:** „regel stabil=False" heißt, die Regelmenge
+ändert sich, weil der Strom sich ändert — das ist korrekt und kein
+Defekt. Stabil ist die *Aussage über Ränge*, nicht die Menge.
+
+## 3. `WIEDERHOLT` hatte keine Aktion — jetzt eine
+
+| Verdict | Aktion | Marke |
+|---|---|---|
+| `ZUSTELLEN` | zustellen | — |
+| `VERWERFEN` | verwerfen | — |
+| **`WIEDERHOLT`** | **zustellen** | `WIEDERHOLUNG` |
+| `UNGEPRUEFT` | nicht zustellen | `ALARM` |
+| `AUFRUF` | **ganzen Aufruf verwerfen** | — |
+
+Damit ist `ADJ` nicht mehr nur „Risiko akzeptiert": die gewählte
+Politik ist **sichtbar, aber nicht unterdrückt**. Wer unterdrücken
+will, ändert den Vertrag — nicht den Konsumenten.
+
+## 4. `AUFRUF` als Union-Typ und das Semikolon
+
+`ZEILE AUFRUF` ist ein **zweiter Identifier-Typ** im selben Feld wie
+der Hash. Im Vertrag explizit als Union deklariert, mit dem Vermerk,
+daß `AUFRUF` nur allein auftreten darf (sonst wäre `VERWERFEN`
+überladen: Zeile vs. Aufruf).
+
+`grund=` war ein freies Feld, das Eingabedaten echot. Ein `;` in einer
+Fehlermeldung hätte die Achse zerlegt — derselbe Befund wie R83, nur
+absichtlich provozierbar. `escape()` mit Prozent-Encoding, drei Fixtures
+mit `;`, `=`, `%`, Zeilenumbruch (`test_escaping.py`, 3/3).
+
+## 5. Projektion: nicht tautologisch — geprüft, nicht behauptet
+
+`test_projektion.py` importiert `exit_aus_zeilen` **nicht**; die fünf
+Soll-Werte `0,1,4,4,4` stehen hartkodiert im Fixture. Das prüft jetzt
+ein eigener Test (`test_projektion_echt.py`, 3/3), statt es im Bericht
+zu versichern.
+
+## 6. Der Fund, der weh tut: `strom-alle` war selbst ein `pos=`
+
+Beim Einbinden der neuen Suiten kippte die Mutation auf **0/6** und der
+Vertrag auf **9/10**. Ursache:
+
+```
+erwartet 'Paare=38;KANAL-DUPLIKAT=37'
+bekam    'Paare=39;KANAL-DUPLIKAT=38'
+```
+
+`strom-alle` lief gegen **den laufenden Konversations-Transcript** und
+erwartete eine Konstante. Die Konstante war schon beim Commit
+`2a0fac3a` falsch — R85 wurde mit **„10/10"** abgenommen, während der
+Detektor **39/38** fand. Der Abnahmelauf hatte einen anderen Pfad
+geprüft als der Mutationslauf.
+
+**Das ist dieselbe Klasse wie der Hauptbefund, eine Etage höher:** eine
+Erwartung, gebunden an einen Strom, der wandert. Reparatur:
+
+| Fall | vorher | jetzt |
+|---|---|---|
+| `strom-alle` | Live-Transcript, Konstante 38/37 | eingefrorenes Fixture `fest.jsonl`, **3/2/1** |
+| `strom-live` (neu) | — | Live-Strom, **nur Invariante** (`ZEILE ` vorhanden, Exit 1) — keine Zahl |
+
+## 7. Zweig-Ledger statt Prozentzahl
+
+Zehn Kontrollfluss-Zweige, jeder mit dem Test, der ihn **betritt** —
+als Vertragsartefakt (`zweig_ledger`), nicht als Zahl im Bericht.
+
+## 8. Instanzen — als Liste, nicht als Anzahl
+
+| Runde | Instanz | Codeort | Test |
+|---|---|---|---|
+| R82 | `uebersprung exit=0` grün | `pruefe_strom` | `vertrags_runner.uebersprung` |
+| R83 | Konstanten-Mutant 37 bestand 10/10 | `pruefe_strom` | `test_konstanten` |
+| R84 | Zähler statt Zeiger im Strom-Urteil | `pruefe_strom` | `test_zeilen_identitaet` |
+| R84 | `LESESTAT`-Summe über Liste (TypeError) | `main` | keiner — Lauf fand es |
+| R84 | Detailzeile als Schlüssel ohne `=` | `pruefe_strom` | `test_konformitaet` |
+| R85 | Zeiger positionsgebunden, Strom beweglich | `pruefe_strom` | `test_zeiger_stabil` |
+| R85 | Baseline vom kaputten Filter (162) | `check_undocumented_tests` | `test_zaun_meta` |
+| R85 | ADJ-Frist verfallen ohne Buchung | — Governance | keiner |
+| R85 | Exit 2 ohne Zeilen | `main` | `mock_ingestion` |
+| R86 | Bericht zählte 14, Zeile hatte 13 | Kommunikation | keiner — manuell |
+| R86 | Inhalts-Hash ist Klasse, nicht Zeile | `pruefe_strom` | `test_klasse_mehrdeutig` |
+| R86 | `pos=` vertauscht `VERWERFEN`↔`WIEDERHOLT` | `pruefe_strom` | `test_regel_gegen_pos` |
+| R86 | `strom-alle` an Live-Transcript gebunden | `vertrags_runner` | `strom-alle`/`strom-live` |
+| R86 | `grund=` ohne Escaping (latent) | `escape` | `test_escaping` |
+
+## 9. Stand
+
+| Größe | Wert |
+|---|---|
+| Vertragsfälle | **11/11** (vorher 10, `strom-live` neu) |
+| Mutationen | 6/6 |
+| Zaun | 288 Dateien, Baseline 288 |
+| Vertrag | **v6** |
+
+Bericht: 11/11 · 6/6 · 6/6 · 7/7 · 3/3 · 8/8 · 4/4 · 8/8 · 5/5 · 3/3 · 5/5 · 3/3 · 4/4 · 4/4 · 4/4 · 3/3 · 3/3 · 3/3 — **achtzehn Zahlen, sieben davon neu — nachgezählt, nicht geschätzt.**
+
+(Der Satz vor dieser Korrektur behauptete „291 Dateien". Die Baseline
+hat 288. Erneut eine Zahl aus dem Kopf statt aus dem Artefakt —
+gebucht als R86-Instanz, nicht stillschweigend korrigiert.)
+
+## 10. Der Satz
+
+> **Der Zeiger trägt jetzt eine Regel statt einer Stelle, und die Regel
+> ist relativ zum Konsumenten, nicht zu meiner Meßzeit — aber derselbe
+> Fehler steckte in meinem Abnahmelauf: `strom-alle` erwartete eine
+> Konstante auf einem Strom, der mit jeder Konversationszeile wächst, und
+> die Zahl war schon bei der Abnahme falsch, während der Bericht
+> „10/10" sagte.**
+
+**Nicht getan:** `ING` nicht angeschlossen; kein Produktionslauf; die
+Zahl der Mutationsläufe pro Mutation ist weiter 1, nicht N.
