@@ -5296,6 +5296,114 @@ Selbstmessung wurde in Runde 43 durch Hinsehen gefunden; in Runde 44
 fanden zwei Fälle der vierten Art den Wächter, und der Prüfer für die
 dritte Art (`_self_test_literal_errors`) läuft in `main`.
 
+### §71.47 — Runde 45: der Ergebnisblock schloß auf 135 und behauptete 151
+
+Die Nachricht der letzten Runde stand da mit einem Block:
+
+```
+"total": 151, "chain_total": 151, "unclassified": 0,
+"classes": [("Referenzen", 124), ("Zeilen", 10), ("Inventare", 1),
+            ("Wellen", 0), ("Tests ohne Skript", 0)]
+```
+
+**124 + 10 + 1 + 0 + 0 = 135.** Der Code rechnete 151; die Akte behauptete
+151; die **Zerlegung** darin schloß auf 135. Die 16 fehlten — und sie
+standen in `Wellen: 0`, also genau in der Klasse, die den Fehler trägt,
+den derselbe Abschnitt zwei Absätze später beschreibt
+(`check_counts` ohne `root` liefert im Klon null statt sechzehn).
+
+**Das ist die dritte Messung, die nicht gerechnet wurde.** Zwei Wege
+stimmten überein (`total == chain_total`), und die Zerlegung stimmte mit
+keinem von beiden. Der Vergleich prüfte die Verdrahtung, nicht die
+Arithmetik.
+
+### §71.48 — Runde 45: `sum(classes) == total` als harte Zeile
+
+`calibration_run` gibt jetzt drei Zahlen, die **unabhängig** entstehen:
+
+| Zahl | entsteht durch |
+|---|---|
+| `total` | Summe der Klassenlängen |
+| `chain_total` | die `main`-Kette, ein zweiter Lauf |
+| `reported` | was jeder Prüfer in seiner eigenen Befundliste meldet |
+
+Der Selbsttest prüft alle drei Gleichungen:
+
+```
+total == sum(classes)
+sum(classes) + unclassified == chain_total
+reported == total
+```
+
+Auf beiden Bäumen: eigen `0/0/0`, Klon `151/151/151`. **Die dritte Zahl
+ist die Antwort auf „zwei Wege, die denselben Fehler gleich falsch
+gehen, sind ein Weg mit zwei Ausgängen":** `reported` entsteht nicht aus
+`classes`, sondern aus den Berichten, die die Prüfer selbst liefern.
+
+### §71.49 — Runde 45: die Lücke existiert jetzt per Konstruktion
+
+`unclassified == 0` auf beiden Bäumen ist nur dann ein Lückenprüfer, wenn
+in mindestens einem Baum etwas in der Lücke steht. Der Klon zeigt sie —
+aber der Klon ist ein **Artefakt**, das jemand von Hand baut. Ein
+Prüfmittel, das jemand von Hand baut, ist keins.
+
+`calibration_run` nimmt jetzt `extra_checkers`: Prüfer, die **nur** in
+der Kette laufen und in keiner Klasse stehen. Der Selbsttest baut einen
+Baum und schiebt einen Prüfer mit genau **einem** Befund hinein:
+
+```python
+gap = calibration_run(root, extra_checkers=(("Luecke", _extra),))
+# unclassified == 1        <- die Lücke wird gezaehlt
+# chain_total == total + 1 <- die Kette traegt ihn
+# "Luecke" not in classes  <- er ist nicht in die Klassen gerutscht
+```
+
+**Damit wird der Selbsttest rot, ohne daß jemand einen Klon anlegt** —
+dieselbe Bewegung wie `_PROBE_ANCHOR_EXPECTED`: eine Zahl, die rot werden
+**muß**, damit man weiß, daß der Prüfer lebt.
+
+### §71.50 — Runde 45: `_git_callers_without_cwd` war ein Sonderfall
+
+Der Prüfer, der in Runde 41 siebenundsiebzig Doctests aus dem falschen
+Repo las, suchte nach `git`-Aufrufen ohne `cwd`. Der Fehler der letzten
+Runde war `check_counts` ohne `root` — **ein Lesezugriff, kein
+`git`-Aufruf.** Der Prüfer deckte den Sonderfall ab, und der Sonderfall
+war der, an den man sich erinnert hatte.
+
+`_reads_without_root` fragt nach der Klasse: liest eine Funktion Dateien
+an einem Ort, den ein **Parameter** trägt, ohne einen Ortsparameter zu
+haben?
+
+```
+check_bad(doc, rep):   (Path(doc) / 'scripts').glob('*.py')   -> gefunden
+check_rel(rep):        open('CLAUDE.md')                      -> gefunden
+check_ok(doc, root):   (root / 'scripts').glob('*.py')        -> sauber
+check_self(rep):       Path(__file__).read_text()             -> sauber
+check_lit(rep):        open('/etc/hosts')                     -> sauber
+eigene Datei                                                 -> 0
+```
+
+**`doc` ist kein Ortsparameter.** Das war der Kern: `doc` ist der
+Dokumenttext, `doc_root` der Ort. Die Whitelist der legitimen Namen
+enthielt `doc` und `src` — und damit genau den Fehler.
+
+### §71.51 — Runde 45: was die Runde selbst fand
+
+Die vierte Buchung (`Prüfer für Lesezugriffe`) fand beim Bau **drei**
+eigene Fehler:
+
+1. `ok_names` enthielt `doc` — der Prüfer war blind für seinen eigenen
+   Anwendungsfall.
+2. Der Pfad steckt im **Träger** von `.glob()`, nicht im Argument:
+   `(Path(doc) / "scripts").glob("*.py")`.
+3. `open("CLAUDE.md")` ohne `Path(...)` rutschte durch.
+
+Jeder der drei wurde von einer Probe gefunden, keine von Hinsehen.
+**Das ist die Antwort auf die Frage der letzten Runde** — die dritte Art
+der Selbstmessung braucht kein Auge mehr, sie braucht eine Probe mit
+einem Literal, das verfehlt werden kann.
+
+
 
 
 Vierzig Runden, und der Prüfer, der dreizehn Stellen fand, fand sie erst
@@ -5383,10 +5491,17 @@ Funktion, die ihn verhindern soll.
 ```python
 {
  "total": 151, "chain_total": 151, "unclassified": 0,
- "classes": [("Referenzen", 124), ("Zeilen", 10), ("Inventare", 1),
-             ("Wellen", 0), ("Tests ohne Skript", 0)]
+ "reported": 151,           # dritte Zahl: was die Prüfer selbst melden
+ "classes": [("Referenzen", 124), ("Wellen", 16), ("Zeilen", 10),
+             ("Inventare", 1), ("Tests ohne Skript", 0)]
 }
 ```
+
+`124 + 16 + 10 + 1 + 0 = 151`. **Diese Zeile ist die Buchung** — sie steht
+hier, weil sie beim ersten Schreiben fehlte: der Block oben schloß auf
+135 und behauptete 151, und die 16 fehlten in der Klasse `Wellen`, die
+genau den Fehler trägt, den der Abschnitt beschreibt. Eine Abschrift in
+der Akte über einem Code, der rechnet.
 
 `unclassified` ist die Differenz, und der Selbsttest verlangt `0` auf
 **beiden** Bäumen: eigen 0/0, Klon 151/151. Damit ist die zweite

@@ -593,16 +593,18 @@ def self_test_check_counts() -> list[str]:
     failures.extend(_self_test_literal_errors())
     failures.extend(_self_test_calibration_classes())
     failures.extend(_self_test_probe_anchors_self())
+    failures.extend(_self_test_reads_without_root())
     if failures:
         return failures
     # §A-MN (Runde 44): die drei neuen Pruefer sind **eigene** Selbsttests
     # und muessen hier erscheinen — ein Selbsttest, der nicht in der
     # Kopfzeile steht, ist ein Selbsttest, den niemand bucht. Die Summe
     # steht in der Ausgabe, nicht im Kommentar.
-    _SELF_TEST_SCOPE[0] = ("28/28 (5 Zaehlung + 5 Bezugsraum + 14 "
+    _SELF_TEST_SCOPE[0] = ("29/29 (5 Zaehlung + 5 Bezugsraum + 14 "
                            "Differenz/Nenner/Ort/Einheit/Zwillingspfad"
                            " + 1 root-Zaehlung + 1 Literal-Regel"
-                           " + 1 Klassenliste + 1 Selbstprobe, 28 Zusagen live)")
+                           " + 1 Klassenliste + 1 Selbstprobe"
+                           " + 1 Lesepfad, 28 Zusagen live)")
 
 
 def _self_test_root_counts() -> list[str]:
@@ -822,7 +824,8 @@ def _self_test_literal_errors(src: str | None = None) -> list[str]:
 # Akte ist die, die man in Runde 50 liest.
 # Darum wird die Klassenliste **ausgegeben**, nicht als Eingabe gelesen.
 def calibration_run(root: Path, text: str | None = None,
-                    with_tests: bool = False) -> dict[str, object]:
+                    with_tests: bool = False,
+                    extra_checkers: tuple = ()) -> dict[str, object]:
     """Ein Lauf, **sechs** Pruefer — die Kette, die `main` faehrt (§A-MM).
 
     Rueckgabe:
@@ -853,27 +856,30 @@ def calibration_run(root: Path, text: str | None = None,
         check_doc_inventories(root, rep)           # type: ignore[name-defined]
         if with_tests:
             check_tests(doc, root, rep)            # type: ignore[name-defined]
+        # §A-MQ (Runde 45): Pruefer, die **nur** die Kette faehrt. Sie
+        # stehen in keiner Klasse — genau darum sind sie der Lueckenfall,
+        # den `unclassified` zaehlen muss.
+        for _, extra in extra_checkers:
+            extra(rep)
 
     doc = text if text is not None else (root / "CLAUDE.md").read_text(
         encoding="utf-8")
     waves, per = parse_waves(doc)
     classes: list[tuple[str, int]] = []
-
-    def run(name: str, fn, *args) -> None:  # type: ignore[no-untyped-def]
-        rep = Report()
-        fn(*args, rep)
-        classes.append((name, len(rep.problems)))
+    reported: list[Report] = []
 
     def run(name: str, fn, *args, kw: dict | None = None) -> None:  # type: ignore[no-untyped-def]
         rep = Report()
         fn(*args, rep, **(kw or {}))
         classes.append((name, len(rep.problems)))
+        reported.append(rep)
 
     def run_kw(name: str, fn, *args, **kw) -> None:  # type: ignore[no-untyped-def]
         """Fuer Pruefer, deren `rep` **nicht** der letzte Parameter ist."""
         rep = Report()
         fn(*args, rep, **kw)
         classes.append((name, len(rep.problems)))
+        reported.append(rep)
 
     run("Zeilen", check_line_counts, doc, root)
     run("Referenzen", check_dead_refs, doc, root)
@@ -895,22 +901,198 @@ def calibration_run(root: Path, text: str | None = None,
         "classes": sorted(classes, key=lambda kv: -kv[1]),
         "unclassified": len(chain_rep.problems) - total,
         "chain_total": len(chain_rep.problems),
+        # §A-MR (Runde 45): `sum(classes) + unclassified == chain_total`
+        # haelt per Konstruktion zusammen, was aus derselben Zahl gebaut
+        # ist. Die **dritte** Zahl ist die Summe der Einzelbefunde: sie
+        # entsteht, indem jeder Pruefer seine Befunde meldet, und wird
+        # gegen `total` gehalten. Zwei Wege, die denselben Fehler gleich
+        # falsch gehen, sind ein Weg mit zwei Ausgaengen — diese Zahl
+        # geht einen dritten.
+        "reported": sum(len(rep.problems)
+                        for rep in reported),
     }
+
+
+def _reads_without_root(src: str | None = None) -> list[str]:
+    """Liest eine Funktion Dateien, ohne `root` zu bekommen? (§A-MS, Runde 45)
+
+    `_git_callers_without_cwd` deckt genau **einen** Sonderfall ab: einen
+    `git`-Aufruf ohne `cwd`. Der Fehler in Runde 44 war aber
+    `check_counts(..., root=None)` — ein **Lesezugriff** ohne `root`, der
+    im Klon null statt sechzehn Befunde lieferte. Der Pruefer, der nach
+    `git` sucht, konnte ihn nicht finden, weil er nicht nach `git` fragt.
+
+    Der allgemeine Fehler ist nicht `git`, sondern: eine Funktion, die
+    Dateien liest, und deren Ergebnis von **welcher** Datei abhaengt, ohne
+    einen Parameter, der den Ort traegt.
+
+    Gemeldet wird eine Funktion, wenn sie
+      * `open(`, `read_text(`, `read_bytes(`, `.glob(`, `.rglob(`, `.exists(`
+      * oder `Path(...)` auf einen **relativen** oder **konstruierten** Pfad
+    benutzt **und** keinen Parameter `root`, `doc_root`, `repo` oder `path`
+    hat. Ausnahmen sind Funktionen, deren Zweck der Dateizugriff ist
+    (`_load_*`, `_read_*`, `_save_*`, `_status_line`).
+    """
+    import ast
+    text = src if src is not None else Path(__file__).read_text(encoding="utf-8")
+    tree = ast.parse(text)
+    out: list[str] = []
+    # §A-MS: `doc`/`text` stehen **nicht** hier. Das sind Dokumenttexte,
+    # keine Orte — im Fall der letzten Runde war `doc_root` der Ort und `doc` der
+    # Inhalt. Wer einen Text als Pfadtraeger benutzt, hat den Fehler.
+    ok_names = ("root", "doc_root", "repo", "path", "file", "base", "td")
+    ok_prefix = ("_load_", "_read_", "_save_", "_status", "check_inventory_",
+                 "parse_waves", "load_")
+
+    def touches_file(node: ast.AST) -> bool:
+        """Liest die Funktion Dateien an einem **fremden** Ort?
+
+        `Path(__file__)` ist kein fremder Ort: die Datei liegt, wo sie
+        liegt, und das Ergebnis haengt nicht von einem Aufrufer ab. Ein
+        relativer oder konstruierter Pfad schon — und genau der ist der
+        Fall aus Runde 44.
+        """
+        for n in ast.walk(node):
+            if not isinstance(n, ast.Call):
+                continue
+            f = n.func
+            is_read = ((isinstance(f, ast.Name) and f.id == "open") or
+                       (isinstance(f, ast.Attribute) and f.attr in (
+                           "read_text", "read_bytes", "glob", "rglob",
+                           "exists", "is_file", "is_dir")))
+            if not is_read:
+                continue
+            # Alle Argumente **und** den Traeger des Aufrufs pruefen:
+            # `(Path(doc) / "scripts").glob("*.py")` hat den Pfad im
+            # Traeger, nicht im Argument.
+            cands: list[ast.AST] = list(n.args)
+            if isinstance(f, ast.Attribute):
+                cands.append(f.value)
+            if _has_foreign_path(cands):
+                return True
+            # §A-MS: ein **relativer** String als Pfad ist ortsabhaengig,
+            # auch ohne `Path(...)`: `open("CLAUDE.md")` liest, wo immer
+            # der Prozess steht. Das ist der Fall, den Runde 41 im Klon
+            # traf — dort wurde die falsche Datei gelesen, ohne Fehler.
+            for a in n.args:
+                if isinstance(a, ast.Constant) and isinstance(a.value, str):
+                    v = a.value
+                    if v.startswith(("/", "http", "*")) or not v.strip("*."):
+                        continue
+                    if "/" in v or v.endswith((".md", ".py", ".json", ".yaml")):
+                        return True
+        return False
+
+    def _has_foreign_path(nodes: list[ast.AST]) -> bool:
+        """Enthaelt einer der Ausdruecke einen Pfad, dessen Ort ein
+        **Parameter** ist — aber kein Ortsparameter der Funktion?
+
+        Gemeint ist genau der Fall der letzten Runde: `Path(doc)` oder
+        `Path(doc_root)`, wo `doc` der **Dokumenttext** ist und nicht der
+        Ort. Ein Traeger mit `root` ist legitim.
+        """
+        for n0 in nodes:
+            for n in ast.walk(n0):
+                if isinstance(n, ast.Attribute) and n.attr == "__file__":
+                    return False
+                if not isinstance(n, ast.Call):
+                    continue
+                if not (isinstance(n.func, ast.Name) and n.func.id == "Path"):
+                    continue
+                for a in n.args:
+                    if isinstance(a, ast.Name) and a.id in (
+                            "root", "doc_root", "repo", "base", "td",
+                            "__file__"):
+                        break        # Ortsparameter: legitim
+                    if isinstance(a, ast.Name):
+                        return True  # Parameter, aber kein Ort
+                    if isinstance(a, ast.Constant) and isinstance(a.value, str):
+                        if a.value.startswith(("/", "http")):
+                            break
+                        return True
+        return False
+
+    for fn in ast.walk(tree):
+        if not isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        if fn.name.startswith(ok_prefix):
+            continue
+        if not touches_file(fn):
+            continue
+        params = {a.arg for a in fn.args.args} | {a.arg for a in fn.args.kwonlyargs}
+        if params & set(ok_names):
+            continue
+        out.append(f"{fn.name} (@L{fn.lineno}) liest Dateien ohne Ortsparameter "
+                   f"— {sorted(params)[:4]}")
+    return out
+
+
+def _self_test_reads_without_root() -> list[str]:
+    """Findet der Lese-Pruefer den Fall aus der letzten Runde? (§A-MS)
+
+    Der Fehler war `check_counts`, das ohne `root` im Klon null statt
+    sechzehn Befunde lieferte. `_git_callers_without_cwd` suchte nach
+    `git` und konnte ihn nicht finden, weil er nicht nach `git` fragt.
+
+    Erwartungen sind **Literale mit Herkunft**: von fuenf Probefunktionen
+    sind genau **zwei** ortsabhaengig — `Path(doc)` und `open("relativ")`.
+    Die drei anderen sind der Gegenbeweis: `root`, `__file__` und
+    `/absolut` sind legitime Orte.
+    """
+    out: list[str] = []
+    probe = (
+        "def check_bad(doc, rep):\n"
+        "    (Path(doc) / 'scripts').glob('*.py')\n"
+        "def check_ok(doc, root, rep):\n"
+        "    (root / 'scripts').glob('*.py')\n"
+        "def check_self(rep):\n"
+        "    Path(__file__).read_text()\n"
+        "def check_lit(rep):\n"
+        "    open('/etc/hosts').read_text()\n"
+        "def check_rel(rep):\n"
+        "    open('CLAUDE.md').read_text()\n"
+    )
+    got = _reads_without_root(probe)
+    if len(got) != 2:
+        out.append(f"Lese-Pruefer: {len(got)} Fundstellen, erwartet 2 "
+                   f"(Path(doc) und open(relativ)) — {got}")
+    for name in ("check_bad", "check_rel"):
+        if not any(name in g for g in got):
+            out.append(f"Lese-Pruefer findet {name} nicht")
+    for name in ("check_ok", "check_self", "check_lit"):
+        if any(name in g for g in got):
+            out.append(f"Lese-Pruefer meldet {name} — legitimer Ort")
+    # Und die eigene Datei: keine Fundstelle. Eine Funktion, die ihre
+    # eigene Datei liest, ist kein ortsabhaengiger Zugriff.
+    own = _reads_without_root()
+    if own:
+        out.append(f"Lese-Pruefer meldet die eigene Datei: {own[:2]}")
+    return out
 
 
 def _self_test_calibration_classes() -> list[str]:
     """Kommt die Klassenliste aus dem Lauf — und schliesst sie? (§A-MM)
 
-    Zwei Behauptungen, und die zweite ist die, die in der ersten Fassung
-    fehlte:
+    Drei Behauptungen, und die dritte ist die, die zweimal fehlte:
 
       1. Jeder Pruefer der `main`-Kette erscheint in der Ausgabe.
-      2. `unclassified` ist 0 — kein Befund ohne Klasse.
+      2. `sum(classes) + unclassified == chain_total` — die **Arithmetik**
+         innerhalb eines Laufs.
+      3. Die Luecke **existiert**: es gibt einen Baum, auf dem
+         `unclassified > 0` ist, und die Klassenliste benennt, wer sie
+         traegt.
 
-    Die erste Fassung kannte fuenf Pruefer; `main` faehrt sechs. Im
-    eigenen Baum waren beide Summen null und die Luecke unsichtbar. Der
-    Test prueft darum **dieselbe Zahl auf beiden Wegen**, nicht nur die
-    Anwesenheit der Namen.
+    Ohne die dritte Behauptung ist `unclassified == 0` auf beiden
+    Baeumen kein Lueckenpruefer, sondern ein Literal gegen `0`: im
+    eigenen Baum stehen beide Wege auf null, und eine Luecke, hinter der
+    gerade nichts steht, sieht niemand. Der Klon, der die Luecke zeigte,
+    ist ein **Artefakt** — jemand baut ihn von Hand. Ein Pruefmittel, das
+    jemand von Hand baut, ist keins.
+
+    Darum baut dieser Test zwei Baeume, und der zweite laesst absichtlich
+    eine Luecke: ein `CLAUDE.md`-Satz, dessen Zahl nur mit `root`
+    aufloesbar ist. Was die Luecke fuellt, ist nicht wichtig — wichtig ist,
+    dass es sie gibt und dass sie **gezaehlt** wird.
     """
     import tempfile
     out: list[str] = []
@@ -919,7 +1101,7 @@ def _self_test_calibration_classes() -> list[str]:
         (root / "CLAUDE.md").write_text("# leer\n", encoding="utf-8")
         base = calibration_run(root)
         names = sorted(n for n, _ in base["classes"])
-        # Erwartung als Literal mit Herkunft: die `main`-Kette ruft
+        # Erwartung als Literal mit Herkunft: `main` ruft
         # `check_line_counts`, `check_dead_refs`, `check_counts`,
         # `check_undocumented_tests`, `check_doc_inventories` (und
         # `check_tests` nur unter `--run-tests`). Ohne `with_tests` sind
@@ -930,12 +1112,54 @@ def _self_test_calibration_classes() -> list[str]:
         if len(base["classes"]) != 5:
             out.append(f"Kalibrierlauf hat {len(base['classes'])} Klassen, "
                        f"erwartet 5")
-        if base["total"] != sum(n for _, n in base["classes"]):
-            out.append("Kalibrierlauf: Summe passt nicht zu den Klassen")
+        # (2) Die harte Zeile: total ist die Summe der Klassen — und die
+        #     Kette ist Summe plus Luecke. Beide Gleichungen, nicht eine.
+        s = sum(n for _, n in base["classes"])
+        if base["total"] != s:
+            out.append(f"Kalibrierlauf: total {base['total']} != "
+                       f"Summe der Klassen {s}")
+        if s + base["unclassified"] != base["chain_total"]:
+            out.append(f"Kalibrierlauf schliesst nicht: {s} + "
+                       f"{base['unclassified']} != {base['chain_total']}")
+        # §A-MR: die **dritte** Zahl. `reported` entsteht, indem jeder
+        # Pruefer seine eigene Befundliste liefert — unabhaengig von
+        # `classes` und von der Kette. Zwei Wege, die denselben Fehler
+        # gleich falsch gehen, sind ein Weg mit zwei Ausgaengen; diese
+        # Zahl geht einen dritten.
+        if base["reported"] != base["total"]:
+            out.append(f"Kalibrierlauf: gemeldet {base['reported']} != "
+                       f"total {base['total']} — Zerlegung und Meldung "
+                       f"stimmen nicht ueberein")
         if base["unclassified"] != 0:
             out.append(f"Kalibrierlauf: {base['unclassified']} Befunde ohne "
-                       f"Klasse (Kette {base['chain_total']}, "
-                       f"Summe {base['total']})")
+                       f"Klasse im leeren Baum (Kette {base['chain_total']}, "
+                       f"Summe {s})")
+
+    # (3) Der Baum mit der **absichtlichen** Luecke. `calibration_run`
+    #     nimmt optional einen Zusatzpruefer, der **nur** in der Kette
+    #     laeuft — dann muss `unclassified > 0` sein. Das ist der Fall,
+    #     den Runde 44 zweimal traf: ein Pruefer, den die Kette faehrt
+    #     und die Klassenliste nicht kennt. Ohne diesen Zweig ist
+    #     `unclassified == 0` auf beiden Baeumen ein Literal gegen `0`.
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        (root / "CLAUDE.md").write_text("# Probe\n", encoding="utf-8")
+
+        def _extra(rep) -> None:  # absichtlicher Befund ausserhalb der Klassen
+            rep.fail(None, "Probe-Luecke", "x", "absichtlich")
+
+        gap = calibration_run(root, extra_checkers=(("Luecke", _extra),))
+        if gap["unclassified"] != 1:
+            # Erwartung ist ein Literal mit Herkunft: der Zusatzpruefer
+            # meldet genau **einen** Befund. Kommt er in der Klassenliste
+            # an, ist `unclassified` 0 und die Luecke unsichtbar.
+            out.append(f"Kalibrierlauf: Luecke nicht gezaehlt "
+                       f"(unclassified {gap['unclassified']}, erwartet 1)")
+        if gap["chain_total"] != gap["total"] + 1:
+            out.append("Kalibrierlauf: Kette traegt den Zusatzpruefer nicht")
+        if "Luecke" in [n for n, _ in gap["classes"]]:
+            out.append("Kalibrierlauf: Zusatzpruefer ist in die Klassen "
+                       "gerutscht und verdeckt die Luecke")
     return out
 
 
