@@ -220,6 +220,10 @@ NO_TEST_SUMMARY: set[str] = {
     # Pfade und gibt aus, was drinsteht — die Zahl im Bericht wird hier
     # GENERIERT statt getippt.
     "scripts/vertragszahlen.py",
+    "scripts/konsumenten_semantik.py",     # Norm als Code, kein Test
+    "scripts/test_konsument_kongruenz.py", # 8/8 K1 vs K2
+    "scripts/test_frist_gate.py",          # 4/4 Verfall löst Buchung aus
+    "scripts/kopfzeile.py",                # offene Posten zuerst, generiert
     "scripts/test_gaeb_reference.py",  # X83-Fixtures gitignore; TMP-checkout ohne Referenzdaten
     "scripts/test_bvbs_pruefdatei.py",     # braucht externe Pruefdatei
     "scripts/export_backtest_signals.py",  # Daten-Exporter, kein Test
@@ -9887,7 +9891,13 @@ def main() -> int:
                      "Kreuz-Record"),
                     ("test_harness_zaun.py",
                      r"(\d+)/(\d+) Harness-Zaun-Faelle gruen",
-                     "Harness-Zaun")):
+                     "Harness-Zaun"),
+                    ("test_konsument_kongruenz.py",
+                     r"(\d+)/(\d+) Konsumenten-Kongruenz-Faelle gruen",
+                     "Konsumenten-Kongruenz"),
+                    ("test_frist_gate.py",
+                     r"(\d+)/(\d+) Frist-Gate-Faelle gruen",
+                     "Frist-Gate")):
                 try:
                     _r = subprocess.run(
                         [sys.executable, str(root / "scripts" / _sk)],

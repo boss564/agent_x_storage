@@ -1,5 +1,5 @@
 {
-  "_version": 7,
+  "_version": 8,
   "_zweck": "Maschinenlesbarer Vertrag des Einwurf-Waechters. Single source of truth fuer Repo und externe Ingestion. Wer hier eine Zeile aendert, aendert das Tor ausserhalb dieses Repos mit.",
   "_stand": "Runde 84 (2026-10-18)",
   "_geltung": "Der Runner (scripts/vertrags_runner.py) importiert diese Datei; die externe Ingestion MUSS sie einlesen. Solange sie es nicht tut, zertifiziert N/N einen Vertrag, den draussen niemand benutzt.",
@@ -433,6 +433,18 @@
       "BC": "R85",
       "VRT": "R85",
       "ING": "vor Go-Live (externer Trigger)"
+    },
+    "NRM": {
+      "gesetzt": "R85",
+      "frist": "R86",
+      "verfallen_in": [
+        "R86",
+        "R87"
+      ],
+      "endzustand": "akzeptiert_mit_neuem_termin",
+      "neuer_termin": "R90",
+      "begruendung": "Injektivitaet der Normalisierung ist NICHT bewiesen. Entschaerft durch R88: der dritte Zweig `bei_unlesbar=WIEDERHOLT` nimmt der Annahme die lasttragende Kante fuer den Fall 'Zeitstempel nicht lesbar'. Was bleibt: zwei LESBARE Rohwerte, die auf dieselbe Normalform fallen (z.B. trailing space) und dadurch `gleich` werden. Dann VERWERFEN — der ADJ-Datenverlust. Beweis bis R90: Injektivitaetsprobe ueber den echten Strom (alle Rohwerte -> Normalform, Kollisionen zaehlen). Faellt sie, muss der Vergleich auf Rohwerte umgestellt werden — dann ist die Normalisierung nicht mehr lasttragend.",
+      "rest": "Der Fix (Vergleich auf Rohwert statt Normalform) ist plausibel, aber nicht gebucht — er aendert, was `gleich` heisst, und damit jede bestehende Regel."
     }
   },
   "mock_selbstreferenz": {
@@ -655,10 +667,57 @@
         "instanz": "Versionssprung v4->v6 ohne v5-Eintrag",
         "code": "waechter_vertrag.json",
         "test": "versions_ledger (R87 nachgetragen)"
+      },
+      {
+        "runde": 88,
+        "instanz": "unlesbarer Zeitstempel: `?`==`?` -> VERWERFEN, Vergleich ohne Groesse",
+        "code": "einwurf_waechter.ts_vergleich",
+        "test": "test_konsument_kongruenz 2'"
+      },
+      {
+        "runde": 88,
+        "instanz": "Vergleichsanker war unbestimmt (Vorgaenger vs. erstes Vorkommen)",
+        "code": "einwurf_waechter._dedup_regeln (anker=vorgaenger)",
+        "test": "test_konsument_kongruenz 1"
+      },
+      {
+        "runde": 88,
+        "instanz": "Konsumenten-Semantik nur in Testfaellen, nicht als Norm",
+        "code": "scripts/konsumenten_semantik.py",
+        "test": "test_konsument_kongruenz (K1 vs K2)"
+      },
+      {
+        "runde": 88,
+        "instanz": "Mutationsvarianz: 3 deterministische Laeufe = 1 Lauf dreimal",
+        "code": "vertrags_runner (MUTANT_LAEUFE)",
+        "test": "offen: Input-Varianz fehlt"
+      },
+      {
+        "runde": 88,
+        "instanz": "Frist-Verfall loest keine Buchung aus (ADJ, NRM, Mutation)",
+        "code": "waechter_vertrag.frist_instrument",
+        "test": "test_frist_gate.py"
+      },
+      {
+        "runde": 88,
+        "instanz": "NRM-Frist R86 verfallen, ungebucht — jetzt lasttragend",
+        "code": "— Annahme",
+        "test": "offen: Injektivitaet unbewiesen"
       }
     ],
     "stand_r86": 14,
-    "stand_r87": 20
+    "stand_r87": 20,
+    "stand_r88": 26,
+    "offene_posten": {
+      "regel": "Die Kopfzeile nennt OFFENE POSTEN, nicht gruene Suiten. Eine Zahl gruener Tests ist keine Aussage darueber, ob der Vertrag implementierbar ist.",
+      "anlass": "R87 meldete '23 Suiten, 0 Befunde' — und die schwersten Funde (12->10, falscher erster Anlauf) kamen von aussen bzw. von einzelnen Tests, nicht von der Suite.",
+      "stand_r88": [
+        "NRM: Injektivitaet unbewiesen (neue Frist R90, verschoben+begruendet)",
+        "Mutation: Varianz jetzt ueber Strom-Reihenfolge/Kopien — Zufallsquelle im DETEKTOR weiterhin fehlend",
+        "Vergleichsanker: normiert, aber nur von K1/K2 geteilt — ING unabhaengig fehlt",
+        "Ordnung: FIFO im Transport nicht garantiert, nur normiert"
+      ]
+    }
   },
   "orakel": {
     "befund": "Die Konstanten-Probe 0/1/2 beweist Anti-Hardcoding, nicht Zaehl-Richtigkeit. Sie zeigt, dass der Code nicht 37 ausgibt — nicht, dass 0 richtig IST.",
@@ -870,6 +929,24 @@
       "commit": "(diese Runde)",
       "runde": 87,
       "aenderung": "DEDUP ohne Katalog (erst/rest_art/bei_gleich/bei_ungleich), Kreuz-Record-Invarianz, Harness-Zaun, N-Laeufe-Mutation, Versionen-Ledger"
+    },
+    {
+      "version": 8,
+      "commit": "(diese Runde)",
+      "runde": 88,
+      "aenderung": "Konsumenten-Semantik als Norm (Anker/Drittfall/Vorrang/Ordnung/Default), totaler TS-Vergleich, Frist-Instrument, Konsumenten-Kongruenztest"
+    },
+    {
+      "version": "8-verworfen",
+      "commit": "—",
+      "runde": 87,
+      "aenderung": "VERWORFEN: erst=/rest=VERWERFEN|WIEDERHOLT als Klassen-Urteil. Grund: `rest=` hing davon ab, welche Zeitstempel der Detektor SAH; eine ungesehene Kopie kippte die Aktion fuer alle Raenge > 1. Scheiterte an test_katalog_naht 3/5. Steht hier, damit die plausible falsche Alternative nicht neu erfunden wird."
+    },
+    {
+      "version": "8-verworfen-2",
+      "commit": "—",
+      "runde": 88,
+      "aenderung": "VERWORFEN: `?` als Sentinel fuer fehlenden Zeitstempel. Grund: `'?' == '?'` ist True — zwei Meldungen ohne Timestamp wurden damit `gleich` und VERWORFEN. Jetzt eigenes Sentinel-Objekt, das mit nichts gleich ist (ts_vergleich). Anlass: eigene Messung /tmp/n3.jsonl."
     }
   ],
   "kreuz_record_invarianten": {
@@ -892,5 +969,42 @@
       "nicht gefangen"
     ],
     "anlass": "Ein Lauf/Mutant kann 'deterministisch gefangen' nicht von 'gelegentlich entkommen' trennen."
+  },
+  "konsumenten_semantik": {
+    "status": "NORM — nicht Beispiel. Jede Aussage hier ist ausfuehrbar in scripts/konsumenten_semantik.py.",
+    "problem": "Der Detektor emittiert eine Regel, die der Konsument auf SEINEM Strom ausfuehrt. Korrektheit ist damit keine Eigenschaft des Reports mehr, sondern der Konsumenten-Implementierung. R87 zeigte fuenf Beispiele und liess fuenf Fragen offen.",
+    "anker": "vorgaenger",
+    "anker_begruendung": "Der unmittelbare Vorgaenger, nicht das erste Vorkommen. Der Detektor misst dasselbe (seen[h] wandert mit, Δ=1). Anker 'erstes Vorkommen' liesse Konsument und Detektor divergieren, obwohl beide demselben Vertrag folgen. Bei [T1,T2,T2]: Vorgaenger -> VERWERFEN, erstes -> WIEDERHOLT. Die Wahl ist normiert, nicht geraten.",
+    "vergleich_domaene": [
+      "gleich",
+      "ungleich",
+      "unlesbar"
+    ],
+    "vergleich_begruendung": "{gleich, ungleich} ist nicht total. Ein fehlender oder unlesbarer Zeitstempel ist keines von beiden. Der dritte Zweig heisst `bei_unlesbar` und wird vom Detektor BEANTWORTET, weil er den Strom kennt.",
+    "bei_unlesbar": "WIEDERHOLT",
+    "bei_unlesbar_begruendung": "Loeschen ohne gelesenen Zeitstempel ist Datenverlust; markieren ist reversibel und sichtbar. Die Vorgabe folgt aus ADJ (R86: zustellen mit Marke), nicht aus einer neuen Politik.",
+    "vorrang": "ZEILE>DEDUP",
+    "vorrang_begruendung": "ZEILE ist ein EREIGNIS ueber DIESEN Strom; DEDUP ist eine VORSCHRIFT fuer kuenftige Kopien. Ein Ereignis ueber eine gesehene Zeile ist konkreter als eine Vorschrift fuer Raenge, die der Detektor nicht sah. Koexistenz ist erlaubt — der Vorrang entscheidet.",
+    "ordnung": "FIFO im Detektor-Strom. Der Konsument darf NICHT annehmen, dassdie erste Kopie seines Stroms die Originalmeldung ist — er wendet die Vorschrift auf seine Reihenfolge an; `anker=vorgaenger` macht das explizit.",
+    "ordnung_begruendung": "Bei gespiegeltem Strom [T2,T1,T1] wird die erste Kopie als `erst` zugestellt. Das ist die semantische Konsequenz, nicht ein Fehler: der Vertrag ordnet nicht, er beschreibt. Wer Ordnung sichern will, sichert sie im Transport, nicht im Regelformat.",
+    "default_regel_los": {
+      "erst": "ZUSTELLEN",
+      "rest": "KEINE-REGEL"
+    },
+    "default_begruendung": "Ein Hash ohne DEDUP-Zeile ist nicht 'unique' — er ist 'nicht gemessen'. Ein stiller Fallback auf ZUSTELLEN oder VERWERFEN waere die Luecke, gegen die das System gebaut wurde. `KEINE-REGEL` ist laut und zaehlt im Konsumenten als Befund.",
+    "ableitung_norm": "Ableitungen parsen RECORD-TYPEN, bevor sie Felder lesen. Kein Feld darf ueber die Record-Grenze hinweg interpretiert werden. Anlass: der erste Lauf von test_kreuz_record las `gesehen=1` als Ereignis und meldete ein Duplikat.",
+    "record_taxonomie": {
+      "ereignis": "ZEILE <sha|pos:n|AUFRUF> <urteil>;...;  — ueber diesen Strom",
+      "vorschrift": "DEDUP <sha>;erst=...;rest_art=...;anker=...;bei_*=...;  — fuer kuenftige Kopien",
+      "meta": "ZEILE AUFRUF VERWERFEN;grund=...;  — nur allein",
+      "default": "KEINE-REGEL  — kein Record, sondern der benannte Nicht-Fall"
+    },
+    "referenz": "scripts/konsumenten_semantik.py — Norm als ausfuehrbarer Code",
+    "test": "scripts/test_konsument_kongruenz.py — K1 (Norm) gegen K2 (Nachbau aus dem Vertragstext)"
+  },
+  "frist_instrument": {
+    "konstruktionsfehler": "Verfall loest keine Buchung aus. Dreimal belegt: ADJ (R84->R86), NRM (R86->R87 ungebucht), Mutationsvarianz.",
+    "regel": "Jede Frist endet in GENAU EINER von zwei Buchungen: 'bewiesen/entschieden' ODER 'akzeptiert mit neuem Termin und Begruendung'. 'Schweigen' ist kein moeglicher Endzustand.",
+    "test": "scripts/test_frist_gate.py"
   }
 }

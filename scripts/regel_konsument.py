@@ -20,6 +20,8 @@ import tempfile
 import subprocess
 from pathlib import Path
 
+import konsumenten_semantik as K
+
 W = Path(__file__).resolve().parent / "einwurf_waechter.py"
 
 
@@ -31,10 +33,10 @@ def _z(ts: str, txt: str) -> str:
 
 def _regeln(out: str) -> dict[str, dict[str, str]]:
     """sha -> {erst, bei_gleich, bei_ungleich}. Keine Anzahl mehr."""
-    return {h: {"erst": e, "gleich": g, "ungleich": u}
-            for h, e, g, u in re.findall(
-                r"DEDUP (\S+);erst=([A-Z]+);rest_art=zeitstempel;"
-                r"bei_gleich=([A-Z]+);bei_ungleich=([A-Z]+);", out)}
+    # §A-ZZZZ177: feldweise, siehe konsumenten_semantik.felder.
+    return {h: {"erst": f["erst"], "gleich": f["bei_gleich"],
+                "ungleich": f["bei_ungleich"]}
+            for h, f in K.regel_aus_bericht(out.splitlines()).items()}
 
 
 def _lauf(zeilen: list[str]) -> str:

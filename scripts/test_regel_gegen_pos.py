@@ -25,6 +25,8 @@ import sys
 import tempfile
 from pathlib import Path
 
+import konsumenten_semantik as K
+
 W = Path(__file__).resolve().parent / "einwurf_waechter.py"
 A = "A" * 500
 B = "B" * 500
@@ -53,10 +55,10 @@ def _pos(out: str) -> dict[int, str]:
 def _dedup(out: str) -> dict[str, dict[str, str]]:
     """sha -> Vorschrift. Kein Rang mehr: die Vorschrift ist im JEDEM
     Strom identisch, gerade weil sie keine Anzahl traegt."""
-    return {h: {"erst": e, "gleich": g, "ungleich": u}
-            for h, e, g, u in re.findall(
-                r"DEDUP (\S+);erst=([A-Z]+);rest_art=zeitstempel;"
-                r"bei_gleich=([A-Z]+);bei_ungleich=([A-Z]+);", out)}
+    # §A-ZZZZ177: feldweise ueber den zentralen Parser.
+    return {h: {"erst": f["erst"], "gleich": f["bei_gleich"],
+                "ungleich": f["bei_ungleich"]}
+            for h, f in K.regel_aus_bericht(out.splitlines()).items()}
 
 
 def main() -> int:

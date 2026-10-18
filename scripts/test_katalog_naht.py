@@ -24,6 +24,8 @@ import sys
 import tempfile
 from pathlib import Path
 
+import konsumenten_semantik as K
+
 ROOT = Path(__file__).resolve().parent.parent
 W = ROOT / "scripts" / "einwurf_waechter.py"
 A = "A" * 500
@@ -48,9 +50,11 @@ def _regel(out: str) -> dict[str, tuple[str, str, str]]:
     """sha -> (erst, bei_gleich, bei_ungleich). `gesehen=` faellt bewusst
     weg: das ist Telemetrie, nicht Autoritaet — der Test prueft die
     VORSCHRIFT, und die muss in jedem Strom gleich sein."""
-    return {h: (e, g, u) for h, e, g, u in re.findall(
-        r"DEDUP (\S+);erst=([A-Z]+);rest_art=zeitstempel;"
-        r"bei_gleich=([A-Z]+);bei_ungleich=([A-Z]+);", out)}
+    # §A-ZZZZ177: feldweise ueber den zentralen Parser. Die Feldreihenfolge
+    # ist NICHT Vertrag — ein Parser, der sie kennt, bricht bei der
+    # naechsten Feld-Ergaenzung (R88: anker=, bei_unlesbar=).
+    return {h: (f["erst"], f["bei_gleich"], f["bei_ungleich"])
+            for h, f in K.regel_aus_bericht(out.splitlines()).items()}
 
 
 def main() -> int:

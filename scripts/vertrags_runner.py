@@ -253,6 +253,28 @@ def _laeufe_pro_mutant() -> int:
         return 3
 
 
+def _varianz_strom(strom: list, saat: int) -> list:
+    """§A-ZZZZ176 (Runde 88): **Input-Varianz statt Wiederholung.**
+
+    R87 lief jeden Mutanten dreimal — auf byte-gleichem Input. Bei einer
+    Pipeline ohne Zufallsquelle sind drei Laeufe identisch: die Zahl war
+    "1 Lauf, dreimal gezaehlt". Dieser Helfer variiert den STROM:
+    Reihenfolge der Meldungen, Doppelungen, ein eingestreuter Muell-Satz.
+    Ein Mutant, der nur unter einer Ordnung entkommt, wird jetzt sichtbar.
+    """
+    import random
+    rnd = random.Random(saat)
+    v = list(strom)
+    if not v:
+        return v
+    # `_saat` liest strom[0] als Kopf — den Vorgaenger nicht wegshuffeln.
+    kopf, rest = v[0], v[1:]
+    rnd.shuffle(rest)
+    v = [kopf] + rest
+    v.append(v[rnd.randrange(len(v))])       # spaete Kopie
+    return v
+
+
 def mutationssuite(vertrag: dict, strom: list, neu_text: str) -> tuple[int, int, list[str]]:
     ok = 0
     meldungen: list[str] = []
@@ -308,8 +330,9 @@ def mutationssuite(vertrag: dict, strom: list, neu_text: str) -> tuple[int, int,
             # sonst ist der Mutant instabil — und eine instabile Probe
             # zaehlt nicht als gefangen.
             _instabil = False
-            for _ in range(N - 1):
-                _n2, _g2, _ = fahre(kopie, vertrag, strom, neu_text)
+            for _i in range(N - 1):
+                _v = _varianz_strom(strom, saat=hash((feld, _i)) & 0xFFFF)
+                _n2, _g2, _ = fahre(kopie, vertrag, _v, neu_text)
                 _gef2 = (_n2 != _g2) or _konstanten_probe(kopie)
                 if _gef2 != _gefangen:
                     _instabil = True

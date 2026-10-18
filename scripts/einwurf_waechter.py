@@ -93,6 +93,39 @@ def normalisiere(text: str) -> str:
     return t.strip("\n")
 
 
+class _Unlesbar:
+    """Zeitstempel fehlt/unlesbar. Gleich mit nichts — auch nicht sich selbst."""
+
+    __slots__ = ()
+
+    def __eq__(self, other: object) -> bool:
+        return False
+
+    def __hash__(self) -> int:
+        return 0
+
+    def __repr__(self) -> str:
+        return "UNLESBAR"
+
+
+UNLESBAR_TS = _Unlesbar()
+
+
+def ts_vergleich(a: object, b: object) -> str:
+    """Totaler Vergleich: gleich | ungleich | unlesbar.
+
+    §A-ZZZZ171 (Runde 88): der zweiwertige Vergleich war nicht total.
+    Ein unlesbarer Zeitstempel ist keines von „gleich" und „ungleich";
+    ihn in einen der Zweige zu zwingen, ist eine stille Entscheidung.
+    Der dritte Zweig ist jetzt benannt und wird vom Detektor BEANTWORTET
+    (er als die Partei, die den Strom kennt) — der Konsument braucht ihn
+    nicht zu raten.
+    """
+    if isinstance(a, _Unlesbar) or isinstance(b, _Unlesbar):
+        return "unlesbar"
+    return "gleich" if a == b else "ungleich"
+
+
 def digest(text: str) -> str:
     return hashlib.sha256(normalisiere(text).encode("utf-8")).hexdigest()
 
@@ -153,7 +186,14 @@ def lese_strom(p: Path) -> list[tuple[str, str]]:
                 skip["envelope"] += 1
                 continue
             m = re.search(r"<timestamp>(.*?)</timestamp>", t)
-            out.append((m.group(1) if m else "?", t))
+            # §A-ZZZZ170 (Runde 88): **der unlesbare Zeitstempel ist ein
+            # eigener Fall, kein Wert.** `"?"` war ein Wert: zwei
+            # Zeitstempel-lose Meldungen ergaben `"?" == "?"` -> gleich ->
+            # VERWERFEN. Der Detektor behauptete einen Vergleich ueber
+            # zwei Groessen, die er beide nicht hatte. Ein fehlender
+            # Zeitstempel darf mit NICHTS gleich sein — auch nicht mit
+            # sich selbst.
+            out.append((m.group(1) if m else UNLESBAR_TS, t))
     LESESTAT.update(skip)
     return out
 
@@ -234,7 +274,9 @@ def pruefe_strom(strom: list[tuple[str, str]]) -> tuple[int, int, list[str]]:
             # des Berichts deckt sich mit der Messung.
             j = seen[h]
             paare += 1
-            gleich_ts = strom[j][0] == ts
+            # §A-ZZZZ171: totaler Vergleich. `unlesbar` ist NICHT gleich.
+            _cmp = ts_vergleich(strom[j][0], ts)
+            gleich_ts = _cmp == "gleich"
             kanal += gleich_ts
             art = "KANAL-DUPLIKAT" if gleich_ts else "WIEDERHOLUNG"
             # §A-ZZZZ142 (Runde 84): **die Detailzeile faellt aus der
@@ -328,9 +370,17 @@ def _dedup_regeln(strom: list[tuple[str, str]], seen: dict[str, int]) -> list[st
         # Zeitstempel-Vergleich, und den kann nur der Konsument fuehren:
         # er hat die Kopie und ihren Vorgaenger. Der Katalog liefert nur
         # die VORSCHRIFT, nicht das Urteil.
+        # §A-ZZZZ171 (Runde 88): **der Vergleich ist total.** Ein
+        # unlesbarer Zeitstempel wird von der Regel ausdruecklich
+        # beantwortet: WIEDERHOLT, nicht VERWERFEN. Loeschen ohne
+        # gelesenen Zeitstempel ist Datenverlust; markieren ist
+        # reversibel und sichtbar.
+        _unl = sum(1 for ts, _ in vor if isinstance(ts, _Unlesbar))
         zeilen.append(
             f"DEDUP {h};erst=ZUSTELLEN;"
-            f"rest_art=zeitstempel;bei_gleich=VERWERFEN;bei_ungleich=WIEDERHOLT;"
+            f"rest_art=zeitstempel;anker=vorgaenger;"
+            f"bei_gleich=VERWERFEN;bei_ungleich=WIEDERHOLT;"
+            f"bei_unlesbar=WIEDERHOLT;unlesbar={_unl};"
             f"gesehen={len(vor)};")
     return zeilen
 
@@ -413,10 +463,10 @@ def main(argv: list[str]) -> int:
         h = digest(text)
         # Einwurf-Zeitstempel fuer die Etikett-Entscheidung (ts_gleich).
         _mt = re.search(r"<timestamp>(.*?)</timestamp>", text)
-        _ein_ts = _mt.group(1) if _mt else "?"
+        _ein_ts = _mt.group(1) if _mt else UNLESBAR_TS
         for i, (ts, t) in enumerate(strom):
             if digest(t) == h:
-                ts_gleich = ts == _ein_ts
+                ts_gleich = ts_vergleich(ts, _ein_ts) == "gleich"
                 # §A-ZZZZ126 (Runde 82): der Einwurf-Zweig trug keine
                 # Messachse. Der Mock-Konsument fragte `Paare==1` und
                 # fand nichts — Befund des Konsumenten, nicht des

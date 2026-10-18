@@ -30,6 +30,8 @@ import sys
 import tempfile
 from pathlib import Path
 
+import konsumenten_semantik as K
+
 ROOT = Path(__file__).resolve().parent.parent
 W = ROOT / "scripts" / "einwurf_waechter.py"
 A = "A" * 500
@@ -51,10 +53,10 @@ def _lauf(zeilen: list[str]) -> str:
 
 
 def _regeln(out: str) -> dict[str, dict[str, str]]:
-    return {h: {"erst": e, "gleich": g, "ungleich": u}
-            for h, e, g, u in re.findall(
-                r"DEDUP (\S+);erst=([A-Z]+);rest_art=zeitstempel;"
-                r"bei_gleich=([A-Z]+);bei_ungleich=([A-Z]+);", out)}
+    # §A-ZZZZ177: feldweise, siehe konsumenten_semantik.felder.
+    return {h: {"erst": f["erst"], "gleich": f["bei_gleich"],
+                "ungleich": f["bei_ungleich"]}
+            for h, f in K.regel_aus_bericht(out.splitlines()).items()}
 
 
 def konsumiere(strom: list[str], regeln: dict[str, dict[str, str]]) -> list[str]:

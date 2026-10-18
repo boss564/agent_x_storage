@@ -32,6 +32,8 @@ import sys
 import tempfile
 from pathlib import Path
 
+import konsumenten_semantik as K
+
 W = Path(__file__).resolve().parent / "einwurf_waechter.py"
 A = "A" * 500
 
@@ -106,9 +108,8 @@ def main() -> int:
     # §A-ZZZZ161: die Aufloesung ist jetzt eine VORSCHRIFT je Klasse
     # (erst/rest_art), nicht eine Rang-Tabelle. `rang=` war der
     # Schnappschuss und ist entfallen.
-    regel_zeiger = re.search(
-        r"DEDUP \S+;erst=\S+;rest_art=zeitstempel;bei_gleich=\S+;"
-        r"bei_ungleich=\S+;", out) is not None
+    # §A-ZZZZ177: Record-Typ erkennen, nicht Feldreihenfolge.
+    regel_zeiger = bool(K.regel_aus_bericht(out.splitlines()))
     frozen = re.search(r"INPUT_SHA=|objekt=", out) is not None
     aufgeloest = regel_zeiger or frozen
     gut = aufgeloest
