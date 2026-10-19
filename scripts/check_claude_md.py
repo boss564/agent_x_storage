@@ -5921,6 +5921,11 @@ SKRIPT_OHNE_LAUF: set[str] = {
     # R95: Test ohne x/y-Bilanz — eigener Berichtsblock.
     "scripts/test_governance_gate.py",  # 7/7 Gate blockt vor dem Commit
     "scripts/test_aufrufbaum.py",       # 4/4 BESTAND vs SPEKULATIV
+    # R96/R97: die Mess-Instrumente. Kein Produktionslauf, kein Produktziel.
+    "scripts/lauf.py",              # Lauf aus der EINEN Zaehlquelle
+    "scripts/aussen.py",            # 94 aussen enumerieren/partionieren
+    "scripts/zerlege_rot.py",       # "rot" in Kategorien mit Einheit
+    "scripts/test_lauf_eine_quelle.py",  # 7/7 Mess-Instrument-Faelle
 }
 
 

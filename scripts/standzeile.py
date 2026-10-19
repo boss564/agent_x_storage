@@ -48,10 +48,18 @@ def zeile() -> str:
     offen = len([p for p in d.get("externes_buch", {}).get("posten", [])
                  if not p.get("eigentuemer")])
     posten = len(d.get("externes_buch", {}).get("posten", []))
+    # R96: zwei Einheiten, nie eine Summe ohne Zerlegung.
+    #   Testkorpus = zaehle() = code + nur_vertrag + aussen.
+    #   Instrumente = Nicht-Test-Skripte, die zaehle() NICHT sieht
+    #   (Frist-Gate, Governance-Gate, Kopf-/Standzeile). In R95 unbewertet.
+    inst = [x.name for x in SCRIPTS.glob("*.py")
+            if not x.name.startswith("test_")]
     return (f"Tests: {gesamt} Dateien "
             f"({len(k['code'])} vertragsbezogen, "
             f"{len(k['nur_vertrag'])} nur Vertrag, "
             f"{len(k['aussen'])} aussen) | "
+            f"Instrumente: {len(inst)} Nicht-Test-Skripte "
+            f"(ausserhalb des Testkorpus) | "
             f"Quarantaene: {q} | "
             f"Obligationen: {posten} extern, davon {offen} ohne Eigentuemer")
 

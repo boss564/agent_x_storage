@@ -45,8 +45,19 @@ def probe(datei: Path) -> tuple[int, str]:
 def main() -> int:
     ok = gesamt = 0
     d = json.loads(V.read_text(encoding="utf-8"))
+    # R96: Nur typisierbare Fristen. `endzustand_typ == "NICHT_TYPISIERBAR"`
+    # markiert Fristen, deren Blocker eine Baum-Eigenschaft ist (Aufrufbaum),
+    # keine ausfuehrbare Probe. Sie gehoeren nicht in diesen Pfad — und
+    # werden hier explizit ausgeschlossen, nicht stillschweigend uebersprungen.
     fristen = {k: v for k, v in d.get("fristen", {}).items()
-               if isinstance(v, dict) and v.get("endzustand")}
+               if isinstance(v, dict) and v.get("endzustand")
+               and v.get("endzustand_typ") != "NICHT_TYPISIERBAR"}
+    nicht_typ = sorted(k for k, v in d.get("fristen", {}).items()
+                       if isinstance(v, dict)
+                       and v.get("endzustand_typ") == "NICHT_TYPISIERBAR")
+    for k in nicht_typ:
+        print(f"skip {k}: NICHT_TYPISIERBAR (Blocker ist Baum-Eigenschaft, "
+              f"gemessen von {d['fristen'][k].get('blocker_messung', {}).get('skript', '?')})")
 
     for name, f in fristen.items():
         gesamt += 1

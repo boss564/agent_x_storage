@@ -1,5 +1,5 @@
 {
-  "_version": 19,
+  "_version": 23,
   "_zweck": "Maschinenlesbarer Vertrag des Einwurf-Waechters. Single source of truth fuer Repo und externe Ingestion. Wer hier eine Zeile aendert, aendert das Tor ausserhalb dieses Repos mit.",
   "_stand": "Runde 84 (2026-10-18)",
   "_geltung": "Der Runner (scripts/vertrags_runner.py) importiert diese Datei; die externe Ingestion MUSS sie einlesen. Solange sie es nicht tut, zertifiziert N/N einen Vertrag, den draussen niemand benutzt.",
@@ -470,16 +470,22 @@
     "ORDNUNG": {
       "gesetzt": "R89",
       "frist": "R91",
-      "endzustand": "akzeptiert_mit_neuem_termin",
-      "blocker": "parse_zeilen() trennt weiter zeilenweise; kein Aufrufer ausserhalb der Tests; kein Emittent emittiert reihenfolge-frei. Die Praefix-Grammatik ist deklariert, aber tot.",
-      "beweisversuch": "R92: test_record_grammatik.py 6/6 — masz die Faehigkeit, nicht den Abnehmer. R93 rg: konsumenten_semantik wird nur von 3 Tests importiert, kein Produktionspfad. Quarantaenisiert in R93.",
+      "blocker": "parse_zeilen() trennt weiter zeilenweise; kein Produktionsaufrufer (Aufrufbaum-Gate SPEKULATIV). Frist kann erst schliessen, wenn ein Abnehmer existiert.",
+      "beweisversuch": "R96: test_aufrufbaum.py misst konsumenten_semantik als SPEKULATIV (0 prod, 8 test). Der Blocker ist eine Baum-Eigenschaft, keine ausfuehrbare Probe — test_blocker_typisiert.py fuehrt ihn deshalb NICHT als typisierten Blocker.",
       "befund": "Norm 1 (Anker vorgaenger) und Norm 4 (Ordnung nicht garantiert) sind strukturell inkonsistent; erst=ZUSTELLEN erzwingt die Annahme, die Norm 4 verbietet.",
       "beweis": "R92: Norm 1 und Norm 4 sind NICHT inkonsistent — sie sprechen ueber verschiedene Dinge. Norm 1 sagt: derselbe Inhalt traegt denselben Anker (digest ist zeitstempel-frei). Norm 4 sagt: die REIHENFOLGE im Strom ist nicht garantiert. Der Widerspruch entstand nur, weil der Emittent eine Reihenfolge kannte ('STROM zuerst'). Mit record_grammatik (jeder Record traegt sein Praefix) ist die Position semantisch irrelevant — gemessen ueber alle Permutationen in test_record_grammatik.py. `erst=ZUSTELLEN` bleibt korrekt: es gilt fuer den Inhalt, nicht fuer die Position.",
       "aufgeloest_in": "R92",
-      "neuer_termin": "R96",
+      "neuer_termin": "R98",
       "wieder_geoeffnet_in": "R93",
       "warum_wieder_offen": "R92 schloss die Frist auf einer Spezifikation: die Praefix-Grammatik existiert im Vertrag, aber `parse_zeilen()` trennt weiter zeilenweise und hat KEINEN Aufrufer ausserhalb der Tests (rg: nur test_klasse_mehrdeutig, test_konsument_kongruenz, test_regel_gegen_pos). Eine Frist, die auf einer Faehigkeit geschlossen wird, die kein Abnehmer abruft, ist im Dokument zu und im Binaer offen. Schliessung erst, wenn parse_zeilen() nach Praefix trennt UND ein Emittent reihenfolge-frei emittiert.",
-      "begruendung": "R92 schloss die Frist auf einer Spezifikation: die Praefix-Grammatik existiert im Vertrag, aber `parse_zeilen()` trennt weiter zeilenweise und hat KEINEN Aufrufer ausserhalb der Tests (rg: nur test_klasse_mehrdeutig, test_konsument_kongruenz, test_regel_gegen_pos). Eine Frist, die auf einer Faehigkeit geschlossen wird, die kein Abnehmer abruft, ist im Dokument zu und im Binaer offen. Schliessung erst, wenn parse_zeilen() nach Praefix trennt UND ein Emittent reihenfolge-frei emittiert."
+      "begruendung": "R92 schloss die Frist auf einer Spezifikation: die Praefix-Grammatik existiert im Vertrag, aber `parse_zeilen()` trennt weiter zeilenweise und hat KEINEN Aufrufer ausserhalb der Tests (rg: nur test_klasse_mehrdeutig, test_konsument_kongruenz, test_regel_gegen_pos). Eine Frist, die auf einer Faehigkeit geschlossen wird, die kein Abnehmer abruft, ist im Dokument zu und im Binaer offen. Schliessung erst, wenn parse_zeilen() nach Praefix trennt UND ein Emittent reihenfolge-frei emittiert. | R96: Der Blocker ist keine ausfuehrbare Probe, sondern eine Aufrufbaum-Eigenschaft. Er wird von test_aufrufbaum.py gemessen, nicht von einem Exit-Code.",
+      "blocker_typ": "KEINE_AUSFUEHRBARE_PROBE — der Blocker ist eine Eigenschaft des Baums (parse_zeilen ohne Produktionsaufrufer), gemessen von test_aufrufbaum.py. Ein Skript, das bei Aufruf Exit 0 liefert, ist kein Blocker.",
+      "blocker_messung": {
+        "skript": "test_aufrufbaum.py",
+        "bedingung": "konsumenten_semantik.klasse == SPEKULATIV"
+      },
+      "endzustand_typ": "NICHT_TYPISIERBAR",
+      "endzustand": "akzeptiert_mit_neuem_termin"
     }
   },
   "mock_selbstreferenz": {
@@ -1105,6 +1111,35 @@
       "aenderung": "Gesamtlauf-Befund gebucht: 12/131 rot, davon 9 Umgebung, 2 vorbestehend, 1 beendet; Messfehler des Ad-hoc-Globs dokumentiert.",
       "gebucht": "R95 Gesamtlauf",
       "vorgaenger_hash": "7b1bdf70d8a18f45a2b2bff381f93bd46d3b810a4aefd6e918d357c4fc788cc8"
+    },
+    {
+      "version": 20,
+      "runde": "R96",
+      "aenderung": "lauf.py (eine Zaehlquelle) + aussen.py (Partitionen) + Instrumente in Standzeile + Frist-Typisierung + Hook-Status B1-B3",
+      "gebucht": "R96-1..8",
+      "vorgaenger_hash": "02d25c5c5e349f7485c396f35e614ecc0985aeb26a944dab86ae62ef5316680c"
+    },
+    {
+      "version": 21,
+      "runde": "R96-Nachtrag",
+      "aenderung": "Vollauf + mechanische Zerlegung + Nachmessung; zerlege_rot.py; lauf.py inkrementell + ende-Zeilen",
+      "gebucht": "R96-9",
+      "vorgaenger_hash": "0f1aa6efcc751e857c01bc77d332c2953a62cd6a90800412156d2c98444bd88d"
+    },
+    {
+      "version": 22,
+      "runde": "R96-Verdrahtung",
+      "aenderung": "test_lauf_eine_quelle.py liest den Vertrag -> wird als Vertragssuite gezaehlt (R93-Verstoss live gefunden und behoben)",
+      "gebucht": "R96-10",
+      "vorgaenger_hash": "8f0e587a495227930f40b9187bca3909606d52125981d014747d78fad7115958"
+    },
+    {
+      "version": 23,
+      "runde": "R97",
+      "aenderung": "ENTSCHEIDUNG R97 gebucht: einmalige Ausnahme fuer 4 namentlich genannte Instrument-Skripte; geschlossene Liste; mit Commit verbraucht",
+      "entscheidung": "R97",
+      "gebucht": "R97-3/4/5",
+      "vorgaenger_hash": "044e1cc748da960051e589ca21c02aa61964fb3b5a34d35a6fce0d68f95bb8a0"
     }
   ],
   "kreuz_record_invarianten": {
@@ -1421,9 +1456,9 @@
     "regel": "Es gibt EINE Zaehlung (test_zaehlweise.py). Jede Suite-Zahl im Bericht liest von dort. Zwei Zahlen ohne Bruecke sind die 291/283-Krankheit.",
     "definition_code": "test_*.py, die waechter_vertrag.json ODER einwurf_waechter.py ODER konsumenten_semantik referenzieren",
     "definition_nur_vertrag": "test_*.py, die NUR waechter_vertrag.json referenzieren (kein Code)",
-    "n_code": 36,
+    "n_code": 37,
     "n_nur_vertrag": 0,
-    "n_gesamt": 36,
+    "n_gesamt": 37,
     "nur_vertrag": [],
     "drift_r91": "R91 nannte 24 (rg-Filter) und 26/26 (Lauf). Beide waren Ad-hoc-Zaehlungen mit unterschiedlichen Filtern. Die EINE Zaehlung nennt 31 — der Unterschied zu 24 ist der Filter, nicht das Repo.",
     "anlass": "R91 Befund 3: 24 vs 26 im selben Bericht.",
@@ -1432,7 +1467,8 @@
     "kern_suiten_verboten": "R93: '20/20 Waechter-Kern-Suiten' war ein Ad-hoc-Filter — dieselbe Krankheit, die R91 an 24/26 verdammte. Es gibt EINE Zahl (n_code) und EINE Liste (quarantaene). Kein Bericht darf eine zweite Teilmenge als 'Kern' adeln.",
     "quarantaene_regel": "Die 4 Quarantaene-Suiten sind in n_code NICHT enthalten und werden separat gezaehlt: 'gruen' heisst nur fuer Dateien unter scripts/test_*.py.",
     "n_aussen": 94,
-    "zaehlweise_befund_r94": "n_code=34 ist KEINE Zaehlung von Tests, sondern ein Regex-Filter ('waechter_vertrag|einwurf_waechter|konsumenten_semantik') auf 128 Testdateien. 94 Dateien sind 'aussen' und wurden nie berichtet. Die Zahl war korrekt fuer ihre Teilmenge, aber die Teilmenge war nicht deklariert."
+    "zaehlweise_befund_r94": "n_code=34 ist KEINE Zaehlung von Tests, sondern ein Regex-Filter ('waechter_vertrag|einwurf_waechter|konsumenten_semantik') auf 128 Testdateien. 94 Dateien sind 'aussen' und wurden nie berichtet. Die Zahl war korrekt fuer ihre Teilmenge, aber die Teilmenge war nicht deklariert.",
+    "verdrahtung_r96": "test_lauf_eine_quelle.py liest den Vertrag seit R96 und zaehlt daher als Vertragssuite. Vorher lag sie in 'aussen' — die Suite, die die Verdrahtung prueft, war selbst nicht verdrahtet. Live-Fund des R93-Musters."
   },
   "externes_buch": {
     "zweck": "Die Bringschuld-Maschine (Frist/Blocker/Gate) funktioniert fuer SELBSTverifizierbares. Fuer FREMdverifizierbares fehlt das Aequivalent. Dieses Buch fuehrt die Posten, die kein Autor selbst schliessen kann.",
@@ -1669,5 +1705,104 @@
     "messfehler_des_laufs": "Der Lauf globte scripts/blocker_*.py mit und zaehlte blocker_nrm_injektivitaet.py als 'rot'. Exit 2 ist dort der BEABSICHTIGTE Zustand (UNBEWIESEN). Der Blocker ist korrekt als blocker_ registriert, nicht als test_ — die Schleife war falsch, nicht das Skript.",
     "lehre": "Ein Gesamtlauf ueber 'alle *.py' ist keine Messung des Systems: er mischt Tests mit Blockern, Live-Suiten mit Fixture-Suiten und zaehlt beides als rot/gruen. Die Zaehlweise (test_zaehlweise.py) trennt bereits korrekt; der Ad-hoc-Glob tat es nicht.",
     "nicht_gemessen": "Die 94 'aussen'-Dateien wurden nie als Gesamtheit bewertet."
-  }
+  },
+  "lauf_eine_quelle": {
+    "regel": "Die Laufschleife ruft zaehle() aus test_zaehlweise.py. Kein Shell-Glob, keine eigene Dateiliste.",
+    "skript": "scripts/lauf.py",
+    "einheiten": {
+      "GRUEN": "exit 0",
+      "GEFALLEN": "exit != 0, != 2, != 143/124",
+      "BEFUND": "exit 2 (UNBEWIESEN) — absichtlich, kein Ausfall",
+      "BEENDET": "exit 143 SIGTERM / 124 Timeout"
+    },
+    "git_zugriff": "keiner — der Beobachter fasst .git nicht an (R96 Buchung 7)",
+    "R95_defekt": "for f in scripts/test_*.py scripts/blocker_*.py -> 131 statt 130, blocker_nrm als rot",
+    "messung_R96": "130 test_*.py + 1 blocker_*.py = 131. Die Differenz IST der Kategorienfehler, kein Universumsproblem.",
+    "verdrahtet": {
+      "suite": "test_lauf_eine_quelle.py",
+      "faelle": 7,
+      "prueft": [
+        "import zaehle",
+        "kein Glob",
+        "vier Einheiten",
+        "Exit 2 -> BEFUND",
+        "kein .git",
+        "Vertrag nennt Suite"
+      ]
+    }
+  },
+  "aussen_partitionen": {
+    "regel": "aussen wird in mechanisch definierte Klassen zerlegt; SONSTIG bleibt sichtbar und wird namentlich gelistet.",
+    "skript": "scripts/aussen.py",
+    "klassen": {
+      "GOVERNANCE": "liest Vertrag/Zaehler/Instrument",
+      "INFRA": "braucht Dienst/Netz (nats, anvil, z3_solver, 127.0.0.1)",
+      "STUDIE": "Mess-/Simulationslauf (rescue, ci, hum, wirtschaft, smartgrid, astrocore, simchain, multichain)",
+      "REGRESSION": "Produkttest ohne Governance-Marker",
+      "SONSTIG": "keine mechanische Zuordnung — namentlich"
+    },
+    "R96_befund": "94 aussen sind ausschliesslich test_*.py. Die Governance-Instrumente lagen NICHT darin — zaehle() sah sie nie. R96-Ruege '94 = Instrumente' ist insoweit falsch; die Luecke ist groesser (190 Nicht-Test-Skripte ungedeckt)."
+  },
+  "instrumente_unbeobachtet": {
+    "fakt": "190 Nicht-Test-Skripte in scripts/ sind fuer zaehle() unsichtbar.",
+    "davon_governance": "check_claude_md.py, kopfzeile.py, standzeile.py, governance_gate.py, bilanz.py, test_zaehlweise.py, lauf.py, aussen.py",
+    "wirkung": "R93 fand 5 Registrierungs-Verstoesse genau in dieser Schicht. Kein Testlauf ueber test_*.py kann sie sehen.",
+    "status": "BENANNT — noch nicht in einem Pruef-Scope. Frist: R98."
+  },
+  "blocker_typisierung": {
+    "regel": "Eine Frist ist nur typisierbar, wenn ihr Blocker eine AUSFUEHRBARE Probe ist (Exit != 0).",
+    "marker": "endzustand_typ = NICHT_TYPISIERBAR",
+    "fall": "ORDNUNG — Blocker ist parse_zeilen ohne Produktionsaufrufer (Baum-Eigenschaft, gemessen von test_aufrufbaum.py). konsumenten_semantik.py ist bei Aufruf Exit 0, also kein Blocker.",
+    "konflikt_geloest": "test_frist_gate (12/12) verlangt endzustand; test_blocker_typisiert (4/4) ueberspringt NICHT_TYPISIERBAR explizit statt stillschweigend."
+  },
+  "hook_status": {
+    "B1": "erfuellt — gate prueft Besitz/neue Suiten, nicht Test-Ausfuehrung",
+    "B2": "erfuellt — scripts/install_hook.sh getrackt + .github/workflows/governance.yml",
+    "B3": "bestaetigt empirisch — Vollauf >10 min, Suite kann nie im Pre-Commit laufen",
+    "baseline": "Der R95-Lauf ist VORHER-Baseline, nicht Ergebnis. Kein Hook-Commit vor dieser Buchung."
+  },
+  "lauf_R96_ergebnis": {
+    "modus": "voll (130 test_*.py)",
+    "dateien": 131,
+    "zerlegung_nachmessung": {
+      "GRUEN": 120,
+      "DIENST": 5,
+      "IMPORT": 2,
+      "ZEITLIMIT": 1,
+      "ASSERTION": 2,
+      "durch_fix_gruen": 1
+    },
+    "echte_offene_regression": [
+      "test_bridge_diagnostic.py (9/10)",
+      "test_wave21_skynet.py (78/80)"
+    ],
+    "kern_befund": "Die Zerlegung des Vollaufs war falsch (4x UNKLAR). Die NACHMESSUNG mit den echten Verdict-Zeilen korrigiert sie zu 5x DIENST. Das Instrument wurde gegen sein eigenes Ergebnis geprueft, nicht gerechtfertigt.",
+    "R95_vergleich": "R95 meldete 12 rot bei 131. R96 meldet 11 rot bei 131, davon 2 echte Regressionen — nicht 9, nicht 12. Kein 'gruen aus Mangel an Gelegenheit': die 5 DIENST-Faelle sind mangels NATS nicht entscheidbar, nicht gruen.",
+    "einheit": "Jede Zahl traegt ihre Klasse. Keine Summe ohne Zerlegung."
+  },
+  "entscheidungen_ausnahmen": [
+    {
+      "id": "R97",
+      "typ": "EINMALIGE_AUSNAHME_VON_STOPP_BEDINGUNG",
+      "autorisiert_von": "externer Auftraggeber (R97 Kurzurteil §2 Schritt 1-4)",
+      "dateien_geschlossen": [
+        "scripts/lauf.py",
+        "scripts/aussen.py",
+        "scripts/zerlege_rot.py",
+        "scripts/test_lauf_eine_quelle.py"
+      ],
+      "datum": "2026-10-19",
+      "variante": "KOPIE_STATT_DATENSCHLUESSEL",
+      "variante_begruendung": "Das Gate bleibt UNVERAENDERT. Die vier Dateien sind bereits gestagt; die Ausnahme wird gebucht, der Commit erfolgt mit --no-verify NICHT. Stattdessen: die vier Skripte werden als WAND_SUITEN-Analogon in den Vertrag aufgenommen, damit das Gate sie ohne Logikaenderung akzeptiert.",
+      "bedingung": [
+        "keine Produktionsfaehigkeit",
+        "kein neues Testziel",
+        "kein neuer Abnehmer",
+        "Inhaltspruefung belegt (Importe: stdlib + test_zaehlweise)"
+      ],
+      "verbraucht_mit_commit": true,
+      "zehnte_auspraegung": "Eine neue Ausnahme braucht eine NEUE Entscheidung — nie Berufung auf 'Instrument-Reparatur'.",
+      "pflicht_output": "Ask-Liste EXT-1..4 (wen/was/wann) — R97 §4"
+    }
+  ]
 }
