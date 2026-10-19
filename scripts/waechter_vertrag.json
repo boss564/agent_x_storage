@@ -1,5 +1,5 @@
 {
-  "_version": 15,
+  "_version": 16,
   "_zweck": "Maschinenlesbarer Vertrag des Einwurf-Waechters. Single source of truth fuer Repo und externe Ingestion. Wer hier eine Zeile aendert, aendert das Tor ausserhalb dieses Repos mit.",
   "_stand": "Runde 84 (2026-10-18)",
   "_geltung": "Der Runner (scripts/vertrags_runner.py) importiert diese Datei; die externe Ingestion MUSS sie einlesen. Solange sie es nicht tut, zertifiziert N/N einen Vertrag, den draussen niemand benutzt.",
@@ -470,12 +470,16 @@
     "ORDNUNG": {
       "gesetzt": "R89",
       "frist": "R91",
-      "endzustand": "bewiesen",
-      "blocker": "Ohne Entscheidung, ob die Engine den Produzenten kontrolliert, ist eine Sequenznummer (Variante b) nicht bewertbar; ohne Transportvertrag ist FIFO (Variante a) nicht pruefbar.",
-      "beweisversuch": "R89: die drei Varianten (a FIFO, b Sequenznummer, c Batch) gegeneinander gestellt. Sie sind NICHT aequivalent — (a) verlagert in den Transport, (b) aendert das Eingabeformat, (c) widerspricht R87 (frieren). Eine Wahl ohne Messung waere geraten.",
+      "endzustand": "akzeptiert_mit_neuem_termin",
+      "blocker": "parse_zeilen() trennt weiter zeilenweise; kein Aufrufer ausserhalb der Tests; kein Emittent emittiert reihenfolge-frei. Die Praefix-Grammatik ist deklariert, aber tot.",
+      "beweisversuch": "R92: test_record_grammatik.py 6/6 — masz die Faehigkeit, nicht den Abnehmer. R93 rg: konsumenten_semantik wird nur von 3 Tests importiert, kein Produktionspfad. Quarantaenisiert in R93.",
       "befund": "Norm 1 (Anker vorgaenger) und Norm 4 (Ordnung nicht garantiert) sind strukturell inkonsistent; erst=ZUSTELLEN erzwingt die Annahme, die Norm 4 verbietet.",
       "beweis": "R92: Norm 1 und Norm 4 sind NICHT inkonsistent — sie sprechen ueber verschiedene Dinge. Norm 1 sagt: derselbe Inhalt traegt denselben Anker (digest ist zeitstempel-frei). Norm 4 sagt: die REIHENFOLGE im Strom ist nicht garantiert. Der Widerspruch entstand nur, weil der Emittent eine Reihenfolge kannte ('STROM zuerst'). Mit record_grammatik (jeder Record traegt sein Praefix) ist die Position semantisch irrelevant — gemessen ueber alle Permutationen in test_record_grammatik.py. `erst=ZUSTELLEN` bleibt korrekt: es gilt fuer den Inhalt, nicht fuer die Position.",
-      "aufgeloest_in": "R92"
+      "aufgeloest_in": "R92",
+      "neuer_termin": "R96",
+      "wieder_geoeffnet_in": "R93",
+      "warum_wieder_offen": "R92 schloss die Frist auf einer Spezifikation: die Praefix-Grammatik existiert im Vertrag, aber `parse_zeilen()` trennt weiter zeilenweise und hat KEINEN Aufrufer ausserhalb der Tests (rg: nur test_klasse_mehrdeutig, test_konsument_kongruenz, test_regel_gegen_pos). Eine Frist, die auf einer Faehigkeit geschlossen wird, die kein Abnehmer abruft, ist im Dokument zu und im Binaer offen. Schliessung erst, wenn parse_zeilen() nach Praefix trennt UND ein Emittent reihenfolge-frei emittiert.",
+      "begruendung": "R92 schloss die Frist auf einer Spezifikation: die Praefix-Grammatik existiert im Vertrag, aber `parse_zeilen()` trennt weiter zeilenweise und hat KEINEN Aufrufer ausserhalb der Tests (rg: nur test_klasse_mehrdeutig, test_konsument_kongruenz, test_regel_gegen_pos). Eine Frist, die auf einer Faehigkeit geschlossen wird, die kein Abnehmer abruft, ist im Dokument zu und im Binaer offen. Schliessung erst, wenn parse_zeilen() nach Praefix trennt UND ein Emittent reihenfolge-frei emittiert."
     }
   },
   "mock_selbstreferenz": {
@@ -1073,6 +1077,13 @@
       "aenderung": "externes_gate ('keiner' verboten, ENTSCHEIDUNG+Wiedervorlage, Stopp-Bedingung), record_grammatik (Praefix statt Reihenfolge), ledger_provenienz (Hash-Kette, v13 rekonstruiert), schwelle_eingaenge (N_eff=None, i.i.d. verletzt), Kopfzeile mit EXT-Zaehler.",
       "gebucht": "R92 Befunde 2,3,4,5,6,7",
       "vorgaenger_hash": "6c08161dd9f57011013f35a53579fb2e904440381d520f75a4a7158459ba6482"
+    },
+    {
+      "version": 16,
+      "runde": 93,
+      "aenderung": "enforcement (Quarantaene der 4 R92-Suiten, Baum statt Buchung), Zaehlweise auf 33 ohne Kern-Filter, ORDNUNG-Frist wieder geoeffnet (R96), Wiedervorlage mit frist_blocker/beweisversuch/verfall, Git-Zeuge als ENTSCHEIDUNG, Rundenzahl als Konvention deklariert.",
+      "gebucht": "R93 Befunde 2,3,4,5,6,7",
+      "vorgaenger_hash": "ec154f9a56322ccd72d6939bb8c06814b981aa8a66e51f177bc3e11aa0eeb7c5"
     }
   ],
   "kreuz_record_invarianten": {
@@ -1389,14 +1400,16 @@
     "regel": "Es gibt EINE Zaehlung (test_zaehlweise.py). Jede Suite-Zahl im Bericht liest von dort. Zwei Zahlen ohne Bruecke sind die 291/283-Krankheit.",
     "definition_code": "test_*.py, die waechter_vertrag.json ODER einwurf_waechter.py ODER konsumenten_semantik referenzieren",
     "definition_nur_vertrag": "test_*.py, die NUR waechter_vertrag.json referenzieren (kein Code)",
-    "n_code": 36,
+    "n_code": 34,
     "n_nur_vertrag": 0,
-    "n_gesamt": 36,
+    "n_gesamt": 34,
     "nur_vertrag": [],
     "drift_r91": "R91 nannte 24 (rg-Filter) und 26/26 (Lauf). Beide waren Ad-hoc-Zaehlungen mit unterschiedlichen Filtern. Die EINE Zaehlung nennt 31 — der Unterschied zu 24 ist der Filter, nicht das Repo.",
     "anlass": "R91 Befund 3: 24 vs 26 im selben Bericht.",
     "selbstreferenz": "R92: die Zaehlweise zaehlt TESTS, nicht Obligationen. 36 Suites gruen + 4 externe Posten ohne Eigentuemer stehen in derselben Kopfzeile (kopfzeile.py). '36/36' ist ein Befund ueber den Pruef-Apparat, kein Gesamtstand.",
-    "partition_grenze": "'Code / nur Vertrag' ist nicht bewiesen exhaustiv. Governance-Artefakte (EXT-Buch, Klausel, Bedarfs-Inventur, Schwelle-Herleitung, Record-Grammatik, Ledger-Provenienz) liegen AUSSERHALB der Partition. Die Zaehlweise zaehlt die Maschinerie, die sie zaehlt — das ist als Grenze gebucht, nicht als Luecke versteckt."
+    "partition_grenze": "'Code / nur Vertrag' ist nicht bewiesen exhaustiv. Governance-Artefakte (EXT-Buch, Klausel, Bedarfs-Inventur, Schwelle-Herleitung, Record-Grammatik, Ledger-Provenienz) liegen AUSSERHALB der Partition. Die Zaehlweise zaehlt die Maschinerie, die sie zaehlt — das ist als Grenze gebucht, nicht als Luecke versteckt.",
+    "kern_suiten_verboten": "R93: '20/20 Waechter-Kern-Suiten' war ein Ad-hoc-Filter — dieselbe Krankheit, die R91 an 24/26 verdammte. Es gibt EINE Zahl (n_code) und EINE Liste (quarantaene). Kein Bericht darf eine zweite Teilmenge als 'Kern' adeln.",
+    "quarantaene_regel": "Die 4 Quarantaene-Suiten sind in n_code NICHT enthalten und werden separat gezaehlt: 'gruen' heisst nur fuer Dateien unter scripts/test_*.py."
   },
   "externes_buch": {
     "zweck": "Die Bringschuld-Maschine (Frist/Blocker/Gate) funktioniert fuer SELBSTverifizierbares. Fuer FREMdverifizierbares fehlt das Aequivalent. Dieses Buch fuehrt die Posten, die kein Autor selbst schliessen kann.",
@@ -1413,7 +1426,11 @@
         "bemerkung": "Seit 6 Runden als Bestand gefuehrt, nie als Instanz. Das ist der Kern der strukturellen Grenze.",
         "klassifikation": "ENTSCHEIDUNG",
         "wiedervorlage": "2026-11-02",
-        "begruendung_ohne_eigentuemer": "Der Autor kann einen fremden Konsumenten nicht bestellen. Ein Test in eigener Hand ist per Definition K1/K2. Nur eine Stelle ausserhalb des Repos kann EXT-1 schliessen; sie ist nicht bekannt, weil dieses Repo keine Aussenbeziehungen fuehrt."
+        "begruendung_ohne_eigentuemer": "Der Autor kann einen fremden Konsumenten nicht bestellen. Ein Test in eigener Hand ist per Definition K1/K2. Nur eine Stelle ausserhalb des Repos kann EXT-1 schliessen; sie ist nicht bekannt, weil dieses Repo keine Aussenbeziehungen fuehrt.",
+        "wiedervorlage_ist_frist": true,
+        "frist_blocker": "Der Autor kann einen fremden Konsumenten nicht bestellen. Ein Test in eigener Hand ist per Definition K1/K2. Nur eine St",
+        "frist_verfall": "am Termin ohne Eigentuemer => Gate ROT, Quarantaene bleibt, keine Freigabe. Kein neues Datum.",
+        "beweisversuch": "KEINER — niemand wurde gefragt. Das ist der Befund, nicht die Ausnahme."
       },
       {
         "id": "EXT-2",
@@ -1426,7 +1443,11 @@
         "bemerkung": "bedarfs_inventur deckt nur diesen Baum. Extern unsichtbar.",
         "klassifikation": "ENTSCHEIDUNG",
         "wiedervorlage": "2026-11-02",
-        "begruendung_ohne_eigentuemer": "Der Downstream existiert nicht in diesem Baum (Inventur: kein Leser). Ohne einen realen Empfaenger ist der Bedarf nicht messbar — die Inventur ist in-tree TRUE und global unbeweisbar."
+        "begruendung_ohne_eigentuemer": "Der Downstream existiert nicht in diesem Baum (Inventur: kein Leser). Ohne einen realen Empfaenger ist der Bedarf nicht messbar — die Inventur ist in-tree TRUE und global unbeweisbar.",
+        "wiedervorlage_ist_frist": true,
+        "frist_blocker": "Der Downstream existiert nicht in diesem Baum (Inventur: kein Leser). Ohne einen realen Empfaenger ist der Bedarf nicht ",
+        "frist_verfall": "am Termin ohne Eigentuemer => Gate ROT, Quarantaene bleibt, keine Freigabe. Kein neues Datum.",
+        "beweisversuch": "KEINER — niemand wurde gefragt. Das ist der Befund, nicht die Ausnahme."
       },
       {
         "id": "EXT-3",
@@ -1439,7 +1460,11 @@
         "bemerkung": "Fixture hat 3. n=1418 ist hergeleitet, nicht gesetzt.",
         "klassifikation": "ENTSCHEIDUNG",
         "wiedervorlage": "2026-11-02",
-        "begruendung_ohne_eigentuemer": "Der Harness-Zaun verbietet Live-Transkripte als Testquelle (zaun_scope). Ein eingefrorener Strom >=1418 Zeilen muesste von aussen geliefert werden; der Autor darf ihn nicht aus dem laufenden Betrieb ziehen, ohne den Zaun zu brechen."
+        "begruendung_ohne_eigentuemer": "Der Harness-Zaun verbietet Live-Transkripte als Testquelle (zaun_scope). Ein eingefrorener Strom >=1418 Zeilen muesste von aussen geliefert werden; der Autor darf ihn nicht aus dem laufenden Betrieb ziehen, ohne den Zaun zu brechen.",
+        "wiedervorlage_ist_frist": true,
+        "frist_blocker": "Der Harness-Zaun verbietet Live-Transkripte als Testquelle (zaun_scope). Ein eingefrorener Strom >=1418 Zeilen muesste v",
+        "frist_verfall": "am Termin ohne Eigentuemer => Gate ROT, Quarantaene bleibt, keine Freigabe. Kein neues Datum.",
+        "beweisversuch": "KEINER — niemand wurde gefragt. Das ist der Befund, nicht die Ausnahme."
       },
       {
         "id": "EXT-4",
@@ -1452,7 +1477,11 @@
         "bemerkung": "Nachbau beweist Reproduzierbarkeit, nicht Korrektheit.",
         "klassifikation": "ENTSCHEIDUNG",
         "wiedervorlage": "2026-11-02",
-        "begruendung_ohne_eigentuemer": "Die zweite Hand ist per Definition nicht der Autor. Ohne einen benannten Reviewer bleibt die Tafel reproduzierbar, aber unvalidiert (R90 Befund 6)."
+        "begruendung_ohne_eigentuemer": "Die zweite Hand ist per Definition nicht der Autor. Ohne einen benannten Reviewer bleibt die Tafel reproduzierbar, aber unvalidiert (R90 Befund 6).",
+        "wiedervorlage_ist_frist": true,
+        "frist_blocker": "Die zweite Hand ist per Definition nicht der Autor. Ohne einen benannten Reviewer bleibt die Tafel reproduzierbar, aber ",
+        "frist_verfall": "am Termin ohne Eigentuemer => Gate ROT, Quarantaene bleibt, keine Freigabe. Kein neues Datum.",
+        "beweisversuch": "KEINER — niemand wurde gefragt. Das ist der Befund, nicht die Ausnahme."
       }
     ],
     "grenze": "Vier externe Posten, null Eigentuemer. Das ist der ehrliche Stand: die Maschine hat die interne Bringschuld geschlossen und die externe noch nicht einmal gebucht.",
@@ -1483,7 +1512,12 @@
         "greift_bei": "gate_rot",
         "ausnahme": "Fixes fuer bereits gebaute Fehler (Regressionen) sind erlaubt — die bauen keine neue Maschinerie."
       },
-      "grenze": "Das Gate kann pruefen, ob ein Name da ist. Es kann keinen Namen erzeugen. Genau das ist die Bringschuld, die kein Test schliesst — und der Grund, warum es ein Gate ist und keine Suite. (Woertlich: Namen kann es nicht erzeugen.)"
+      "grenze": "Das Gate kann pruefen, ob ein Name da ist. Es kann keinen Namen erzeugen. Genau das ist die Bringschuld, die kein Test schliesst — und der Grund, warum es ein Gate ist und keine Suite. (Woertlich: Namen kann es nicht erzeugen.)",
+      "wiedervorlage_regeln": [
+        "Jede Wiedervorlage traegt frist_blocker, beweisversuch, frist_verfall.",
+        "Verstreicht der Termin ohne Eigentuemer, scheitert das Gate — es bucht KEIN neues Datum.",
+        "beweisversuch='KEINER' ist zulaessig, aber es ist ein Befund und kein Grund."
+      ]
     }
   },
   "record_grammatik": {
@@ -1510,5 +1544,28 @@
     "anlass": "R92 Befund 7: Kontiguitaet erzwungen, Gleichzeitigkeit nicht.",
     "zwei_passes": "Flags (rekonstruiert) werden VOR dem Hashen gesetzt. Sonst hasht e_n den Zustand von e_(n-1) vor seiner Markierung — ein Bruch, der nicht vom Einschub kommt. Der Test fing genau das beim ersten Lauf."
   },
-  "messachse_norm": "distinkte_normalformen"
+  "messachse_norm": "distinkte_normalformen",
+  "enforcement": {
+    "regel": "Ein Verstoss gegen eine Stopp-Bedingung hat eine KONSEQUENZ IM BAUM, nicht nur eine Buchung im Ledger. Die in der Verstossrunde gebauten Suiten werden quarantaenisiert, bis die Bedingung echt erfuellt ist.",
+    "quarantaene": [
+      "test_record_grammatik",
+      "test_externes_gate",
+      "test_ledger_provenienz",
+      "test_schwelle_eingaenge"
+    ],
+    "freigabe_bei": "alle_posten_mit_eigentuemer",
+    "warum_kein_stopp_nachweis_feld": "R92 schlug ein stopp_nachweis-Feld vor, das VORHER prueft. Das verschiebt die Durchsetzung auf die naechste Runde — Aufschub. Die Sperre ist deshalb keine Feldpruefung, sondern ein Baumzustand: die Dateien sind nicht da, wo der Korb sie sucht.",
+    "was_das_nicht_kann": "Die Sperre kann die Suiten nicht GRUEN machen und den Eigentuemer nicht erzeugen. Sie kann nur verhindern, dass der Turm weiterwaechst, waehrend die Basis fehlt."
+  },
+  "zaehler_achsen": {
+    "problem": "R93 Befund 7: drei Zaehlachsen ohne deklarierte Abbildung. Runden (R89..R93), Versionen (v9..v15), Suiten (32/36/20/33).",
+    "versionen": "versions_ledger, kontiguierlich, hash-verkettet",
+    "suiten": "zaehlweise.n_code, EINE Zahl, aus test_zaehlweise.py",
+    "runden": "KEIN Ledger. Die Runde im Bericht ist die Nummer N+1 der Kritik an Runde N. Ungeschriebene Konvention — hier als Deklaration gebucht, nicht als Ledger.",
+    "grenze": "Die Rundenzahl ist eine Berichtskonvention, kein Ereignis. Sie wird NICHT hash-verkettet, weil sie kein Artefakt ist."
+  },
+  "git_zeuge": {
+    "status": "ENTSCHEIDUNG",
+    "inhalt": "Git-History ist ein NATIVER Zeuge (das Repo IST Git), nicht 'ausserhalb'. Sie wird nicht gebunden, weil das Artefakt im Repo liegt und die Kette sonst von der Git-Implementierung abhinge. Das ist eine WHAL, keine Tatsache."
+  }
 }

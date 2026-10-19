@@ -54,7 +54,7 @@ def main() -> int:
           f"{_zw.get('n_nur_vertrag')} (nur Vertrag) = "
           f"{_zw.get('n_gesamt')} — aus test_zaehlweise.py")
     print(f"Obligationen: {len(_ext)} extern, davon {len(_offen_ext)} ohne "
-          f"Eigentuemer — aus test_externes_gate.py")
+          f"Eigentuemer — Quelle: externes_buch im Vertrag (Gate gesperrt, R93)")
     return 0
 
 
