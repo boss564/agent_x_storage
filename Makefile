@@ -970,3 +970,7 @@ son-report: ## Regenerate SON report (24h validity for compliance gate)
 
 backup: ## Nightly backup (compose + env + Neo4j dump + retention)
 	bash scripts/backup_agent_x.sh
+
+# R106: versionierte Wand-Aktivierung. Frischer Clone -> make init.
+init:
+	@bash githooks/install.sh

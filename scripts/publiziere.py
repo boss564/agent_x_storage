@@ -14,6 +14,8 @@ sein eigenes Gate nicht besteht, wird nicht veroeffentlicht.
 """
 from __future__ import annotations
 
+import base64
+import json
 import shutil
 import subprocess
 import sys
@@ -37,6 +39,23 @@ def main(argv: list[str]) -> int:
     if r.returncode != 0:
         print("NICHT PUBLIZIERT — der Bericht besteht sein eigenes Gate nicht.")
         return 1
+    # Buchung 2 (R106): Pfad+Länge+Digest sind drei Zeilen desselben
+    # Dokuments. Die BYTES muessen mit. Jeder Beleg wird base64 in den
+    # Bericht geschrieben — 587 Zeichen statt eines Pfads, den der
+    # Auditor nicht lesen kann.
+    import base64
+    belege = [json.loads(z) for z in (REPO / "scripts" / "beweis_ledger.jsonl")
+              .read_text(encoding="utf-8").splitlines() if z.strip()]
+    kanal = ["", "## Belege — Bytes zum Selbstrechnen", "",
+             "    base64 -d | sha256sum   (muss den sha256 unten ergeben)", ""]
+    for e in belege:
+        roh = (REPO / "publiziert" / f"{e['artefakt'].replace('/', '__')}"
+               f"_{e['von']}-{e['bis']}.payload.txt").read_bytes()
+        kanal += [f"### {e['artefakt']}:{e['von']}-{e['bis']}", "",
+                  "```", base64.b64encode(roh).decode(), "```", "",
+                  f"sha256 = `{e['sha256']}`", ""]
+    bericht.write_text(bericht.read_text(encoding="utf-8") + "\n".join(kanal),
+                       encoding="utf-8")
     ziel = REPO / "publiziert" / bericht.name
     ziel.parent.mkdir(exist_ok=True)
     shutil.copyfile(bericht, ziel)
