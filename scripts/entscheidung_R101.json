@@ -1,0 +1,35 @@
+{
+  "id": "R101",
+  "typ": "PAYLOAD_MIT_WAND_BEZUG",
+  "autorisiert_von": "externer Auftraggeber (R100 Kurzurteil §7/§10: R101 ist schreibbar, P1 erfuellt)",
+  "ziel": "Die Asymmetrie schliessen: der Lauf mit Aufrufer archiviert jetzt, der archivierte Lauf bleibt --voll.",
+  "dateien_geschlossen": [
+    "scripts/lauf.py",
+    "Makefile",
+    "scripts/test_lauf_aufrufer.py",
+    "scripts/check_claude_md.py"
+  ],
+  "fix": {
+    "baseline_sha256": "d2c2ce695a79a482e10cf6e406992a2a53ffb84dcd04c1c7f107b8616c61f335",
+    "ziel_sha256": "f0587d46bb36dfaad44470c7741d7c26f465bcc5f936ce17f7b757cf2e5b7d93",
+    "hinweis": "Der Dreizustand aus R100 greift hier zum ersten Mal praktisch: AKTIV vor der Aenderung, VOLLZOGEN danach."
+  },
+  "aenderung": {
+    "lauf.py": "archivieren() auch fuer den Vertragslauf (unbedingt statt nur --voll)",
+    "Makefile": "Falschmeldung korrigiert: make meldet bei JEDEM Fehler 2. BEFUND ist ueber make nicht von GEFALLEN unterscheidbar (gemessen).",
+    "test_lauf_aufrufer.py": "NEU 7/7 — prueft die make-Grenze als dokumentierten Defekt, nicht als Behauptung",
+    "check_claude_md.py": "Korb-Registrierung der neuen Suite"
+  },
+  "neu_gebucht": {
+    "make_normalisiert": "GNU make gibt bei Rezept-Fehler immer 2. 0/1/2 ueberlebt die Grenze nicht. Der Abnehmer braucht lauf.py direkt oder data/lauf_letzter.json.",
+    "r99_entscheidung": "SIGNALISIEREND statt BERICHTEND nachgebucht."
+  },
+  "nicht_in_R101": [
+    "Retention fuer protokoll/ (P4)",
+    "Abnehmer implementieren (P4)",
+    "#13 SHA-Schutz",
+    "#14 Audit-Loop",
+    "Monotonie via Ledger-Read"
+  ],
+  "verbraucht_mit_commit": true
+}
