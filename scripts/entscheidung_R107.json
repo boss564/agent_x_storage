@@ -1,0 +1,33 @@
+{
+  "entscheidung_id": "R107",
+  "datum": "2026-10-19",
+  "art": "BEFUND + ARCHITEKTUR",
+  "gegenstand": "R106-Defekt: gelieferte Base64 trug nicht die behaupteten 440 Bytes",
+  "befund": {
+    "bestaetigt_durch": "Nutzer, Padding-Arithmetik ohne Shell, dann wc -c",
+    "was_getippt_war": "Die Base64 im R106-Bericht wurde von Hand geschrieben, nicht aus der Datei erzeugt.",
+    "abweichung": "Byte 178: 'Vetragsscope' statt 'Vertragsscope' -- ein 'r' fehlt.",
+    "gelieferte_laenge": 439,
+    "echte_laenge": 440,
+    "padding_geliefert": "==",
+    "padding_echt": "=",
+    "sha256_echt": "b24985950ab17b2c4092cf68138baccd433a726e2970aacd5ff2975ba99ba6e4",
+    "sha256_geliefert": "30257636d107f7019074d85de4742e119f0faa24ddcf6340e0741d4ce7b00b52"
+  },
+  "anerkannt": [
+    "Länge, Base64 und Digest duerfen nicht aus drei Quellen kommen (Nutzer, R106 §4).",
+    "Die Padding-Arithmetik ist ein pruefbares Invariant ohne Werkzeug -- der Nutzer hat recht, sie allein deckt den Defekt auf."
+  ],
+  "korrektur": {
+    "R105_tabelle": "Die 440-Byte-Angabe war korrekt. Falsch war die gelieferte Base64, nicht die Laenge.",
+    "digest": "b2498595... ist an die echte 440-Byte-Datei gebunden und bleibt gueltig."
+  },
+  "architektur": {
+    "werkzeug": "scripts/beleg_export.py -- Länge, mod3, Padding, Base64, SHA aus einer Quelle.",
+    "grenze": "pruefe_paket() prueft Selbstkonsistenz, NICHT Inhaltstreue. Eine konsistente Faelschung (veraenderter Payload, eigener SHA) bleibt GRUEN. Inhaltstreue ist Aufgabe von beweis.py check (Region-SHA).",
+    "tests": "scripts/test_beleg_export.py 5/5, inkl. Nachbildung des R106-Pakets als ROT."
+  },
+  "offen": [
+    "Jeder weitere Base64-Beleg im Bericht muss aus beleg_export.py kommen, nicht getippt werden."
+  ]
+}

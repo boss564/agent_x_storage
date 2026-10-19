@@ -5944,6 +5944,9 @@ SKRIPT_OHNE_LAUF: set[str] = {
     "scripts/zerlege_rot.py",       # "rot" in Kategorien mit Einheit
     "scripts/test_lauf_eine_quelle.py",  # 7/7 Mess-Instrument-Faelle
     "scripts/ask_liste.py",         # R97 §4: Pflicht-Output der Ausnahme
+    # R107: Länge/Padding/Digest aus EINER Quelle + seine Wand-Suite.
+    "scripts/beleg_export.py",      # Beleg-Paket: atomar, nicht getippt
+    "scripts/test_beleg_export.py",  # 5/5 Selbstkonsistenz + Grenze
 }
 
 

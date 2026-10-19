@@ -78,6 +78,8 @@ WAND_SUITEN = {"scripts/test_governance_gate.py",
                # pruefen, ob ein Zitat bestehen KANN — nicht den Turm.
                "scripts/test_beweiskanal.py",
                "scripts/test_produkt_bewachung.py",
+               # R107: die Längen-/Padding-/Digest-Invariante des Belegkanals.
+               "scripts/test_beleg_export.py",
                }
 
 # R97/R98: Die Ausnahme ist eine DATENSCHICHT, kein Regelbruch. Jede
