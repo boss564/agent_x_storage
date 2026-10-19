@@ -1,0 +1,10 @@
+{
+  "id": "R97-N1",
+  "typ": "WAND_REPARATUR",
+  "autorisiert_von": "externer Auftraggeber (R97 §4: 'der Verbrauch ist lesend — das Gate prueft, ob die vier Dateien schon im Baum sind')",
+  "befund": "Die erste Fassung von ausnahme_R97() pruefte den Ledger statt den Dateibaum. Sie verbrauchte sich im Bootstrap-Commit e8a97895, bevor die Payload (lauf.py, aussen.py, zerlege_rot.py, test_lauf_eine_quelle.py) committet war — die 10. Auspraegung rueckwaerts: die Ausnahme verfiel ins Leere statt zur Kategorie zu werden.",
+  "reparatur": "Verbrauch misst _git ls-tree HEAD auf die vier Dateien. Lesend, kein Schreibzugriff im Hook (B3 intakt).",
+  "payload": "keine — dieser Commit traegt nur die Wand.",
+  "kriterium": "R97 §4 wortgleich: 'das Gate prueft: Sind die 4 Dateien bereits im Baum?'",
+  "verbraucht": "nicht verbrauchsaehig — eine Wandreparatur ist keine Ausnahme."
+}

@@ -1,5 +1,5 @@
 {
-  "_version": 23,
+  "_version": 24,
   "_zweck": "Maschinenlesbarer Vertrag des Einwurf-Waechters. Single source of truth fuer Repo und externe Ingestion. Wer hier eine Zeile aendert, aendert das Tor ausserhalb dieses Repos mit.",
   "_stand": "Runde 84 (2026-10-18)",
   "_geltung": "Der Runner (scripts/vertrags_runner.py) importiert diese Datei; die externe Ingestion MUSS sie einlesen. Solange sie es nicht tut, zertifiziert N/N einen Vertrag, den draussen niemand benutzt.",
@@ -1140,6 +1140,14 @@
       "entscheidung": "R97",
       "gebucht": "R97-3/4/5",
       "vorgaenger_hash": "044e1cc748da960051e589ca21c02aa61964fb3b5a34d35a6fce0d68f95bb8a0"
+    },
+    {
+      "version": 24,
+      "runde": "R97-N1",
+      "aenderung": "Wandreparatur: Verbrauch misst Dateibaum statt Ledger (10. Auspraegung rueckwaerts behoben)",
+      "entscheidung": null,
+      "gebucht": "R97-N1",
+      "vorgaenger_hash": "c5ba28232e69af16341982cfa18a4713e3b8628490b52cba5cd2d74cac4ad64b"
     }
   ],
   "kreuz_record_invarianten": {
@@ -1803,6 +1811,16 @@
       "verbraucht_mit_commit": true,
       "zehnte_auspraegung": "Eine neue Ausnahme braucht eine NEUE Entscheidung — nie Berufung auf 'Instrument-Reparatur'.",
       "pflicht_output": "Ask-Liste EXT-1..4 (wen/was/wann) — R97 §4"
+    }
+  ],
+  "wand_reparaturen": [
+    {
+      "id": "R97-N1",
+      "befund": "ausnahme_R97 pruefte Ledger statt Dateibaum; verbrauchte sich im Bootstrap-Commit",
+      "reparatur": "_git ls-tree HEAD auf die 4 Dateien; lesend",
+      "autorisiert_von": "externer Auftraggeber (R97 §4)",
+      "beleg": "R97 Kurzurteil §4: 'der Verbrauch ist lesend — das Gate prueft, ob die vier Dateien schon im Baum sind'",
+      "commit_mit_payload": false
     }
   ]
 }

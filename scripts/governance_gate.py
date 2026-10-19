@@ -91,10 +91,22 @@ def ausnahme_R97(gestaged: list[str]) -> tuple[bool, str]:
     fremd = [p for p in gestaged if p not in liste]
     if fremd:
         return False, f"Ausnahme deckt {len(fremd)} fremde Datei(en): {fremd[:3]}"
-    d = json.loads(V.read_text(encoding="utf-8"))
-    if any(x.get("entscheidung") == e["id"] for x in d.get("versions_ledger", [])):
-        return False, f"{e['id']} bereits verbraucht -- neue ENTSCHEIDUNG noetig"
-    return True, f"{e['id']}: {len(liste)} Dateien, geschlossen, einmalig"
+    # R97-Nachtrag: Verbrauch misst den DATEIZUSTAND, nicht den Ledger.
+    # Ein Ledger-Eintrag sagt "Entscheidung gefaellt", nicht "Payload
+    # gelandet". Der erste Fassung pruefte den Ledger und verbrauchte
+    # die Ausnahme im Bootstrap-Commit, bevor die Nutzlast committet war
+    # -- die 10. Auspraegung rueckwaerts: die Ausnahme verfiel ins Leere.
+    # Jetzt: verbraucht ist sie erst, wenn ALLE gelisteten Dateien
+    # versioniert im HEAD-Baum liegen. Lesend (B3).
+    fehlend = []
+    for f in sorted(liste):
+        r = _git("ls-tree", "--name-only", "HEAD", "--", f)
+        if not r.strip():
+            fehlend.append(f)
+    if not fehlend:
+        return False, f"{e['id']} verbraucht -- alle Dateien im Baum; neue ENTSCHEIDUNG noetig"
+    return True, (f"{e['id']}: {len(liste)} Dateien, geschlossen, einmalig "
+                  f"(noch {len(fehlend)} nicht im Baum)")
 
 
 def _verbrauche_R97() -> None:
