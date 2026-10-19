@@ -72,7 +72,8 @@ def neue_tests(gestaged: list[str]) -> list[str]:
 WAND_SUITEN = {"scripts/test_governance_gate.py",
                "scripts/test_aufrufbaum.py",
                "scripts/test_governance_semantik.py",  # R100: testet die Wand
-               "scripts/test_lauf_aufrufer.py"}  # R101: testet die Grenze
+               "scripts/test_lauf_aufrufer.py",  # R101: testet die Grenze
+               "scripts/test_lauf_artefakt.py"}  # R102: testet das Artefakt
 
 # R97/R98: Die Ausnahme ist eine DATENSCHICHT, kein Regelbruch. Jede
 # Entscheidung ist eine eigene Datei mit geschlossener Liste; verbraucht
@@ -85,7 +86,8 @@ ENTSCH = SCRIPTS / "entscheidung_R97.json"
 ENTSCHEIDUNGEN = (SCRIPTS / "entscheidung_R97.json",
                   SCRIPTS / "entscheidung_R98.json",
                   SCRIPTS / "entscheidung_R100.json",
-                  SCRIPTS / "entscheidung_R101.json")
+                  SCRIPTS / "entscheidung_R101.json",
+                  SCRIPTS / "entscheidung_R102.json")
 
 
 def _ausnahme(e: dict, gestaged: list[str]) -> tuple[bool, str]:
