@@ -109,21 +109,9 @@ def ausnahme_R97(gestaged: list[str]) -> tuple[bool, str]:
                   f"(noch {len(fehlend)} nicht im Baum)")
 
 
-def _verbrauche_R97() -> None:
-    """Schliesse die Ausnahme im Ledger, sobald sie wirkt."""
-    if not ENTSCH.exists():
-        return
-    e = json.loads(ENTSCH.read_text(encoding="utf-8"))
-    d = json.loads(V.read_text(encoding="utf-8"))
-    if any(x.get("entscheidung") == e["id"] for x in d.get("versions_ledger", [])):
-        return
-    d.setdefault("entscheidungen_ausnahmen", []).append({
-        "id": e["id"], "typ": e["typ"],
-        "autorisiert_von": e["autorisiert_von"],
-        "dateien_geschlossen": e["dateien_geschlossen"],
-        "verbraucht_mit_commit": True})
-    V.write_text(json.dumps(d, indent=2, ensure_ascii=False) + "\n",
-                 encoding="utf-8")
+# R97-N1/B3: Es gibt KEINEN _verbrauche_R97(). Das Gate schreibt nicht.
+# Der Verbrauch folgt allein aus dem Dateibaum: sobald die vier Dateien
+# in HEAD liegen, verweigert ausnahme_R97() die naechste Ausnahme.
 
 
 def erfuellt_besitz(gestaged: list[str], diff: str) -> bool:
@@ -190,8 +178,7 @@ def main(argv: list[str]) -> int:
         turm_neu = [x for x in neu if x not in WAND_SUITEN]
         ok_ausn, grund = ausnahme_R97(gestaged) if turm_neu else (False, "")
         if turm_neu and ok_ausn:
-            _verbrauche_R97()
-            warnung.append(f"R97-Ausnahme VERBRAUCHT: {grund}")
+            warnung.append(f"R97-Ausnahme aktiv (verbraucht sich mit diesem Commit): {grund}")
             turm_neu = []
         if turm_neu and not erfuellt_besitz(gestaged, diff):
             hart.append(
