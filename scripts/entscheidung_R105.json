@@ -1,0 +1,28 @@
+{
+  "id": "R105",
+  "typ": "ENTSCHEIDUNG",
+  "datum": "2026-10-19",
+  "ziel": "R104-Review abbuchen: P0-Status ehrlich zurueckstufen und dann vollziehen; Wand versionieren; Registrierungs-Regel mit Commit-Ort.",
+  "vorgaenger": "R104 (Werkzeug-Haelfte); R103 (Erbauer-Haelfte)",
+  "eigene_fehler_aus_R104": {
+    "1": "'P0 erfuellt' war ueberbucht. §1 zeigte ein Protokoll, keinen uebertragbaren Nachweis: zwei Zeilen aus demselben Dokument sind eine Tautologie.",
+    "2": "Die Kanonisierung des Payloads war NIRGENDS spezifiziert. Reale Folge, gemessen: ohne LF f8f2…, mit 1 LF b249…, mit 2 LF 1ec3…",
+    "3": "Region-SHA und Datei-SHA wurden beide erzwungen. Jede spaetere Dateiaenderung haette jeden historischen Beleg entwertet.",
+    "4": "'Registrierung statt Reklassifikation' war UNBELEGT. Geprueft: die zaehlung.py-Registrierung liegt in fe5a7cad = PAYLOAD, nicht in 07e49fa6. Der Schluessel reiste weiter, nur unter neuem Namen. Der R103-Defekt war NICHT behoben."
+  },
+  "entscheidungen": {
+    "P0_regel": "P0 ist erfuellt, wenn der Auditor einen Beleg END-TO-END rechnet: publizierte Byte-Datei + Spec + voller SHA. Nicht wenn der Erbauer es protokolliert.",
+    "kanonisierung": "BEWEIS-SPEC v1 (scripts/BEWEIS_SPEC.md). LF, genau ein Trailing-LF, Tabs byte-exakt, UTF-8 ohne BOM. Eine Funktion kanonisch(), ueberall benutzt.",
+    "bindungen": "Region-SHA = Beweisbindung (blockiert). Datei-SHA = Provenienz (sichtbar, blockiert nur mit --provenienz-streng).",
+    "wand": "git config core.hooksPath githooks. Der Hook liegt im Baum. Serverseite existiert: .github/workflows/governance.yml. Lokal bleibt --no-verify moeglich — das ist eine bekannter Rest, kein verschwiegener.",
+    "registrierung": "NEUE REGEL: Korb-/Klassifikations-Registrierung darf NUR in einem ENTSCHEIDUNGS-Commit erfolgen. Liegt sie im Payload, ist der Schluessel in der Nutzlast — unabhaengig vom Namen. R104 hat die Regel verletzt und wird hier korrigiert.",
+    "prosa_gate": "publiziere.py ist die Pipeline. Kein Warn-Modus. Ein Bericht, der sein Gate nicht besteht, wird nicht publiziert. ZITAT-AUSGABE blockt zitierte Gate-Ausgaben aus.",
+    "produkt": "vertrag/vertrag_<ts>.json + latest.json als Zeiger. data/ bleibt ignoriert — Laufzeit ist keine Historie, die Kopie ist es."
+  },
+  "nicht_entschieden": {
+    "ledger_trennung": "waechter_vertrag.json traegt weiter Regeln+Ledger. P3.",
+    "zustandsmodell": "N Paare statt Lebenszyklus. P3.",
+    "hook_historie": "Installationszeitpunkt des alten .git/hooks/pre-commit bleibt unpruefbar. Ab R105 ist die Wand im Baum; davor ist sie es nicht.",
+    "auditor_direktzugriff": "Nicht gewaehrt. Ersatz ist die Byte-Datei in publiziert/."
+  }
+}

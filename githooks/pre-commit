@@ -1,0 +1,68 @@
+#!/bin/bash
+# Pre-commit hook: CLAUDE.md consistency check
+# Prueft den INDEX (staged content), nicht den Arbeitsbaum — damit auch
+# git add -p und partielle Stagings korrekt behandelt werden.
+#
+# Verhindert Commits mit unstimmigen Agentenzahlen, Zeilenzahlen,
+# toten Referenzen oder veralteten Testergebnissen.
+#
+# ---------------------------------------------------------------------
+# REKONSTRUIERT in R95 (Commit-Kontext: governance-gate).
+# Der Original-Hook war NICHT versioniert und wurde beim Installieren des
+# Governance-Wrappers ueberschrieben. Wiederhergestellt aus dem gelesenen
+# Kopf (Zeilen 1-13 verifiziert) und den beobachteten Effekten
+# (Ueberschriften-Regel, ALLOW_HEADING_DROP, checkout-index-Export).
+# Zeilen 14-40 sind eine Rekonstruktion, keine Kopie. Befund gebucht in
+# scripts/waechter_vertrag.json -> hook_rekonstruktion.
+# ---------------------------------------------------------------------
+
+set -e
+
+# --- Governance-Gate (R95) — steht am Anfang: billig vor teuer -----------
+GOV="$(git rev-parse --show-toplevel)/scripts/governance_gate.py"
+if [ -f "$GOV" ]; then
+    python3 "$GOV" || exit 1
+fi
+
+# R105: unter core.hooksPath liegt der Hook in githooks/ (eine Ebene
+# unter der Wurzel), nicht in .git/hooks/ (zwei). git rev-parse ist
+# ohnehin die einzige verlaessliche Quelle — unabhaengig vom Ort.
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+CHECKER="$REPO_ROOT/scripts/check_claude_md.py"
+
+# --- Ueberschriften-Regel (billig, zuerst) -------------------------------
+# Eine gestagte Ueberschriftszeile (##…) ohne +Gegenstueck ist eine
+# geloeschte Zusage: sie faellt im Diff nicht als Loeschung auf, sondern
+# als Umgebung. Zweimal von Hand gefangen (TAG7_ABNAHME §5.3, §5), null
+# Mal verhindert.
+#
+# Absichtliche Entfernung: ALLOW_HEADING_DROP=1 als Umgebungsvariable.
+
+if [ -z "${ALLOW_HEADING_DROP:-}" ]; then
+    _d=$(git diff --cached -U0 -- '*.md' 2>/dev/null || true)
+    _minus=$(printf '%s\n' "$_d" | grep -cE '^-#{2,} ' || true)
+    _plus=$(printf '%s\n' "$_d" | grep -cE '^\+#{2,} ' || true)
+    if [ "$_minus" -gt "$_plus" ]; then
+        echo ""
+        echo "❌ Überschrift entfernt ohne Gegenstück ($_minus entfernt, $_plus neu):"
+        printf '%s\n' "$_d" | grep -E '^-#{2,} ' || true
+        echo ""
+        echo "   Absicht? -> ALLOW_HEADING_DROP=1 git commit ..."
+        exit 1
+    fi
+fi
+
+echo "🔍 CLAUDE.md consistency check..."
+
+TMP=$(mktemp -d)
+trap 'rm -rf "$TMP"' EXIT
+
+git checkout-index --prefix="$TMP/" -a 2>/dev/null || true
+
+# Falls checkout-index nichts exportiert hat (leerer Index), gegen
+# Arbeitsbaum pruefen
+if [ ! -f "$TMP/CLAUDE.md" ]; then
+    python3 "$CHECKER" "$REPO_ROOT" --run-tests
+else
+    python3 "$CHECKER" "$TMP" --run-tests
+fi

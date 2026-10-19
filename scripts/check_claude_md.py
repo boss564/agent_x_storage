@@ -5934,6 +5934,10 @@ SKRIPT_OHNE_LAUF: set[str] = {
     # R96/R97: die Mess-Instrumente. Kein Produktionslauf, kein Produktziel.
     "scripts/lauf.py",              # Lauf aus der EINEN Zaehlquelle
     "scripts/zaehlung.py",          # Assurance vs. Charakterisierung, getrennt
+    "scripts/publiziere.py",  # Publikations-Pipeline
+    "scripts/vertrag_snapshot.py",  # Snapshot Produkt
+    "scripts/test_vertrag_snapshot.py",  # Produkt durable
+    "scripts/test_zaehlung_parser.py",  # Eichnormal Messgeraet
     "scripts/beweis.py",            # #14 Beleg-Erzeugung (cite/publish)
     "scripts/beweis.py",            # #14 hash-verankerte Vollzitate
     "scripts/aussen.py",            # 94 aussen enumerieren/partionieren
