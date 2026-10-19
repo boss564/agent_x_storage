@@ -1,5 +1,5 @@
 {
-  "_version": 32,
+  "_version": 33,
   "_zweck": "Maschinenlesbarer Vertrag des Einwurf-Waechters. Single source of truth fuer Repo und externe Ingestion. Wer hier eine Zeile aendert, aendert das Tor ausserhalb dieses Repos mit.",
   "_stand": "Runde 84 (2026-10-18)",
   "_geltung": "Der Runner (scripts/vertrags_runner.py) importiert diese Datei; die externe Ingestion MUSS sie einlesen. Solange sie es nicht tut, zertifiziert N/N einen Vertrag, den draussen niemand benutzt.",
@@ -1212,6 +1212,14 @@
       "entscheidung": null,
       "gebucht": "R102-P0",
       "vorgaenger_hash": "0b29cdf519773286ecfcfa7e7946528acf041fac9a85439a29c01fc2fbe64fe2"
+    },
+    {
+      "version": 33,
+      "runde": "R102",
+      "aenderung": "Interface-Entscheidung: make lauf = Human-Convenience, Vertragsschnittstelle = data/lauf_letzter.json. test_lauf_artefakt.py 5/5 (D1 verteidigt R98 #2 gegen den .gitignore-Fehlgriff). Schemafehler-Regel N Dateien -> N Paare, mit Test. R101 als Regelverletzung bestaetigt (4 Dateien, 1 Paar).",
+      "entscheidung": "R102",
+      "gebucht": "R102",
+      "vorgaenger_hash": "51cb89bf87819656a97af76df04e2495d59346b8ce141227b24775ac8e1d2910"
     }
   ],
   "kreuz_record_invarianten": {
@@ -2133,5 +2141,11 @@
   "namenskonflikt": {
     "befund": "protokoll/vollauf_<ts>.json entstand im Vertragslauf (37), nicht im --voll (131). Der Name luegt.",
     "loesung": "vertrag_<ts>.json vs vollauf_<ts>.json — eigene Entscheidung."
+  },
+  "R102_offen": {
+    "protokoll_untracked": "BESTAETIGT. git status '?? protokoll/' = uncommitted, NICHT ignored (check-ignore: NEIN). Terminologie scharf: uncommitted != ignored. test_lauf_artefakt.py D1 verteidigt das (Mutation .gitignore -> rot).",
+    "kopplung": "BESTAETIGT. Jeder make lauf erzeugt ein neues untracked Archiv. Die geschlossene Haelfte (Ausloeser) verschaerft die offene (Versionierung). Retention muss VOR weiterer Mess-Ausweitung entschieden werden.",
+    "namenskonflikt": "BESTAETIGT. protokoll/vollauf_20261019T173912Z.json entstand im Vertragslauf (37 Dateien, modus=vertrag). Der Name sagt vollauf. Loesung: vertrag_<ts>.json vs vollauf_<ts>.json — eigene Entscheidung.",
+    "test_register": "BEFUND. Meine R102-Ergaenzung hat die Zusammenfassungszeile in test_governance_semantik.py ueberschrieben. 8 Tests gruen, aber ohne gedruckte Summe — ein gruener Lauf, der nicht sagt, wie viel er geprueft hat. Behoben."
   }
 }

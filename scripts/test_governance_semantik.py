@@ -105,6 +105,26 @@ def main() -> int:
         finally:
             G._git = real_git
 
+    # R102: Der Live-Befund. Ein Datensatz mit N Dateien braucht N Paare
+    # (baseline, ziel). R101 lieferte EIN Paar fuer vier Dateien — drei
+    # waren dadurch per Konstruktion ANOMALIE, und der Dreizustand hat
+    # seinen ersten echten Einsatz nicht bestanden.
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "scripts").mkdir()
+        a, b = root / "scripts" / "a.py", root / "scripts" / "b.py"
+        G.SCRIPTS = root / "scripts"
+        G._git = lambda *x, **k: "scripts/a.py"
+        a.write_text("ziel")     # == ziel_sha256
+        b.write_text("anders")   # weder baseline noch ziel
+        # EIN globales Paar, zwei Dateien -> b ist ANOMALIE
+        d_ein_paar = {"id": "RX", "dateien_geschlossen": ["scripts/a.py", "scripts/b.py"],
+                      "fix": {"baseline_sha256": sha("base"),
+                              "ziel_sha256": sha("ziel")}}
+        ok_, grund = G._ausnahme(d_ein_paar, ["scripts/a.py", "scripts/b.py"])
+        pruefe("R102 ein globales Hash-Paar -> Datei ohne eigenes Paar ist ANOMALIE",
+               not ok_ and "ANOMALIE" in grund, grund)
+
     print(f"\n{ok}/{gesamt} Verbrauchs-Semantik-Faelle gruen")
     return 0 if ok == gesamt else 1
 
