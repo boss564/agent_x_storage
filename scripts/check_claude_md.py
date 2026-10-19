@@ -5926,6 +5926,7 @@ SKRIPT_OHNE_LAUF: set[str] = {
     "scripts/aussen.py",            # 94 aussen enumerieren/partionieren
     "scripts/zerlege_rot.py",       # "rot" in Kategorien mit Einheit
     "scripts/test_lauf_eine_quelle.py",  # 7/7 Mess-Instrument-Faelle
+    "scripts/ask_liste.py",         # R97 §4: Pflicht-Output der Ausnahme
 }
 
 
