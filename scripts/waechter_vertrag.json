@@ -1,5 +1,5 @@
 {
-  "_version": 24,
+  "_version": 25,
   "_zweck": "Maschinenlesbarer Vertrag des Einwurf-Waechters. Single source of truth fuer Repo und externe Ingestion. Wer hier eine Zeile aendert, aendert das Tor ausserhalb dieses Repos mit.",
   "_stand": "Runde 84 (2026-10-18)",
   "_geltung": "Der Runner (scripts/vertrags_runner.py) importiert diese Datei; die externe Ingestion MUSS sie einlesen. Solange sie es nicht tut, zertifiziert N/N einen Vertrag, den draussen niemand benutzt.",
@@ -1148,6 +1148,14 @@
       "entscheidung": null,
       "gebucht": "R97-N1",
       "vorgaenger_hash": "c5ba28232e69af16341982cfa18a4713e3b8628490b52cba5cd2d74cac4ad64b"
+    },
+    {
+      "version": 25,
+      "runde": "R98",
+      "aenderung": "ENTSCHEIDUNG R98 gebucht: Meßevidenz archivieren (Route A, protokoll/), geschlossene Liste [lauf.py], Provenienz, Kette R97/R98 enumeriert, #11 als Backlog",
+      "entscheidung": "R98",
+      "gebucht": "R98-1..8",
+      "vorgaenger_hash": "e766c7cab53c83ff9050cce75d32a5cb475372844a9846ab11980223ecf268dc"
     }
   ],
   "kreuz_record_invarianten": {
@@ -1811,6 +1819,24 @@
       "verbraucht_mit_commit": true,
       "zehnte_auspraegung": "Eine neue Ausnahme braucht eine NEUE Entscheidung — nie Berufung auf 'Instrument-Reparatur'.",
       "pflicht_output": "Ask-Liste EXT-1..4 (wen/was/wann) — R97 §4"
+    },
+    {
+      "id": "R98",
+      "typ": "WAND_AENDERUNG_MIT_AUSNAHME",
+      "autorisiert_von": "externer Auftraggeber (R98 Kurzurteil §5)",
+      "ist_nicht": "Wiedereroeffnung von R97 — R97 ist mit 6a3d0681 verbraucht",
+      "dateien_geschlossen": [
+        "scripts/lauf.py"
+      ],
+      "route": "A — protokoll/vollauf_<ISO-ts>.json (versioniert), nicht data/ (.gitignore:38)",
+      "provenienz": "commit_hash, modus, zeitstempel_utc, zaehlweise, zerlegung, exita",
+      "querverweis": "lauf_R96_ergebnis",
+      "commit_trennung": [
+        "Wand: entscheidung_R98.json + Vertrag",
+        "Payload: lauf.py"
+      ],
+      "verbraucht_mit_commit": true,
+      "naechste": "R99"
     }
   ],
   "wand_reparaturen": [
@@ -1821,6 +1847,67 @@
       "autorisiert_von": "externer Auftraggeber (R97 §4)",
       "beleg": "R97 Kurzurteil §4: 'der Verbrauch ist lesend — das Gate prueft, ob die vier Dateien schon im Baum sind'",
       "commit_mit_payload": false
+    },
+    {
+      "id": "R98-G",
+      "befund": "Der Verbrauchs-Massstab 'alle Dateien in HEAD' ist zu grob: er unterscheidet nicht zwischen unveraendert akzeptiert und nach Freigabe geaendert. Das ist dieselbe Verwechslung wie #11.",
+      "reparatur": "Generischer Leser fuer R97+R98. Bei vorhandener fix.baseline_sha256 gilt: verbraucht, wenn Arbeitsbaum-Hash != Baseline.",
+      "autorisiert_von": "externer Auftraggeber (R98 Bedingungen 1, 6, 7)",
+      "commit_mit_payload": false,
+      "b3": "write_text im Gate: 0"
     }
-  ]
+  ],
+  "kette_R97_R98": {
+    "zweck": "Bedingung 8: die geschlossene Liste ist nur auditierbar, wenn die Kette enumeriert ist.",
+    "commits": [
+      {
+        "sha": "7a2263c4",
+        "ebene": "Baseline",
+        "was": "R95 Gesamtlauf 12/131 — VORHER, nicht Ergebnis"
+      },
+      {
+        "sha": "8b288cfa",
+        "ebene": "Reparatur",
+        "was": "Standzeile + Blocker-Typisierung; R97 nur als Prosa im Vertrag"
+      },
+      {
+        "sha": "69d06d7d",
+        "ebene": "Wand",
+        "was": "R95 Gate greift vor dem Commit"
+      },
+      {
+        "sha": "e8a97895",
+        "ebene": "Wand",
+        "was": "R97-Bootstrap: entscheidung_R97.json + Leser; keine Payload"
+      },
+      {
+        "sha": "fbb9354d",
+        "ebene": "Wand",
+        "was": "R97-N1: Verbrauch prueft Dateibaum statt Ledger"
+      },
+      {
+        "sha": "c0d2e4a8",
+        "ebene": "Wand",
+        "was": "R97-N1/B3: write_text entfernt, Gate schreibt nicht"
+      },
+      {
+        "sha": "6a3d0681",
+        "ebene": "Payload",
+        "was": "die vier Skripte; R97 verbraucht"
+      },
+      {
+        "sha": "d1b4dbb9",
+        "ebene": "Pflicht-Output",
+        "was": "Ask-Liste EXT-1..4"
+      }
+    ],
+    "verifiziert": "2026-10-19, alle acht in git log vorhanden"
+  },
+  "#11_kandidat": {
+    "titel": "Schutz existiert, Deckung fehlt",
+    "beleg": "governance_gate.neue_tests() nutzt --diff-filter=A. Nur Hinzufuegungen werden geprueft; Modifikationen an akzeptierten Skripten nicht.",
+    "status": "BACKLOG — nicht in R98 gebaut",
+    "gegenmassnahme": "Hash-Allowlist akzeptierter Skripte; jede Aenderung nach Freigabe = neue Entscheidungspflicht. Selbst eine Wandaenderung -> eigene Entscheidung.",
+    "ersatz_beleg_bis_dahin": "R-Entscheidung muss im COMMIT-TEXT stehen, weil das Gate sie nicht erzwingt."
+  }
 }

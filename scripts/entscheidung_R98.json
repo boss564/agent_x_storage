@@ -1,0 +1,52 @@
+{
+  "id": "R98",
+  "typ": "WAND_AENDERUNG_MIT_AUSNAHME",
+  "autorisiert_von": "externer Auftraggeber (R98 Kurzurteil §5, acht Bedingungen)",
+  "nicht_wiedereroeffnung_von": "R97",
+  "begruendung_neue_entscheidung": "R97 ist mit Commit 3 (6a3d0681) verbraucht. Eine fuenfte Wand ist ein neuer Payload und braucht eine neue Entscheidung. Die geschlossene Liste heisst nicht 'der Bau ist beendet', sondern 'jeder weitere Bau ist ein neuer, einzeln zu autorisierender Fall'.",
+  "befund": {
+    "id": "#11-Kandidat",
+    "titel": "Schutz existiert, Deckung fehlt",
+    "beleg": "governance_gate.neue_tests() nutzt --diff-filter=A (nur Hinzufuegungen). Modifikationen an bestehenden Skripten sind fuer das Gate unsichtbar. Die R98-Aenderung an lauf.py wuerde still durchgehen.",
+    "status": "BACKLOG, nicht in R98 gebaut",
+    "warum_nicht_jetzt": "Eine Hash-Allowlist akzeptierter Skripte waere selbst eine Wandaenderung und braucht eine eigene Entscheidung (R99+)."
+  },
+  "fix": {
+    "route": "A",
+    "route_verworfen": {
+      "B": ".gitignore-Ausnahme !data/vollauf_*.json — data/ bleibt Mischraum, Ignorier-Regel wird Governance-Eingriff",
+      "C": "manuell committen — fehleranfaellig, widerspricht dem Automatismus"
+    },
+    "ziel_datei": "scripts/lauf.py",
+    "aenderung": "Bei --voll zusaetzlich nach protokoll/vollauf_<ISO-ts>.json schreiben (versionierter Pfad).",
+    "abgelehnt": "data/vollauf_<datum>.json — liegt unter .gitignore:38, bleibt fluechtig. Heilt das Ueberschreiben, nicht die Archivierbarkeit.",
+    "timestamp": "ISO-8601 mit Sekunden, keine Kollision bei Zweitlauf am selben Tag",
+    "provenienz_pflichtfelder": [
+      "commit_hash",
+      "modus (voll|vertrag)",
+      "zeitstempel_utc",
+      "zaehlweise_n_code",
+      "zaehlweise_n_gesamt",
+      "zerlegung {GRUEN,GEFALLEN,BEFUND,BEENDET}",
+      "dateien_mit_exitcode"
+    ],
+    "querverweis": "Archiv-Run-ID <-> Vertragsschlüssel lauf_R96_ergebnis (zwei Quellen, die aufeinander zeigen — nicht zwei Wahrheiten)",
+    "baseline_sha256": "2a5f79fb7fc33e5803b14d7594d00026f12ab24c58d970bb8ad3ad2238293d48",
+    "baseline_bedeutung": "Der akzeptierte Stand von lauf.py aus R97 (Commit 6a3d0681). R98 gilt NUR fuer die Aenderung gegen diesen Hash. Ist lauf.py im Baum bereits anders als baseline, ist R98 verbraucht (die Aenderung ist gelandet). Ist lauf.py im Baum gleich baseline UND im Index anders -> R98 greift."
+  },
+  "dateien_geschlossen": [
+    "scripts/lauf.py"
+  ],
+  "commit_trennung": {
+    "commit_1": "scripts/entscheidung_R98.json + Vertragsdatensatz (WAND, keine Payload)",
+    "commit_2": "scripts/lauf.py (PAYLOAD)"
+  },
+  "beleg_ersatz": "Das Gate blockt Modifikationen nicht (#11). Der Beleg ist daher der Commit-Text: R98 muss dort sichtbar sein, nicht nur im Datensatz.",
+  "verbraucht_mit_commit": true,
+  "naechste_wand_aenderung": "R99",
+  "nicht_gedeckt": [
+    "Retention (unbegrenztes Wachstum durch jedes --voll) — Backlog",
+    "Hash-Allowlist gegen #11 — Backlog, eigene Entscheidung",
+    "Jede weitere Datei"
+  ]
+}

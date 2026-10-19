@@ -72,41 +72,74 @@ def neue_tests(gestaged: list[str]) -> list[str]:
 WAND_SUITEN = {"scripts/test_governance_gate.py",
                "scripts/test_aufrufbaum.py"}
 
-# R97: Die Ausnahme ist eine DATENSCHICHT, kein Regelbruch. Das Gate liest
-# `scripts/entscheidung_R97.json`; die Dateiliste dort ist geschlossen und
-# die Ausnahme ist mit einem Commit verbraucht (Ledger-Pruefung). Neue
-# Ausnahme = neue ENTSCHEIDUNG, nie Berufung auf "Instrument-Reparatur"
+# R97/R98: Die Ausnahme ist eine DATENSCHICHT, kein Regelbruch. Jede
+# Entscheidung ist eine eigene Datei mit geschlossener Liste; verbraucht
+# ist sie, wenn alle gelisteten Dateien in HEAD liegen (lesend, B3).
+# Neue Wand = neue ENTSCHEIDUNG, nie Berufung auf "Instrument-Reparatur"
 # (10. Auspraegung: Ausnahme darf nicht Kategorie werden).
 ENTSCH = SCRIPTS / "entscheidung_R97.json"
 
 
-def ausnahme_R97(gestaged: list[str]) -> tuple[bool, str]:
-    """Einmalige, gebuchte Ausnahme — nur fuer die geschlossene Dateiliste."""
-    if not ENTSCH.exists() or not gestaged:
-        return False, ""
-    e = json.loads(ENTSCH.read_text(encoding="utf-8"))
+ENTSCHEIDUNGEN = (SCRIPTS / "entscheidung_R97.json",
+                  SCRIPTS / "entscheidung_R98.json")
+
+
+def _ausnahme(e: dict, gestaged: list[str]) -> tuple[bool, str]:
+    """Eine Entscheidung anwenden. Die LOGIK ist fuer alle gleich:
+    geschlossene Liste, fremde Datei -> nein, verbraucht -> nein.
+    Eine neue Entscheidung erweitert nur ENTSCHEIDUNGEN, nie diese
+    Funktion. So kann 'Instrument-Reparatur' nicht zur Kategorie werden.
+    """
     liste = set(e.get("dateien_geschlossen", []))
     if not liste:
-        return False, "Dateiliste leer — Ausnahme ungueltig"
+        return False, f"{e.get('id','?')}: Dateiliste leer — ungültig"
     fremd = [p for p in gestaged if p not in liste]
     if fremd:
-        return False, f"Ausnahme deckt {len(fremd)} fremde Datei(en): {fremd[:3]}"
-    # R97-Nachtrag: Verbrauch misst den DATEIZUSTAND, nicht den Ledger.
-    # Ein Ledger-Eintrag sagt "Entscheidung gefaellt", nicht "Payload
-    # gelandet". Der erste Fassung pruefte den Ledger und verbrauchte
-    # die Ausnahme im Bootstrap-Commit, bevor die Nutzlast committet war
-    # -- die 10. Auspraegung rueckwaerts: die Ausnahme verfiel ins Leere.
-    # Jetzt: verbraucht ist sie erst, wenn ALLE gelisteten Dateien
-    # versioniert im HEAD-Baum liegen. Lesend (B3).
-    fehlend = []
-    for f in sorted(liste):
-        r = _git("ls-tree", "--name-only", "HEAD", "--", f)
-        if not r.strip():
-            fehlend.append(f)
+        return False, (f"{e['id']} deckt {len(fremd)} fremde Datei(en): "
+                       f"{fremd[:3]}")
+    # R97-N1: Verbrauch misst den DATEIZUSTAND, nicht den Ledger.
+    # R98-N1: Feiner. Eine Datei kann in HEAD liegen UND geaendert werden.
+    # "In HEAD" allein ist zu grob (#11: genau diese Verwechslung liess
+    # Modifikationen unsichtbar). Massstab ist daher:
+    #   baseline_sha256 vorhanden -> verbraucht, wenn HEAD != baseline
+    #   sonst                     -> verbraucht, wenn alle Dateien in HEAD
+    base = e.get("fix", {}).get("baseline_sha256")
+    if base:
+        fehlend = [f for f in sorted(liste)
+                   if not _git("ls-tree", "--name-only", "HEAD", "--", f).strip()]
+        if fehlend:
+            return True, (f"{e['id']}: {len(liste)} Dateien, Basis noch nicht im Baum")
+        import hashlib as _h
+        for f in sorted(liste):
+            ist = _h.sha256((SCRIPTS.parent / f).read_bytes()).hexdigest()
+            if ist != base:
+                return False, (f"{e['id']} verbraucht — {f} weicht von der "
+                               f"Baseline ab; neue ENTSCHEIDUNG noetig")
+        return True, (f"{e['id']}: {len(liste)} Dateien, Basis identisch, "
+                      f"Aenderung gegen Baseline gestattet")
+    fehlend = [f for f in sorted(liste)
+               if not _git("ls-tree", "--name-only", "HEAD", "--", f).strip()]
     if not fehlend:
-        return False, f"{e['id']} verbraucht -- alle Dateien im Baum; neue ENTSCHEIDUNG noetig"
+        return False, (f"{e['id']} verbraucht — alle Dateien im Baum; "
+                       f"neue ENTSCHEIDUNG nötig")
     return True, (f"{e['id']}: {len(liste)} Dateien, geschlossen, einmalig "
                   f"(noch {len(fehlend)} nicht im Baum)")
+
+
+def ausnahme_aktiv(gestaged: list[str]) -> tuple[bool, str]:
+    """Die erste greifende Entscheidung. Reihenfolge = Dateiliste oben."""
+    if not gestaged:
+        return False, ""
+    gruende = []
+    for pfad in ENTSCHEIDUNGEN:
+        if not pfad.exists():
+            continue
+        ok, grund = _ausnahme(json.loads(pfad.read_text(encoding="utf-8")),
+                              gestaged)
+        if ok:
+            return True, grund
+        gruende.append(grund)
+    return False, "; ".join(gruende) if gruende else ""
 
 
 # R97-N1/B3: Es gibt KEINEN _verbrauche_R97(). Das Gate schreibt nicht.
@@ -176,7 +209,7 @@ def main(argv: list[str]) -> int:
         neu = neue_tests(gestaged)
         # Wand-Suiten (Bootstrap) sind keine Turm-Suiten.
         turm_neu = [x for x in neu if x not in WAND_SUITEN]
-        ok_ausn, grund = ausnahme_R97(gestaged) if turm_neu else (False, "")
+        ok_ausn, grund = ausnahme_aktiv(gestaged) if turm_neu else (False, "")
         if turm_neu and ok_ausn:
             warnung.append(f"R97-Ausnahme aktiv (verbraucht sich mit diesem Commit): {grund}")
             turm_neu = []
