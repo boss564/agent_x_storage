@@ -1,0 +1,33 @@
+{
+  "id": "R104",
+  "typ": "ENTSCHEIDUNG",
+  "datum": "2026-10-19",
+  "ziel": "#14 fertigbauen (Auditor-Haelfte) und die drei Prozessfehler aus R103-Review schliessen, BEVOR weitere Payload entsteht.",
+  "vorgaenger": "R102 (make lauf = Human-Convenience) und R103 (#14 Haelfte 1: Erbauer-Disziplin)",
+  "befunde_aus_review": {
+    "1": "#14 halb gebaut: Format/Drift/Ledger disziplinieren den Erbauer; der Auditor kann 12-Hex-Digest ueber ein unlesbares Repo nicht rechnen. Ein Digest ueber ein Geheimnis ist kein Beweis.",
+    "2": "Kanal schuetzt das Ledger, nicht die Prosa. Der Original-Defekt (gekuerztes Zitat im Fliesstext) passiert ungeprueft.",
+    "3": "Ein Commit verletzt Entscheidung-vor-Payload. Die Klassifikation WAND_SUITEN loeste den Block IM SELBEN Commit, den das Gate blockierte — Selbst-Autorisierung.",
+    "4": "Wandblock-Mechanismus unbenannt; Wand/Turm-Schwelle lag im Payload.",
+    "5": "R103-Bericht sagte 'R102 kuerzte den Makefile-Block'. Der Record zeigt: die Kuerzung stammt aus R99, korrigiert in R100 (Transcript-Zeile 8129). R102 kuerzte nichts am Makefile. Referenzielle Unscharfe im ersten Beleg.",
+    "6": ".gitignore-Ausnahme 'letzte Regel gewinnt' ist Bandage; Wahrheits-Dateien haengen an Zeilenreihenfolge.",
+    "7": "Gruener Charakterisierungstest in derselben Regressionszeile wie Assurance laesst die Zahl das Gegenteil bedeuten."
+  },
+  "entscheidungen": {
+    "P0_voller_sha": "Jeder Beleg traegt sha256 ueber 64 Hex PLUS sha256 ueber die GANZE Datei PLUS Zeilenzahl. Kein 12-Zeichen-Index mehr.",
+    "P0_byte_exakt": "cite --publish liefert JSON mit text+sha256. Auditor prueft mit sha256sum, ohne Repo, ohne Werkzeug. Nachgewiesen: Uebereinstimmung.",
+    "P1_sequenz": "ENTSCHEIDUNG vor PAYLOAD als getrennte Commits. Publikation erst nach Sequenzende. 'Atomar' heisst EIN PUBLIZIERTER ZUSTAND, nicht EIN Commit.",
+    "P1_klassifikation": "Wand/Turm-Klassifikation ist eine ENTSCHEIDUNG (diese Datei), nicht eine Zeile im Payload. R103 hat sie im Payload gesetzt — Rueckfall, gebucht.",
+    "P2_prosa": "beweis.py --stdin prueft Fliesstext gegen das Ledger; jede Datei:Zeile-Referenz ohne Beleg wird ROT. Der Bericht muss durch dieses Gate.",
+    "P2_zaehlung": "Assurance und Charakterisierung werden getrennt gezaehlt (zaehlung.py als EINZIGE Quelle). 43/43 | 6/6, nie 49/49.",
+    "P2_gitignore": "*.jsonl-Glob ENTFERNT. Explizit getrackt: evidence-ledger, PAPER_FEED_...jsonl, memory/JOURNAL.jsonl. Keine Negationskette.",
+    "R103_fehler": "Die Makefile-Zuordnung 'R102 kuerzte' wird in R104 oeffentlich richtiggestellt: R99 kuerzte, R100 korrigierte."
+  },
+  "nicht_entschieden": {
+    "produkt": "lauf_letzter.json bleibt gitignored und ungoverned. P3, unveraendert.",
+    "ledger_trennung": "waechter_vertrag.json traegt weiter Regeln+Ledger. P3.",
+    "zustandsmodell": "N Paare statt Lebenszyklus. P3.",
+    "hook_versionierung": "pre-commit ist 0x versioniert; install_hook.sh existiert. Befund gebucht, nicht behoben.",
+    "auditor_zugriff": "Lesender Repo-Zugriff wurde NICHT gewaehrt. Ersatz: byte-exakte Publikation + voller SHA. Der Auditor kann rechnen, wenn er das Artefakt bekommt."
+  }
+}
