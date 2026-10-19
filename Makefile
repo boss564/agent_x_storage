@@ -48,6 +48,22 @@ test:
 	@echo ""
 	@echo "✅ Alle Test-Suiten durchlaufen"
 
+# ── Lauf: die EINE Zählquelle, mit Abnehmer ──────────────────────────
+# R99. Aufrufer = dieses Target. Abnehmer = wer die Ausgabe liest.
+# Blockt NICHT — die Messung ist ein Spiegel, keine Tür.
+# Exit: 0 GRUEN | 1 GEFALLEN (bewiesen rot) | 2 BEFUND (unentscheidbar)
+lauf:
+	@echo "🔁 LAUF — Vertragsscope (37 Suiten), eine Zählquelle: test_zaehlweise.zaehle()"
+	@python3 scripts/lauf.py; rc=$$?; \
+	  case $$rc in \
+	    0) echo "✅ GRUEN — Vertragsscope grün" ;; \
+	    1) echo "❌ GEFALLEN — mindestens eine Suite bewiesen rot" ;; \
+	    2) echo "⚠️  BEFUND — unentscheidbar (Blocker/Timeout), NICHT grün" ;; \
+	    *) echo "⚠️  UNERWARTET (Exit $$rc)" ;; \
+	  esac; exit $$rc
+
+.PHONY: lauf
+
 # ── Compile: Frühwarnung vor dem Push ────────────────────────────────
 #
 # §A-ZZZZ106 (Runde 75): **die fünf Wochen Blindheit waren die Lücke

@@ -1,0 +1,43 @@
+{
+  "id": "R99",
+  "typ": "WAND_AENDERUNG_MIT_AUSNAHME",
+  "autorisiert_von": "externer Auftraggeber (R99 Priorisierung P1; Kurzurteil §4/§6)",
+  "ist_nicht": "R98-Wiedereroeffnung. R98 ist mit a7ec141f verbraucht.",
+
+  "ziel": "Die neunte Auspraegung dort schliessen, wo sie sitzt: lauf.py hat keinen Ausloeser. Einen ABNEHMER schaffen, nicht nur einen Aufrufer.",
+  "aufrufer_vs_abnehmer": {
+    "aufrufer": "ein CI-Schritt oder make-Target, das lauf.py startet",
+    "abnehmer": "eine Instanz, die auf das Ergebnis HANDELT: bei Rot blockt oder eskaliert, bei Gruen bucht",
+    "befund": "R99 liefert den Aufrufer. Den Abnehmer kann kein Skript erzeugen — er ist eine Rollenzuweisung."
+  },
+
+  "block_semantik": {
+    "entscheidung": "BERICHTEN, NICHT BLOCKEN",
+    "grund": "Ein blockierender Vertragslauf macht die Messung zur Tuer. Dann entsteht der Anreiz, die Messung gruen zu machen statt den Turm zu reparieren. Die Messung ist ein Spiegel, keine Tuer.",
+    "was_blockt_stattdessen": "Der bestehende Hook (check_claude_md.py) blockt unveraendert. R99 fuegt keinen zweiten Blocker hinzu.",
+    "was_berichtet": "make lauf gibt aus; CI zeigt den Status. Kein Gate, das an der Messung haengt."
+  },
+
+  "scope": {
+    "vertragslauf": "37 Suiten, ~21 s — taeglich vertretbar",
+    "vollauf": "131 Dateien, >20 min — NICHT in R99. Das ist R100 und braucht Reaktionspflicht."
+  },
+
+  "dateien_geschlossen": ["scripts/lauf.py", "Makefile"],
+  "aenderung": {
+    "lauf.py": "Fehlercode-Differenzierung: 0 gruen, 1 GEFALLEN, 2 BEFUND (unentscheidbar). R99 fuehrt die drei Zustaende ein, die R98 nur zwei hatte.",
+    "Makefile": "Target 'lauf': ruft scripts/lauf.py (Vertragsscope), zeigt GRUEN/GEFALLEN/BEFUND getrennt."
+  },
+
+  "nicht_in_R99": [
+    "#12 Governance-Tests fuer die Verbrauchs-Semantik (P2, eigene Wand)",
+    "Ziel-Hash / Dreizustand fuer Ausnahmen (P2)",
+    "Nightly --voll (R100, nur mit benannter Reaktionspflicht)",
+    "Retention fuer protokoll/"
+  ],
+
+  "verbraucht_mit_commit": true,
+  "naechste_wand_aenderung": "R100",
+
+  "beleg_ersatz": "Das Gate blockt Makefile und lauf.py-Modifikation nicht (#11). R99 muss im Commit-Text stehen."
+}

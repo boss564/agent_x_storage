@@ -11,6 +11,8 @@ Fuenf Faelle:
   3  die vier Einheiten sind definiert (GRUEN/GEFALLEN/BEFUND/BEENDET)
   4  Exit 2 wird als BEFUND, nicht als GEFALLEN klassifiziert
   5  lauf.py fasst .git nicht an
+  6  R99: Makefile hat einen Ausloeser (Aufrufer) fuer lauf.py
+  7  R99: der Ausloeser nennt BEFUND — nicht nur gruen/rot
 """
 from __future__ import annotations
 
@@ -64,6 +66,13 @@ def main() -> int:
                 n.body = n.body[1:] or [ast.Pass()]
     code = ast.unparse(baum)
     pruefe("kein .git-Zugriff im ausfuehrbaren Code", ".git" not in code)
+
+    # R99: Ein Aufrufer ist kein Abnehmer. Diese zwei Faelle pruefen,
+    # dass der Ausloeser existiert UND die Semantik benennt.
+    mk = (SCRIPTS.parent / "Makefile").read_text(encoding="utf-8")
+    pruefe("Makefile hat einen Aufrufer 'lauf:'", bool(re.search(r"^lauf:", mk, re.M)))
+    pruefe("Aufrufer nennt BEFUND (nicht nur gruen/rot)", "BEFUND" in mk)
+    pruefe("Aufrufer ruft scripts/lauf.py", "scripts/lauf.py" in mk)
 
     print(f"\n{ok}/{gesamt} Mess-Instrument-Faelle gruen")
     return 0 if ok == gesamt else 1

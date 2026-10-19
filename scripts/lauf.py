@@ -167,8 +167,13 @@ def main(argv: list[str]) -> int:
     print(f"\nArtefakt: {ERGEBNIS}")
     if voll:
         print(f"Archiv:   {archivieren(json.loads(ERGEBNIS.read_text(encoding='utf-8')))}")
-    return 0 if not any(e["klasse"] in ("GEFALLEN", "BEENDET")
-                        for e in d["erg"]) else 1
+    # R99: DREI Zustaende statt zwei. Ein BEFUND ist nicht gruen.
+    cls = Counter(e["klasse"] for e in d["erg"])
+    if cls.get("GEFALLEN") or cls.get("BEENDET"):
+        return 1          # GEFALLEN: bewiesen rot
+    if cls.get("BEFUND"):
+        return 2          # BEFUND: unentscheidbar — nicht gruen, nicht rot
+    return 0              # GRUEN
 
 
 if __name__ == "__main__":
