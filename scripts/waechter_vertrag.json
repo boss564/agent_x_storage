@@ -1,5 +1,5 @@
 {
-  "_version": 27,
+  "_version": 28,
   "_zweck": "Maschinenlesbarer Vertrag des Einwurf-Waechters. Single source of truth fuer Repo und externe Ingestion. Wer hier eine Zeile aendert, aendert das Tor ausserhalb dieses Repos mit.",
   "_stand": "Runde 84 (2026-10-18)",
   "_geltung": "Der Runner (scripts/vertrags_runner.py) importiert diese Datei; die externe Ingestion MUSS sie einlesen. Solange sie es nicht tut, zertifiziert N/N einen Vertrag, den draussen niemand benutzt.",
@@ -1172,6 +1172,14 @@
       "entscheidung": "R99",
       "gebucht": "R99",
       "vorgaenger_hash": "2b8698e0f75a09db962699de02bd6761f0f77170a42bfee73b35acbe4a0c60b1"
+    },
+    {
+      "version": 28,
+      "runde": "R100",
+      "aenderung": "Dreizustand der Ausnahmen-Verbrauchs-Semantik. Fremde Aenderung ist ANOMALIE, nicht verbraucht. Governance-Tests (#12 geschlossen). Taxonomie in drei Felder aufgeteilt.",
+      "entscheidung": "R100",
+      "gebucht": "R100",
+      "vorgaenger_hash": "538e594ec553dfde85e63d5c91345f01c9fc1e6a3996e859e21a0eb575e7a6ad"
     }
   ],
   "kreuz_record_invarianten": {
@@ -1766,6 +1774,21 @@
       "vorher": "keiner (Hook/CI/Makefile: 0)",
       "jetzt": "make lauf",
       "abnehmer": "offen — benannt, nicht erzeugt"
+    },
+    "verdrahtet_innen": {
+      "wert": true,
+      "beleg": "lauf.py:41 `from test_zaehlweise import zaehle`",
+      "suite": "test_lauf_eine_quelle.py"
+    },
+    "verdrahtet_aussen": {
+      "wert": "ab R99",
+      "beleg": "Makefile:56 `lauf:` -> scripts/lauf.py",
+      "vorher": "kein Hook, keine CI, kein Makefile"
+    },
+    "abnehmer": {
+      "wert": null,
+      "status": "OFFEN",
+      "grund": "Rolle ohne Mechanismus ist ein Name ohne Funktion — R99 Kurzurteil 8"
     }
   },
   "aussen_partitionen": {
@@ -1947,7 +1970,7 @@
   "#12_kandidat": {
     "titel": "Die Wand testet den Turm; wer testet die Wand?",
     "beleg": "Der Verbrauchsfehler (alle Dateien in HEAD statt Baseline-Hash) wurde MANUELL beim Testen entdeckt. Kein Test faengt ihn regressiv. test_governance_gate.py 7/7 kennt die Verbrauchs-Semantik nicht.",
-    "status": "BACKLOG P2 — eigene Wandaenderung",
+    "status": "GESCHLOSSEN durch R100 (test_governance_semantik.py 7/7, Mutation gefangen)",
     "gegenmassnahme": "Governance-Tests fuer die Verbrauchs-Semantik: aktiv|vollzogen|anomal, plus Nicht-Ueberschreiben, plus Zaehlquelle."
   },
   "baseline_sha_defizite": {
@@ -1975,6 +1998,24 @@
         "Nightly --voll (R100, nur mit benannter Reaktionspflicht)",
         "Retention fuer protokoll/"
       ]
+    },
+    "R100": {
+      "id": "R100",
+      "ziel": "Dreizustand AKTIV/VOLLZOGEN/ANOMALIE + regressive Tests",
+      "dateien_geschlossen": [
+        "scripts/governance_gate.py",
+        "scripts/entscheidung_R100.json"
+      ],
+      "toucht_lauf_py": false,
+      "tests": "test_governance_semantik.py 7/7; Mutation auf Zweizustand -> 5/7 (Faelle 3+4 rot)"
     }
-  }
+  },
+  "R99_p0_geklaert": {
+    "make_lauf_exit": "WIDERLEGT. Makefile:63 hat `esac; exit $$rc`. Verhaltensbeweis: BEFUND injiziert -> lauf.py 2, make lauf 2. Die Behauptung pruefte ein gekuerztes Zitat, nicht das Artefakt.",
+    "berichtsfehler": "BESTAETIGT. 'berichtend, nicht blockend' beschreibt den KONSUMENTEN. Der Produzent liefert exit $$rc und ist damit blockend interpretierbar. Formulierung war falsch.",
+    "entscheidung_im_payload": "BESTAETIGT. 86df7206 = waechter_vertrag.json. 6b28e2e8 = Makefile, entscheidung_R99.json, lauf.py, test_lauf_eine_quelle.py. Das Henne-Ei ist zurueck; R100 haelt die Regel wieder.",
+    "zitat": "GESTRICHEN. 'das Instrument zu verdrahten' steht in keinem meiner Records. Es wurde in der Auditor-Anfrage eingefuehrt und von mir als Zitat uebernommen — die 8. Auspraegung, weitergereicht.",
+    "ich_urheber": "Aufgeklaert: Transcript ed0106b6:8106 belegt, dass ich mich auf MICH bezog, nicht auf den Auditor. Unklare Formulierung, kein fremder Beleg."
+  },
+  "taxonomie_regel": "verdrahtet ohne Richtungsangabe ist verboten. Drei Felder: verdrahtet_innen, verdrahtet_aussen, abnehmer. Einzeln nullable, einzeln auditabel."
 }

@@ -70,7 +70,8 @@ def neue_tests(gestaged: list[str]) -> list[str]:
 # Durchsetzung, nicht den Turm — und duerfen im Installations-Commit
 # mitkommen.
 WAND_SUITEN = {"scripts/test_governance_gate.py",
-               "scripts/test_aufrufbaum.py"}
+               "scripts/test_aufrufbaum.py",
+               "scripts/test_governance_semantik.py"}  # R100: testet die Wand
 
 # R97/R98: Die Ausnahme ist eine DATENSCHICHT, kein Regelbruch. Jede
 # Entscheidung ist eine eigene Datei mit geschlossener Liste; verbraucht
@@ -81,7 +82,8 @@ ENTSCH = SCRIPTS / "entscheidung_R97.json"
 
 
 ENTSCHEIDUNGEN = (SCRIPTS / "entscheidung_R97.json",
-                  SCRIPTS / "entscheidung_R98.json")
+                  SCRIPTS / "entscheidung_R98.json",
+                  SCRIPTS / "entscheidung_R100.json")
 
 
 def _ausnahme(e: dict, gestaged: list[str]) -> tuple[bool, str]:
@@ -103,18 +105,38 @@ def _ausnahme(e: dict, gestaged: list[str]) -> tuple[bool, str]:
     # Modifikationen unsichtbar). Massstab ist daher:
     #   baseline_sha256 vorhanden -> verbraucht, wenn HEAD != baseline
     #   sonst                     -> verbraucht, wenn alle Dateien in HEAD
+    # R100: DREI Zustaende statt zwei. Vorher galt jede Abweichung von der
+    # Baseline als "verbraucht" — eine FREMDE Aenderung verbrauchte die
+    # Ausnahme genauso wie die autorisierte Payload (DoS gegen die Ausnahme).
+    # Jetzt: AKTIV (sha==baseline) / VOLLZOGEN (sha==ziel) / ANOMALIE.
     base = e.get("fix", {}).get("baseline_sha256")
+    ziel = e.get("fix", {}).get("ziel_sha256")
     if base:
         fehlend = [f for f in sorted(liste)
                    if not _git("ls-tree", "--name-only", "HEAD", "--", f).strip()]
         if fehlend:
             return True, (f"{e['id']}: {len(liste)} Dateien, Basis noch nicht im Baum")
         import hashlib as _h
-        for f in sorted(liste):
+
+        def _zustand(f: str) -> tuple[str, str]:
             ist = _h.sha256((SCRIPTS.parent / f).read_bytes()).hexdigest()
-            if ist != base:
-                return False, (f"{e['id']} verbraucht — {f} weicht von der "
-                               f"Baseline ab; neue ENTSCHEIDUNG noetig")
+            if ist == base:
+                return "AKTIV", ""
+            if ziel and ist == ziel:
+                return "VOLLZOGEN", ""
+            if not ziel:
+                return "ANOMALIE", "Ziel-Hash fehlt im Datensatz"
+            return "ANOMALIE", f"{f} traf weder Baseline noch Ziel"
+
+        befunde = [(f, *_zustand(f)) for f in sorted(liste)]
+        anomal = [(f, warum) for f, z, warum in befunde if z == "ANOMALIE"]
+        if anomal:
+            f0, warum = anomal[0]
+            return False, (f"{e['id']} ANOMALIE — {warum} ({f0}); weder "
+                           f"autorisiert noch offen — neue ENTSCHEIDUNG noetig")
+        if all(z == "VOLLZOGEN" for _, z, _ in befunde):
+            return False, (f"{e['id']} verbraucht — Ziel-Hash erreicht; "
+                           f"neue ENTSCHEIDUNG noetig")
         return True, (f"{e['id']}: {len(liste)} Dateien, Basis identisch, "
                       f"Aenderung gegen Baseline gestattet")
     fehlend = [f for f in sorted(liste)
