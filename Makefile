@@ -57,10 +57,15 @@ lauf:
 	@python3 scripts/lauf.py; rc=$$?; \
 	  case $$rc in \
 	    0) echo "✅ GRUEN — Vertragsscope grün" ;; \
-	    1) echo "❌ GEFALLEN — mindestens eine Suite bewiesen rot" ;; \
-	    2) echo "⚠️  BEFUND — unentscheidbar (Blocker/Timeout), NICHT grün" ;; \
-	    *) echo "⚠️  UNERWARTET (Exit $$rc)" ;; \
+	    1) echo "❌ Fehler — Suite rot (make meldet 2, NICHT 1)" ;; \
+	    2) echo "⚠️  Fehler — unentscheidbar oder rot (make meldet 2)" ;; \
+	    *) echo "⚠️  Fehler (make meldet 2, lauf.py sagt $$rc)" ;; \
 	  esac; exit $$rc
+
+# R101: GNU make normalisiert JEDES Rezept-Exit auf 2. Die 0/1/2-
+# Semantik von lauf.py ueberlebt diese Grenze NICHT. Wer BEFUND von
+# GEFALLEN unterscheiden muss, ruft scripts/lauf.py DIREKT oder liest
+# data/lauf_letzter.json. Dieses Target ist ein Ausloeser, kein Signal.
 
 .PHONY: lauf
 

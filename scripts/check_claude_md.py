@@ -240,6 +240,7 @@ NO_TEST_SUMMARY: set[str] = {
     "scripts/test_wiedervorlage.py",       # 5/5 Wiedervorlage ist eine Frist
     "scripts/test_governance_gate.py",     # 7/7 Gate blockt vor dem Commit
     "scripts/test_governance_semantik.py", # 7/7 Verbrauch aktiv/vollzogen/anomal
+    "scripts/test_lauf_aufrufer.py",        # 7/7 make-Grenze + Instrument
     # §A-ZZZZ167: Waage ohne Sollwert. Liest den Vertrag ueber explizite
     # Pfade und gibt aus, was drinsteht — die Zahl im Bericht wird hier
     # GENERIERT statt getippt.
@@ -5922,6 +5923,7 @@ SKRIPT_OHNE_LAUF: set[str] = {
     # R95: Test ohne x/y-Bilanz — eigener Berichtsblock.
     "scripts/test_governance_gate.py",  # 7/7 Gate blockt vor dem Commit
     "scripts/test_governance_semantik.py",  # 7/7 Verbrauchssemantik
+    "scripts/test_lauf_aufrufer.py",  # 7/7 make-Grenze
     "scripts/test_aufrufbaum.py",       # 4/4 BESTAND vs SPEKULATIV
     # R96/R97: die Mess-Instrumente. Kein Produktionslauf, kein Produktziel.
     "scripts/lauf.py",              # Lauf aus der EINEN Zaehlquelle

@@ -1,5 +1,5 @@
 {
-  "_version": 28,
+  "_version": 30,
   "_zweck": "Maschinenlesbarer Vertrag des Einwurf-Waechters. Single source of truth fuer Repo und externe Ingestion. Wer hier eine Zeile aendert, aendert das Tor ausserhalb dieses Repos mit.",
   "_stand": "Runde 84 (2026-10-18)",
   "_geltung": "Der Runner (scripts/vertrags_runner.py) importiert diese Datei; die externe Ingestion MUSS sie einlesen. Solange sie es nicht tut, zertifiziert N/N einen Vertrag, den draussen niemand benutzt.",
@@ -1180,6 +1180,22 @@
       "entscheidung": "R100",
       "gebucht": "R100",
       "vorgaenger_hash": "538e594ec553dfde85e63d5c91345f01c9fc1e6a3996e859e21a0eb575e7a6ad"
+    },
+    {
+      "version": 29,
+      "runde": "R101-P0",
+      "aenderung": "P0-Korrekturen: Phantomzitat-Attribution gestrichen (Fundstelle Zeile 8106, role=assistant, mein Eigentum). Drei-Commit-Behauptung auf ZWEI korrigiert. R99-Entscheidung nachgebucht: SIGNALISIEREND. Neuer Befund: make normalisiert jeden Programm-Exit auf 2 — 0/1/2 ueberlebt die make-Grenze nicht. #13/#14 gebucht.",
+      "entscheidung": null,
+      "gebucht": "R101-P0",
+      "vorgaenger_hash": "a82eb82f790a690a623d7644689c8ec3d4b3b0657ed96bd9c4229dc3fafbde64"
+    },
+    {
+      "version": 30,
+      "runde": "R101",
+      "aenderung": "Archiv auch fuer Vertragslauf — die Asymmetrie Aufrufer/Archiv geschlossen. Makefile deklariert die make-Grenze (jeder Rezept-Fehler -> 2). test_lauf_aufrufer.py 7/7 prueft die Grenze verhaltensbasiert.",
+      "entscheidung": "R101",
+      "gebucht": "R101",
+      "vorgaenger_hash": "751b42743577a0fb10e6d9a4cf28692d34bd88f30affb5e39bc748f46db4b56e"
     }
   ],
   "kreuz_record_invarianten": {
@@ -1789,6 +1805,11 @@
       "wert": null,
       "status": "OFFEN",
       "grund": "Rolle ohne Mechanismus ist ein Name ohne Funktion — R99 Kurzurteil 8"
+    },
+    "archiv": {
+      "vorher": "nur --voll",
+      "jetzt": "beide Modi (R101)",
+      "beleg": "protokoll/vollauf_20261019T173912Z.json"
     }
   },
   "aussen_partitionen": {
@@ -2008,6 +2029,17 @@
       ],
       "toucht_lauf_py": false,
       "tests": "test_governance_semantik.py 7/7; Mutation auf Zweizustand -> 5/7 (Faelle 3+4 rot)"
+    },
+    "R101": {
+      "id": "R101",
+      "ziel": "Archiv fuer Vertragslauf (Asymmetrie geschlossen)",
+      "dateien_geschlossen": [
+        "scripts/lauf.py",
+        "Makefile",
+        "scripts/test_lauf_aufrufer.py",
+        "scripts/check_claude_md.py"
+      ],
+      "dreizustand_erstmals_genutzt": "baseline_sha256 + ziel_sha256 gesetzt"
     }
   },
   "R99_p0_geklaert": {
@@ -2017,5 +2049,35 @@
     "zitat": "GESTRICHEN. 'das Instrument zu verdrahten' steht in keinem meiner Records. Es wurde in der Auditor-Anfrage eingefuehrt und von mir als Zitat uebernommen — die 8. Auspraegung, weitergereicht.",
     "ich_urheber": "Aufgeklaert: Transcript ed0106b6:8106 belegt, dass ich mich auf MICH bezog, nicht auf den Auditor. Unklare Formulierung, kein fremder Beleg."
   },
-  "taxonomie_regel": "verdrahtet ohne Richtungsangabe ist verboten. Drei Felder: verdrahtet_innen, verdrahtet_aussen, abnehmer. Einzeln nullable, einzeln auditabel."
+  "taxonomie_regel": "verdrahtet ohne Richtungsangabe ist verboten. Drei Felder: verdrahtet_innen, verdrahtet_aussen, abnehmer. Einzeln nullable, einzeln auditabel.",
+  "#13_kandidat": {
+    "titel": "Veroeffentlichte SHAs sind nicht vor Rewrite geschuetzt",
+    "beleg": "git commit --amend ueberschrieb 6b28e2e8 (seit R99 veroeffentlicht). Reparatur via reset auf denselben SHA ist fuer den Auditor nicht verifizierbar — er kennt den Original-Tree nie gesehen.",
+    "gegenmassnahme": "signierte Tags, Branch-Protection oder append-only Ledger mit Tree-Hashes. Eigene Entscheidung.",
+    "status": "BACKLOG — nicht mitgeschleppt"
+  },
+  "#14_kandidat": {
+    "titel": "Audit-Loop unterprovisioniert — Quote-Treue ist Single Point of Failure",
+    "beleg": "Drei Runden, dreimal Quote-Defekt: (a) R99-Bericht zitierte das Makefile-Rezept ohne 'esac; exit $$rc' zu Ende; (b) R100 behauptete eine Attribution, die der Record nicht traegt; (c) R100 zitierte Makefile:63 isoliert, ohne Shell-Semantik.",
+    "gegenmassnahme": "(a) lesender Artefakt-Zugriff fuer den Auditor, oder (b) hash-verankerte Vollzitate: jede beweisfuehrende Stelle mit Datei-SHA + vollstaendigem Wortlaut; gekuerzte Zitate markiert und NICHT beweisfuehrend.",
+    "status": "BACKLOG — strukturell, eigene Entscheidung"
+  },
+  "R101_befund_make_maske": {
+    "titel": "Die make-Grenze normalisiert JEDES Programm-Exit auf 2",
+    "beleg_beweis": "prog=1,2,3,9,42 -> make=2 in allen Faellen (gemessen, /tmp/mk2). GNU make gibt bei Rezept-Fehler immer 2 zurueck, unabhaengig vom exit-Code des Rezepts.",
+    "folge": "Die 0/1/2-Semantik von lauf.py ueberlebt die make-Grenze NICHT. GEFALLEN (1) und BEFUND (2) sind von aussen identisch. 'make lauf' ist als Signal untauglich, egal ob 'exit $$rc' steht.",
+    "nicht_der_befund": "Es ist NICHT die Behauptung 'flacht auf 0' — make liefert 2, nicht 0.",
+    "korrektur_des_berichts": "R100-Bericht sagte 'make lauf -> 2 bei BEFUND' — richtig, aber es war NICHT das Signal, sondern makes Normalfehler-2. Beide Faelle liefern 2.",
+    "bedeutung": "Der Abnehmer braucht lauf.py direkt (oder ein Exit-File), nicht das make-Target."
+  },
+  "R101_p0_korrekturen": {
+    "p0a_entscheidung": "R99-Datensatz neu gebucht: SIGNALISIEREND statt BERICHTEND. Der erste Satz beschrieb den Konsumenten und meinte den Produzenten.",
+    "p0b_phantomzitat": {
+      "fundstelle_wortlaut": "Transcript ed0106b6 Zeile 8106 und 8121, Rolle=assistant (ich). In der Auditor-Anfrage Zeile 8123: Wortlaut NICHT vorhanden; dort steht 'die den Abnehmer spaeter verdrahten wird' — eine andere Aussage.",
+      "fehler": "R100-Bericht schrieb 'Sie fuehrten es in Ihrer R99-Anfrage ein' — BEHAUPTET, nicht geprueft. Die Attribution auf den Auditor ist unbelegt.",
+      "korrektur": "Attribution GESTRICHEN, nicht nur das Zitat. Der Satz ist mein Eigentum, Zeile 8106.",
+      "lehre": "Wer eine Attribution behauptet, muss die Fundstelle nennen — Zeile und Rolle. Sonst wiederholt er den Defekt, den er korrigiert."
+    },
+    "p0c_zahl": "R100-Kette = ZWEI Commits (b7286439 Entscheidung, e8f9a4de Wand). Drei war falsch: R100 hat keinen Payload-Commit, die Wand IST der Payload."
+  }
 }

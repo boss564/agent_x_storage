@@ -165,8 +165,11 @@ def main(argv: list[str]) -> int:
                         encoding="utf-8")
     bericht(d)
     print(f"\nArtefakt: {ERGEBNIS}")
-    if voll:
-        print(f"Archiv:   {archivieren(json.loads(ERGEBNIS.read_text(encoding='utf-8')))}")
+    # R101: Auch der Vertragslauf wird archiviert. Vorher hatte genau der
+    # Lauf einen Aufrufer, der NICHT archivierte — und der archivierte
+    # Lauf (--voll) hatte keinen Aufrufer. Die taegliche Messung war
+    # fluechtig und damit unbelegbar.
+    print(f"Archiv:   {archivieren(json.loads(ERGEBNIS.read_text(encoding='utf-8')))}")
     # R99: DREI Zustaende statt zwei. Ein BEFUND ist nicht gruen.
     cls = Counter(e["klasse"] for e in d["erg"])
     if cls.get("GEFALLEN") or cls.get("BEENDET"):
