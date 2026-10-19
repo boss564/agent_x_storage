@@ -20,6 +20,10 @@ exports/
 cache/
 *.jsonl
 
+# Beweiskanal #14: Ausnahme NACH dem Glob — letzte Regel gewinnt.
+# Ein ignoriertes Append-Only ist kein Append-Only.
+!scripts/beweis_ledger.jsonl
+
 # IDE
 .vscode/
 .idea/

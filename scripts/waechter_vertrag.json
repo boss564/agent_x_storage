@@ -1,5 +1,5 @@
 {
-  "_version": 33,
+  "_version": 34,
   "_zweck": "Maschinenlesbarer Vertrag des Einwurf-Waechters. Single source of truth fuer Repo und externe Ingestion. Wer hier eine Zeile aendert, aendert das Tor ausserhalb dieses Repos mit.",
   "_stand": "Runde 84 (2026-10-18)",
   "_geltung": "Der Runner (scripts/vertrags_runner.py) importiert diese Datei; die externe Ingestion MUSS sie einlesen. Solange sie es nicht tut, zertifiziert N/N einen Vertrag, den draussen niemand benutzt.",
@@ -1220,6 +1220,14 @@
       "entscheidung": "R102",
       "gebucht": "R102",
       "vorgaenger_hash": "51cb89bf87819656a97af76df04e2495d59346b8ce141227b24775ac8e1d2910"
+    },
+    {
+      "version": 34,
+      "runde": "R103",
+      "aenderung": "#14 GEBAUT: Beweiskanal mit hash-verankerten Vollzitaten (beweis.py, 3 Belege, 8/8 Test). Produkt ungoverned als Charakterisierungstest. D1-Grenze, Wall/Ledger-Konflation, N-Paare-Grenze, Nachtrag-Regel gebucht.",
+      "entscheidung": null,
+      "gebucht": "R103",
+      "vorgaenger_hash": "9962db6e56b22618f831a8b0df73442b0906eaffa241b72d2c29223664ee965d"
     }
   ],
   "kreuz_record_invarianten": {
@@ -2147,5 +2155,35 @@
     "kopplung": "BESTAETIGT. Jeder make lauf erzeugt ein neues untracked Archiv. Die geschlossene Haelfte (Ausloeser) verschaerft die offene (Versionierung). Retention muss VOR weiterer Mess-Ausweitung entschieden werden.",
     "namenskonflikt": "BESTAETIGT. protokoll/vollauf_20261019T173912Z.json entstand im Vertragslauf (37 Dateien, modus=vertrag). Der Name sagt vollauf. Loesung: vertrag_<ts>.json vs vollauf_<ts>.json — eigene Entscheidung.",
     "test_register": "BEFUND. Meine R102-Ergaenzung hat die Zusammenfassungszeile in test_governance_semantik.py ueberschrieben. 8 Tests gruen, aber ohne gedruckte Summe — ein gruener Lauf, der nicht sagt, wie viel er geprueft hat. Behoben."
+  },
+  "#14_beweiskanal": {
+    "status": "GEBAUT (R103)",
+    "mechanismus": "Hash-verankerte Vollzitate: scripts/beweis.py cite erzeugt <<<BEWEIS archefakt=... zeile=a-b sha=...>>> mit vollem Wortlaut. check --strict meldet SHA-Drift.",
+    "test": "test_beweiskanal.py 8/8; Mutation (Zeile im Bereich geaendert) -> ROT Exit 1.",
+    "grenze": "Der Auditor liest den Bericht, nicht das Repo. Der SHA im Block ist pruefbar, wenn jemand das Repo hat. Ohne Zugriff bleibt der Block eine Behauptung mit Digest — aber eine, die der Erbauer nicht still kuerzen kann.",
+    "ledger": "scripts/beweis_ledger.jsonl — 3 Belege, alle R102-Streitpunkte."
+  },
+  "produkt_ungoverned": {
+    "befund": "BESTAETIGT. data/lauf_letzter.json: .gitignore:38 'data/', in KEINER dateien_geschlossen. protokoll/ nie committet (git log --all: leer).",
+    "charakterisierung": "test_produkt_bewachung.py 3/3 — wird rot, wenn jemand es behebt. Bis dahin dokumentiert es die Luecke.",
+    "nicht_behauptet": "R102 hat das Produkt NICHT bewacht. Die Schnittstelle ist logisch richtig, physisch auf Sand."
+  },
+  "D1_grenze": {
+    "befund": "D1 prueft 'protokoll/ ist nicht gitignored' (der Boden), nicht 'protokoll/ ist committet' (die Decke).",
+    "folge": "gruen solange Archive uncommitted sind. Notwendig, nicht hinreichend. Als Grenze gebucht, nicht als Luecke versteckt."
+  },
+  "wall_ledger_konflation": {
+    "befund": "BESTAETIGT. waechter_vertrag.json wurde 26x geschrieben. Regeln und Ledger in einer Datei.",
+    "folge": "D-Fix (historische Tatsache) ist Behauptung ueber eine Datei, die bei jeder Buchung neu geschrieben wird. Revert loescht Eintraege.",
+    "loesung_offen": "waechter_regeln.json + append-only ledger/ — eigene Wandänderung, P1."
+  },
+  "N_paare_grenze": {
+    "befund": "Kardinalitaet ist nicht Lebenszyklus. Neue Datei (keine Baseline) und geloeschte (kein Ziel) sind mit N Paaren nicht abbildbar.",
+    "loesung_offen": "per-Datei-Zustand {neu, geaendert, geloescht, unveraendert}, P2."
+  },
+  "nachtrag_regel": {
+    "regel": "Ein veroeffentlichter Bericht hat keine Nachtrag-Commits. Braucht er einen, war die Runde nicht fertig — atomar neu publizieren.",
+    "beleg": "R101 fc2ec647, R102 1e18cb8c — beide Nachträge nach Payload.",
+    "status": "als Regel gebucht; R103 haelt sie (ein Commit)."
   }
 }

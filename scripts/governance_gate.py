@@ -73,7 +73,11 @@ WAND_SUITEN = {"scripts/test_governance_gate.py",
                "scripts/test_aufrufbaum.py",
                "scripts/test_governance_semantik.py",  # R100: testet die Wand
                "scripts/test_lauf_aufrufer.py",  # R101: testet die Grenze
-               "scripts/test_lauf_artefakt.py"}  # R102: testet das Artefakt
+               "scripts/test_lauf_artefakt.py",  # R102: testet das Artefakt
+               # R103 (#14): der Beweiskanal und seine Grenze. Beide
+               # pruefen, ob ein Zitat bestehen KANN — nicht den Turm.
+               "scripts/test_beweiskanal.py",
+               "scripts/test_produkt_bewachung.py"}
 
 # R97/R98: Die Ausnahme ist eine DATENSCHICHT, kein Regelbruch. Jede
 # Entscheidung ist eine eigene Datei mit geschlossener Liste; verbraucht
