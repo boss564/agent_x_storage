@@ -1,5 +1,5 @@
 {
-  "_version": 30,
+  "_version": 31,
   "_zweck": "Maschinenlesbarer Vertrag des Einwurf-Waechters. Single source of truth fuer Repo und externe Ingestion. Wer hier eine Zeile aendert, aendert das Tor ausserhalb dieses Repos mit.",
   "_stand": "Runde 84 (2026-10-18)",
   "_geltung": "Der Runner (scripts/vertrags_runner.py) importiert diese Datei; die externe Ingestion MUSS sie einlesen. Solange sie es nicht tut, zertifiziert N/N einen Vertrag, den draussen niemand benutzt.",
@@ -1196,6 +1196,14 @@
       "entscheidung": "R101",
       "gebucht": "R101",
       "vorgaenger_hash": "751b42743577a0fb10e6d9a4cf28692d34bd88f30affb5e39bc748f46db4b56e"
+    },
+    {
+      "version": 31,
+      "runde": "R101-Nachtrag",
+      "aenderung": "Offener Befund gebucht: protokoll/ ist untracked trotz R101-Archivierung. R101 schliesst die Aufrufer-Asymmetrie, nicht die Versionierungs-Asymmetrie. Nicht ueberverkaufen.",
+      "entscheidung": null,
+      "gebucht": "R101-Nachtrag",
+      "vorgaenger_hash": "cb059ce69370b106245d0d4f89df36d61463af570e158c831690221e78174db1"
     }
   ],
   "kreuz_record_invarianten": {
@@ -2079,5 +2087,11 @@
       "lehre": "Wer eine Attribution behauptet, muss die Fundstelle nennen — Zeile und Rolle. Sonst wiederholt er den Defekt, den er korrigiert."
     },
     "p0c_zahl": "R100-Kette = ZWEI Commits (b7286439 Entscheidung, e8f9a4de Wand). Drei war falsch: R100 hat keinen Payload-Commit, die Wand IST der Payload."
+  },
+  "R101_offen_protokoll": {
+    "befund": "protokoll/ ist UNTRACKED (git status: ?? protokoll/), nicht ignoriert. Der Vertragslauf archiviert seit R101, aber die Archive sind nicht versioniert — die taegliche Messung bleibt fluechtig.",
+    "status": "P4 Retention, offen",
+    "nicht_behauptet": "R101 hat die Asymmetrie NICHT vollstaendig geschlossen. Es gibt jetzt einen Aufrufer, der archiviert — aber das Archiv ist nicht eingecheckt.",
+    "naechster_schritt": "Retention-Entscheidung: pro Lauf einchecken (Bloat) oder Zusammenfassung + Rotation (Verlustfreiheit?). Eigene Entscheidung, nicht hier."
   }
 }
