@@ -67,7 +67,7 @@ def main(argv: list[str]) -> int:
     # erzeugt von der Pipeline, nicht vom Gedaechtnis des Autors.
     grenze = ["", "## Was nicht behauptet wird (erzeugt, nicht erinnert)", "",
               "| | Status |", "|---|---|",
-              "| Produkt bewacht (Quelle `data/lauf_lester.json`) | **nein** — die Kopie in `vertrag/` ist eine Projektion |",
+              "| Produkt bewacht (Quelle `data/lauf_letzter.json`) | **nein** — die Kopie in `vertrag/` ist eine Projektion |",
               "| Wand `--no-verify`-fest | **nein** — lokal umgehbar; CI existiert, Ergebnis hier unbelegt |",
               "| Regeln/Ledger getrennt | **nein** |", "| per-Datei-Zustand | **nein** |", ""]
     bericht.write_text(bericht.read_text(encoding="utf-8")

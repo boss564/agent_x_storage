@@ -29,6 +29,12 @@
     "befund": "R105 hat die Korb-Regel befolgt (5 Eintraege in 38789ba6), aber die WAND-KLASSIFIKATION in ef461acb gelassen — im selben Commit wie der Payload. Unterbucht.",
     "entscheidung": "Klassifikation herausgeloest in diesen Commit. Reihenfolge: Regeln -> Klassifikation -> Payload.",
     "neue_regel": "WAND_SUITEN-Aenderung ist IMMER eine eigene Entscheidung, nie Beilage eines Payloads.",
-    "echo_ursache": "Werkzeugfehler konkret: der Bericht wurde nach dem Bau nicht an den Auditor uebergeben; die Antwort des Auditors wurde im Transkript-Fenster als eigener Output gelesen. Mechanismus: Uebergabe ist ein eigener Schritt (publiziere.py), kein Nebeneffekt des Bauens."
+    "echo_ursache": "Werkzeugfehler konkret: der Bericht wurde nach dem Bau nicht an den Auditor uebergeben; die Antwort des Auditors wurde im Transkript-Fenster als eigener Output gelesen. Mechanismus: Uebergabe ist ein eigener Schritt (publiziere.py), kein Nebeneffekt des Bauens.",
+    "zaehlwiderspruch": {
+      "behauptung_R105": "Drei Commits, Sequenz sichtbar",
+      "gemessen": "git log --oneline 38789ba6..ef461acb -> 1 Commit (ef461acb). Mit 38789ba6: 2.",
+      "befund": "Die Prosa zaehlte drei, die Tabelle listete zwei, git zeigt einen bzw. zwei. Das Eichnormal fuer zaehlung.py hilft nicht, weil die Prosa nicht durch das Eichnormal laeuft.",
+      "regel": "Commit-Zahlen im Bericht werden mit git log erzeugt, nicht geschrieben."
+    }
   }
 }
