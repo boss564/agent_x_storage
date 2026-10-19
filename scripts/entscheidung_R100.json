@@ -1,0 +1,49 @@
+{
+  "id": "R100",
+  "typ": "WAND_AENDERUNG",
+  "autorisiert_von": "externer Auftraggeber (R99 Kurzurteil §10 P1; Reihenfolge P0->P1->P2->P3->P4)",
+  "vorbedingung_von": ["P2 (Archiv-Erweiterung lauf.py)", "P4 (Abnehmer-Implementierung)"],
+  "ist_nicht": "R99-Wiedereroeffnung. R100 repariert die Wand, nicht das Instrument.",
+
+  "ziel": "Die Verbrauchs-Semantik von Ausnahmen lernt den Ziel-Hash. Aktiv/Vollzogen/Anomalie statt nur aktiv/verbraucht. Dazu regressive Tests — die Wand testet ihre eigene Semantik.",
+
+  "befund_der_R100_ausloest": {
+    "lebender_defekt": "governance_gate._ausnahme() prueft `ist != base -> verbraucht`. Jede fremde Aenderung an lauf.py verbraucht R98, jede autorisierte auch. Der Ziel-Hash fehlt.",
+    "beweis_dass_es_lebend_ist": "Jede kuenftige autorisierte lauf.py-Aenderung (Archiv-Erweiterung P2, Abnehmer P4) ist fuer die Wand von Manipulation ununterscheidbar.",
+    "verbrauch_r99_ohne_ziel_hash": "R99 hatte KEINEN baseline_sha256 — R99 wurde gar nicht ueber die R97-Mechanik verbraucht. Der Befund ist strukturell, nicht nur semantisch."
+  },
+
+  "dreizustand": {
+    "AKTIV": "sha == baseline -> Ausnahme unverbraucht, Aenderung steht aus",
+    "VOLLZOGEN": "sha == ziel -> autorisierte Payload gelandet, Ausnahme verbraucht",
+    "ANOMALIE": "sha != baseline && sha != ziel -> fremde Aenderung; EIGENE Flagge, nicht 'verbraucht'",
+    "ohne_ziel": "fehlt ziel_sha256 -> rueckfall auf AKTIV/ANOMALIE, ANOMALIE mit Hinweis 'Ziel-Hash fehlt'. Kein stilles 'verbraucht'."
+  },
+
+  "dateien_geschlossen": ["scripts/governance_gate.py", "scripts/entscheidung_R100.json"],
+  "toucht_lauf_py": false,
+  "begruendung_nicht_lauf_py": "Die Wand wird vor der naechsten lauf.py-Aenderung repariert. lauf.py bleibt unberuehrt, bis die Wand sauber ist.",
+
+  "tests": {
+    "datei": "scripts/test_governance_semantik.py",
+    "faelle": [
+      "AKTIV: sha==baseline -> aktiv",
+      "VOLLZOGEN: sha==ziel -> verbraucht, meldung nennt ziel",
+      "ANOMALIE: sha!=baseline && sha!=ziel -> ANOMALIE, NICHT verbraucht",
+      "kein ziel_sha256 -> ANOMALIE-Hinweis, kein stilles verbraucht",
+      "baseline noch nicht im Baum -> 'Basis noch nicht im Baum'",
+      "Dateiliste leer -> ungueltig",
+      "fremde Datei in gestaged -> abgelehnt"
+    ]
+  },
+
+  "nicht_in_R100": [
+    "lauf.py Aenderung (P2, erst nach R100)",
+    "Makefile Block-Semantik (P2, Correctness des Berichts, kein Code)",
+    "Abnehmer-Implementierung (P4)",
+    "Retention fuer protokoll/"
+  ],
+
+  "verbraucht_mit_commit": true,
+  "naechste_wand_aenderung": "R101"
+}
