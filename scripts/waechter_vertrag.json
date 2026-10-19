@@ -1,5 +1,5 @@
 {
-  "_version": 25,
+  "_version": 27,
   "_zweck": "Maschinenlesbarer Vertrag des Einwurf-Waechters. Single source of truth fuer Repo und externe Ingestion. Wer hier eine Zeile aendert, aendert das Tor ausserhalb dieses Repos mit.",
   "_stand": "Runde 84 (2026-10-18)",
   "_geltung": "Der Runner (scripts/vertrags_runner.py) importiert diese Datei; die externe Ingestion MUSS sie einlesen. Solange sie es nicht tut, zertifiziert N/N einen Vertrag, den draussen niemand benutzt.",
@@ -1049,8 +1049,8 @@
       "runde": 91,
       "aenderung": "schwellen_herleitung: n = ceil(sqrt(2*N*ln(1/(1-alpha)))) = 1418 aus N=1e8, alpha=0.01. Die vorige 1000 war um 1.4x zu klein. Probe liest die Schwelle statt sie zu setzen.",
       "gebucht": "R91 Befund 5",
-      "vorgaenger_hash": "eee1f2e6f35e575b2058ba4c6c6a8925e845d453473a510ddec70041932a1238",
-      "rekonstruiert": true
+      "rekonstruiert": true,
+      "vorgaenger_hash": "eee1f2e6f35e575b2058ba4c6c6a8925e845d453473a510ddec70041932a1238"
     },
     {
       "version": 14,
@@ -1156,6 +1156,22 @@
       "entscheidung": "R98",
       "gebucht": "R98-1..8",
       "vorgaenger_hash": "e766c7cab53c83ff9050cce75d32a5cb475372844a9846ab11980223ecf268dc"
+    },
+    {
+      "version": 26,
+      "runde": "R99-P0",
+      "aenderung": "P0 geklaert: verdrahtet = innen (Zaehlquelle) vs aussen (Ausloeser). R98-Vorbehalte geprueft (exita kein Tippfehler, Kollision bewiesen). #12 und Baseline-SHA-Defizite A-D gebucht.",
+      "entscheidung": null,
+      "gebucht": "R99-P0",
+      "vorgaenger_hash": "ff47b57bc69cc38c21b12f8afe2981488f94f1de6f1383dfa683ea885165c4fb"
+    },
+    {
+      "version": 27,
+      "runde": "R99",
+      "aenderung": "R99 gebucht: make lauf als Aufrufer, Exit 0/1/2 (GRUEN/GEFALLEN/BEFUND). Berichten statt Blocken. Abnehmer bleibt offen und ist als offen gebucht.",
+      "entscheidung": "R99",
+      "gebucht": "R99",
+      "vorgaenger_hash": "2b8698e0f75a09db962699de02bd6761f0f77170a42bfee73b35acbe4a0c60b1"
     }
   ],
   "kreuz_record_invarianten": {
@@ -1745,6 +1761,11 @@
         "kein .git",
         "Vertrag nennt Suite"
       ]
+    },
+    "ausloeser": {
+      "vorher": "keiner (Hook/CI/Makefile: 0)",
+      "jetzt": "make lauf",
+      "abnehmer": "offen — benannt, nicht erzeugt"
     }
   },
   "aussen_partitionen": {
@@ -1909,5 +1930,51 @@
     "status": "BACKLOG — nicht in R98 gebaut",
     "gegenmassnahme": "Hash-Allowlist akzeptierter Skripte; jede Aenderung nach Freigabe = neue Entscheidungspflicht. Selbst eine Wandaenderung -> eigene Entscheidung.",
     "ersatz_beleg_bis_dahin": "R-Entscheidung muss im COMMIT-TEXT stehen, weil das Gate sie nicht erzwingt."
+  },
+  "P0_widerspruch_verdrahtet": {
+    "frage": "Was galt als 'verdrahtet'? Wo war es?",
+    "befund": "Zwei Bedeutungen eines Worts, vermischt in meiner eigenen Formulierung.",
+    "innen": "lauf.py ruft zaehle() aus test_zaehlweise.py — EINE Zaehlquelle. Belegt durch test_lauf_eine_quelle.py 7/7. Das ist, was der Vertrag unter lauf_eine_quelle.verdrahtet meint.",
+    "aussen": "Kein Aufrufer in .git/hooks/pre-commit, .github/workflows/governance.yml oder Makefile. Die 5 rg-Treffer sind Korb-Registrierung (check_claude_md.py:5925), Prosa (entscheidung_R9x.json) und Buchung (waechter_vertrag.json) — keine Aufrufe.",
+    "urteil": "Die Behauptung 'verdrahtet' war NIE falsch, sie war unterspezifiziert. Richtig: nach innen verdrahtet, nach aussen unverdrahtet. Meine Formulierung 'das Instrument verdrahten' hat beides vermischt — 8. Auspraegung in der Formulierung.",
+    "regel": "Ab R99: 'verdrahtet' ohne Richtungsangabe ist verboten. Es gibt innen (Zaehlquelle) und aussen (Ausloeser)."
+  },
+  "R98_vorbehalte_geprueft": {
+    "exita": "KEIN Tippfehler. Das Feld heisst exitcodes. Die Abkuerzung 'exita' stand nur in meiner Berichts-Prosa.",
+    "kollision": "BEWIESEN, nicht behauptet: vier archivieren() in derselben Sekunde -> vier Dateien, vier verschiedene Inhalte, keine ueberschrieben (while ziel.exists()).",
+    "protokoll_versioniert": "git check-ignore -> NEIN, jetzt und nach R98. Bleibt offen zu pruefen bei jeder .gitignore-Aenderung."
+  },
+  "#12_kandidat": {
+    "titel": "Die Wand testet den Turm; wer testet die Wand?",
+    "beleg": "Der Verbrauchsfehler (alle Dateien in HEAD statt Baseline-Hash) wurde MANUELL beim Testen entdeckt. Kein Test faengt ihn regressiv. test_governance_gate.py 7/7 kennt die Verbrauchs-Semantik nicht.",
+    "status": "BACKLOG P2 — eigene Wandaenderung",
+    "gegenmassnahme": "Governance-Tests fuer die Verbrauchs-Semantik: aktiv|vollzogen|anomal, plus Nicht-Ueberschreiben, plus Zaehlquelle."
+  },
+  "baseline_sha_defizite": {
+    "A": "Pruef-Funktion, keine Wand. ausnahme_aktiv() wird aufgerufen, das Gate prueft Modifikationen nicht (#11). Verbrauch dokumentiert, nicht erzwungen.",
+    "B": "Zweizustaendig statt dreizustaendig: Hash==baseline -> aktiv; alles andere -> 'verbraucht'. Ein FREMDER Eingriff verbraucht R98 genauso wie die autorisierte Payload. DoS gegen die Ausnahme.",
+    "C": "Ungetestet (#12).",
+    "D": "Nicht monoton: Revert auf Baseline reaktiviert R98. Verbrauch ist eine historische Tatsache, kein Hash-Zustand."
+  },
+  "entscheidungen": {
+    "R99": {
+      "id": "R99",
+      "ziel": "Die neunte Auspraegung dort schliessen, wo sie sitzt: lauf.py hat keinen Ausloeser. Einen ABNEHMER schaffen, nicht nur einen Aufrufer.",
+      "block_semantik": "BERICHTEN, NICHT BLOCKEN",
+      "grund": "Ein blockierender Vertragslauf macht die Messung zur Tuer. Dann entsteht der Anreiz, die Messung gruen zu machen statt den Turm zu reparieren. Die Messung ist ein Spiegel, keine Tuer.",
+      "scope": "37 Suiten, ~21 s — taeglich vertretbar",
+      "dateien_geschlossen": [
+        "scripts/lauf.py",
+        "Makefile"
+      ],
+      "aufrufer": "Makefile target 'lauf' -> scripts/lauf.py",
+      "abnehmer": "OFFEN — Rollenzuweisung, nicht per Skript erzeugbar. Bis dahin ist R99 ein Aufrufer, kein Abnehmer.",
+      "nicht_in_R99": [
+        "#12 Governance-Tests fuer die Verbrauchs-Semantik (P2, eigene Wand)",
+        "Ziel-Hash / Dreizustand fuer Ausnahmen (P2)",
+        "Nightly --voll (R100, nur mit benannter Reaktionspflicht)",
+        "Retention fuer protokoll/"
+      ]
+    }
   }
 }
