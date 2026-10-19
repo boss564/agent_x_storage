@@ -1,0 +1,8 @@
+	@echo "🔁 LAUF — Vertragsscope (37 Suiten), eine Zählquelle: test_zaehlweise.zaehle()"
+	@python3 scripts/lauf.py; rc=$$?; \
+	  case $$rc in \
+	    0) echo "✅ GRUEN — Vertragsscope grün" ;; \
+	    1) echo "❌ Fehler — Suite rot (make meldet 2, NICHT 1)" ;; \
+	    2) echo "⚠️  Fehler — unentscheidbar oder rot (make meldet 2)" ;; \
+	    *) echo "⚠️  Fehler (make meldet 2, lauf.py sagt $$rc)" ;; \
+	  esac; exit $$rc

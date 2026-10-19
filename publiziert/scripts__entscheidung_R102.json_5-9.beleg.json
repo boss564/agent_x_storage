@@ -1,0 +1,11 @@
+{
+  "artefakt": "scripts/entscheidung_R102.json",
+  "von": 5,
+  "bis": 9,
+  "sha256": "2a8de22b2e33a952c2fd66fd223b37f9d41c0c457af79750849da150a13cefad",
+  "sha256_datei": "551a4dcf8fe4fb7b3ba30b44bffcde6c40b0aab8f1bb1ae9e1bccee747f2ee2c",
+  "zeilen": 43,
+  "text": "\n  \"kern\": \"make lauf ist KEIN Abnehmer-Interface. Es ist Human-Convenience.\",\n  \"befund\": \"GNU make normalisiert jeden Rezept-Fehler auf 2 (gemessen: prog=1,2,3,9,42 -> 2). Die 0/1/2-Semantik von lauf.py ueberlebt die Grenze nicht.\",\n  \"widerlegt\": \"R99 sagte 'drei ehrliche Ausgaenge'. An der make-Grenze bleiben 0 und 2. GEFALLEN und BEFUND fallen zusammen.\",\n  \"degradierung\": {\n",
+  "runde": "",
+  "warum": ""
+}

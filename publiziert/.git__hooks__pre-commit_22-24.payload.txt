@@ -1,0 +1,3 @@
+GOV="$(git rev-parse --show-toplevel)/scripts/governance_gate.py"
+if [ -f "$GOV" ]; then
+    python3 "$GOV" || exit 1

@@ -1,0 +1,11 @@
+{
+  "artefakt": ".git/hooks/pre-commit",
+  "von": 22,
+  "bis": 24,
+  "sha256": "82cae6c4d6ab4d3aa49bb7ac5e710db04507cfe8012ff054f8cc98bce1b65752",
+  "sha256_datei": "0f2afd06ead553a40e0e069929a8bd67292be5ee3d45be0415a159eab6948afd",
+  "zeilen": 66,
+  "text": "GOV=\"$(git rev-parse --show-toplevel)/scripts/governance_gate.py\"\nif [ -f \"$GOV\" ]; then\n    python3 \"$GOV\" || exit 1\n",
+  "runde": "",
+  "warum": ""
+}

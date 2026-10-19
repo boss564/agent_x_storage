@@ -1,0 +1,11 @@
+{
+  "artefakt": "Makefile",
+  "von": 56,
+  "bis": 63,
+  "sha256": "b24985950ab17b2c4092cf68138baccd433a726e2970aacd5ff2975ba99ba6e4",
+  "sha256_datei": "c5af605c8f86312a7a7fbbd0df4f96686fb65cc274a985c13e20b765ceb1bf34",
+  "zeilen": 972,
+  "text": "\t@echo \"🔁 LAUF — Vertragsscope (37 Suiten), eine Zählquelle: test_zaehlweise.zaehle()\"\n\t@python3 scripts/lauf.py; rc=$$?; \\\n\t  case $$rc in \\\n\t    0) echo \"✅ GRUEN — Vertragsscope grün\" ;; \\\n\t    1) echo \"❌ Fehler — Suite rot (make meldet 2, NICHT 1)\" ;; \\\n\t    2) echo \"⚠️  Fehler — unentscheidbar oder rot (make meldet 2)\" ;; \\\n\t    *) echo \"⚠️  Fehler (make meldet 2, lauf.py sagt $$rc)\" ;; \\\n\t  esac; exit $$rc\n",
+  "runde": "",
+  "warum": ""
+}

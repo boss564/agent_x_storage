@@ -31,6 +31,34 @@ SUITEN: dict[str, tuple[str, str]] = {
 }
 
 
+def summenzeile(stdout: str) -> tuple[int, int] | None:
+    """Liest die LETZTE 'N/M'-Angabe, egal wo sie in der Zeile steht.
+
+    R104-Selbstbefund: der Parser nahm das erste 'N/M' irgendeiner Zeile
+    und las 1/1 statt 6/6. R105-Selbstbefund: er verlangte 'N/M' am
+    ZEILENANFANG — aber die Ausgabe lautet "Assurance 43/43 | ...".
+    Beide Lesarten waren falsch. Ein Eichnormal findet beides.
+    """
+    import re
+    treffer = re.findall(r"(?<![\d/])(\d+)/(\d+)(?![\d/])", stdout)
+    if not treffer:
+        return None
+    a, b = treffer[-1]
+    return int(a), int(b)
+
+
+# Eichnormal: bekannte Eingaben -> bekanntes Soll. Nachtragen statt raten.
+FIXTURES: list[tuple[str, str, int, int]] = [
+    ("einfach", "ok 1\nok 2\n\n2/2 Faelle gruen\n", 2, 2),
+    ("zwischenzeile mit slash",
+     "ok (1/2) Teil\nok (2/2) Teil\n\n6/6 Bewachungs-Befunde\n", 6, 6),
+    ("mehrere Summenzeilen, letzte gewinnt",
+     "1/1 alt\n5/5 neu\n", 5, 5),
+    ("keine Summenzeile", "irgendwas ohne zahl\n", 0, 0),
+    ("zeile mit 3 slash", "a/b/c\n\n3/4 done\n", 3, 4),
+]
+
+
 def zaehle() -> dict:
     out = {"assurance": [0, 0], "charakterisierung": [0, 0], "details": []}
     for name, (klasse, _) in SUITEN.items():
@@ -39,16 +67,8 @@ def zaehle() -> dict:
             continue
         r = subprocess.run([sys.executable, str(p)], cwd=REPO,
                            capture_output=True, text=True)
-        # Die Summenzeile ist die, die MIT "N/M" BEGINNT. Sonst frisst der
-        # Parser das erste "N/M" irgendeiner Zwischenzeile (Selbstbefund R104).
-        letzte = [z for z in r.stdout.strip().splitlines()
-                  if z.strip() and z.split()[0].count("/") == 1
-                  and z.split()[0].split("/")[0].isdigit()]
-        if letzte:
-            teil, ganz = letzte[-1].split()[0].split("/")
-            a, b = int(teil), int(ganz)
-        else:
-            a, b = (0, 1) if r.returncode else (1, 1)
+        s = summenzeile(r.stdout)
+        a, b = s if s else ((0, 1) if r.returncode else (1, 1))
         out[klasse][0] += a
         out[klasse][1] += b
         out["details"].append({"suite": name, "klasse": klasse,

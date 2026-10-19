@@ -1,0 +1,487 @@
+{
+ "erg": [
+  {
+   "datei": "test_adj_slot.py",
+   "exit": 0,
+   "klasse": "GRUEN",
+   "s": 0.1,
+   "letzte": "4/4 ADJ-Slot-Faelle gruen",
+   "ende": [
+    "ok   vier Etiketten -> vier Verdicts  ['UNGEPRUEFT', 'VERWERFEN', 'WIEDERHOLT', 'ZUSTELLEN']",
+    "ok   keine Vermischung             WIEDERHOLT=1 VERWERFEN=1",
+    "",
+    "4/4 ADJ-Slot-Faelle gruen"
+   ]
+  },
+  {
+   "datei": "test_aufrufbaum.py",
+   "exit": 0,
+   "klasse": "GRUEN",
+   "s": 16.7,
+   "letzte": "4/4 Aufrufbaum-Faelle gruen",
+   "ende": [
+    "     einwurf_waechter           BESTAND     prod=2 test=4",
+    "     vertrags_runner            SPEKULATIV  prod=0 test=0",
+    "",
+    "4/4 Aufrufbaum-Faelle gruen"
+   ]
+  },
+  {
+   "datei": "test_bedarfs_inventur.py",
+   "exit": 0,
+   "klasse": "GRUEN",
+   "s": 0.0,
+   "letzte": "5/5 Bedarfs-Inventur-Faelle gruen",
+   "ende": [
+    "ok   Zusage = Protokoll         status=PROTOKOLL",
+    "ok   Substanzklassen            ['ABLEITUNG', 'ENTSCHEIDUNG', 'MESSUNG', 'regel', 'test', 'verstoss']",
+    "",
+    "5/5 Bedarfs-Inventur-Faelle gruen"
+   ]
+  },
+  {
+   "datei": "test_blocker_typisiert.py",
+   "exit": 0,
+   "klasse": "GRUEN",
+   "s": 0.1,
+   "letzte": "4/4 Typisierter-Blocker-Faelle gruen",
+   "ende": [
+    "ok   Freitext-Falle geprueft   alt=True neu=False",
+    "ok   Gelegenheit normiert     ja",
+    "",
+    "4/4 Typisierter-Blocker-Faelle gruen"
+   ]
+  },
+  {
+   "datei": "test_determinismus.py",
+   "exit": 0,
+   "klasse": "GRUEN",
+   "s": 0.2,
+   "letzte": "9/9 Determinismus-und-Zahlen-Faelle gruen",
+   "ende": [
+    "ok   Vier-Eimer-Invariante       deklariert",
+    "ok   Vokabular-Abbildung        11 Eintraege",
+    "",
+    "9/9 Determinismus-und-Zahlen-Faelle gruen"
+   ]
+  },
+  {
+   "datei": "test_enforcement.py",
+   "exit": 0,
+   "klasse": "GRUEN",
+   "s": 0.0,
+   "letzte": "Quarantaene: 4 Suiten gesperrt, Freigabe bei: alle_posten_mit_eigentuemer",
+   "ende": [
+    "ok   Bilanz ungeglaettet         4/4 ohne Eigentuemer",
+    "",
+    "7/7 Enforcement-Faelle gruen",
+    "Quarantaene: 4 Suiten gesperrt, Freigabe bei: alle_posten_mit_eigentuemer"
+   ]
+  },
+  {
+   "datei": "test_escaping.py",
+   "exit": 0,
+   "klasse": "GRUEN",
+   "s": 0.1,
+   "letzte": "3/3 Escaping-Faelle gruen",
+   "ende": [
+    "ok   Achse ohne Eingabe-Echo      sauber",
+    "ok   grund ein Feld              ['kein_modus']",
+    "",
+    "3/3 Escaping-Faelle gruen"
+   ]
+  },
+  {
+   "datei": "test_exit2_zeilen.py",
+   "exit": 0,
+   "klasse": "GRUEN",
+   "s": 0.1,
+   "letzte": "3/3 Exit-2-Zeilen-Faelle gruen",
+   "ende": [
+    "ok   einwurf ohne strom         exit=2 zeile=ja grund=einwurf_ohne_strom",
+    "ok   kein Inhalts-Hash bei 2      0 erfunden",
+    "",
+    "3/3 Exit-2-Zeilen-Faelle gruen"
+   ]
+  },
+  {
+   "datei": "test_exit_taxonomie.py",
+   "exit": 0,
+   "klasse": "GRUEN",
+   "s": 0.1,
+   "letzte": "7/7 Exit-4-Taxonomie-Faelle gruen",
+   "ende": [
+    "ok   Exit 2 stdout=Bericht        (nur AUFRUF-Zeile)",
+    "ok   'undefiniert' begruendet     ja",
+    "",
+    "7/7 Exit-4-Taxonomie-Faelle gruen"
+   ]
+  },
+  {
+   "datei": "test_exit_vor_stdout.py",
+   "exit": 0,
+   "klasse": "GRUEN",
+   "s": 0.1,
+   "letzte": "4/4 Exit-vor-Stdout-Faelle gruen",
+   "ende": [
+    "ok   gesunder Lauf, beide einig    exit=0",
+    "ok   Norm im Vertrag              'Konsumenten pruefen zuerst den Exit-Code'",
+    "",
+    "4/4 Exit-vor-Stdout-Faelle gruen"
+   ]
+  },
+  {
+   "datei": "test_frist_gate.py",
+   "exit": 0,
+   "klasse": "GRUEN",
+   "s": 0.0,
+   "letzte": "12/12 Frist-Gate-Faelle gruen",
+   "ende": [
+    "ok   Instrument benennt 'Schweigen'  als verboten",
+    "ok   Instrument verlinkt seinen Test",
+    "",
+    "12/12 Frist-Gate-Faelle gruen"
+   ]
+  },
+  {
+   "datei": "test_governance_gate.py",
+   "exit": 0,
+   "klasse": "GRUEN",
+   "s": 0.0,
+   "letzte": "7/7 Gate-Fehlermodus-Faelle gruen",
+   "ende": [
+    "ok   B3: lesend, offline        ja",
+    "ok   B2: Installer + CI        installer=True ci=True",
+    "",
+    "7/7 Gate-Fehlermodus-Faelle gruen"
+   ]
+  },
+  {
+   "datei": "test_hash_eingang.py",
+   "exit": 0,
+   "klasse": "GRUEN",
+   "s": 0.0,
+   "letzte": "6/6 Hash-Eingangs-Pruefungen gruen",
+   "ende": [
+    "ok   _text_von-nur-content              len=500, erwartet 500",
+    "ok   _text_von-ignoriert-extra          seq/channel tragen nichts bei",
+    "",
+    "6/6 Hash-Eingangs-Pruefungen gruen"
+   ]
+  },
+  {
+   "datei": "test_katalog_naht.py",
+   "exit": 0,
+   "klasse": "GRUEN",
+   "s": 0.2,
+   "letzte": "5/5 Katalog-Naht-Faelle gruen",
+   "ende": [
+    "ok   kein rang= im DEDUP           sauber",
+    "ok   3 gesehen == 2 gesehen       identisch",
+    "",
+    "5/5 Katalog-Naht-Faelle gruen"
+   ]
+  },
+  {
+   "datei": "test_klasse_mehrdeutig.py",
+   "exit": 0,
+   "klasse": "GRUEN",
+   "s": 0.1,
+   "letzte": "4/4 Klassen-Mehrdeutigkeits-Faelle gruen",
+   "ende": [
+    "ok   pos driftet unter Bewegung 2 von 3 Positionen: [('2', 'VERWERFEN', 'WIEDERHOLT'), ('3', 'WIEDERHOLT', 'VERWERFEN')]",
+    "ok   Mehrdeutigkeit aufgeloest   regel=True frozen=False",
+    "",
+    "4/4 Klassen-Mehrdeutigkeits-Faelle gruen"
+   ]
+  },
+  {
+   "datei": "test_klausel.py",
+   "exit": 0,
+   "klasse": "GRUEN",
+   "s": 0.4,
+   "letzte": "5/5 Klausel-Faelle gruen",
+   "ende": [
+    "ok   MESSUNG-Skript ist gruen   rot=[]",
+    "ok   Praesenz-Falle messbar     alt=True neu=False",
+    "",
+    "5/5 Klausel-Faelle gruen"
+   ]
+  },
+  {
+   "datei": "test_konformitaet.py",
+   "exit": 0,
+   "klasse": "GRUEN",
+   "s": 0.1,
+   "letzte": "8/8 Konformitaets-Pruefungen gruen",
+   "ende": [
+    "ok   Ausgabe-Grammatik        30 Schluessel, 0 Verstoesse",
+    "ok   Zeilen-Marken            4 Marken, Zeiger=True, Urteil=True",
+    "",
+    "8/8 Konformitaets-Pruefungen gruen"
+   ]
+  },
+  {
+   "datei": "test_konstanten.py",
+   "exit": 0,
+   "klasse": "GRUEN",
+   "s": 0.1,
+   "letzte": "Kein fester Wert besteht alle drei — die Zahl folgt der Eingabe.",
+   "ende": [
+    "ok   C: 3 identisch, ts verschieden   Paare=2 KANAL-DUPLIKAT=0 WIEDERHOLUNG=2",
+    "",
+    "3/3 Konstanten-Proben gruen",
+    "Kein fester Wert besteht alle drei — die Zahl folgt der Eingabe."
+   ]
+  },
+  {
+   "datei": "test_konsument_kongruenz.py",
+   "exit": 0,
+   "klasse": "GRUEN",
+   "s": 0.1,
+   "letzte": "8/8 Konsumenten-Kongruenz-Faelle gruen",
+   "ende": [
+    "ok   3' Norm im Vertrag          vorrang=ZEILE>DEDUP anker=vorgaenger",
+    "ok   Anker im Record            anker=vorgaenger",
+    "",
+    "8/8 Konsumenten-Kongruenz-Faelle gruen"
+   ]
+  },
+  {
+   "datei": "test_kreuz_record.py",
+   "exit": 0,
+   "klasse": "GRUEN",
+   "s": 0.4,
+   "letzte": "10/10 Kreuz-Record-Faelle gruen",
+   "ende": [
+    "ok   Ableitung muell           exit=4 aus_records=4",
+    "ok   Ableitung dup+muell       exit=4 aus_records=4",
+    "",
+    "10/10 Kreuz-Record-Faelle gruen"
+   ]
+  },
+  {
+   "datei": "test_lauf_eine_quelle.py",
+   "exit": 0,
+   "klasse": "GRUEN",
+   "s": 0.0,
+   "letzte": "10/10 Mess-Instrument-Faelle gruen",
+   "ende": [
+    "ok   Aufrufer nennt BEFUND (nicht nur gruen/rot)",
+    "ok   Aufrufer ruft scripts/lauf.py",
+    "",
+    "10/10 Mess-Instrument-Faelle gruen"
+   ]
+  },
+  {
+   "datei": "test_naht_beweis.py",
+   "exit": 0,
+   "klasse": "GRUEN",
+   "s": 0.1,
+   "letzte": "5/5 Naht-Faelle gruen",
+   "ende": [
+    "ok   C  weniger gesehen            ['ZUSTELLEN']",
+    "ok   D  gesehen= ohne Wirkung      True",
+    "",
+    "5/5 Naht-Faelle gruen"
+   ]
+  },
+  {
+   "datei": "test_normalisierung.py",
+   "exit": 0,
+   "klasse": "GRUEN",
+   "s": 0.0,
+   "letzte": "8/8 Normalisierungs-Grenzen gruen",
+   "ende": [
+    "ok   getrennt  Wortstellung             Rollen sind Bedeutung",
+    "ok   getrennt  beide Richtungen geprueft Test enthaelt Kollisions- UND Trennungsfaelle",
+    "",
+    "8/8 Normalisierungs-Grenzen gruen"
+   ]
+  },
+  {
+   "datei": "test_projektion.py",
+   "exit": 0,
+   "klasse": "GRUEN",
+   "s": 0.2,
+   "letzte": "5/5 Projektions-Faelle gruen",
+   "ende": [
+    "ok   Duplikat + Muell     exit=4 aus_zeilen=4 soll=4",
+    "ok   alles drei           exit=4 aus_zeilen=4 soll=4",
+    "",
+    "5/5 Projektions-Faelle gruen"
+   ]
+  },
+  {
+   "datei": "test_projektion_echt.py",
+   "exit": 0,
+   "klasse": "GRUEN",
+   "s": 0.0,
+   "letzte": "3/3 Projektions-Echtheits-Faelle gruen",
+   "ende": [
+    "ok   Soll-Werte hartkodiert      5 Fixtures: ['0', '1', '4', '4', '4']",
+    "ok   keine Selbstableitung       rein",
+    "",
+    "3/3 Projektions-Echtheits-Faelle gruen"
+   ]
+  },
+  {
+   "datei": "test_regel_gegen_pos.py",
+   "exit": 0,
+   "klasse": "GRUEN",
+   "s": 0.2,
+   "letzte": "3/3 Regel-gegen-pos-Faelle gruen",
+   "ende": [
+    "ok   (A,bei_gleich) vorher/nachher  VERWERFEN -> VERWERFEN",
+    "ok   Stabilität                   pos stabil=False  regel stabil=True",
+    "",
+    "3/3 Regel-gegen-pos-Faelle gruen"
+   ]
+  },
+  {
+   "datei": "test_reorder_payload.py",
+   "exit": 0,
+   "klasse": "GRUEN",
+   "s": 0.0,
+   "letzte": "7/7 Reorder-Payload-Faelle gruen",
+   "ende": [
+    "ok   Etiketten-Achse divergiert  ['ZUSTELLEN', 'VERWERFEN', 'WIEDERHOLT'] vs ['ZUSTELLEN', 'WIEDERHOLT', 'VERWERFEN']",
+    "ok   Zusage deckt Befund         ja",
+    "",
+    "7/7 Reorder-Payload-Faelle gruen"
+   ]
+  },
+  {
+   "datei": "test_schwelle_herleitung.py",
+   "exit": 0,
+   "klasse": "GRUEN",
+   "s": 0.0,
+   "letzte": "6/6 Schwellen-Herleitungs-Faelle gruen",
+   "ende": [
+    "ok   Probe liest statt tippt    literal=False liest=True",
+    "ok   Status-Regel deklariert    ja",
+    "",
+    "6/6 Schwellen-Herleitungs-Faelle gruen"
+   ]
+  },
+  {
+   "datei": "test_stdout_inhalt.py",
+   "exit": 0,
+   "klasse": "GRUEN",
+   "s": 0.1,
+   "letzte": "5/5 Per-Code-stdout-Faelle gruen",
+   "ende": [
+    "ok   Exit 3 fordert Fehlertext   'STROM UNLESBAR;grund=...; VOR der Nullachse — die '",
+    "ok   R88-Falle geschlossen      False-Positiv=False",
+    "",
+    "5/5 Per-Code-stdout-Faelle gruen"
+   ]
+  },
+  {
+   "datei": "test_substanzklassen.py",
+   "exit": 0,
+   "klasse": "GRUEN",
+   "s": 0.0,
+   "letzte": "6/6 Substanzklassen-Faelle gruen",
+   "ende": [
+    "ok   Praesenz-Falle messbar      alt=True neu=False",
+    "ok   Verstoss benannt           ja",
+    "",
+    "6/6 Substanzklassen-Faelle gruen"
+   ]
+  },
+  {
+   "datei": "test_unwissen_etikett.py",
+   "exit": 0,
+   "klasse": "GRUEN",
+   "s": 0.1,
+   "letzte": "8/8 Unwissen-ist-kein-Etikett-Faelle gruen",
+   "ende": [
+    "ok   C  bool-Konsument divergiert   bool=VERWERFEN total=UNGEPRUEFT",
+    "ok   C2 Vertragstext-Konsument     UNGEPRUEFT == UNGEPRUEFT",
+    "",
+    "8/8 Unwissen-ist-kein-Etikett-Faelle gruen"
+   ]
+  },
+  {
+   "datei": "test_vergleich_nachbau.py",
+   "exit": 0,
+   "klasse": "GRUEN",
+   "s": 0.0,
+   "letzte": "10/10 Schnittstellen-Faelle gruen",
+   "ende": [
+    "ok   Nachbau == Referenz        Abweichungen=0",
+    "ok   Abbildung auf Verdicts    vollstaendig",
+    "",
+    "10/10 Schnittstellen-Faelle gruen"
+   ]
+  },
+  {
+   "datei": "test_version_ledger.py",
+   "exit": 0,
+   "klasse": "GRUEN",
+   "s": 0.0,
+   "letzte": "6/6 Versions-Ledger-Faelle gruen",
+   "ende": [
+    "ok   kopfzeile liest statt tippt liest=True getippt=False",
+    "ok   Eintraege vollstaendig      nackt=[]",
+    "",
+    "6/6 Versions-Ledger-Faelle gruen"
+   ]
+  },
+  {
+   "datei": "test_wiedervorlage.py",
+   "exit": 0,
+   "klasse": "GRUEN",
+   "s": 0.0,
+   "letzte": "5/5 Wiedervorlage-Faelle gruen",
+   "ende": [
+    "ok   Verfall -> ROT             alle korrekt",
+    "ok   Termine nicht verfallen    ok",
+    "",
+    "5/5 Wiedervorlage-Faelle gruen"
+   ]
+  },
+  {
+   "datei": "test_zaehlweise.py",
+   "exit": 0,
+   "klasse": "GRUEN",
+   "s": 0.0,
+   "letzte": "     37 (Code-Bezug) + 0 (nur Vertragssatz) = 37",
+   "ende": [
+    "ok   nur_vertrag aufgelistet    []",
+    "",
+    "6/6 Zaehlweise-Faelle gruen",
+    "     37 (Code-Bezug) + 0 (nur Vertragssatz) = 37"
+   ]
+  },
+  {
+   "datei": "test_zeiger_stabil.py",
+   "exit": 0,
+   "klasse": "GRUEN",
+   "s": 0.1,
+   "letzte": "3/3 Zeiger-Stabilitaets-Faelle gruen",
+   "ende": [
+    "ok   Urteil unter Bewegung   2 gemeinsame Zeiger, stabil=True",
+    "ok   Positions-Drift         entfaellt (kein Positionszeiger)",
+    "",
+    "3/3 Zeiger-Stabilitaets-Faelle gruen"
+   ]
+  },
+  {
+   "datei": "test_zeilen_identitaet.py",
+   "exit": 0,
+   "klasse": "GRUEN",
+   "s": 0.1,
+   "letzte": "4/4 Zeilen-Identitaets-Faelle gruen",
+   "ende": [
+    "ok   Urteil je Zeile          soll={1: 'ZUSTELLEN', 2: 'VERWERFEN', 3: 'ZUSTELLEN', 4: 'VERWERFEN', 5: 'UNGEPRUEFT'}  ist={5: 'UNGEPRUEFT', 1: 'ZUSTELLEN', 2: 'VERWERFEN', 3: 'ZUSTELLEN', 4: 'VERWERFEN'}",
+    "ok   Zustell-Liste            [1, 3, 5] erwartet [1, 3, 5]",
+    "",
+    "4/4 Zeilen-Identitaets-Faelle gruen"
+   ]
+  }
+ ],
+ "quelle": "test_zaehlweise.zaehle()",
+ "modus": "vertrag"
+}

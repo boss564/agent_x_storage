@@ -1,0 +1,5 @@
+
+  "kern": "make lauf ist KEIN Abnehmer-Interface. Es ist Human-Convenience.",
+  "befund": "GNU make normalisiert jeden Rezept-Fehler auf 2 (gemessen: prog=1,2,3,9,42 -> 2). Die 0/1/2-Semantik von lauf.py ueberlebt die Grenze nicht.",
+  "widerlegt": "R99 sagte 'drei ehrliche Ausgaenge'. An der make-Grenze bleiben 0 und 2. GEFALLEN und BEFUND fallen zusammen.",
+  "degradierung": {

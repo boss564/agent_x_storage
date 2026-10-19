@@ -46,8 +46,14 @@ MUSTER = re.compile(
     r"sha256=(?P<h>[0-9a-f]{64}) datei=(?P<d>[0-9a-f]{64}) "
     r"zeilen=(?P<z>\d+)\n(?P<t>.*?)\nBEWEIS>>>", re.S)
 # Prosa-Referenzen: Makefile:63, scripts/lauf.py:112, artefakt:12-14
-PROSA = re.compile(r"\b([\w./-]+\.(?:py|json|jsonl|md|sh|yml|yaml|sol|ino))"
-                   r":(\d+)(?:-(\d+))?")
+# Prosa-Referenzen (R105 erweitert — drei Luecken, alle real gefunden):
+#   1 datei:zeile  mit beliebiger Endung (auch .git/hooks/pre-commit)
+#   2 datei:von-bis
+#   3 L<zahl> — Transcript-Zeilennummer ohne Artefakt. Genau der Defekt
+#     aus P0b: "Zeile 8123" als Beweis ohne pruefbare Adresse.
+PROSA = re.compile(
+    r"(?P<pfad>[\w./-]*[\w-]):(?P<von>\d+)(?:-(?P<bis>\d+))?"
+    r"|(?<![\w-])L(?P<lzeile>\d+)")
 
 
 def _zeilen(pfad: Path) -> list[str]:
@@ -59,7 +65,19 @@ def _bereich(pfad: Path, von: int, bis: int) -> str:
     if von < 1 or bis > len(zs) or von > bis:
         raise ValueError(f"{pfad.name}: Bereich {von}-{bis} ungueltig "
                          f"(Datei hat {len(zs)} Zeilen)")
-    return "\n".join(zs[von - 1:bis]) + "\n"
+    # BEWEIS-SPEC v1 §2: LF only, kein CRLF, genau ein Trailing-LF.
+    return "\n".join(z.rstrip("\r") for z in zs[von - 1:bis]) + "\n"
+
+
+def kanonisch(text: str) -> bytes:
+    """BEWEIS-SPEC v1 §2 — die EINZIGE Kanonisierung.
+
+    LF only, kein CRLF, genau ein Trailing-LF, UTF-8 ohne BOM.
+    Wer publiziert, MUSS diese Bytes schreiben. Wer prueft, MUSS sie
+    hashen. Zwei Implementierungen waeren zwei Wahrheiten.
+    """
+    t = text.replace("\r\n", "\n").replace("\r", "\n").lstrip("\ufeff")
+    return (t.rstrip("\n") + "\n").encode("utf-8")
 
 
 def _h(text: str) -> str:
@@ -71,7 +89,7 @@ def beleg(artefakt: str, von: int, bis: int, runde: str = "",
     pfad = REPO / artefakt
     inhalt = _bereich(pfad, von, bis)
     return {"artefakt": artefakt, "von": von, "bis": bis,
-            "sha256": _h(inhalt),
+            "sha256": hashlib.sha256(kanonisch(inhalt)).hexdigest(),
             "sha256_datei": _h(pfad.read_bytes().decode("utf-8")),
             "zeilen": len(_zeilen(pfad)),
             "text": inhalt, "runde": runde, "warum": warum}
@@ -90,24 +108,58 @@ def pruefe_block(a: str, von: int, bis: int, sha: str, dsha: str,
     if not pfad.exists():
         return f"Artefakt fehlt: {a}"
     ist = _bereich(pfad, von, bis)
-    if _h(ist) != sha:
+    if hashlib.sha256(kanonisch(ist)).hexdigest() != sha:
         return f"{a}:{von}-{bis} Bereichs-SHA weicht ab"
     if ist.rstrip("\n") != text.rstrip("\n"):
         return f"{a}:{von}-{bis} Wortlaut weicht trotz SHA ab"
+    return ""
+
+
+def provenienz(a: str, dsha: str, zeilen: int) -> str:
+    """BEWEIS-SPEC v1 §4: Datei-SHA ist Versionszeiger, keine Beweisbindung.
+
+    Das Zitat bleibt wahr, wenn sich die Datei anderswo aendert. Deshalb
+    meldet Provenienz-Drift sichtbar, blockiert aber nur mit --provenienz-streng.
+    """
+    pfad = REPO / a
+    if not pfad.exists():
+        return f"Artefakt fehlt: {a}"
     if _h(pfad.read_bytes().decode("utf-8")) != dsha:
-        return f"{a} Datei-SHA weicht ab — Artefakt AUSSERHALB des Bereichs geaendert"
+        return f"{a}: Datei-SHA abweichend (Versionszeiger, Zitat unberuehrt)"
     if len(_zeilen(pfad)) != zeilen:
-        return f"{a} Zeilenzahl {len(_zeilen(pfad))} != belegt {zeilen}"
+        return f"{a}: {len(_zeilen(pfad))} Zeilen statt belegt {zeilen}"
     return ""
 
 
 def prosa_gate(text: str, belegte: set[tuple[str, int, int]]) -> list[str]:
     """Jede Datei:Zeile-Referenz muss ein Beleg sein. Rueckgabe: Luecken."""
     luecken = []
+    # Exemption (R105): Zeilen, die als ZITAT einer Gate-Ausgabe markiert
+    # sind, werden nicht geprueft — sonst ist jede Gate-Fehlermeldung
+    # (die selbst file:zeile traegt) ein Gate-Verstoss.
+    # Konvention: die Zeile beginnt mit "ZITAT>" oder folgt auf eine
+    # Zeile, die genau "ZITAT-AUSGABE" lautet.
+    zeilen = text.splitlines()
+    ausgenommen = set()
+    aktiv = False
+    for i, z in enumerate(zeilen):
+        if z.strip() == "ZITAT-AUSGABE":
+            aktiv = True
+            continue
+        if aktiv:
+            if not z.strip():
+                aktiv = False
+            else:
+                ausgenommen.add(i)
     for m in PROSA.finditer(text):
-        a, v = m.group(1), int(m.group(2))
-        b = int(m.group(3) or v)
-        # akzeptiere, wenn irgendein Beleg der Datei den Bereich deckt
+        zi = text.count("\n", 0, m.start())
+        if zi in ausgenommen:
+            continue
+        if m.group("lzeile"):
+            luecken.append(f"L{m.group('lzeile')} (Transcript-Zeile ohne Artefakt)")
+            continue
+        a, v = m.group("pfad"), int(m.group("von"))
+        b = int(m.group("bis") or v)
         if not any(x == a and v >= lo and b <= hi for x, lo, hi in belegte):
             luecken.append(f"{a}:{v}" + (f"-{b}" if b != v else ""))
     return luecken
@@ -129,12 +181,18 @@ def check(strict: bool = False, prosa_pfad: str | None = None) -> int:
               LEDGER.read_text(encoding="utf-8").splitlines() if z.strip()] \
         if LEDGER.exists() else []
     defekte = 0
+    streng_p = "--provenienz-streng" in sys.argv
     for e in belege:
+        # Beweisbindung: Region. Blockiert immer.
         befund = pruefe_block(e["artefakt"], e["von"], e["bis"], e["sha256"],
                               e["sha256_datei"], e["zeilen"], e["text"])
+        # Provenienz: Datei. Sichtbar; blockiert nur mit Flag (Spec §4).
+        prov = provenienz(e["artefakt"], e["sha256_datei"], e["zeilen"])
         print(f"{'ok  ' if not befund else 'ROT '} {e['artefakt']}:{e['von']}-{e['bis']} "
               f"[{e.get('runde','?')}] {befund}")
-        defekte += bool(befund)
+        if prov:
+            print(f"{'ROT ' if streng_p else 'PROV'} {prov}")
+        defekte += bool(befund) + (bool(prov) and streng_p)
     if prosa_pfad:
         luecken = prosa_gate(Path(prosa_pfad).read_text(encoding="utf-8"),
                              belegte_aus_ledger())
@@ -165,6 +223,12 @@ def main(argv: list[str]) -> int:
     von, bis = (int(x) for x in args[1].split(":"))
     e = beleg(args[0], von, bis)
     if "--publish" in argv:
+        out = REPO / "publiziert"
+        out.mkdir(exist_ok=True)
+        stem = f"{args[0].replace('/', '__')}_{von}-{bis}"
+        (out / f"{stem}.payload.txt").write_bytes(kanonisch(e["text"]))
+        (out / f"{stem}.beleg.json").write_text(
+            json.dumps(e, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         print(json.dumps(e, ensure_ascii=False, indent=2))
     else:
         print(zitiere(e))
