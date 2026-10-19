@@ -1,5 +1,5 @@
 {
-  "_version": 18,
+  "_version": 19,
   "_zweck": "Maschinenlesbarer Vertrag des Einwurf-Waechters. Single source of truth fuer Repo und externe Ingestion. Wer hier eine Zeile aendert, aendert das Tor ausserhalb dieses Repos mit.",
   "_stand": "Runde 84 (2026-10-18)",
   "_geltung": "Der Runner (scripts/vertrags_runner.py) importiert diese Datei; die externe Ingestion MUSS sie einlesen. Solange sie es nicht tut, zertifiziert N/N einen Vertrag, den draussen niemand benutzt.",
@@ -1098,6 +1098,13 @@
       "aenderung": "governance_gate im Pre-Commit (B1 drei Wege), install_hook.sh + CI-Backstop (B2), gate-only/lesend/offline (B3), Bootstrap-Ausnahme als ENTSCHEIDUNG gebucht, Hook-Rekonstruktion gebucht.",
       "gebucht": "R95 B1/B2/B3 + Bootstrap + Hook-Verlust",
       "vorgaenger_hash": "7d4bc706acdeb68bc9a2fb8d806dc85c7e982f582790d7164935059bfc27aea2"
+    },
+    {
+      "version": 19,
+      "runde": 95,
+      "aenderung": "Gesamtlauf-Befund gebucht: 12/131 rot, davon 9 Umgebung, 2 vorbestehend, 1 beendet; Messfehler des Ad-hoc-Globs dokumentiert.",
+      "gebucht": "R95 Gesamtlauf",
+      "vorgaenger_hash": "7b1bdf70d8a18f45a2b2bff381f93bd46d3b810a4aefd6e918d357c4fc788cc8"
     }
   ],
   "kreuz_record_invarianten": {
@@ -1655,5 +1662,12 @@
     "rekonstruktion": "Zeilen 1-13 verifiziert gelesen; Governance-Block neu; Ueberschriften-Regel und checkout-index-Export aus beobachtetem Verhalten rekonstruiert. Keine Kopie.",
     "konsequenz": "Ein Hook ohne getrackte Quelle ist bei jedem Editierfehler verloren. Der Installer (scripts/install_hook.sh) haengt an, statt zu ersetzen — aber die Lehre ist: Hooks gehoeren getrackt.",
     "status": "REKONSTRUIERT, nicht wiederhergestellt. Befund offen."
+  },
+  "gesamttlauf_befund": {
+    "anlass": "R95: erster Gesamtlauf ueber alle Suiten (26 min, 03:55-04:21).",
+    "ergebnis": "12 von 131 rot. Davon 9 umgebungsbedingt (NATS/Z3/Netz fehlen, Import scripts.*, RSS-Limit), 1 beendet (index.lock), 2 vorbestehend.",
+    "messfehler_des_laufs": "Der Lauf globte scripts/blocker_*.py mit und zaehlte blocker_nrm_injektivitaet.py als 'rot'. Exit 2 ist dort der BEABSICHTIGTE Zustand (UNBEWIESEN). Der Blocker ist korrekt als blocker_ registriert, nicht als test_ — die Schleife war falsch, nicht das Skript.",
+    "lehre": "Ein Gesamtlauf ueber 'alle *.py' ist keine Messung des Systems: er mischt Tests mit Blockern, Live-Suiten mit Fixture-Suiten und zaehlt beides als rot/gruen. Die Zaehlweise (test_zaehlweise.py) trennt bereits korrekt; der Ad-hoc-Glob tat es nicht.",
+    "nicht_gemessen": "Die 94 'aussen'-Dateien wurden nie als Gesamtheit bewertet."
   }
 }
