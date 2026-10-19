@@ -1,5 +1,5 @@
 {
-  "_version": 31,
+  "_version": 32,
   "_zweck": "Maschinenlesbarer Vertrag des Einwurf-Waechters. Single source of truth fuer Repo und externe Ingestion. Wer hier eine Zeile aendert, aendert das Tor ausserhalb dieses Repos mit.",
   "_stand": "Runde 84 (2026-10-18)",
   "_geltung": "Der Runner (scripts/vertrags_runner.py) importiert diese Datei; die externe Ingestion MUSS sie einlesen. Solange sie es nicht tut, zertifiziert N/N einen Vertrag, den draussen niemand benutzt.",
@@ -1204,6 +1204,14 @@
       "entscheidung": null,
       "gebucht": "R101-Nachtrag",
       "vorgaenger_hash": "cb059ce69370b106245d0d4f89df36d61463af570e158c831690221e78174db1"
+    },
+    {
+      "version": 32,
+      "runde": "R102-P0",
+      "aenderung": "fc2ec647=Buchung nicht Wand (1 Datei, _version+Ledger). R101=3 Commits, zeitliche Luecke in §1b. Dreizustand-Schemafehler: baseline/ziel gelten fuer alle 4 Dateien, 3 sind per Konstruktion ANOMALIE. Zeile 8123: beide Zitate woertlich vorhanden. R99 'drei ehrliche Ausgaenge' widerlegt, Degradierung gebucht.",
+      "entscheidung": null,
+      "gebucht": "R102-P0",
+      "vorgaenger_hash": "0b29cdf519773286ecfcfa7e7946528acf041fac9a85439a29c01fc2fbe64fe2"
     }
   ],
   "kreuz_record_invarianten": {
@@ -2093,5 +2101,37 @@
     "status": "P4 Retention, offen",
     "nicht_behauptet": "R101 hat die Asymmetrie NICHT vollstaendig geschlossen. Es gibt jetzt einen Aufrufer, der archiviert — aber das Archiv ist nicht eingecheckt.",
     "naechster_schritt": "Retention-Entscheidung: pro Lauf einchecken (Bloat) oder Zusammenfassung + Rotation (Verlustfreiheit?). Eigene Entscheidung, nicht hier."
+  },
+  "R102_p0": {
+    "fc2ec647": {
+      "natur": "REINE BUCHUNG. 1 Datei (waechter_vertrag.json), +15/-1 Zeilen: _version 30->31 und Ledger-Eintrag 31. Keine Governance-Semantik, kein Code, kein Test.",
+      "sequenz": "NACH dem Payload (parent=83d54c2f). Das verletzt die Ordnung Entscheidung->Wand->Payload NICHT, weil es keine Wand ist — aber es ist auch keine Wand und darf nicht als 'Wand-Nachtrag' firmieren. Korrekt: BUCHUNG. Der Commit-Titel war irrefuehrend.",
+      "zählung": "R101 hat DREI Commits: 6d4a1e99 (Entscheidung), 83d54c2f (Payload), fc2ec647 (Buchung). Meine §1b zeigte zwei, §6 drei. Die §1b-Liste war mit 'e8f9a4de..HEAD' gefiltert und zeigte fc2ec647 nicht, weil es zum Zeitpunkt des Aufrufs noch nicht existierte — zwei getrennte Shell-Aufrufe. Kein Widerspruch, eine zeitliche Lücke. Trotzdem: der Bericht haette sie benennen muessen."
+    },
+    "ziel_hash_live_einsatz": {
+      "frage": "Hat der Dreizustand R101s lauf.py-Aenderung als VOLLZOGEN erkannt?",
+      "antwort": "NEIN. Der Mechanismus ist nie zur Entscheidung gekommen. Grund: R101 nennt eine BASELINE ueber alle vier Dateien, der ZIEL-Hash gilt aber nur fuer lauf.py. Makefile, test_lauf_aufrufer.py und check_claude_md.py sind per Konstruktion ANOMALIE — sie hatten nie einen Ziel-Hash.",
+      "beweis": "governance_gate.ausnahme_aktiv(['scripts/lauf.py']) -> False, 'R101 ANOMALIE — Makefile traf weder Baseline noch Ziel'. Der Gate prueft ALLE Dateien der Liste, nicht die einzeln geaenderte.",
+      "urteil": "Das ist ein SCHEMAFEHLER im Datensatz, kein Semantikfehler der Wand: ein Datensatz mit vier Dateien braucht vier Paare (baseline,ziel), nicht ein Paar fuer alle. Der Dreizustand funktioniert pro Datei; der Datensatz lieferte ihm eine falsche Form.",
+      "live_einsatz": "Damit hat der Dreizustand seinen ersten echten Einsatz NICHT bestanden — und nicht, weil der Hash falsch war, sondern weil der Datensatz ihm nicht genug Information gab. Das ist der Befund, den der Bericht schuldig blieb."
+    },
+    "zeile_8123": {
+      "befund": "BEIDE Zeichenketten stehen in Zeile 8123 (role=user): 'die den Abnehmer später verdrahten wird' 1x, 'auch die spätere Abnehmer-Verdrahtung' 2x. Meine Wiedergabe war WÖRTLICH.",
+      "aber": "Ich zitierte den Satz aus §3 ('genau die, die den Abnehmer später verdrahten wird'), Ihre Kritik bezog sich auf 'Der Satz' ('auch die spätere Abnehmer-Verdrahtung'). Beide sind in derselben Zeile. Wörtlich korrekt, referenziell unscharf — ich haette den Satz nennen müssen, auf den die Kritik sich bezieht.",
+      "status": "TEILWEISE KORREKT. Keine Falschzitat, aber eine ungenaue Referenz."
+    }
+  },
+  "R99_behauptung_widerlegt": {
+    "befund": "R99 sagte 'drei ehrliche Ausgänge'. R101 zeigt: an der make-Grenze bleiben 0 und 2, 1 und 2 fallen zusammen. make lauf ist ein Gruen/Rot-Schalter.",
+    "degradierung": "Das ist eine ENTSCHEIDUNG, keine Konsequenz — sie muss gebucht werden, nicht als Nebenbefund geführt.",
+    "neue_deklaration": "make lauf = Human-Convenience (lesbarer Text-Kanal). Vertragsschnittstelle = data/lauf_letzter.json."
+  },
+  "verschlimmerung": {
+    "befund": "R101 loest die Ausloeser-Haelfte und verschaerft die Belegbarkeits-Haelfte: jeder make lauf schreibt ein neues untracked protokoll/-Archiv.",
+    "terminkritisch": "Retention muss VOR jeder weiteren Mess-Ausweitung entschieden werden."
+  },
+  "namenskonflikt": {
+    "befund": "protokoll/vollauf_<ts>.json entstand im Vertragslauf (37), nicht im --voll (131). Der Name luegt.",
+    "loesung": "vertrag_<ts>.json vs vollauf_<ts>.json — eigene Entscheidung."
   }
 }

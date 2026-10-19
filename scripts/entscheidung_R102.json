@@ -1,0 +1,43 @@
+{
+  "id": "R102",
+  "typ": "SCHNITTSTELLEN_ENTSCHEIDUNG",
+  "autorisiert_von": "externer Auftraggeber (R101 Kurzurteil §9 P1: Abnehmer-Interface-Entscheidung)",
+
+  "kern": "make lauf ist KEIN Abnehmer-Interface. Es ist Human-Convenience.",
+  "befund": "GNU make normalisiert jeden Rezept-Fehler auf 2 (gemessen: prog=1,2,3,9,42 -> 2). Die 0/1/2-Semantik von lauf.py ueberlebt die Grenze nicht.",
+  "widerlegt": "R99 sagte 'drei ehrliche Ausgaenge'. An der make-Grenze bleiben 0 und 2. GEFALLEN und BEFUND fallen zusammen.",
+  "degradierung": {
+    "typ": "ENTSCHEIDUNG, nicht Konsequenz",
+    "make_lauf": "Human-Convenience. Der Text-Kanal (Meldung) ist lesbar, aber lokalisierbar und nicht maschinell stabil.",
+    "vertragsschnittstelle": "data/lauf_letzter.json — pro Datei Klasse, plus Provenienz (modus).",
+    "nicht_zulaessig": "Ein maschineller Konsument darf den make-Exit als Signal lesen. Er darf auch nicht den Meldungstext parsen."
+  },
+
+  "tests": {
+    "neu": "scripts/test_lauf_artefakt.py 5/5",
+    "faelle": [
+      "A1 Artefakt traegt pro Datei Status",
+      "A2 Provenienz modus",
+      "B1 Statusverteilung aus dem Artefakt ableitbar",
+      "C1 Inventar = Summe der Klassen",
+      "D1 protokoll/ ist NICHT gitignored (R98 #2 aktiv verteidigt)"
+    ],
+    "mutation": "protokoll/ in .gitignore -> D1 rot (4/5). Der Fehlgriff ist gefangen."
+  },
+
+  "schemafehler_R101": {
+    "befund": "R101 gibt EIN baseline/ziel-Paar fuer VIER Dateien. Der Gate prueft alle, also sind drei per Konstruktion ANOMALIE.",
+    "live_einsatz": "Der Dreizustand hat seinen ersten echten Einsatz NICHT bestanden — nicht wegen falscher Semantik, sondern wegen eines unzureichenden Datensatzes.",
+    "regel_fuer_R103": "N Dateien -> N Paare (baseline, ziel). Ein globales Paar ist ungueltig.",
+    "test": "test_governance_semantik.py 8/8, Fall 'ein globales Hash-Paar -> ANOMALIE'"
+  },
+
+  "dateien_geschlossen": ["scripts/test_lauf_artefakt.py", "scripts/check_claude_md.py", "scripts/governance_gate.py"],
+  "nicht_in_R102": [
+    "Retention/Versionierung protokoll/ (P3, eigene Entscheidung)",
+    "Namensschema vertrag_/vollauf_ (P3)",
+    "Monotonie via Ledger-Read (P2)",
+    "#13 SHA-Schutz", "#14 Auditor-Zugriff"
+  ],
+  "verbraucht_mit_commit": true
+}
