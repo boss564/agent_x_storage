@@ -1,0 +1,45 @@
+{
+  "entscheidung_id": "R108",
+  "datum": "2026-10-19",
+  "art": "KORREKTUR + DEFINITION",
+  "gegenstand": "R107-Diagnose falsch; P0a/P0b trennen",
+  "korrektur_R107": {
+    "falsche_behauptung": "Byte 178: 'Vetragsscope' statt 'Vertragsscope', ein 'r' fehlt.",
+    "widerlegt_durch": "Nutzer, manuelle Base64-Dekodierung beider Vorkommen: beide mit 'r'.",
+    "ursache_des_diagnosefehlers": "Die Rechnung lief gegen einen selbst rekonstruierten Python-String, nicht gegen die gelieferte Base64.",
+    "tatsaechlicher_befund": {
+      "praefix_identisch": 24,
+      "suffix_identisch": 222,
+      "shift": 1,
+      "geliefert_byte_24": "e",
+      "quelle_byte_24": "r",
+      "anhang_quelle": "\\n",
+      "laenge_geliefert": 439,
+      "laenge_quelle": 440
+    },
+    "falsche_sha_in_R107": "30257636d107f7019074d85de4742e119f0faa24ddcf6340e0741d4ce7b00b52",
+    "echte_sha_der_gelieferten_bytes": "2205f240ea394941e92d19ba4493282e724d4c9d18238c4be7c646620e672168",
+    "sha_der_quelle": "b24985950ab17b2c4092cf68138baccd433a726e2970aacd5ff2975ba99ba6e4"
+  },
+  "definition_P0": {
+    "P0a": {
+      "frage": "Reproduziert der Auditor den behaupteten Digest aus den gelieferten Bytes?",
+      "uebertragbar": true,
+      "werkzeug": "beleg_export.py (volle Base64) + sha256sum",
+      "status": "moeglich -- sobald die Bytes vollstaendig geliefert sind (R108: ja)"
+    },
+    "P0b": {
+      "frage": "Sind die gelieferten Bytes die echte Datei?",
+      "uebertragbar": false,
+      "grund": "Selbstkonsistenz ist nicht Inhaltstreue. Konsistente Faelschung bleibt GRUEN.",
+      "werkzeug": "beweis.py check (Region-SHA), repo-gebunden",
+      "status": "prinzipiell nicht von Dritten pruefbar"
+    },
+    "regel": "'P0 erfuellt' ohne Zusatz bedeutet IMMER P0a. P0b wird nie als extern geprueft behauptet."
+  },
+  "architektur": {
+    "neues_werkzeug": "beleg_export.diff_gegen_quelle() -- byteweiser Diff GELIEFERT vs QUELLE, shift-bewusst.",
+    "warum": "Einzelbyte-Vergleich meldet bei Einfuegung 243 Treffer (R106). Praefix/Suffix/shift trennt Einfuegung, Loeschung, Ersetzung.",
+    "tests": "scripts/test_beleg_export.py 9/9, inkl. R106-Sonderfall (shift=1 bei Byte 24) und shift=0-Ersetzung."
+  }
+}

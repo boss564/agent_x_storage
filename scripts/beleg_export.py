@@ -79,6 +79,49 @@ def pruefe_paket(p: dict) -> list[str]:
     return fehler
 
 
+def diff_gegen_quelle(geliefert_b64: str, quelle: bytes) -> dict:
+    """Byteweiser Diff der GELIEFERTEN Bytes gegen die Quelle (R108).
+
+    R107-Defekt: Die Diagnose "Byte 178, 'r' fehlt" beschrieb eine
+    Zeichenkette, die nie geliefert wurde. Die Rechnung lief gegen
+    einen selbst rekonstruierten String. Dieser Fehler ist vermeidbar,
+    wenn der Diff gegen die GELIEFERTEN Bytes laeuft statt gegen eine
+    Abschrift.
+
+    Einzelbyte-Vergleich ist hier irrefuehrend: eine Einfuegung ab
+    Position N macht ALLE Folgebytes zu "Abweichungen" (R106: 243).
+    Deshalb wird in Praefix / Mitte / Suffix zerlegt:
+      - shift > 0 : in der Quelle steht mehr als geliefert (Loeschung)
+      - shift < 0 : in der Quelle steht weniger (Einfuegung)
+      - shift = 0 : reine Ersetzung, dann zaehlen Einzelbytes
+    """
+    import base64 as _b64
+    import hashlib as _h
+    g = _b64.b64decode(geliefert_b64)
+    q = quelle
+    n = min(len(g), len(q))
+    p = 0
+    while p < n and g[p] == q[p]:
+        p += 1
+    s = 0
+    while s < n - p and g[-1 - s] == q[-1 - s]:
+        s += 1
+    g_mitte = g[p:len(g) - s]
+    q_mitte = q[p:len(q) - s]
+    return {
+        "laenge_geliefert": len(g),
+        "laenge_quelle": len(q),
+        "sha_geliefert": _h.sha256(g).hexdigest(),
+        "sha_quelle": _h.sha256(q).hexdigest(),
+        "praefix_identisch": p,
+        "suffix_identisch": s,
+        "shift": len(q_mitte) - len(g_mitte),
+        "quelle_mitte": q_mitte,
+        "geliefert_mitte": g_mitte,
+        "identisch": g == q,
+    }
+
+
 def main(argv: list[str]) -> int:
     if len(argv) == 2 and argv[0] == "--self-check":
         e = json.loads(Path(argv[1]).read_text(encoding="utf-8"))
