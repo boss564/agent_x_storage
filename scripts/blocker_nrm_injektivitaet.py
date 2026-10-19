@@ -39,35 +39,50 @@ def main() -> int:
         print("Blocker fuer Frist NRM bleibt offen — Probe nicht ausfuehrbar.")
         return 2
 
+    # §A-ZZZZ212 (Runde 92): die Achse ist DISTINKTE NORMALFORMEN, nicht
+    # Zeilen. i.i.d. Zeilen sind bei geclusterten Stroemen eine falsche
+    # Annahme — 1000 Zeilen derselben Sekunde sind EINE Gelegenheit.
     from einwurf_waechter import digest
-    hashes: dict[str, str] = {}
+    hashes: dict[str, tuple[str, str]] = {}   # normform -> (roh, quelle)
     kollisionen = []
+    zeilen = 0
     for nr, zeile in enumerate(STROM.read_text(encoding="utf-8").splitlines(), 1):
         if not zeile.strip():
             continue
-        h = digest(zeile)
-        if h in hashes and hashes[h] != zeile:
-            kollisionen.append((nr, hashes[h][:40], zeile[:40]))
-        hashes[h] = zeile
+        zeilen += 1
+        h = digest(zeile)                     # die Normalform
+        if h in hashes and hashes[h][0] != zeile:
+            kollisionen.append((nr, hashes[h][0][:40], zeile[:40]))
+        else:
+            hashes.setdefault(h, (zeile, "_"))
     if kollisionen:
         print(f"WIDERLEGT: {len(kollisionen)} Kollisionen")
         for nr, a, b in kollisionen[:5]:
             print(f"  Zeile {nr}: {a!r} != {b!r}")
         return 1
-    # §A-ZZZZ206 (Runde 91): die Schwelle ist ABGELEITET, nicht gesetzt.
-    # Bis R91 stand hier `MINDESTENS = 1000` — eine magische Zahl, die
-    # fuer N=1e8 um Faktor 1.4 zu klein war und aus dem Bauch stammte.
-    # Jetzt: n = ceil(sqrt(2 * N * ln(1/(1-alpha)))) aus dem Vertrag.
+    # §A-ZZZZ206/212: die Schwelle folgt aus dem FORMAT-Raum (N_eff), weil
+    # Verletzungen an Formatgrenzen liegen — nicht aus der Sekundenzahl.
     import json as _json
     _v = _json.loads((SCRIPTS / "waechter_vertrag.json").read_text(
         encoding="utf-8"))["schwellen_herleitung"]
     import math as _math
+    _N = _v["N_herleitung"].get("N_eff")
+    _a = _v["alpha"]
+    if not _N:
+        # §A-ZZZZ213 (Runde 92): N ist NICHT hergeleitet. Dann ist die
+        # Probe nicht entscheidbar — und "gruen mit 3 Zeilen" waere die
+        # Gelegenheits-Falle tiefer (N_eff=36 ergab n=1).
+        print("UNBEWIESEN: N (Normalform-Raum) ist nicht hergeleitet "
+              f"({len(hashes)} distinkte Normalformen gelesen). "
+              "Die Schwelle hat die richtige Form, aber keinen gueltigen "
+              "Eingang — ein zu kleiner Raum macht jede Probe gruen.")
+        return 2
     MINDESTENS = _math.ceil(_math.sqrt(
-        2.0 * _v["N"] * _math.log(1.0 / (1.0 - _v["alpha"]))))
+        2.0 * _N * _math.log(1.0 / (1.0 - _a))))
     if len(hashes) < MINDESTENS:
-        print(f"UNBEWIESEN: {len(hashes)} Zeilen < {MINDESTENS} "
-              "(n aus N und alpha) — gruen aus Mangel an Gelegenheit, "
-              "nicht aus Beweis")
+        print(f"UNBEWIESEN: {len(hashes)} distinkte Normalformen < "
+              f"{MINDESTENS} (n aus N_eff={_N}, alpha={_a}; {zeilen} Zeilen "
+              "gelesen) — gruen aus Mangel an Gelegenheit, nicht aus Beweis")
         return 2
     print(f"BESTANDEN: {len(hashes)} Zeilen, 0 Kollisionen")
     return 0

@@ -40,13 +40,21 @@ def main() -> int:
         neu = f" -> {v['neuer_termin']}" if v.get("neuer_termin") else ""
         print(f"  {k}: {v['endzustand']}{neu}")
     # §A-ZZZZ207: jede Suite-Zahl liest aus EINER Quelle (zaehlweise).
+    # §A-ZZZZ214 (Runde 92): die Zaehlweise zaehlt TESTS, nicht OBLIGATIONEN.
+    # "32/32 gruen" neben vier unbeauftragten Posten suggeriert Gesamtstand.
+    # Jetzt stehen beide Zahlen in derselben Zeile — mit ihrer Einheit.
     _zw = d.get("zaehlweise", {})
+    _ext = d.get("externes_buch", {}).get("posten", [])
+    _offen_ext = [p for p in _ext
+                  if not p.get("eigentuemer")]
     print(f"\nStand: {_stand} | Version: v{d['_version']} | Instanzen: "
           f"{len(d['bringschuld']['instanzen'])} | Ledger: "
           f"{len(d['versions_ledger'])}")
-    print(f"Zaehlweise: {_zw.get('n_code')} (Code) + "
+    print(f"Tests:      {_zw.get('n_code')} (Code) + "
           f"{_zw.get('n_nur_vertrag')} (nur Vertrag) = "
           f"{_zw.get('n_gesamt')} — aus test_zaehlweise.py")
+    print(f"Obligationen: {len(_ext)} extern, davon {len(_offen_ext)} ohne "
+          f"Eigentuemer — aus test_externes_gate.py")
     return 0
 
 

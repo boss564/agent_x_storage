@@ -1,5 +1,5 @@
 {
-  "_version": 14,
+  "_version": 15,
   "_zweck": "Maschinenlesbarer Vertrag des Einwurf-Waechters. Single source of truth fuer Repo und externe Ingestion. Wer hier eine Zeile aendert, aendert das Tor ausserhalb dieses Repos mit.",
   "_stand": "Runde 84 (2026-10-18)",
   "_geltung": "Der Runner (scripts/vertrags_runner.py) importiert diese Datei; die externe Ingestion MUSS sie einlesen. Solange sie es nicht tut, zertifiziert N/N einen Vertrag, den draussen niemand benutzt.",
@@ -470,10 +470,12 @@
     "ORDNUNG": {
       "gesetzt": "R89",
       "frist": "R91",
-      "endzustand": null,
+      "endzustand": "bewiesen",
       "blocker": "Ohne Entscheidung, ob die Engine den Produzenten kontrolliert, ist eine Sequenznummer (Variante b) nicht bewertbar; ohne Transportvertrag ist FIFO (Variante a) nicht pruefbar.",
       "beweisversuch": "R89: die drei Varianten (a FIFO, b Sequenznummer, c Batch) gegeneinander gestellt. Sie sind NICHT aequivalent — (a) verlagert in den Transport, (b) aendert das Eingabeformat, (c) widerspricht R87 (frieren). Eine Wahl ohne Messung waere geraten.",
-      "befund": "Norm 1 (Anker vorgaenger) und Norm 4 (Ordnung nicht garantiert) sind strukturell inkonsistent; erst=ZUSTELLEN erzwingt die Annahme, die Norm 4 verbietet."
+      "befund": "Norm 1 (Anker vorgaenger) und Norm 4 (Ordnung nicht garantiert) sind strukturell inkonsistent; erst=ZUSTELLEN erzwingt die Annahme, die Norm 4 verbietet.",
+      "beweis": "R92: Norm 1 und Norm 4 sind NICHT inkonsistent — sie sprechen ueber verschiedene Dinge. Norm 1 sagt: derselbe Inhalt traegt denselben Anker (digest ist zeitstempel-frei). Norm 4 sagt: die REIHENFOLGE im Strom ist nicht garantiert. Der Widerspruch entstand nur, weil der Emittent eine Reihenfolge kannte ('STROM zuerst'). Mit record_grammatik (jeder Record traegt sein Praefix) ist die Position semantisch irrelevant — gemessen ueber alle Permutationen in test_record_grammatik.py. `erst=ZUSTELLEN` bleibt korrekt: es gilt fuer den Inhalt, nicht fuer die Position.",
+      "aufgeloest_in": "R92"
     }
   },
   "mock_selbstreferenz": {
@@ -768,6 +770,15 @@
         "Die Schwelle ist hergeleitet: n=1418 aus N=1e8, alpha=0.01. Die vorige 1000 war um 1.4x zu klein.",
         "Zaehlweise: 31 Suiten mit Code-Bezug. Die R91 genannten 24/26 waren zwei Ad-hoc-Filter, keine Messung.",
         "v12/v13/v14 sind im Ledger, aber die Prosa nennt sie nicht — das bleibt offen bis zur naechsten Runde, die sie zitieren muss."
+      ],
+      "stand_r92": [
+        "EXT-Buch: 'keiner' ist jetzt verboten. Alle vier Posten sind ENTSCHEIDUNG mit Begruendung + Wiedervorlage 2026-11-02. Das Gate ist GRUEN, weil die Form gueltig ist — NICHT weil ein Eigentuemer existiert. Gate-Gruen bedeutet hier 'ehrlich unbeauftragt', nicht 'erledigt'.",
+        "Stopp-Bedingung beschlossen: solange das Gate rot ist, keine neue interne Maschinerie. Sie greift heute nicht (Gate gruen), aber sie ist die Regel fuer den naechsten roten Zustand.",
+        "Record-Grammatik: jeder Record traegt ein Typ-Praefix. Der Vorrang 'STROM zuerst' ist BANDAGE, nicht Norm. Ein Praefix-Parser ist reihenfolge-unabhaengig (gemessen ueber alle Permutationen).",
+        "Ledger-Provenienz: Hash-Verkettung. v13 ist als rekonstruiert markiert. Ein Einschub bricht die Kette strukturell — aber nicht den Zeitpunkt; Git-History bleibt der einzige Zeuge.",
+        "Schwelle: die MAGIE IST NICHT GEWANDERT, sie war im Modell. N_eff=36 ergab n=1 — ein zu kleiner Raum macht jede Probe gruen. N_eff ist deshalb None, die Probe Exit 2. Die Herleitung hat Form, aber keinen gueltigen Eingang.",
+        "Die Krankheit hat eine fuenfte Auspraegung (EXT-Buch). Der Fix ist ein Gate, das rot meldet. Es kann keinen Namen erzeugen — das ist der Punkt, an dem der Zaun endet.",
+        "Stopp: diese Runde hat trotz Stopp-Bedingung einen normativen Satz gebaut (record_grammatik). Die Bedingung greift erst bei rotem Gate; das Gate war gruen. Das ist die Luecke — die Bedingung haette VOR dem Bau greifen muessen."
       ]
     }
   },
@@ -950,79 +961,93 @@
       "version": 2,
       "commit": "9caad516",
       "runde": 82,
-      "aenderung": "Messachse schluessel=wert, Verantwortliche mit Fristen"
+      "aenderung": "Messachse schluessel=wert, Verantwortliche mit Fristen",
+      "vorgaenger_hash": "7cc2868f4d5b34a9bcc25fb7b11266d0ca244407a0567c3b26e9f9ca660f7ef1"
     },
     {
       "version": 3,
       "commit": "e3d9fd49",
       "runde": 83,
-      "aenderung": "Aggregation _SCHWERE, Schema-Invarianz 7/7 (Aktionsaenderung 3/4 ohne Versionsnennung — Befund R85)"
+      "aenderung": "Aggregation _SCHWERE, Schema-Invarianz 7/7 (Aktionsaenderung 3/4 ohne Versionsnennung — Befund R85)",
+      "vorgaenger_hash": "252ee800daf117b561254714da2a919e022e8f594904207bdcd2e1106ec01dc8"
     },
     {
       "version": 4,
       "commit": "d9a3f23e",
       "runde": 84,
-      "aenderung": "Zeilen-Identitaet ZEILE n, Exit 2 Meta-Achse, Ausgabe-Grammatik"
+      "aenderung": "Zeilen-Identitaet ZEILE n, Exit 2 Meta-Achse, Ausgabe-Grammatik",
+      "vorgaenger_hash": "807a230a79373b8d64ef0defa1d90bc93460b04f52d6e63fdefba8324edb580c"
     },
     {
       "version": 5,
       "commit": "2a0fac3a",
       "runde": 85,
-      "aenderung": "Zeiger inhaltlich ZEILE sha, exit_aus_zeilen, WIEDERHOLT, Eingabe-Grammatik — Version im Bericht NIE genannt (Befund R87)"
+      "aenderung": "Zeiger inhaltlich ZEILE sha, exit_aus_zeilen, WIEDERHOLT, Eingabe-Grammatik — Version im Bericht NIE genannt (Befund R87)",
+      "vorgaenger_hash": "4e2e12cafd570904246973576ac237a21a7e5b55cb296b611ad07e25ce2b4490"
     },
     {
       "version": 6,
       "commit": "3e77f42f",
       "runde": 86,
-      "aenderung": "DEDUP-Regeln rang/aktion, escape(), AUFRUF-Union, Aktions-Vertrag"
+      "aenderung": "DEDUP-Regeln rang/aktion, escape(), AUFRUF-Union, Aktions-Vertrag",
+      "vorgaenger_hash": "282cb4357284071a7304d329b0d437387246d5664a86acfe7528a07774dc78f9"
     },
     {
       "version": 7,
       "commit": "(diese Runde)",
       "runde": 87,
-      "aenderung": "DEDUP ohne Katalog (erst/rest_art/bei_gleich/bei_ungleich), Kreuz-Record-Invarianz, Harness-Zaun, N-Laeufe-Mutation, Versionen-Ledger"
+      "aenderung": "DEDUP ohne Katalog (erst/rest_art/bei_gleich/bei_ungleich), Kreuz-Record-Invarianz, Harness-Zaun, N-Laeufe-Mutation, Versionen-Ledger",
+      "vorgaenger_hash": "5067d0531f921bbf606a6dfac534c33ef56588134091fb3f40b9d38ec8152cdd"
     },
     {
       "version": 8,
       "commit": "(diese Runde)",
       "runde": 88,
-      "aenderung": "Konsumenten-Semantik als Norm (Anker/Drittfall/Vorrang/Ordnung/Default), totaler TS-Vergleich, Frist-Instrument, Konsumenten-Kongruenztest"
+      "aenderung": "Konsumenten-Semantik als Norm (Anker/Drittfall/Vorrang/Ordnung/Default), totaler TS-Vergleich, Frist-Instrument, Konsumenten-Kongruenztest",
+      "vorgaenger_hash": "cfd4a2473af91a554141fe3679533be2439b4b0db4ad492f19710f714d2caec7"
     },
     {
       "version": 9,
       "commit": "(diese Runde)",
       "runde": 89,
-      "aenderung": "Unwissen ist kein Etikett (bei_unlesbar=UNGEPRUEFT, ZEITSTEMPEL-UNLESBAR-Eimer), die boolesche Falle mit-geschlossen (vergleich_pflicht), Frist-Gate mit Blocker+Beweisversuch, Exit-vor-Stdout-Norm, PYTHONHASHSEED-Varianz, normative_quelle deklariert"
+      "aenderung": "Unwissen ist kein Etikett (bei_unlesbar=UNGEPRUEFT, ZEITSTEMPEL-UNLESBAR-Eimer), die boolesche Falle mit-geschlossen (vergleich_pflicht), Frist-Gate mit Blocker+Beweisversuch, Exit-vor-Stdout-Norm, PYTHONHASHSEED-Varianz, normative_quelle deklariert",
+      "vorgaenger_hash": "87d72fd33c7054c10360455cec99e3552432bb48970e9520e24865f6785677f5"
     },
     {
       "version": 10,
       "runde": 90,
       "aenderung": "Reorder ist im Payload kein Widerspruch (zustell_zusage: ZUSTELLEN garantiert Inhalt, nicht Original-Zeitstempel, gemessen 7/7). Exit-Taxonomie 0-4 normiert (stdout_ist_bericht je Code, Exit 4 = Bericht mit Unbeurteilbarem, NICHT Prozessausfall, gemessen 7/7). vergleich_schnittstelle sprach-agnostisch (Wahrheitstafel, Nachbau aus Prosa deckungsgleich, 10/10). art= bleibt Ereignis-Ontologie: unlesbar -> art=UNBEURTEILBAR;grund=ZEITSTEMPEL-UNLESBAR. version_doktrin: Ledger ist einzige Versionswahrheit.",
-      "gebucht": "R90 Befunde 2,3,4,5,7"
+      "gebucht": "R90 Befunde 2,3,4,5,7",
+      "vorgaenger_hash": "63c871343178ef146bcde6ee091e337756e8bd289f958eb88da95249fd98d4f7"
     },
     {
       "version": 11,
       "runde": 90,
       "aenderung": "Typisierter Blocker (blocker_nrm_injektivitaet.py, Exit 2=UNBEWIESEN), Gelegenheits-Norm, Hash-Volllaenge im Record, Paar-Zaehlung n-1, Vier-Eimer-Invariante als Normsatz, Vokabular-Abbildung 7 Ebenen, Baseline-Determinismus separat bewiesen. Waechter-Suiten gezaehlt: 24 (R89 sagte 27).",
-      "gebucht": "R90 Befunde 6,7,8"
+      "gebucht": "R90 Befunde 6,7,8",
+      "vorgaenger_hash": "40b71cdf4217778891060d1a47582d5a2d017095a62352b71515ba5430a61588"
     },
     {
       "version": 12,
       "runde": 91,
       "aenderung": "Bedarfs-Inventur (zustell_zusage = PROTOKOLL, kein Leser im Baum), substanzklassen (MESSUNG/ABLEITUNG/ENTSCHEIDUNG mit Belegpflicht), per-Code-stdout-Inhalt (Exit 3 muss Fehlerzeile tragen), Schwellen-Herleitung, Gesamtzahl aus einer Quelle.",
-      "gebucht": "R91 Befunde 2,3,4,5"
+      "gebucht": "R91 Befunde 2,3,4,5",
+      "vorgaenger_hash": "630575423d1a7aadc6386e516b06e84add4722bfbe9b70436858836f10e20b3f"
     },
     {
       "version": 13,
       "runde": 91,
       "aenderung": "schwellen_herleitung: n = ceil(sqrt(2*N*ln(1/(1-alpha)))) = 1418 aus N=1e8, alpha=0.01. Die vorige 1000 war um 1.4x zu klein. Probe liest die Schwelle statt sie zu setzen.",
-      "gebucht": "R91 Befund 5"
+      "gebucht": "R91 Befund 5",
+      "vorgaenger_hash": "eee1f2e6f35e575b2058ba4c6c6a8925e845d453473a510ddec70041932a1238",
+      "rekonstruiert": true
     },
     {
       "version": 14,
       "runde": 91,
       "aenderung": "externes_buch (EXT-1..4, Eigentuemer keiner), zaehlweise (31 aus einer Quelle), per-Code-stdout-Inhalt (Exit 3 STROM-Zeile), schwellen_herleitung (n=1418).",
-      "gebucht": "R91 Befunde 3,4,5,7"
+      "gebucht": "R91 Befunde 3,4,5,7",
+      "vorgaenger_hash": "4af9baa0f32ffcc45769665d317a60fa1ff8cd7736ba9ec0ba7b7d76d09c3773"
     },
     {
       "version": "8-verworfen",
@@ -1041,6 +1066,13 @@
       "commit": "—",
       "runde": 88,
       "aenderung": "VERWORFEN: bei_unlesbar=WIEDERHOLT. Grund: WIEDERHOLT heisst seit R85 'bewusste Neusendung, BELEGT durch anderen Zeitstempel'. Ein unlesbarer TS belegt nichts. Steht im Ledger, weil es plausibel klingt ('markieren ist reversibel') und ohne den Eintrag neu erfunden wuerde."
+    },
+    {
+      "version": 15,
+      "runde": 92,
+      "aenderung": "externes_gate ('keiner' verboten, ENTSCHEIDUNG+Wiedervorlage, Stopp-Bedingung), record_grammatik (Praefix statt Reihenfolge), ledger_provenienz (Hash-Kette, v13 rekonstruiert), schwelle_eingaenge (N_eff=None, i.i.d. verletzt), Kopfzeile mit EXT-Zaehler.",
+      "gebucht": "R92 Befunde 2,3,4,5,6,7",
+      "vorgaenger_hash": "6c08161dd9f57011013f35a53579fb2e904440381d520f75a4a7158459ba6482"
     }
   ],
   "kreuz_record_invarianten": {
@@ -1182,7 +1214,7 @@
     "substanz": "MESSUNG",
     "messung_skript": "test_exit_taxonomie.py",
     "rueckwirkend_r88": "Mit dieser Norm ist die R88-Diagnose praeziser: der Test las stdout nicht ZU FRUEH — der Waecher EMITTIERTE bei Exit 3 eine Nullachse ohne Ursache. R88 fixte den relativen Pfad (Harness), nicht den Vertrag. Jetzt traegt stdout die Ursache (STROM-Zeile), und stderr bleibt Diagnose fuer Menschen, nicht Quelle fuer Konsumenten.",
-    "vorrang_strom_zeile": "Die STROM-Zeile steht VOR der Achse, weil die Achse mit `;` endet und eine nachgestellte Zeile an sie ankleben wuerde. Ein Konsument, der zeilenweise liest, findet sie an Zeile 1."
+    "vorrang_strom_zeile": "BANDAGE, nicht Norm: die STROM-Zeile steht im Emittenten VOR der Achse, weil das lesbarer ist. Ein Parser, der sich darauf verlaesst, ist nicht konform — die verbindliche Regel ist record_grammatik: jeder Record traegt sein Praefix, die Position ist nicht noetig. Sobald ein zweiter Emittent existiert, darf der Vorrang fallen, ohne dass ein Parser bricht."
   },
   "zustell_zusage": {
     "satz": "ZUSTELLEN garantiert den INHALT der Meldung (zeitstempel-frei gehasht), NICHT den Zeitstempel der urspruenglichen Meldung.",
@@ -1313,19 +1345,58 @@
     "befund": "Die 1000 war nicht nur unhergeleitet, sondern um 1.4x zu klein. Eine 1000-Zeilen-Probe waere bei N=1e8 dauerhaft gruen aus Mangel an Gelegenheit — dieselbe Krankheit wie 3 Zeilen, nur groesser.",
     "status_regel": "Solange n nicht erreicht ist, ist die Probe UNBEWIESEN (Exit 2). Sie ist nie BESTANDEN unterhalb von n — und nie BESTANDEN durch eine Zahl, die nicht aus N und alpha folgt.",
     "test": "test_schwelle_herleitung.py",
-    "anlass": "R91 Befund 5: magische Zahl statt Ableitung."
+    "anlass": "R91 Befund 5: magische Zahl statt Ableitung.",
+    "N_herleitung": {
+      "formel": "N_eff = |trennzeichen| x |feldbreiten| x |jahres-auswahl| — der Raum, in dem NORMALISIERUNGEN kollidieren koennen, nicht der Raum der Sekunden.",
+      "trennzeichen": [
+        ".",
+        "-",
+        "/",
+        "_"
+      ],
+      "feldbreiten": [
+        "1",
+        "2",
+        "4"
+      ],
+      "jahres_auswahl": [
+        "JJJJ",
+        "JJ",
+        "none"
+      ],
+      "N_eff": null,
+      "warum": "Injektivitaetsverletzungen entstehen an FORMAT-GRENZEN ('01.02.' vs '1.2.' vs '2024-02-01'), nicht bei zufaelligen Sekunden. Der Raum der Sekunden (1e8) ist der falsche Raum: dort liegt die Kollision nie.",
+      "folge": "N_eff=36 ist VIEL kleiner als 1e8. Die Probe wird bei diesem Raum realistisch, weil Verletzungen genau hier liegen.",
+      "N_eff_zu_klein_befund": "N_eff=36 ergibt n=1 — die Probe waere mit 3 Zeilen 'BESTANDEN'. Das ist die Gelegenheits-Falle tiefer: ein zu klein geschaetzter Raum macht jede Probe gruen. 36 zaehlt Formate, nicht WERTE. Zwei verschiedene Zeitpunkte im GLEICHEN Format normalisieren verschieden — der Raum ist |Formate| x |Werte|, nicht |Formate|.",
+      "N_eff_korrektur": {
+        "einsicht": "Injektivitaet ist ueber (Format, Wert)-Paare zu pruefen, nicht ueber Formate allein. Zwei Zeitstempel kollidieren, wenn sie nach Normalisierung GLEICH sind — das haengt am Wert.",
+        "folge": "N_eff=36 ist KEIN gueltiger Eingang. Die Probe mit N_eff=36 ist nicht ausfuehrbar im Sinne der Frage.",
+        "status": "OFFEN — der richtige Raum ist nicht hergeleitet. Bis dahin bleibt EXT-3 offen und die Probe UNBEWIESEN, nicht BESTANDEN."
+      }
+    },
+    "alpha_herleitung": {
+      "frage": "Wer traegt das Restrisiko von alpha? Das ist keine Frage an den Autor.",
+      "stelle": "Risikotraeger (Betrieb/Audit), nicht der Entwickler",
+      "status": "anforderung",
+      "default": "1% ist eine PLAUSIBLE Zahl, keine Anforderung. Sie steht hier als Platzhalter fuer den Risikotraeger — nicht als Policy des Autors."
+    },
+    "annahme_verletzt": true,
+    "modell": "Geburtstagsschranke setzt uniforme, unabhaengige Ziehungen voraus. Der reale Strom ist geclustert (Bursts, gleiche Sekunde) und Verletzungen sind an Formatgrenzen LOKALISIERT. Damit ist die Schranke weder Garantie noch Schaetzung.",
+    "status": "Floor, keine Garantie: n sagt, ab wann eine Verletzung mit 1-alpha SICHTBAR waere, wenn Ziehungen uniform waeren. Es sagt nicht, dass keine Verletzung vorliegt.",
+    "bleibt_offen": "Die Schwellen-Herleitung hat jetzt die richtige FORM, aber der Raum ist nicht hergeleitet. R91 sagte 'Magie von 1000 auf N und alpha gewandert'. R92 zeigt: N selbst war zu klein geschaetzt, und mit dem korrekten N ist n=1. Die Magie ist nicht gewandert — sie war die ganze Zeit im Modell."
   },
   "zaehlweise": {
     "regel": "Es gibt EINE Zaehlung (test_zaehlweise.py). Jede Suite-Zahl im Bericht liest von dort. Zwei Zahlen ohne Bruecke sind die 291/283-Krankheit.",
     "definition_code": "test_*.py, die waechter_vertrag.json ODER einwurf_waechter.py ODER konsumenten_semantik referenzieren",
     "definition_nur_vertrag": "test_*.py, die NUR waechter_vertrag.json referenzieren (kein Code)",
-    "n_code": 32,
+    "n_code": 36,
     "n_nur_vertrag": 0,
-    "n_gesamt": 32,
+    "n_gesamt": 36,
     "nur_vertrag": [],
     "drift_r91": "R91 nannte 24 (rg-Filter) und 26/26 (Lauf). Beide waren Ad-hoc-Zaehlungen mit unterschiedlichen Filtern. Die EINE Zaehlung nennt 31 — der Unterschied zu 24 ist der Filter, nicht das Repo.",
     "anlass": "R91 Befund 3: 24 vs 26 im selben Bericht.",
-    "selbstreferenz": "Die Zaehlweise zaehlt test_zaehlweise.py mit — sie ist selbst eine Vertrags-Suite. Das ist korrekt, aber es macht die Zahl von der Existenz des Zaehlers abhaengig: 31 vor dem Zaehler, 32 danach. Beide sind wahr fuer ihren Zeitpunkt; nur EINE Zaehlung darf gelten."
+    "selbstreferenz": "R92: die Zaehlweise zaehlt TESTS, nicht Obligationen. 36 Suites gruen + 4 externe Posten ohne Eigentuemer stehen in derselben Kopfzeile (kopfzeile.py). '36/36' ist ein Befund ueber den Pruef-Apparat, kein Gesamtstand.",
+    "partition_grenze": "'Code / nur Vertrag' ist nicht bewiesen exhaustiv. Governance-Artefakte (EXT-Buch, Klausel, Bedarfs-Inventur, Schwelle-Herleitung, Record-Grammatik, Ledger-Provenienz) liegen AUSSERHALB der Partition. Die Zaehlweise zaehlt die Maschinerie, die sie zaehlt — das ist als Grenze gebucht, nicht als Luecke versteckt."
   },
   "externes_buch": {
     "zweck": "Die Bringschuld-Maschine (Frist/Blocker/Gate) funktioniert fuer SELBSTverifizierbares. Fuer FREMdverifizierbares fehlt das Aequivalent. Dieses Buch fuehrt die Posten, die kein Autor selbst schliessen kann.",
@@ -1339,7 +1410,10 @@
         "akzeptanz": "Ein Konsument in einer anderen Sprache baut VERGLEICH aus der Tafel nach und liest Exit 4 korrekt, ohne die Python-Tests zu kennen.",
         "status": "offen",
         "seit": "R86",
-        "bemerkung": "Seit 6 Runden als Bestand gefuehrt, nie als Instanz. Das ist der Kern der strukturellen Grenze."
+        "bemerkung": "Seit 6 Runden als Bestand gefuehrt, nie als Instanz. Das ist der Kern der strukturellen Grenze.",
+        "klassifikation": "ENTSCHEIDUNG",
+        "wiedervorlage": "2026-11-02",
+        "begruendung_ohne_eigentuemer": "Der Autor kann einen fremden Konsumenten nicht bestellen. Ein Test in eigener Hand ist per Definition K1/K2. Nur eine Stelle ausserhalb des Repos kann EXT-1 schliessen; sie ist nicht bekannt, weil dieses Repo keine Aussenbeziehungen fuehrt."
       },
       {
         "id": "EXT-2",
@@ -1349,7 +1423,10 @@
         "akzeptanz": "Inventur ueber den echten Konsumenten: liest er den Original-TS? Wenn ja, Mitzeichnung von zustell_zusage.",
         "status": "offen",
         "seit": "R91",
-        "bemerkung": "bedarfs_inventur deckt nur diesen Baum. Extern unsichtbar."
+        "bemerkung": "bedarfs_inventur deckt nur diesen Baum. Extern unsichtbar.",
+        "klassifikation": "ENTSCHEIDUNG",
+        "wiedervorlage": "2026-11-02",
+        "begruendung_ohne_eigentuemer": "Der Downstream existiert nicht in diesem Baum (Inventur: kein Leser). Ohne einen realen Empfaenger ist der Bedarf nicht messbar — die Inventur ist in-tree TRUE und global unbeweisbar."
       },
       {
         "id": "EXT-3",
@@ -1359,7 +1436,10 @@
         "akzeptanz": "blocker_nrm_injektivitaet.py liefert Exit 0 oder 1 (nicht 2).",
         "status": "offen",
         "seit": "R90",
-        "bemerkung": "Fixture hat 3. n=1418 ist hergeleitet, nicht gesetzt."
+        "bemerkung": "Fixture hat 3. n=1418 ist hergeleitet, nicht gesetzt.",
+        "klassifikation": "ENTSCHEIDUNG",
+        "wiedervorlage": "2026-11-02",
+        "begruendung_ohne_eigentuemer": "Der Harness-Zaun verbietet Live-Transkripte als Testquelle (zaun_scope). Ein eingefrorener Strom >=1418 Zeilen muesste von aussen geliefert werden; der Autor darf ihn nicht aus dem laufenden Betrieb ziehen, ohne den Zaun zu brechen."
       },
       {
         "id": "EXT-4",
@@ -1369,10 +1449,66 @@
         "akzeptanz": "Jemand, der den \"?\"-Bug nicht baute, bestaetigt die drei Ausgaenge aus der Semantik.",
         "status": "offen",
         "seit": "R91",
-        "bemerkung": "Nachbau beweist Reproduzierbarkeit, nicht Korrektheit."
+        "bemerkung": "Nachbau beweist Reproduzierbarkeit, nicht Korrektheit.",
+        "klassifikation": "ENTSCHEIDUNG",
+        "wiedervorlage": "2026-11-02",
+        "begruendung_ohne_eigentuemer": "Die zweite Hand ist per Definition nicht der Autor. Ohne einen benannten Reviewer bleibt die Tafel reproduzierbar, aber unvalidiert (R90 Befund 6)."
       }
     ],
     "grenze": "Vier externe Posten, null Eigentuemer. Das ist der ehrliche Stand: die Maschine hat die interne Bringschuld geschlossen und die externe noch nicht einmal gebucht.",
-    "anlass": "R91 Befund 7 — Selbstverifikation an ihrer Grenze."
-  }
+    "anlass": "R91 Befund 7 — Selbstverifikation an ihrer Grenze.",
+    "gate": {
+      "platzhalter_verboten": true,
+      "platzhalter": [
+        "",
+        "keiner",
+        "keine",
+        "none",
+        "null",
+        "tbd",
+        "offen",
+        "spaeter",
+        "?",
+        "n/a",
+        "niemand",
+        "-"
+      ],
+      "zulaessig": [
+        "(a) Eigentuemer-Objekt {name, datum,} + akzeptanz am Posten",
+        "(b) klassifikation=ENTSCHEIDUNG + begruendung_ohne_eigentuemer + wiedervorlage"
+      ],
+      "warum": "'keiner' sieht wie eine Antwort aus und ist die Abwesenheit einer Antwort — der \"?\"-Sentinel der Governance-Schicht. Ein Feld, dessen Wert die Abwesenheit eines Werts ist, ist kein gebuchter Posten.",
+      "stopp_bedingung": {
+        "regel": "Solange das Gate rot ist (mindestens ein Posten ohne zulaessigen Eigentuemer), wird KEINE neue interne Maschinerie gebaut: kein neuer normativer Satz, keine neue Test-Suite. Sonst waechst der Turm der Selbstbeobachtung, waehrend die Basis fehlt.",
+        "greift_bei": "gate_rot",
+        "ausnahme": "Fixes fuer bereits gebaute Fehler (Regressionen) sind erlaubt — die bauen keine neue Maschinerie."
+      },
+      "grenze": "Das Gate kann pruefen, ob ein Name da ist. Es kann keinen Namen erzeugen. Genau das ist die Bringschuld, die kein Test schliesst — und der Grund, warum es ein Gate ist und keine Suite. (Woertlich: Namen kann es nicht erzeugen.)"
+    }
+  },
+  "record_grammatik": {
+    "regel": "Jeder Record traegt ein TYP-PRAEFIX am Zeilenanfang (STROM/ZEILE/DEDUP/Paare=/AUFRUF). Ein Parser trennt nach Praefix, nicht nach Position. Damit ist die Reihenfolge semantisch irrelevant — kein Emittent kennt eine Version.",
+    "praefixe": [
+      "STROM ",
+      "ZEILE ",
+      "DEDUP ",
+      "Paare=",
+      "AUFRUF "
+    ],
+    "terminator": "jeder Record endet mit ';' — ein fehlendes ';' ist ein Syntaxfehler, kein stiller Feldwechsel",
+    "was_sich_aendert": "R91 verlangte 'STROM zuerst, sonst klebt sie an der Achse'. Das war eine versteckte Reihenfolge-Version im Emittenten — das Spiegelbild des Parser-Bugs aus R88. Jetzt gilt: die Position ist irrelevant; was zaehlt, ist das Praefix.",
+    "vorrang_als_bandage": "exit_taxonomie.vorrang_strom_zeile bleibt als Anzeige-Konvention (STROM zuerst ist lesbarer), ist aber NICHT mehr Norm. Kein Parser darf sich darauf verlassen.",
+    "test": "test_record_grammatik.py",
+    "anlass": "R92 Befund 4."
+  },
+  "ledger_provenienz": {
+    "regel": "Jeder akzeptierte Eintrag traegt sha256(canonical(Vorgaenger)) in `vorgaenger_hash`. Ein Einschub bricht die Kette strukturell.",
+    "canonical": "nur die inhaltlichen Felder (version, runde, aenderung, gebucht, rekonstruiert), nach Schluessel sortiert — sonst haengt der Hash an der Schreibweise.",
+    "rekonstruiert": "Ein Eintrag, der nach seinem Nachfolger geschrieben wurde, traegt `rekonstruiert: true`. Der v13-Fall (R92) ist der erste.",
+    "grenze": "Hash-Verkettung erkennt einen NACHTRAG, nicht den ZEITPUNKT. Wer alle Hashes neu berechnet, erzeugt eine gueltige Kette. Der einzige Schutz ist Git-History — ausserhalb dieses Artefakts.",
+    "test": "test_ledger_provenienz.py",
+    "anlass": "R92 Befund 7: Kontiguitaet erzwungen, Gleichzeitigkeit nicht.",
+    "zwei_passes": "Flags (rekonstruiert) werden VOR dem Hashen gesetzt. Sonst hasht e_n den Zustand von e_(n-1) vor seiner Markierung — ein Bruch, der nicht vom Einschub kommt. Der Test fing genau das beim ersten Lauf."
+  },
+  "messachse_norm": "distinkte_normalformen"
 }

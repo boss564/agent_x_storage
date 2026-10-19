@@ -233,6 +233,11 @@ NO_TEST_SUMMARY: set[str] = {
     "scripts/test_naht_beweis.py",         # 5/5 Konsument auf ungesehenem Strom
     "scripts/test_kreuz_record.py",        # 10/10 Record-Komposition + Exit-Ableitung
     "scripts/test_harness_zaun.py",        # 3/3 kein Test liest Live-Pfad
+    # Runde 92: die Krankheit über die Jurisdiktionsgrenze der Klausel.
+    "scripts/test_record_grammatik.py",    # 6/6 Praefix statt Reihenfolge
+    "scripts/test_externes_gate.py",       # 7/7 'keiner' ist kein Eigentuemer
+    "scripts/test_ledger_provenienz.py",   # 6/6 Hash-Kette, Einschub bricht
+    "scripts/test_schwelle_eingaenge.py",  # 6/6 N_eff offen, i.i.d. verletzt
     # §A-ZZZZ167: Waage ohne Sollwert. Liest den Vertrag ueber explizite
     # Pfade und gibt aus, was drinsteht — die Zahl im Bericht wird hier
     # GENERIERT statt getippt.
