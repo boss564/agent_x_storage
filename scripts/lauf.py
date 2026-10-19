@@ -103,6 +103,55 @@ def bericht(d: dict) -> None:
                 print(f"  {e['datei']:38} {e['letzte'][:70]}")
 
 
+# R98 (Route A): Das Archiv liegt in einem VERSIONIERTEN Pfad.
+# `data/` ist .gitignore:38 — ein Archiv dort waere fluechtig und heilte
+# nur das Ueberschreiben, nicht die Archivierbarkeit.
+PROTOKOLL = SCRIPTS.parent / "protokoll"
+VERTRAG = SCRIPTS / "waechter_vertrag.json"
+
+
+def _provenienz(modus: str) -> dict:
+    """Herkunft, ohne die ein Archiv eine Zahlenkolonne ist (R98 Bedingung 4)."""
+    def g(*a: str) -> str:
+        try:
+            return subprocess.run(["git", *a], capture_output=True,
+                                  text=True, cwd=SCRIPTS.parent).stdout.strip()
+        except OSError:
+            return ""
+    try:
+        z = json.loads(VERTRAG.read_text(encoding="utf-8"))
+        zw = {"n_code": z.get("zaehlweise", {}).get("n_code"),
+              "n_gesamt": z.get("zaehlweise", {}).get("n_gesamt"),
+              "version": z.get("_version")}
+    except (OSError, ValueError):
+        zw = {}
+    return {
+        "commit_hash": g("rev-parse", "HEAD"),
+        "commit_dirty": bool(g("status", "--porcelain")),
+        "modus": modus,
+        "zeitstempel_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "zaehlweise": zw,
+        "querverweis": "lauf_R96_ergebnis",
+    }
+
+
+def archivieren(d: dict) -> Path:
+    """R98: schreibt nach protokoll/ (versioniert), ISO-Timestamp mit Sekunden."""
+    PROTOKOLL.mkdir(parents=True, exist_ok=True)
+    ts = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
+    ziel = PROTOKOLL / f"vollauf_{ts}.json"
+    n = 2
+    while ziel.exists():  # Zweitlauf in derselben Sekunde — keine Kollision
+        ziel = PROTOKOLL / f"vollauf_{ts}_{n}.json"
+        n += 1
+    d["provenienz"] = _provenienz(d.get("modus", "?"))
+    d["zerlegung"] = dict(sorted(Counter(e["klasse"] for e in d["erg"]).items()))
+    d["exitcodes"] = {e["datei"]: e["exit"] for e in d["erg"]}
+    ziel.write_text(json.dumps(d, indent=1, ensure_ascii=False),
+                    encoding="utf-8")
+    return ziel
+
+
 def main(argv: list[str]) -> int:
     voll = "--voll" in argv
     k = zaehle()
@@ -116,6 +165,8 @@ def main(argv: list[str]) -> int:
                         encoding="utf-8")
     bericht(d)
     print(f"\nArtefakt: {ERGEBNIS}")
+    if voll:
+        print(f"Archiv:   {archivieren(json.loads(ERGEBNIS.read_text(encoding='utf-8')))}")
     return 0 if not any(e["klasse"] in ("GEFALLEN", "BEENDET")
                         for e in d["erg"]) else 1
 
