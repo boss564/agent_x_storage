@@ -5933,6 +5933,8 @@ SKRIPT_OHNE_LAUF: set[str] = {
     "scripts/test_aufrufbaum.py",       # 4/4 BESTAND vs SPEKULATIV
     # R96/R97: die Mess-Instrumente. Kein Produktionslauf, kein Produktziel.
     "scripts/lauf.py",              # Lauf aus der EINEN Zaehlquelle
+    "scripts/zaehlung.py",          # Assurance vs. Charakterisierung, getrennt
+    "scripts/beweis.py",            # #14 Beleg-Erzeugung (cite/publish)
     "scripts/beweis.py",            # #14 hash-verankerte Vollzitate
     "scripts/aussen.py",            # 94 aussen enumerieren/partionieren
     "scripts/zerlege_rot.py",       # "rot" in Kategorien mit Einheit

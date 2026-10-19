@@ -18,11 +18,8 @@ config/news_watchdog.env
 logs/
 exports/
 cache/
-*.jsonl
-
-# Beweiskanal #14: Ausnahme NACH dem Glob — letzte Regel gewinnt.
-# Ein ignoriertes Append-Only ist kein Append-Only.
-!scripts/beweis_ledger.jsonl
+# *.jsonl-Glob ENTFERNT (R104): Wahrheits-Dateien haengen nicht an einer
+# Negationskette. Was getrackt wird, wird explizit getrackt.
 
 # IDE
 .vscode/
