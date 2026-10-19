@@ -1,0 +1,21 @@
+{
+  "id": "R97",
+  "typ": "EINMALIGE_AUSNAHME_VON_STOPP_BEDINGUNG",
+  "autorisiert_von": "externer Auftraggeber (R97 Kurzurteil §2/§3)",
+  "zweck": "Instrument-Reparatur: die Messung an die EINE Zaehlquelle verdrahten (R96-9. Auspraegung).",
+  "kriterium": {
+    "keine_produktionsfaehigkeit": true,
+    "kein_neues_testziel": true,
+    "kein_neuer_abnehmer": true,
+    "inhaltspruefung_R97": "Importe nur stdlib + test_zaehlweise; kein Zugriff auf agents_b2g/services/shadow_contract; test_lauf_eine_quelle prueft lauf.py-Mechanik, kein Produktziel."
+  },
+  "dateien_geschlossen": [
+    "scripts/lauf.py",
+    "scripts/aussen.py",
+    "scripts/zerlege_rot.py",
+    "scripts/test_lauf_eine_quelle.py"
+  ],
+  "nicht_gedeckt": "Jede weitere Datei. Eine neue Ausnahme braucht eine NEUE ENTSCHEIDUNG, nie eine Berufung auf 'Instrument-Reparatur' (10. Auspraegung: Ausnahme darf nicht Kategorie werden).",
+  "verbraucht_mit_commit": true,
+  "pflicht_output": "Ask-Liste: fuer EXT-1..4 je wen/was/wann (R97 §4). Ohne sie war die Ausnahme Prokrastination."
+}

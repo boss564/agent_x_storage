@@ -72,6 +72,47 @@ def neue_tests(gestaged: list[str]) -> list[str]:
 WAND_SUITEN = {"scripts/test_governance_gate.py",
                "scripts/test_aufrufbaum.py"}
 
+# R97: Die Ausnahme ist eine DATENSCHICHT, kein Regelbruch. Das Gate liest
+# `scripts/entscheidung_R97.json`; die Dateiliste dort ist geschlossen und
+# die Ausnahme ist mit einem Commit verbraucht (Ledger-Pruefung). Neue
+# Ausnahme = neue ENTSCHEIDUNG, nie Berufung auf "Instrument-Reparatur"
+# (10. Auspraegung: Ausnahme darf nicht Kategorie werden).
+ENTSCH = SCRIPTS / "entscheidung_R97.json"
+
+
+def ausnahme_R97(gestaged: list[str]) -> tuple[bool, str]:
+    """Einmalige, gebuchte Ausnahme — nur fuer die geschlossene Dateiliste."""
+    if not ENTSCH.exists() or not gestaged:
+        return False, ""
+    e = json.loads(ENTSCH.read_text(encoding="utf-8"))
+    liste = set(e.get("dateien_geschlossen", []))
+    if not liste:
+        return False, "Dateiliste leer — Ausnahme ungueltig"
+    fremd = [p for p in gestaged if p not in liste]
+    if fremd:
+        return False, f"Ausnahme deckt {len(fremd)} fremde Datei(en): {fremd[:3]}"
+    d = json.loads(V.read_text(encoding="utf-8"))
+    if any(x.get("entscheidung") == e["id"] for x in d.get("versions_ledger", [])):
+        return False, f"{e['id']} bereits verbraucht -- neue ENTSCHEIDUNG noetig"
+    return True, f"{e['id']}: {len(liste)} Dateien, geschlossen, einmalig"
+
+
+def _verbrauche_R97() -> None:
+    """Schliesse die Ausnahme im Ledger, sobald sie wirkt."""
+    if not ENTSCH.exists():
+        return
+    e = json.loads(ENTSCH.read_text(encoding="utf-8"))
+    d = json.loads(V.read_text(encoding="utf-8"))
+    if any(x.get("entscheidung") == e["id"] for x in d.get("versions_ledger", [])):
+        return
+    d.setdefault("entscheidungen_ausnahmen", []).append({
+        "id": e["id"], "typ": e["typ"],
+        "autorisiert_von": e["autorisiert_von"],
+        "dateien_geschlossen": e["dateien_geschlossen"],
+        "verbraucht_mit_commit": True})
+    V.write_text(json.dumps(d, indent=2, ensure_ascii=False) + "\n",
+                 encoding="utf-8")
+
 
 def erfuellt_besitz(gestaged: list[str], diff: str) -> bool:
     """Beruehrt der Commit AUSSCHLIESSLICH Besitz-Felder? (B1 Weg 2)"""
@@ -135,6 +176,11 @@ def main(argv: list[str]) -> int:
         neu = neue_tests(gestaged)
         # Wand-Suiten (Bootstrap) sind keine Turm-Suiten.
         turm_neu = [x for x in neu if x not in WAND_SUITEN]
+        ok_ausn, grund = ausnahme_R97(gestaged) if turm_neu else (False, "")
+        if turm_neu and ok_ausn:
+            _verbrauche_R97()
+            warnung.append(f"R97-Ausnahme VERBRAUCHT: {grund}")
+            turm_neu = []
         if turm_neu and not erfuellt_besitz(gestaged, diff):
             hart.append(
                 f"{len(turm_neu)} neue Test-Suite(n) ohne Eigentuemer "
