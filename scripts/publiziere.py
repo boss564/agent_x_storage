@@ -48,13 +48,30 @@ def main(argv: list[str]) -> int:
               .read_text(encoding="utf-8").splitlines() if z.strip()]
     kanal = ["", "## Belege — Bytes zum Selbstrechnen", "",
              "    base64 -d | sha256sum   (muss den sha256 unten ergeben)", ""]
+    sys.path.insert(0, str(REPO / "scripts"))
+    import beweis as B
     for e in belege:
-        roh = (REPO / "publiziert" / f"{e['artefakt'].replace('/', '__')}"
-               f"_{e['von']}-{e['bis']}.payload.txt").read_bytes()
+        pfad = (REPO / "publiziert" / f"{e['artefakt'].replace('/', '__')}"
+                f"_{e['von']}-{e['bis']}.payload.txt")
+        # R106-Selbstbefund: nicht jeder Ledger-Beleg war je publiziert.
+        # Die Pipeline ERZEUGT die Bytes aus der Quelle, statt sie zu erwarten.
+        if not pfad.exists():
+            pfad.parent.mkdir(exist_ok=True)
+            pfad.write_bytes(B.kanonisch(e["text"]))
+        roh = pfad.read_bytes()
         kanal += [f"### {e['artefakt']}:{e['von']}-{e['bis']}", "",
                   "```", base64.b64encode(roh).decode(), "```", "",
                   f"sha256 = `{e['sha256']}`", ""]
-    bericht.write_text(bericht.read_text(encoding="utf-8") + "\n".join(kanal),
+    # Buchung 7 (R106): die Negation darf nicht still verschwinden.
+    # Solange die Quelle ungoverned ist, steht die Grenze im Bericht —
+    # erzeugt von der Pipeline, nicht vom Gedaechtnis des Autors.
+    grenze = ["", "## Was nicht behauptet wird (erzeugt, nicht erinnert)", "",
+              "| | Status |", "|---|---|",
+              "| Produkt bewacht (Quelle `data/lauf_lester.json`) | **nein** — die Kopie in `vertrag/` ist eine Projektion |",
+              "| Wand `--no-verify`-fest | **nein** — lokal umgehbar; CI existiert, Ergebnis hier unbelegt |",
+              "| Regeln/Ledger getrennt | **nein** |", "| per-Datei-Zustand | **nein** |", ""]
+    bericht.write_text(bericht.read_text(encoding="utf-8")
+                       + "\n".join(kanal) + "\n".join(grenze),
                        encoding="utf-8")
     ziel = REPO / "publiziert" / bericht.name
     ziel.parent.mkdir(exist_ok=True)
