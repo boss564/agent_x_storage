@@ -1,0 +1,28 @@
+name: governance
+# CI-Backstop fuer das Governance-Gate (B2, Runde 95).
+#
+# `git commit --no-verify` existiert. Der lokale Hook ist damit umgehbar.
+# Erst dieser Job macht aus dem Hook eine durchgesetzte Regel: derselbe
+# Code, auf einer Maschine, die der Autor nicht mitcommitten kann.
+#
+# Keine Suite hier — nur das Gate. Sekundenbereich, lesend, offline.
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0        # bilanz.py liest HEAD~1
+      - name: Governance-Gate
+        run: python3 scripts/governance_gate.py
+      - name: Bilanz aus git
+        run: python3 scripts/bilanz.py
+      - name: Standzeile generiert
+        run: python3 scripts/standzeile.py
+      - name: Aufrufbaum
+        run: python3 scripts/test_aufrufbaum.py

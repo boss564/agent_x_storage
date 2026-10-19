@@ -1,5 +1,5 @@
 {
-  "_version": 16,
+  "_version": 18,
   "_zweck": "Maschinenlesbarer Vertrag des Einwurf-Waechters. Single source of truth fuer Repo und externe Ingestion. Wer hier eine Zeile aendert, aendert das Tor ausserhalb dieses Repos mit.",
   "_stand": "Runde 84 (2026-10-18)",
   "_geltung": "Der Runner (scripts/vertrags_runner.py) importiert diese Datei; die externe Ingestion MUSS sie einlesen. Solange sie es nicht tut, zertifiziert N/N einen Vertrag, den draussen niemand benutzt.",
@@ -1084,6 +1084,20 @@
       "aenderung": "enforcement (Quarantaene der 4 R92-Suiten, Baum statt Buchung), Zaehlweise auf 33 ohne Kern-Filter, ORDNUNG-Frist wieder geoeffnet (R96), Wiedervorlage mit frist_blocker/beweisversuch/verfall, Git-Zeuge als ENTSCHEIDUNG, Rundenzahl als Konvention deklariert.",
       "gebucht": "R93 Befunde 2,3,4,5,6,7",
       "vorgaenger_hash": "ec154f9a56322ccd72d6939bb8c06814b981aa8a66e51f177bc3e11aa0eeb7c5"
+    },
+    {
+      "version": 17,
+      "runde": 94,
+      "aenderung": "standzeile generiert (standzeile.py), Aufrufbaum-Gate (test_aufrufbaum.py), Zahlbefund n_code=34 von 128, Bilanzregel aus Posten.",
+      "gebucht": "R94 Befunde 2,3,4,5",
+      "vorgaenger_hash": "f649c98a5e7015d34055a172f2452763b8cdad5d3ab7b2419f9324ada4cf4a77"
+    },
+    {
+      "version": 18,
+      "runde": 95,
+      "aenderung": "governance_gate im Pre-Commit (B1 drei Wege), install_hook.sh + CI-Backstop (B2), gate-only/lesend/offline (B3), Bootstrap-Ausnahme als ENTSCHEIDUNG gebucht, Hook-Rekonstruktion gebucht.",
+      "gebucht": "R95 B1/B2/B3 + Bootstrap + Hook-Verlust",
+      "vorgaenger_hash": "7d4bc706acdeb68bc9a2fb8d806dc85c7e982f582790d7164935059bfc27aea2"
     }
   ],
   "kreuz_record_invarianten": {
@@ -1400,16 +1414,18 @@
     "regel": "Es gibt EINE Zaehlung (test_zaehlweise.py). Jede Suite-Zahl im Bericht liest von dort. Zwei Zahlen ohne Bruecke sind die 291/283-Krankheit.",
     "definition_code": "test_*.py, die waechter_vertrag.json ODER einwurf_waechter.py ODER konsumenten_semantik referenzieren",
     "definition_nur_vertrag": "test_*.py, die NUR waechter_vertrag.json referenzieren (kein Code)",
-    "n_code": 34,
+    "n_code": 36,
     "n_nur_vertrag": 0,
-    "n_gesamt": 34,
+    "n_gesamt": 36,
     "nur_vertrag": [],
     "drift_r91": "R91 nannte 24 (rg-Filter) und 26/26 (Lauf). Beide waren Ad-hoc-Zaehlungen mit unterschiedlichen Filtern. Die EINE Zaehlung nennt 31 — der Unterschied zu 24 ist der Filter, nicht das Repo.",
     "anlass": "R91 Befund 3: 24 vs 26 im selben Bericht.",
     "selbstreferenz": "R92: die Zaehlweise zaehlt TESTS, nicht Obligationen. 36 Suites gruen + 4 externe Posten ohne Eigentuemer stehen in derselben Kopfzeile (kopfzeile.py). '36/36' ist ein Befund ueber den Pruef-Apparat, kein Gesamtstand.",
     "partition_grenze": "'Code / nur Vertrag' ist nicht bewiesen exhaustiv. Governance-Artefakte (EXT-Buch, Klausel, Bedarfs-Inventur, Schwelle-Herleitung, Record-Grammatik, Ledger-Provenienz) liegen AUSSERHALB der Partition. Die Zaehlweise zaehlt die Maschinerie, die sie zaehlt — das ist als Grenze gebucht, nicht als Luecke versteckt.",
     "kern_suiten_verboten": "R93: '20/20 Waechter-Kern-Suiten' war ein Ad-hoc-Filter — dieselbe Krankheit, die R91 an 24/26 verdammte. Es gibt EINE Zahl (n_code) und EINE Liste (quarantaene). Kein Bericht darf eine zweite Teilmenge als 'Kern' adeln.",
-    "quarantaene_regel": "Die 4 Quarantaene-Suiten sind in n_code NICHT enthalten und werden separat gezaehlt: 'gruen' heisst nur fuer Dateien unter scripts/test_*.py."
+    "quarantaene_regel": "Die 4 Quarantaene-Suiten sind in n_code NICHT enthalten und werden separat gezaehlt: 'gruen' heisst nur fuer Dateien unter scripts/test_*.py.",
+    "n_aussen": 94,
+    "zaehlweise_befund_r94": "n_code=34 ist KEINE Zaehlung von Tests, sondern ein Regex-Filter ('waechter_vertrag|einwurf_waechter|konsumenten_semantik') auf 128 Testdateien. 94 Dateien sind 'aussen' und wurden nie berichtet. Die Zahl war korrekt fuer ihre Teilmenge, aber die Teilmenge war nicht deklariert."
   },
   "externes_buch": {
     "zweck": "Die Bringschuld-Maschine (Frist/Blocker/Gate) funktioniert fuer SELBSTverifizierbares. Fuer FREMdverifizierbares fehlt das Aequivalent. Dieses Buch fuehrt die Posten, die kein Autor selbst schliessen kann.",
@@ -1555,7 +1571,18 @@
     ],
     "freigabe_bei": "alle_posten_mit_eigentuemer",
     "warum_kein_stopp_nachweis_feld": "R92 schlug ein stopp_nachweis-Feld vor, das VORHER prueft. Das verschiebt die Durchsetzung auf die naechste Runde — Aufschub. Die Sperre ist deshalb keine Feldpruefung, sondern ein Baumzustand: die Dateien sind nicht da, wo der Korb sie sucht.",
-    "was_das_nicht_kann": "Die Sperre kann die Suiten nicht GRUEN machen und den Eigentuemer nicht erzeugen. Sie kann nur verhindern, dass der Turm weiterwaechst, waehrend die Basis fehlt."
+    "was_das_nicht_kann": "Die Sperre kann die Suiten nicht GRUEN machen und den Eigentuemer nicht erzeugen. Sie kann nur verhindern, dass der Turm weiterwaechst, waehrend die Basis fehlt.",
+    "drei_wege": {
+      "hart": "bekannte Regressionen + neue Suite ohne Eigentuemer (ausser Besitz-Commit)",
+      "erlaubt": "Commit beruehrt NUR scripts/waechter_vertrag.json und NUR Besitz-Schluessel (eigentuemer/posten/beweisversuch/frist_blocker/externes_buch)",
+      "warnung": "Besitz rot, aber kein neuer Test — Luecke DEKLARIERT, nicht versteckt"
+    },
+    "backstop": ".github/workflows/governance.yml — --no-verify existiert, der Hook ist lokal umgehbar; CI nicht.",
+    "wand_suiten": [
+      "test_governance_gate",
+      "test_aufrufbaum"
+    ],
+    "wall_ausnahme": "Suiten, die die Wand selbst sind, gelten als Besitz-erfuellend (B1 Weg 2): sie bauen die Durchsetzung, nicht den Turm. Begruendung im Bootstrap-Eintrag."
   },
   "zaehler_achsen": {
     "problem": "R93 Befund 7: drei Zaehlachsen ohne deklarierte Abbildung. Runden (R89..R93), Versionen (v9..v15), Suiten (32/36/20/33).",
@@ -1567,5 +1594,66 @@
   "git_zeuge": {
     "status": "ENTSCHEIDUNG",
     "inhalt": "Git-History ist ein NATIVER Zeuge (das Repo IST Git), nicht 'ausserhalb'. Sie wird nicht gebunden, weil das Artefakt im Repo liegt und die Kette sonst von der Git-Implementierung abhinge. Das ist eine WHAL, keine Tatsache."
+  },
+  "aufrufbaum": {
+    "regel": "Eine spezifizierte Funktion ist BESTAND, wenn mindestens ein Nicht-Test-Aufrufer sie importiert; sonst SPEKULATIV. Spekulativ ist kein Fehler, aber es hat keine Beweiskraft fuer ein System.",
+    "klassen": [
+      "BESTAND",
+      "SPEKULATIV"
+    ],
+    "module": [
+      {
+        "name": "konsumenten_semantik",
+        "klasse": "SPEKULATIV",
+        "beweiskraft": "KEINE",
+        "befund": "R94: rg findet 3 Tests + regel_konsument.py. Letzteres ist ein Fixture-Konsument (4/4 im Korb, 'erzeugt Strome im eigenen Lauf'). Kein Produktionspfad. Der gesamte Consumer-Strang schuetzt eine Funktion, die niemand in Produktion aufruft."
+      },
+      {
+        "name": "einwurf_waechter",
+        "klasse": "BESTAND",
+        "befund": "digest() wird vom Waechter selbst gerufen (Emitter)."
+      },
+      {
+        "name": "vertrags_runner",
+        "klasse": "SPEKULATIV",
+        "befund": "Vertragsdatei wird gelesen, aber der Runner hat keinen Produktionsaufrufer ausserhalb der Tests.",
+        "beweiskraft": "KEINE"
+      }
+    ],
+    "anlass": "R94 Befund 5: das Projekt verifiziert einen Konsumenten, den es nicht gibt.",
+    "namensregel": "'test_*' ist NICHT die einzige Testform. regel_konsument.py ist ein Fixture-Konsument (4/4 im Korb) und heisst nicht test_*. Das Gate liest den Korb mit, sonst zaehlt es einen Testaufbau als Produktion — und die Klassifikation wird zu OPTIMISTISCH."
+  },
+  "standzeile": {
+    "regel": "Die Standzeile wird GENERIERT (scripts/standzeile.py) aus derselben Quelle wie die Zaehlung. Kein Tastaturzugriff.",
+    "verbotene_woerter": [
+      "kern",
+      "critical",
+      "kritisch",
+      "relevant",
+      "wichtig",
+      "ausgewaehlt",
+      "selected"
+    ],
+    "warum": "R93 baute die Anti-Kern-Regel und schrieb 'Waechter-Kern 15/15' in den Fuss desselben Berichts. Die Standzeile war Prosa."
+  },
+  "bilanz_regel": {
+    "regel": "Jede Netto-Zahl wird aus git gelesen (bilanz.py), nicht getippt. Die Bilanz ist die Differenz der Testdateien zwischen zwei Revisionen.",
+    "prosa_verboten": true,
+    "anlass": "R93 Befund 4: '+2 rein, -4 gesperrt' ergab -2, der Bericht behauptete -3. Und 20-4=16, nicht 15. Die Zahlkrankheit im Meta-Satz."
+  },
+  "bootstrap_ausnahme": {
+    "klassifikation": "ENTSCHEIDUNG",
+    "was": "Der Installations-Commit des Governance-Gates (R95) inkl. test_governance_gate.py und test_aufrufbaum.py — die Suiten, die die Wand selbst sind.",
+    "warum": "Der Gate ist heute rot (4/4 ohne Eigentuemer). Ein Hook, der 'keine neuen Suiten ohne Eigentuemer' durchsetzt, blockiert den Commit, der ihn installiert. Das ist kein Paradox, sondern ein Bootstrap: die Wand darf einmal gebaut werden, bevor sie steht.",
+    "umfang": "EINMALIG, genau dieser Commit (R95).",
+    "begruendung_warum_keine_neunte_auspraegung": "Ungebucht waere die Ausnahme eine Regel mit stiller Ausnahme — die neunte Auspraegung. Gebucht ist sie genau das, was die Klausel verlangt: eine ENTSCHEIDUNG mit Begruendung.",
+    "wiedervorlage": "2026-11-02",
+    "beweisversuch": "Der erste Folge-Commit mit neuer Suite ohne Eigentuemer muss HART blockieren. Getestet in test_governance_gate.py Fall 1 (synthetisch)."
+  },
+  "hook_rekonstruktion": {
+    "befund": "R95: der bestehende .git/hooks/pre-commit (CLAUDE.md-Checker, Ueberschriften-Regel, ALLOW_HEADING_DROP) war NICHT versioniert und wurde beim Installieren des Governance-Wrappers ueberschrieben.",
+    "rekonstruktion": "Zeilen 1-13 verifiziert gelesen; Governance-Block neu; Ueberschriften-Regel und checkout-index-Export aus beobachtetem Verhalten rekonstruiert. Keine Kopie.",
+    "konsequenz": "Ein Hook ohne getrackte Quelle ist bei jedem Editierfehler verloren. Der Installer (scripts/install_hook.sh) haengt an, statt zu ersetzen — aber die Lehre ist: Hooks gehoeren getrackt.",
+    "status": "REKONSTRUIERT, nicht wiederhergestellt. Befund offen."
   }
 }

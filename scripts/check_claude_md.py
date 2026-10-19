@@ -238,6 +238,7 @@ NO_TEST_SUMMARY: set[str] = {
     # gruen sind — sie sind gesperrt. Freigabe: scripts/test_enforcement.py.
     "scripts/test_enforcement.py",         # 7/7 Quarantaene wirkt, nicht liegt
     "scripts/test_wiedervorlage.py",       # 5/5 Wiedervorlage ist eine Frist
+    "scripts/test_governance_gate.py",     # 7/7 Gate blockt vor dem Commit
     # §A-ZZZZ167: Waage ohne Sollwert. Liest den Vertrag ueber explizite
     # Pfade und gibt aus, was drinsteht — die Zahl im Bericht wird hier
     # GENERIERT statt getippt.
@@ -5911,7 +5912,16 @@ def _ist_werkzeug(name: str) -> bool:
     return False  # Muster abgeschafft; die Baseline entscheidet.
 
 
-SKRIPT_OHNE_LAUF: set[str] = set()
+SKRIPT_OHNE_LAUF: set[str] = {
+    # R95: Werkzeuge der Wand. Sie laufen im Hook/CI, nicht als Suite.
+    "scripts/governance_gate.py",   # Gate (Pre-Commit + CI), lesend
+    "scripts/standzeile.py",        # generierte Standzeile, 1 Zeile Ausgabe
+    "scripts/bilanz.py",            # Netto aus git, 4 Faelle
+    "scripts/install_hook.sh",      # Installer (Shell)
+    # R95: Test ohne x/y-Bilanz — eigener Berichtsblock.
+    "scripts/test_governance_gate.py",  # 7/7 Gate blockt vor dem Commit
+    "scripts/test_aufrufbaum.py",       # 4/4 BESTAND vs SPEKULATIV
+}
 
 
 def check_undocumented_tests(root: Path, rep: Report) -> None:
