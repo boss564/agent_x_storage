@@ -1,0 +1,51 @@
+{
+  "entscheidung_id": "R111",
+  "datum": "2026-10-20",
+  "art": "P0a-HISTORIE + DREI OFFENE PUNKTE GESCHLOSSEN",
+  "herkunft": "Alle Befunde maschinell aus dem Transkript (Zeilenangabe), nicht aus Prosa.",
+  "P0a_historie": {
+    "R108_Abschluss_war_unberechtigt": {
+      "transkript_zeile": 8318,
+      "ueberschrift": "## 0. Die Bytes — hier, zum Rechnen",
+      "geliefert_laenge": 439,
+      "geliefert_padding": "Cg==",
+      "geliefert_gruen": "Vetragsscope (ohne r)",
+      "geliefert_sha": "30257636d107f7019074d85de4742e119f0faa24ddcf6340e0741d4ce7b00b52",
+      "behauptet_darunter": "wc -c -> 440, b2498595...",
+      "befund": "Der Block widerspricht sich selbst: die gelieferten Bytes sind die R106-Kette, der Digest daneben ist der der 440-Byte-Fassung.",
+      "buchung": "R108 §0 ist ein FALSCHER P0a-Abschluss. Zurueckgezogen."
+    },
+    "R109_4_ist_die_korrekte_Uebergabe": {
+      "transkript_zeile": 8363,
+      "laenge": 440,
+      "padding": "Ywo=",
+      "sha": "b24985950ab17b2c4092cf68138baccd433a726e2970aacd5ff2975ba99ba6e4",
+      "identisch_mit_datei": true,
+      "status": "einzige vollstaendige und korrekte Uebergabe"
+    }
+  },
+  "offene_punkte_geschlossen": {
+    "bz4_in_R107_3": {
+      "transkript_zeile": 8352,
+      "befund": "Der Block 'base64: CUBlY2hvICLwn5SBIExBVUYg4oCUIFZl...bz4=' ist von Hand abgekuerzt: '...' in der Mitte, Ende aus fremder Kette.",
+      "ursache": "getippt, nicht ausgegeben",
+      "loesung": "beleg_export.py gibt base64 nie gekuerzt aus; Kuerzung ist verboten."
+    },
+    "xxd_wert_in_R109_4": {
+      "transkript_zeile": 8363,
+      "behauptet": "24 47 24 63 0a = $G$c\\n",
+      "echt_beide_ketten": "20 24 24 72 63 0a = ' $$rc\\n'",
+      "ursache": "getippt",
+      "loesung": "xxd-Werte werden ab jetzt maschinell eingefuegt, nicht getippt."
+    },
+    "zeile_8306_nie_uebergeben": {
+      "befund": "R110 hat gegen eine Kette gerechnet, die der Auditor nie in Haenden hatte.",
+      "status": "transkript-gebunden -- Konvergenz nur autorseitig, kein P0a"
+    }
+  },
+  "P0_status": {
+    "P0a": "erfuellbar (R109 §4), NICHT erfuellt -- kein Digest von einem unabhaengigen Terminal",
+    "P0b": "repo-gebunden, nie extern behauptet",
+    "regel_R111": "P0a gilt als erfuellt nur mit einem Digest, der nicht vom Erbauer gerechnet wurde."
+  }
+}

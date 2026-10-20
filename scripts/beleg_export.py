@@ -45,7 +45,10 @@ def paket(artefakt: str, von: int, bis: int) -> dict:
             "laenge": len(roh), "mod3": len(roh) % 3,
             "padding": pad or "-",
             "base64": b64,
-            "sha256": hashlib.sha256(roh).hexdigest()}
+            "sha256": hashlib.sha256(roh).hexdigest(),
+            # R111: Hex-Werte werden erzeugt, nicht getippt (R109 §4 zeigte
+            # "24 47 24 63 0a" fuer "$rc\n"; echt ist "20 24 24 72 63 0a").
+            "hex_ende": roh[-6:].hex(" ")}
 
 
 def pruefe_paket(p: dict) -> list[str]:
@@ -76,6 +79,14 @@ def pruefe_paket(p: dict) -> list[str]:
         fehler.append("Sha256 passt nicht zu den gelieferten Bytes")
     if p["padding"] != (erwartetes_pad or "-"):
         fehler.append(f"Padding-Feld {p['padding']} != {erwartetes_pad or '-'}")
+    # R111: Kuerzung ist kein Beleg. '...' oder U+2026 in der Base64 heisst:
+    # der Auditor kann nicht rechnen. R107 §3 lieferte genau das.
+    if "..." in p["base64"] or "\u2026" in p["base64"]:
+        fehler.append("Base64 ist gekuerzt ('...'/'\u2026') -- nicht pruefbar")
+    # R111: Hex-Werte werden erzeugt, nicht getippt. R109 §4 behauptete
+    # "24 47 24 63 0a" fuer "$rc\n"; echt ist "20 24 24 72 63 0a".
+    if "hex_ende" in p and p["hex_ende"] != roh[-6:].hex(" "):
+        fehler.append(f"hex_ende {p['hex_ende']!r} != {roh[-6:].hex(' ')!r}")
     return fehler
 
 
@@ -144,6 +155,7 @@ def main(argv: list[str]) -> int:
     print(f"mod3:     {p['mod3']}")
     print(f"padding:  {p['padding']}")
     print(f"sha256:   {p['sha256']}")
+    print(f"hex_ende: {p['hex_ende']}")
     print(f"base64:   {p['base64']}")
     return 0
 

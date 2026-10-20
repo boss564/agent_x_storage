@@ -145,3 +145,24 @@ def test_reine_ersetzung_ist_ein_replace():
     assert d["ops"][0]["op"] == "replace"
     assert d["ops"][0]["a_bytes"] == b"X"
     assert d["ops"][0]["b_bytes"] == b"d"
+
+
+# --- R111: Kuerzung und getippte Hex-Werte ------------------------------
+
+def test_gekuerzte_base64_wird_rot():
+    """R107 §3 lieferte 'CUBlY2hv...bz4=' -- Mitte abgeschnitten.
+    Ein gekuerzter Beleg ist kein Beleg."""
+    p = E.paket("Makefile", 56, 63)
+    p_kuerz = dict(p, base64=p["base64"][:40] + "..." + p["base64"][-4:])
+    fehler = E.pruefe_paket(p_kuerz)
+    assert any("gekuerzt" in f for f in fehler), fehler
+
+
+def test_getippter_hex_wert_wird_rot():
+    """R109 §4 behauptete '24 47 24 63 0a' fuer '$rc\\n'.
+    Echt (beide Ketten): '20 24 24 72 63 0a' = ' $$rc\\n'."""
+    p = E.paket("Makefile", 56, 63)
+    assert p["hex_ende"] == "20 24 24 72 63 0a"
+    p_falsch = dict(p, hex_ende="24 47 24 63 0a")
+    fehler = E.pruefe_paket(p_falsch)
+    assert any("hex_ende" in f for f in fehler), fehler
