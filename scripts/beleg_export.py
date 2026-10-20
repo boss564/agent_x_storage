@@ -88,37 +88,41 @@ def diff_gegen_quelle(geliefert_b64: str, quelle: bytes) -> dict:
     wenn der Diff gegen die GELIEFERTEN Bytes laeuft statt gegen eine
     Abschrift.
 
-    Einzelbyte-Vergleich ist hier irrefuehrend: eine Einfuegung ab
-    Position N macht ALLE Folgebytes zu "Abweichungen" (R106: 243).
-    Deshalb wird in Praefix / Mitte / Suffix zerlegt:
+    Einzelbyte-Vergleich ist irrefuehrend; Praefix/Suffix ebenfalls
+    (siehe R109 unten). Die folgende Beschreibung ist der HISTORISCHE
+    Ansatz und wird durch difflib ersetzt:
       - shift > 0 : in der Quelle steht mehr als geliefert (Loeschung)
       - shift < 0 : in der Quelle steht weniger (Einfuegung)
       - shift = 0 : reine Ersetzung, dann zaehlen Einzelbytes
+
+    R109-Korrektur: Der Ein-Shift-Ansatz (Praefix/Suffix) unterstellt
+    EINE Verschiebung. R106 hatte DREI unabhaengige Eingriffe an drei
+    Stellen (replace 24, insert 178, replace 216). Praefix/Suffix haette
+    daraus "shift=+1, 243 Abweichungen" gemacht -- ein Artefakt.
+
+    Deshalb: echte Sequenz-Alignment (difflib), die mehrere Ops meldet.
+    Rueckgabe je Op: {op, a_pos, b_pos, a_bytes, b_bytes}.
     """
     import base64 as _b64
+    import difflib as _dl
     import hashlib as _h
     g = _b64.b64decode(geliefert_b64)
     q = quelle
-    n = min(len(g), len(q))
-    p = 0
-    while p < n and g[p] == q[p]:
-        p += 1
-    s = 0
-    while s < n - p and g[-1 - s] == q[-1 - s]:
-        s += 1
-    g_mitte = g[p:len(g) - s]
-    q_mitte = q[p:len(q) - s]
+    ops = []
+    for tag, i1, i2, j1, j2 in _dl.SequenceMatcher(
+            a=g, b=q, autojunk=False).get_opcodes():
+        if tag == "equal":
+            continue
+        ops.append({"op": tag, "a_pos": i1, "b_pos": j1,
+                    "a_bytes": g[i1:i2], "b_bytes": q[j1:j2]})
     return {
         "laenge_geliefert": len(g),
         "laenge_quelle": len(q),
         "sha_geliefert": _h.sha256(g).hexdigest(),
         "sha_quelle": _h.sha256(q).hexdigest(),
-        "praefix_identisch": p,
-        "suffix_identisch": s,
-        "shift": len(q_mitte) - len(g_mitte),
-        "quelle_mitte": q_mitte,
-        "geliefert_mitte": g_mitte,
         "identisch": g == q,
+        "n_ops": len(ops),
+        "ops": ops,
     }
 
 

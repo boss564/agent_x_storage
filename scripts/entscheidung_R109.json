@@ -1,0 +1,35 @@
+{
+  "entscheidung_id": "R109",
+  "datum": "2026-10-20",
+  "art": "KORREKTUR (dritte) + WERKZEUGFEHLER + PROZESSSTOPP",
+  "gegenstand": "R106-Diff maschinell geklaert; R108-Diagnose und R109-Review-Diagnose beide falsch",
+  "diff_maschine": {
+    "werkzeug": "beleg_export.diff_gegen_quelle (difflib, gegen die echte R106-Kette)",
+    "laenge": "439 -> 440",
+    "n_ops": 3,
+    "ops": [
+      {"op": "replace", "a_pos": 24, "a_bytes": "e", "b_bytes": "r", "lesart": "Veetragsscope -> Vertragsscope"},
+      {"op": "insert", "a_pos": 178, "b_bytes": "r", "lesart": "Vetragsscope -> Vertragsscope"},
+      {"op": "replace", "a_pos": 216, "a_bytes": "0x98", "b_bytes": "0x9d", "lesart": "U+260C ☌ -> U+274C ❌ (nur 3. Byte der Sequenz)"}
+    ],
+    "ende": "beide identisch: $$rc\\n"
+  },
+  "falsche_diagnosen": {
+    "R107": "Byte 178, ein 'r' fehlt, 3025... sha. Widerlegt: es sind drei Stellen, sha war 2205...",
+    "R108": "Byte 24, shift +1, Suffix 222, 243 Abweichungen. Widerlegt: keine Shift-Verschiebung, drei unabhaengige Ops.",
+    "R109_Review": "Fehlendes 'c' am Ende, R106 endet auf $$r\\n. Widerlegt: beide enden auf $$rc\\n."
+  },
+  "werkzeugfehler": {
+    "befund": "Der Praefix/Suffix-'shift'-Algorithmus unterstellt EINE Verschiebung. Bei zwei unabhaengigen Einfuegungen liefert er ein Artefakt (shift=1, 243 Abweichungen).",
+    "korrektur": "difflib.SequenceMatcher, meldet n_ops Ops mit Position und Bytes.",
+    "lehre": "Ein Werkzeug, das nur einen Fehlertyp kennt, meldet bei einem anderen Fehlertyp eine falsche Diagnose -- mit exakter Position, also ueberzeugend."
+  },
+  "prozessstopp": {
+    "regel": "Ab R110 keine Diagnose eines vergangenen Defekts ohne maschinellen diff_gegen_quelle-Lauf gegen die GELIEFERTE Kette. Prosa-Diagnosen gelten als unbelegt.",
+    "grund": "Drei Runden in Folge wurde ein Defekt an der falschen Stelle verortet -- jede mit Byte-genauer Praezision."
+  },
+  "P0": {
+    "P0a": "erfuellbar -- R108-Base64 == Datei (byte-exakt, verifiziert), 440 Bytes, b249..., Ywo=",
+    "P0b": "repo-gebunden, nie extern behauptet"
+  }
+}

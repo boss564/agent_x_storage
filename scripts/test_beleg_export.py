@@ -79,23 +79,34 @@ R106_B64 = (
     "LnB5IHNhZ3QgJCRyYykiIDs7IFwKCSAgZXNhYzsgZXhpdCAkJHJjCg==")
 
 
-def test_r106_shift_ist_ein_byte_ab_position_24():
-    """R108: Die R107-Diagnose ('Byte 178, r fehlt') war falsch.
+def test_r106_hat_drei_handschrift_fehler_nicht_einen_shift():
+    """R109: Die R106-Kette weicht an DREI Stellen ab, nicht per Shift.
 
-    Tatsaechlich: Praefix ab Byte 24 != Quelle, Suffix 222 identisch,
-    shift +1. Geliefert Byte 24 = 'e', Quelle = 'r'. Und das Ende
-    '\\n' fehlt in der gelieferten Fassung.
+    difflib gegen die echte Kette findet:
+      replace 24   'e' -> 'r'      (Veetragsscope)
+      insert  178  ''  -> 'r'      (Vetragsscope)
+      replace 216  U+260C -> U+274C (☌ statt ❌)
+    Das Ende '$$rc\\n' ist in BEIDEN identisch.
+
+    R108 behauptete 'Byte 24, shift +1, 243 Abweichungen' -- falsch.
+    R109-Review behauptete 'fehlendes c am Ende' -- ebenfalls falsch.
     """
-    q = E.REPO / "publiziert/Makefile_56-63.payload.txt"
+    import difflib
+    q = (E.REPO / "publiziert/Makefile_56-63.payload.txt")
     if not q.exists():
-        return  # Quelle nicht im Baum (frischer Clone) -- Test ist dann stumm
-    d = E.diff_gegen_quelle(R106_B64, q.read_bytes())
-    assert d["laenge_geliefert"] == 439
-    assert d["laenge_quelle"] == 440
-    assert d["praefix_identisch"] == 24
-    assert d["shift"] == 1
-    assert d["geliefert_mitte"].startswith(b"etragsscope")
-    assert d["quelle_mitte"].startswith(b"rtragsscope")
+        return
+    q = q.read_bytes()
+    g = base64.b64decode(R106_B64)
+    assert len(g) == 439 and len(q) == 440
+    assert g.endswith(b"$$rc\n") and q.endswith(b"$$rc\n")
+    ops = [(t, i1, i2, j1, j2) for t, i1, i2, j1, j2
+           in difflib.SequenceMatcher(a=g, b=q, autojunk=False).get_opcodes()
+           if t != "equal"]
+    assert [o[0] for o in ops] == ["replace", "insert", "replace"], ops
+    assert ops[0][1] == 24 and g[24:25] == b"e" and q[24:25] == b"r"
+    assert ops[1][1] == 178 and q[178:179] == b"r"
+    assert ops[2][1] == 216 and g[216:217] == b"\x98"
+    assert q[217:218] == b"\x9d"   # ☌ U+260C vs ❌ U+274C, letztes Byte
 
 
 def test_r106_sha_der_gelieferten_bytes():
@@ -105,21 +116,22 @@ def test_r106_sha_der_gelieferten_bytes():
             == "2205f240ea394941e92d19ba4493282e724d4c9d18238c4be7c646620e672168")
 
 
-def test_einfuegung_ist_shift_nicht_n_einzelbytes():
-    """Eine Einfuegung macht alle Folgebytes zu 'Abweichungen'. Der Diff
-    muss das als shift melden, nicht als 243 Einzelbefunde."""
+def test_einfuegung_wird_als_insert_gemeldet():
+    """Eine Einfuegung ist EIN insert-Op, nicht N Abweichungen."""
     q = b"abcdefghij"
     g_b64 = base64.b64encode(b"abXcdefghij").decode()
     d = E.diff_gegen_quelle(g_b64, q)
-    assert d["shift"] == -1          # Quelle hat 1 Byte weniger
-    assert d["praefix_identisch"] == 2
-    assert d["suffix_identisch"] == 8
+    assert d["n_ops"] == 1
+    assert d["ops"][0]["op"] == "delete"
+    assert d["ops"][0]["a_bytes"] == b"X"
+    assert d["ops"][0]["a_pos"] == 2
 
 
-def test_reine_ersetzung_shift_null():
+def test_reine_ersetzung_ist_ein_replace():
     q = b"abcdefghij"
     g_b64 = base64.b64encode(b"abcXefghij").decode()
     d = E.diff_gegen_quelle(g_b64, q)
-    assert d["shift"] == 0
-    assert d["geliefert_mitte"] == b"X"
-    assert d["quelle_mitte"] == b"d"
+    assert d["n_ops"] == 1
+    assert d["ops"][0]["op"] == "replace"
+    assert d["ops"][0]["a_bytes"] == b"X"
+    assert d["ops"][0]["b_bytes"] == b"d"
