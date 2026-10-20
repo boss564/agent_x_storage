@@ -1,0 +1,41 @@
+{
+  "entscheidung_id": "R110",
+  "datum": "2026-10-20",
+  "art": "FIXTURE-KORREKTUR + SELBSTBEFUND",
+  "gegenstand": "R109 rechnete gegen eine selbst geschriebene Fixture; die echte R106-Kette hat 2 Ops",
+  "herkunft": {
+    "methode": "Transkript geparst, alle Base64-Kandidaten extrahiert, nach Rolle/Zeile klassifiziert.",
+    "zeile_8306": {"rolle": "assistant", "inhalt": "R106-Payload ('Hier sind die Bytes. Rechnen Sie:')", "len": 439, "header": "Vertragsscope", "gruen": "Vetragsscope", "sha": "30257636d107f7019074d85de4742e119f0faa24ddcf6340e0741d4ce7b00b52"},
+    "zeile_8358": {"rolle": "assistant", "inhalt": "R109-Shell-Aufruf, selbst getippte Fixture", "len": 439, "header": "Veetragsscope"},
+    "zeile_8363": {"rolle": "assistant", "inhalt": "R107-Prosa", "len": 440, "header": "Vertragsscope"}
+  },
+  "echter_diff": {
+    "quelle": "Transkript Zeile 8306 gegen publiziert/Makefile_56-63.payload.txt",
+    "n_ops": 2,
+    "ops": [
+      {"op": "insert", "a_pos": 178, "b_pos": 178, "b_bytes": "r", "lesart": "Vetragsscope -> Vertragsscope (GRUEN-Zeile)"},
+      {"op": "replace", "a_pos": 216, "b_pos": 217, "a_bytes": "0x98", "b_bytes": "0x9d", "lesart": "U+260C vs U+274C, zweites UTF-8-Byte"}
+    ],
+    "header_byte_24": "korrekt -- Vertragsscop, kein Defekt",
+    "ende": "beide identisch: $$rc\\n"
+  },
+  "falsche_diagnosen_bilanz": {
+    "R107": "Byte 178 'r' fehlt -- SUBSTANZ RICHTIG. Aber sha 3025... wurde faelschlich verworfen.",
+    "R108": "shift +1, 243 Abweichungen -- falsch. 2205... war sha einer erfundenen Fixture.",
+    "R109": "replace@24 erfunden -- gegen selbst getippte Fixture gerechnet. Der Prozessstopp-Verstoss.",
+    "R109_Review_Tail": "fehlendes c am Ende -- falsch, ende identisch."
+  },
+  "selbstbefund": {
+    "muster": "Vier Runden, vier byte-genaue Diagnosen, drei falsch. Jede falsche Diagnose entstand durch Rechnen gegen eine Abschrift statt gegen das Gelieferte.",
+    "schaerfung": "Der Prozessstopp aus R109 galt fuer Prosa. R110 zeigt: er muss fuer JEDEN String gelten, der nicht maschinell aus dem Transkript extrahiert wurde.",
+    "konsequenz": "Kuenftige Diff-Laeufe beziehen R106_B64 ausschliesslich per Transkript-Extraktion (Zeile 8306), nie aus einer Handschrift."
+  },
+  "anerkennung": {
+    "review_R109": "2 Ops, Header korrekt, Laenge vom fehlenden r -- alles bestaetigt.",
+    "review_R109_selbstkorrektur": "Der Reviewer korrigierte seine eigene Tail-Diagnose gegen die Bytes."
+  },
+  "P0": {
+    "P0a": "erfuellbar -- R108-Base64 byte-exakt == Datei, 440 Bytes, b249..., Ywo=",
+    "P0b": "repo-gebunden"
+  }
+}

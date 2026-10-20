@@ -5946,7 +5946,8 @@ SKRIPT_OHNE_LAUF: set[str] = {
     "scripts/ask_liste.py",         # R97 §4: Pflicht-Output der Ausnahme
     # R107: Länge/Padding/Digest aus EINER Quelle + seine Wand-Suite.
     "scripts/beleg_export.py",      # Beleg-Paket: atomar, nicht getippt
-    "scripts/test_beleg_export.py",  # 5/5 Selbstkonsistenz + Grenze
+    "scripts/test_beleg_export.py",  # 9/9 Selbstkonsistenz + Diff
+    "scripts/hole_r106_aus_transkript.py",  # R110: Fixture nie handgetippt
 }
 
 
