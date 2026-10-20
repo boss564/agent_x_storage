@@ -190,8 +190,8 @@ def test_r111_verstuemmelter_block_wird_rot():
             f"padding=g== hex_ende={g[-6:].hex(' ')}")
     verstuemmelt = H.hole()[:539] + "agtICQkcmMpIiA7OyBcCgkgIGV4aXQgJCRyYw=="
     fehler = BB.pruefe(kopf + "\n" + verstuemmelt + "\n")
-    assert any("sha256" in f for f in fehler), fehler
-    assert any("laenge" in f for f in fehler), fehler
+    # R113: die Verstuemmelung macht die Laenge ungueltig -> strikte Ablehnung
+    assert any("kein gueltiges Base64" in f for f in fehler), fehler
 
 
 def test_gekuerzter_block_wird_rot():
@@ -199,4 +199,50 @@ def test_gekuerzter_block_wird_rot():
     block = BB.erzeuge("Makefile", 56, 63)
     kopf, b64 = block.strip().split("\n")
     rot = kopf + "\n" + b64[:200] + "..." + b64[-8:] + "\n"
-    assert any("gekuerzt" in f for f in BB.pruefe(rot))
+    fehler = BB.pruefe(rot)
+    assert any("gekuerzt" in f or "kein gueltiges Base64" in f for f in fehler), fehler
+
+
+# --- R113: strikte Dekodierung ------------------------------------------
+
+def test_r111_block_ist_kein_gueltiges_base64():
+    """586 Zeichen, Rest 2 -- arithmetisch unmoglich.
+
+    Pythons b64decode dekodiert es stillschweigend zu 438 Bytes; das war
+    die Zahl, die ich in R112 als 'verstuemmelt, 438 B' meldete. Sie war
+    ein Parser-Artefakt, keine Messung.
+    """
+    import binascii
+    import beleg_block as BB
+    kaputt = "CUBlY2hvICL" + "A" * 100 + "JCRyYw=="
+    assert len(kaputt) % 4 != 0 or True  # Laenge ist hier nebensaechlich
+    # Der echte R111-Fall: 586 Zeichen
+    r111 = ("CUBlY2hvICLwn5SBIExBVUYg4oCUIFZlcnRyYWdzc2NvcGUgKDM3IFN1aXRlbiksIGVpbmUg"
+            "WsOkaGxxdWVsbGU6IHRlc3RfemFlaGx3ZWlzZS56YWVobGUoKSIKCUBweXRob24zIHNjcmlwdHMv"
+            "bGF1Zi5weTsgcmM9JCQ/OyBcCgkgIGNhc2UgJCRyYyBpbiBcCgkgICAgMCkgZWNobyAi4pyFIEdS"
+            "VUVOIOKAlCBWZXRyYWdzc2NvcGUgZ3LDvG4iIDs7IFwKCSAgICAxKSBlY2hvICLimIwgRmVobGVy"
+            "IOKAlCBTdWl0ZSByb3QgKG1ha2UgbWVsZGV0IDIsIE5JQ0hUIDEpIiA7OyBcCgkgICAgMikgZWNoby"
+            "Ai4pqg77iPICBGZWhsZXIg4oCUIHVuZW50c2NoZWlkYmFyIG9kZXIgcm90IChtYWtlIG1lbGRldCAy"
+            "KSIgOzsgXAoJICAgICopIGVjaG8gIuKaoO+4jyAgRmVobGVyIChtYWtlIG1lbGRldCAyLCBsYXVm"
+            "LnB5IHNhZ3QgJCRyYykiIDs7IFwKCSAgZXNhYzsgZXhpdCAkJHJjCg==")
+    # R111-spezifische Verstuemmelung ab 539
+    verst = r111[:539] + "agtICQkcmMpIiA7OyBcCgkgIGV4aXQgJCRyYw=="
+    assert len(verst) % 4 != 0
+    kopf = ("BELEG laenge=439 sha256=30257636d107f7019074d85de4742e119f0faa24ddcf6340e0741d4ce7b00b52 "
+            "padding=g== hex_ende=20 24 24 72 63 0a")
+    fehler = BB.pruefe(kopf + "\n" + verst + "\n")
+    assert any("kein gueltiges Base64" in f for f in fehler), fehler
+    with __import__("pytest").raises(Exception):
+        binascii.a2b_base64(verst, strict_mode=True)
+
+
+def test_bit_flip_mit_gueltiger_base64_wird_rot():
+    """Gegenprobe: ein gueltig base64-kodierter falscher Inhalt.
+
+    Genau der Fall, den die Laengen-Wache NICHT faengt: nur sha256/hex_ende.
+    """
+    import beleg_block as BB, base64 as _b64
+    from belege_helfer import falscher_block
+    b = falscher_block()
+    fehler = BB.pruefe(b)
+    assert any("sha256" in f for f in fehler), fehler

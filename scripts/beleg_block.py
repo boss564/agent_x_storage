@@ -59,10 +59,25 @@ def pruefe(block: str) -> list[str]:
     fehler = []
     if "..." in b64 or "\u2026" in b64:
         fehler.append("Base64 gekuerzt")
+    # R113: Python b64decode ist nachsichtig und verwirft Restzeichen
+    # stillschweigend. Der R111-Block war 586 Zeichen (Rest 2) -- kein
+    # gueltiges Base64 -- und wurde trotzdem zu 438 Bytes dekodiert.
+    # Ein Beleg muss STRIKT dekodieren.
+    import binascii
+    fehler = []
+    if len(b64) % 4 != 0:
+        fehler.append(f"Base64-Laenge {len(b64)} ist kein Vielfaches von 4 "
+                      f"(Rest {len(b64) % 4}) -- kein gueltiges Base64")
     try:
-        roh = base64.b64decode(b64)
+        binascii.a2b_base64(b64, strict_mode=True)
+        roh = base64.b64decode(b64, validate=True)
     except Exception as e:
-        return [f"Base64 unlesbar: {e}"]
+        fehler.append(f"Base64 nicht strikt dekodierbar: {e}")
+        return fehler
+    if echtes_pad := ("" if len(roh) % 3 == 0 else ("=" if len(roh) % 3 == 2 else "==")):
+        pass
+    if not b64.endswith(echtes_pad) and echtes_pad:
+        fehler.append(f"Padding fehlt: erwartet {echtes_pad!r}, Ende ist {b64[-3:]!r}")
     if str(len(roh)) != felder.get("laenge"):
         fehler.append(f"laenge: {len(roh)} != {felder.get('laenge')}")
     if hashlib.sha256(roh).hexdigest() != felder.get("sha256"):

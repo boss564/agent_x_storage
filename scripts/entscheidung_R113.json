@@ -1,0 +1,66 @@
+{
+  "runde": "R113",
+  "datum": "2026-10-20",
+  "pruefer": "extern (Review durch Nutzer, Channel-only)",
+  "pruefobjekt": "Lieferung R112 (Echo-Frage) + Kette R106-R113",
+  "feststellungen": [
+    {
+      "id": "F113-1",
+      "befund": "Meine Ankuendigung 'Drei Wege, alle legitim:' blieb ohne Inhalt; AskQuestion brach nach 286s ab. Angekuendigter Inhalt, fehlender Inhalt -- sechste Instanz.",
+      "beweis": "Transkript Zeile 8436 endet mit 'Drei Wege, alle legitim:'; AskQuestion-Ergebnis = 'was interrupted by the user'.",
+      "status": "bestaetigt",
+      "bewertung": "Mein Fehler. Bestaetigt und gebucht."
+    },
+    {
+      "id": "F113-2",
+      "befund": "Ihre Behauptung, Ihre letzte Antwort sei '§0: Die Bauform von R112 ist die richtige' gewesen, ist im Transkript nicht vorhanden.",
+      "beweis": "0 Treffer fuer 'Die Bauform von R112 ist die richtige' und 'es gibt keinen neuen Befund' im gesamten Transkript (8438 Zeilen).",
+      "status": "nicht_bestaetigt",
+      "bewertung": "Die von Ihnen referierte Nachricht existiert im Kanal nicht. Ich kann sie nicht als 'Ihre Antwort' anerkennen, aber ich kann auch nicht ausschliessen, dass Ihnen ein anderer Kanal vorliegt."
+    },
+    {
+      "id": "F113-3",
+      "befund": "'586 Zeichen, 438 Bytes' ist arithmetisch unmoeglich.",
+      "beweis": "R111-Block war 586 Zeichen, 586 mod 4 = 2; binascii.a2b_base64(strict_mode=True) -> 'Excess padding not allowed'; b64decode lieferte 438 Bytes -- Parser-Artefakt, keine Messung.",
+      "status": "bestaetigt",
+      "bewertung": "Meine R112-Meldung ('verstuemmelt, 438 B') war ein Artefakt der nachsichtigen Dekodierung. Die korrekte Diagnose ist: der Block war kein gueltiges Base64."
+    },
+    {
+      "id": "F113-4",
+      "befund": "hex_ende 42 02 42 47 26 30 widerspricht aXQgJCRyYw==.",
+      "beweis": "aXQgJCRyYw== dekodiert zu 8 Bytes (' it $$rc'), nicht 6. Der korrekte Wert fuer den echten Block ist 20 24 24 72 63 0a.",
+      "status": "bestaetigt",
+      "bewertung": "Verwechslung zwischen Waechter-Tabelle und gedrucktem Ende in R111 §2."
+    },
+    {
+      "id": "F113-5",
+      "befund": "beleg_block.py dekodierte Base64 nachsichtig und haette einen ROT-Block als GRUEN durchgelassen.",
+      "beweis": "Vor R113: base64.b64decode(b, validate=True) akzeptierte 586 Zeichen. Nach R113: len%4-Pruefung + binascii.a2b_base64(strict_mode=True).",
+      "status": "behoben",
+      "bewertung": "Werkzeug gehaertet. Test test_r111_block_ist_kein_gueltiges_base64 deckt den Fall ab."
+    },
+    {
+      "id": "F113-6",
+      "befund": "Die beiden .beleg-Bloecke wurden im Kanal nie geliefert.",
+      "beweis": "R111 und R112 enthielten keine Zeile mit 'BELEG laenge=' als eigenstaendiger Block.",
+      "status": "bestaetigt",
+      "bewertung": "Weg A wird in R113 ausgefuehrt: beide Bloecke inline, Zeile 1 Header + Zeile 2 Body."
+    },
+    {
+      "id": "F113-7",
+      "befund": "padding=-Delimiter-Mehrdeutigkeit: '=' ist Trenner und Wert.",
+      "beweis": "padding== (leer) / padding=== (ein '=') / padding==== (zwei '=='). Parser nutzt rsplit(' ',1) und split('=',1).",
+      "status": "bestaetigt_akzeptiert",
+      "bewertung": "Lesbar und eindeutig per rsplit. Bleibt so, weil das Format ansonsten nicht mehr Zeile-1-only parsebar waere."
+    }
+  ],
+  "p0_status": {
+    "p0a": "NICHT erfuellt. Die Bytes sind jetzt im Kanal (Weg A), aber der Digest wurde noch nicht von einem fremden Terminal gerechnet (Weg B).",
+    "p0b": "NICHT erfuellt. Repo-gebundene Provenienz ohne unabhaengige Verifikation ist eine Repo-seitige Behauptung."
+  },
+  "weg": {
+    "A": "AUSGEFUEHRT in R113: beide .beleg-Bloecke inline",
+    "B": "OFFEN: erfordert Mensch an fremdem Terminal",
+    "C": "Frist: wenn B in der naechsten Runde nicht kommt"
+  }
+}
