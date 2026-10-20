@@ -5948,6 +5948,7 @@ SKRIPT_OHNE_LAUF: set[str] = {
     "scripts/beleg_export.py",      # Beleg-Paket: atomar, nicht getippt
     "scripts/test_beleg_export.py",  # 9/9 Selbstkonsistenz + Diff
     "scripts/hole_r106_aus_transkript.py",  # R110: Fixture nie handgetippt
+    "scripts/beleg_block.py",       # R112: Beleg mit eigener Kopfzeile
 }
 
 

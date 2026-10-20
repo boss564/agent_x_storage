@@ -166,3 +166,37 @@ def test_getippter_hex_wert_wird_rot():
     p_falsch = dict(p, hex_ende="24 47 24 63 0a")
     fehler = E.pruefe_paket(p_falsch)
     assert any("hex_ende" in f for f in fehler), fehler
+
+
+# --- R112: der Block muss sich selbst pruefen ----------------------------
+
+def test_beleg_block_gruen():
+    import beleg_block as BB
+    block = BB.erzeuge("Makefile", 56, 63)
+    assert BB.pruefe(block) == [], BB.pruefe(block)
+    assert block.splitlines()[0].startswith("BELEG laenge=440 ")
+    assert "hex_ende=20 24 24 72 63 0a" in block.splitlines()[0]
+
+
+def test_r111_verstuemmelter_block_wird_rot():
+    """R111 §2 druckte 586 statt 588 Zeichen; ab Pos. 539 verstuemmelt.
+    Der Block traegt den korrekten Kopf, aber falsche Bytes -> ROT."""
+    import beleg_block as BB, hole_r106_aus_transkript as H
+    if R106_B64 is None:
+        return
+    import base64 as _b64
+    g = _b64.b64decode(H.hole())
+    kopf = (f"BELEG laenge={len(g)} sha256={hashlib.sha256(g).hexdigest()} "
+            f"padding=g== hex_ende={g[-6:].hex(' ')}")
+    verstuemmelt = H.hole()[:539] + "agtICQkcmMpIiA7OyBcCgkgIGV4aXQgJCRyYw=="
+    fehler = BB.pruefe(kopf + "\n" + verstuemmelt + "\n")
+    assert any("sha256" in f for f in fehler), fehler
+    assert any("laenge" in f for f in fehler), fehler
+
+
+def test_gekuerzter_block_wird_rot():
+    import beleg_block as BB
+    block = BB.erzeuge("Makefile", 56, 63)
+    kopf, b64 = block.strip().split("\n")
+    rot = kopf + "\n" + b64[:200] + "..." + b64[-8:] + "\n"
+    assert any("gekuerzt" in f for f in BB.pruefe(rot))

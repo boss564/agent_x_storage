@@ -1,0 +1,35 @@
+{
+  "entscheidung_id": "R112",
+  "datum": "2026-10-20",
+  "art": "BELEG-KANAL GEHAERTET",
+  "gegenstand": "R111 §2 druckte eine verstuemmelte Kette; Selbstpruefung daneben war die Ausgabe des Extrakors",
+  "befund": {
+    "transkript_zeile": 8423,
+    "gedruckt_b64_len": 586,
+    "gedruckt_bytes": 438,
+    "extraktor_b64_len": 588,
+    "extraktor_bytes": 439,
+    "verstuemmelung_ab": 539,
+    "gedruckt": "IHNagtICQkcmMpIiA7OyBcCgkgIGV4...",
+    "extraktor": "IHNhZ3QgJCRyYykiIDs7IFwKCSAgZXNh...",
+    "gedrucktes_hex_ende": "42 02 42 47 26 30",
+    "gedrucktes_sha": "5398ec6e4930e3f9f5c081f808afcea108f49f8a72abd6aa1f187d436b61b590",
+    "erwartetes_sha": "30257636d107f7019074d85de4742e119f0faa24ddcf6340e0741d4ce7b00b52",
+    "ursache": "Die Base64 wurde beim Schreiben des Berichts von Hand eingefuegt, nicht aus der Datei kopiert."
+  },
+  "review_befund_bestaetigt": {
+    "tail": "Die gedruckte Kette endet 'aXQgJCRyYw==' = $$rc ohne LF. Korrekt ist 'aXQgJCRyYwo='. Bestaetigt.",
+    "aber_weitergehend": "Der Defekt beginnt schon bei Pos. 539 und umfasst den gesamten Rest. Der Reviewer sah nur die Tail-Kontradiktion."
+  },
+  "architektur": {
+    "befund": "Wachen in pruefe_paket() schuetzen die BERECHNUNG, nicht den UEBERGABEKANAL. Ein handgetippter Block im Bericht laeuft nie durch pruefe_paket().",
+    "loesung": "beleg_block.py erzeugt 'BELEG laenge=... sha256=... padding=... hex_ende=...' + genau eine Base64-Zeile. Der Leser prueft den Block gegen seine eigene Kopfzeile: beleg_block.py --pruefe <datei>.",
+    "dateien": ["belege/Makefile_56-63.beleg", "belege/R106_lieferung.beleg"],
+    "nachweis": "eigener Block GRUEN; R111-§2-Block ROT mit 4 Befunden (laenge, sha256, hex_ende, padding)."
+  },
+  "regel_R112": "Base64 in einem Bericht darf nur als Zwei-Zeilen-Block mit eigener Kopfzeile erscheinen. Ein Block ohne pruefbare Kopfzeile gilt als unbelegt.",
+  "P0": {
+    "P0a": "erfuellbar, nicht erfuellt -- kein Digest von einem fremden Terminal",
+    "P0b": "repo-gebunden"
+  }
+}
