@@ -1,5 +1,8 @@
 # BYPASS-ZÄHLUNG — Messung
 # 2026-11-05T18:25:27Z · HEAD ff050c2f · Nachtrag 2026-11-05T20:45Z: HEAD 3c658971, sauber (kein Marker)
+# Nachtrag 2026-11-05T20:52Z: HEAD ed9d1c98 — der Commit ed9d1c98 traegt
+#   das Wort „Bypass" NUR in dieser Datei (Commit-Text beim ersten Versuch);
+#   der Commit-Text selbst wurde neu gefasst, s. naechster Commit.
 # Methode: git rev-list --count --grep  (zählt COMMITS, nicht Zeilen)
 
 BYPASS_COUNT_RAW=3
