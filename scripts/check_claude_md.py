@@ -5939,7 +5939,9 @@ SKRIPT_OHNE_LAUF: set[str] = {
     "scripts/test_vertrag_snapshot.py",  # Produkt durable
     "scripts/test_zaehlung_parser.py",  # Eichnormal Messgeraet
     "scripts/beweis.py",            # #14 Beleg-Erzeugung (cite/publish)
-    "scripts/beweis.py",            # #14 hash-verankerte Vollzitate
+                                    # §SP-832: zweite Nennung entfernt —
+                                    # "hash-verankerte Vollzitate" ist
+                                    # dasselbe Skript, keine zweite Quelle.
     "scripts/aussen.py",            # 94 aussen enumerieren/partionieren
     "scripts/zerlege_rot.py",       # "rot" in Kategorien mit Einheit
     "scripts/test_lauf_eine_quelle.py",  # 7/7 Mess-Instrument-Faelle

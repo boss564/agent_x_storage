@@ -18,15 +18,36 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import os
 import re
 import sys
 from pathlib import Path
 
-TRANSKRIPT = Path(
-    "/Users/olivermueller/.cursor/projects/"
-    "Volumes-THX-OS-ULTRA-Users-olivermueller-agent-x-storage-order-execution-engine/"
-    "agent-transcripts/ed0106b6-8a07-4cda-ac09-53851e6aa04a/"
-    "ed0106b6-8a07-4cda-ac09-53851e6aa04a.jsonl")
+# §SP-832 (2026-11-05): **der Harness-Zaun hat recht gehabt, nicht die Ausnahme.**
+# Bis hier stand der Live-Transcript hart kodiert in scripts/ -- genau das,
+# was der Zaun verbietet (Anlass R85: eine Suite, die den Live-Strom liest,
+# teilt dessen Blindheit). Der Fix ist NICHT eine Ausnahme in AUSNAHMEN,
+# sondern der Pfad wird zur Laufzeit hereingereicht:
+#
+#   1. `--transkript <pfad>`  (explizit, fuer den Menschen)
+#   2. Env `AGENTX_TRANSKRIPT` (fuer Test/Harness, ohne Argument)
+#
+# Kein Default auf einen Live-Pfad: fehlt beides, bricht der Aufruf mit
+# einer benannten Meldung ab. Ein stiller Fallback waere derselbe Defekt
+# in neuer Form. Der Gegenstand dieses Skripts -- der R106-Payload -- ist
+# byte-exakt (SHA unten) und damit unabhaengig vom Zieldatei-Pfad.
+
+def _transkript_aus_umgebung() -> Path:
+    """Pfad aus Argument oder Env. Kein Live-Default (Zaun §SP-832)."""
+    for i, a in enumerate(sys.argv):
+        if a == "--transkript" and i + 1 < len(sys.argv):
+            return Path(sys.argv[i + 1])
+    env = os.environ.get("AGENTX_TRANSKRIPT")
+    if env:
+        return Path(env)
+    raise SystemExit(
+        "Transkript nicht gesetzt: --transkript <pfad> oder AGENTX_TRANSKRIPT. "
+        "Kein Live-Default (Harness-Zaun).")
 
 MARKER = "Hier sind die Bytes"
 MUSTER = re.compile(r"CUBlY2hvICL[A-Za-z0-9+/=]{200,}")
@@ -36,7 +57,9 @@ MUSTER = re.compile(r"CUBlY2hvICL[A-Za-z0-9+/=]{200,}")
 ERWARTETE_SHA = "30257636d107f7019074d85de4742e119f0faa24ddcf6340e0741d4ce7b00b52"
 
 
-def hole(pfad: Path = TRANSKRIPT) -> str:
+def hole(pfad: Path | None = None) -> str:
+    if pfad is None:
+        pfad = _transkript_aus_umgebung()
     treffer = []
     for nr, zeile in enumerate(pfad.read_text(encoding="utf-8").splitlines(), 1):
         if MARKER not in zeile:

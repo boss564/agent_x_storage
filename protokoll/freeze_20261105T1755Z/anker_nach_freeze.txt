@@ -1,0 +1,4 @@
+# ANKER nach Freeze (P1.1)
+# 2026-11-05T18:11:22Z
+3031a8d44ae908036caee41ffbdca2c0c4d2b792
+3031a8d4 Freeze-Nachtrag: Anker fd20c565 + SP-830 widerlegt + embedded-repo-Hinweis
