@@ -1,0 +1,14 @@
+{
+  "stamp": "20261101T154856Z-abbruch",
+  "sha": "f54d622ef19f2b0e",
+  "bytes": 1843200,
+  "seq": 35,
+  "counts": {
+    "drafts": 60,
+    "run_metrics": 5512,
+    "cycles": 1206,
+    "generation_state": 1
+  },
+  "pages": 450,
+  "source_sha": "5a487d256245206a"
+}

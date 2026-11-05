@@ -1,0 +1,5 @@
+# Reproduktions-Hashes (2026-11-05T18:06Z)
+# Anker HEAD: 913af0dcc0ccdc8c4fe1fa1f176ebe4d0f3bf39c
+# Befehl:  git rev-parse HEAD:<pfad>  |  git hash-object <pfad>
+CLAUDE.md                                  HEAD=4a6a4d403fb8c60f0c017be3e0e69c4f32b98e94  BAUM=4a6a4d403fb8c60f0c017be3e0e69c4f32b98e94
+order_execution_engine/ops/BERICHT.md      HEAD=888beb40ecb23af01b8f752550a5e23f8b6919fb  BAUM=fd09b6abfce6d1da8af6f3c5f1bb7320c20a3da4

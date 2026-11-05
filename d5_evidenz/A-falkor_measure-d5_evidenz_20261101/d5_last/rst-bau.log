@@ -1,0 +1,1 @@
+{"integrity": "ok", "journal_mode_der_kopie": "delete", "counts": {"drafts": 380, "run_metrics": 80, "cycles": 0, "generation_state": 1}, "last_written_seq": 80, "pages": 39, "writer_seq": {"bereit": 5, "while": 610, "done": 615}, "schreibstrom_reihenfolge_ok": true, "meta_pari": true, "artefakt_liegt_strikt_im_fenster": true, "artefakt_veraltet_gegen_while": true}

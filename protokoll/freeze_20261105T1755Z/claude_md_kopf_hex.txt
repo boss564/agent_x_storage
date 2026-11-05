@@ -1,0 +1,8 @@
+# CLAUDE.md Kopfbytes — Messung 2026-11-05T18:06Z
+# ERGEBNIS: KEIN BOM. Behauptung SP-830 widerlegt (siehe SP830_WIDERLEGT.md)
+
+CLAUDE.md Arbeitsbaum erste 3 Bytes (hex): 23 20 41   -> "# A"
+CLAUDE.md HEAD erste 3 Bytes (hex):       23 20 41   -> "# A"
+git hash-object Arbeitsbaum:  4a6a4d403fb8
+git rev-parse HEAD:CLAUDE.md: 4a6a4d403fb8   (identisch -> unveraendert, nicht gestaged)
+BOM EF BB BF vorhanden: False

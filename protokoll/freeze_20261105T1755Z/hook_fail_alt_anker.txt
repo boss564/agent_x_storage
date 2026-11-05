@@ -1,0 +1,21 @@
+# HOOK-BEFUND: VORBESTEHEND — Beleg gegen den ALTEN ANKER (ohne meine Änderungen)
+# Erstellt: 2026-11-05T18:07Z
+#
+# Methode: git archive HEAD (913af0dc) -> Checker auf den ANKER-Stand, NICHT auf
+#          den Arbeitsbaum. Damit ist ausgeschlossen, dass der Befund durch die
+#          Freeze-Artefakte entsteht.
+#
+PROBE-KOMMANDO:
+  TMP=$(mktemp -d) && git archive HEAD | tar -x -C "$TMP"
+  python3 scripts/check_claude_md.py "$TMP" --run-tests
+  echo $?
+#
+ERGEBNIS: EXIT=1
+#
+--- WÖRTLICHE AUSGABE (relevante Zeilen) ---
+8 gemessen · 1 nicht gemessen · 0 ohne Skript (12 entfernt) — unvollstaendig · Prüfer 842de489e5a7
+Bericht: 6 Felder, 2 Befund(e) — **nur Form** · 11/11 Vertragsfälle grün · 6/6 Mutationen gefangen · Hash-Eingang 6/6 · Konsument 6/7 · Konstanten 3/3 · Normalisierung 8/8 · Zeilen-Identitaet 4/4 · Konformitaet 8/8 · Zaun-Meta 5/5 · Zeiger 3/3 · Projektion 5/5 · Exit2-Zeilen 3/3 · ADJ-Slot 4/4 · Regel-Konsument 4/4 · Klassen-Mehrdeutigkeit 4/4 · Regel-gegen-pos 3/3 · Escaping 3/3 · Projektion-echt 3/3 · Katalog-Naht 5/5 · Naht-Beweis 5/5 · Kreuz-Record 10/10 · Harness-Zaun 2/3 · Konsumenten-Kongruenz 8/8 · Frist-Gate 12/12 · Unwissen-Etikett 8/8 · Exit-vor-Stdout 4/4
+Regeltabelle: 13 Regeln, 0 Befund(e)
+             Kopfzeile: Prüfer af77393000f8 im Block, 842de489e5a7 heute — Block ist Vorzustand
+            Doku: siehe ops/KOPFZEILE.md   tatsaechlich: Kopfzeile: Prüfer af77393000f8 im Block, 842de489e5a7 heute — Block ist Vorzustand
+  1 Befund(e) zitiert und durch einen Korrekturblock quittiert — sichtbar, nicht blockierend.

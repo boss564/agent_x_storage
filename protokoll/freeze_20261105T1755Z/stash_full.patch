@@ -1,0 +1,129 @@
+diff --git a/docs/REGIME_SWARM_LIVE_SHADOW_RUNBOOK.md b/docs/REGIME_SWARM_LIVE_SHADOW_RUNBOOK.md
+index 70d4f821..e1658ac2 100644
+--- a/docs/REGIME_SWARM_LIVE_SHADOW_RUNBOOK.md
++++ b/docs/REGIME_SWARM_LIVE_SHADOW_RUNBOOK.md
+@@ -46,9 +46,11 @@ make raas-regime-swarm-live-shadow-install \
+ ```bash
+ kubectl rollout status statefulset/regime-swarm -n trading --timeout=180s
+ kubectl get pods -n trading -l app.kubernetes.io/name=regime-swarm
+-kubectl logs -n trading regime-swarm-0 -f | grep -E 'swarm_daemon_start|cycle_error|INFRASTRUCTURE'
++kubectl logs -n trading regime-swarm-0 -f | grep -E 'swarm_daemon_start|cycle_complete|cycle_error|INFRASTRUCTURE'
+ ```
+ 
++Jeder Leader-Zyklus schreibt `{"event":"cycle_complete","ticks_this_cycle":…}` — neben `/metrics` `swarm_ticks_last_cycle` für die Feed-Lücken-Zuordnung (kein Gap-Detector im Drift-Pfad; i.i.d. fängt Lücken nicht ab).
++
+ Erwartung im Start-Log: `"live_execution": false`, `"live_feed_enabled": true`, `"interval_s": 30`, `"worm_dir": "/data/worm/live"`, `"swarm_live_execution_env": "false"`.
+ 
+ ### Charter-Check (4. Signal — vor Metriken)
+@@ -82,17 +84,24 @@ Ohne `SWARM_LIVE_EXECUTION` in der ConfigMap gilt weiterhin Ebene 2 (Code-WORM-G
+ 
+ **Config-Priorität (ab Daemon-Fix):** ConfigMap/Env **schlägt** `/app/config/regime_swarm.json` für `CYCLE_INTERVAL_SECONDS`, `LIVE_FEED_*`, `SWARM_METRICS_PORT`. Kein JSON-Volume-Override nötig.
+ 
++## Deployment-Drift (Chart vs. laufender Pod)
++
++> **Stand 2026-08-28 (kind `regime-shadow`, Namespace `trading`):** Live-Shadow läuft mit Image **`agentx-regime-swarm:live-shadow`**, imperativ per `kubectl set image statefulset/regime-swarm …` gesetzt (PR #18-Deploy). Helm-Chart [`values.yaml`](../charts/regime-swarm/values.yaml) hat `image.tag: ""` — ein späteres `helm upgrade` würde das Image **nicht** rekonstruieren und scheitert derzeit zusätzlich an **immutable** `volumeClaimTemplates` (PVC **10Gi** im Cluster vs. **5Gi** im Overlay). Wer den Cluster nur aus dem Repo aufbaut, bekommt **nicht** automatisch diesen Stand.
++>
++> **Vermerk für Rebuild:** Image manuell laden (`kind load docker-image agentx-regime-swarm:live-shadow`), dann `kubectl set image …` **oder** StatefulSet einmal löschen und Helm mit `--set persistence.size=10Gi` + `--set image.tag=live-shadow`. Workaround-ConfigMap `regime-swarm-config-override` war nie nötig (PR #18).
++
+ ## 4. Metriken (Checkliste)
+ 
+ ```bash
+ kubectl port-forward -n trading statefulset/regime-swarm 8080:8080 &
+ curl -s http://localhost:8080/health
+-curl -s http://localhost:8080/metrics | grep -E '^drift_counter|^risk_multiplier|^gate_block_counter|^swarm_cycles_total'
++curl -s http://localhost:8080/metrics | grep -E '^drift_counter|^risk_multiplier|^gate_block_counter|^swarm_cycles_total|^swarm_ticks_last_cycle'
+ ```
+ 
+ | Metrik | Erwartung (1–2 Tage Shadow) |
+ |--------|-----------------------------|
+ | `swarm_cycles_total` | Steigt ~alle 30 s (Leader-Pod) |
++| `swarm_ticks_last_cycle` | Ticks vom WebSocket **in diesem Zyklus**; bei WS-Lücke fällt die Zahl ein, während `drift_counter` steigen kann → Feed-Artefakt, nicht Markt |
+ | `drift_counter{regime,type}` | Bewegt sich bei Regime-Klassifikation (nicht bei jedem Tick) |
+ | `risk_multiplier` | A8-Advisory-Multiplikator (Default 1.0, Soft-Adapt bei Unreliable) |
+ | `gate_block_counter{gate="A0"}` | Nur bei Flash/Spread-Verletzung — **nicht** dauerhaft >0 bei normalen Ticks |
+@@ -179,7 +188,7 @@ PYTHONPATH=. python3 scripts/run_regime_swarm_daemon.py \
+ |-----------|-----------|
+ | Zyklen stabil | Kein Crash; WS-Feed läuft im Hintergrund-Thread |
+ | Infra normal | Kein dauerhaftes `INFRASTRUCTURE_BLOCKED` bei regulären Ticks |
+-| Metriken leben | `swarm_cycles_total` ↑; `drift_counter` / `risk_multiplier` reagieren auf Drift-Pipeline |
++| Metriken leben | `swarm_cycles_total` ↑; `swarm_ticks_last_cycle` plausibel; `drift_counter` / `risk_multiplier` reagieren auf Drift-Pipeline |
+ | WORM wächst | JSONL-Datei unter `…/paper_trades.worm.jsonl` append-only |
+ | Charter | Jede WORM-Zeile `live_execution=false`; kein Order-Send |
+ 
+diff --git a/scripts/test_live_feed_prometheus.py b/scripts/test_live_feed_prometheus.py
+index 81ce8937..9281e5c7 100644
+--- a/scripts/test_live_feed_prometheus.py
++++ b/scripts/test_live_feed_prometheus.py
+@@ -133,6 +133,64 @@ def test_feed_worm_daemon_counters() -> None:
+                 _fail("report live_execution")
+ 
+ 
++def test_ticks_per_cycle_metric() -> None:
++    from prototypes.raas_paper_trading.feed import PaperTick
++
++    os.environ["SWARM_INFRA_GATES_ENABLED"] = "false"
++    reset_metrics()
++    with tempfile.TemporaryDirectory() as tmp:
++        root = Path(tmp)
++        worm_dir = root / "worm" / "live"
++        bridge = LivePaperBridge(
++            symbol="ETHUSDT",
++            worm_dir=worm_dir,
++            feed=MockWebSocketFeed([]),
++            attach_orderbook=False,
++        )
++        for i in range(5):
++            bridge.ingest_tick(
++                PaperTick(symbol="ETHUSDT", ts=f"2026-01-01T00:00:{i:02d}Z", price=100.0 + i, source="test")
++            )
++        cfg = {
++            "cycle_interval_seconds": 1,
++            "worm_dir": str(worm_dir),
++            "audit_path": str(root / "audit.jsonl"),
++            "cooling_path": str(root / "cooling.jsonl"),
++            "state_path": str(root / "state.json"),
++            "report_path": str(root / "report.json"),
++            "cycle_log_path": str(root / "cycles.jsonl"),
++            "leader_snapshot_path": str(root / "leader.json"),
++            "live_execution": False,
++            "live_feed_enabled": True,
++            "metrics_port": 18080,
++        }
++        daemon = RegimeSwarmDaemon(cfg, live_bridge=bridge)
++
++        async def _interval(extra_ticks: int = 0) -> int:
++            tick_base = bridge.ticks_written
++            await daemon.run_cycle()
++            for j in range(extra_ticks):
++                bridge.ingest_tick(
++                    PaperTick(
++                        symbol="ETHUSDT",
++                        ts=f"2026-01-01T00:02:{j:02d}Z",
++                        price=110.0 + j,
++                        source="test",
++                    )
++                )
++            return bridge.ticks_written - tick_base
++
++        if asyncio.run(_interval()) != 0:
++            _fail("expected 0 ticks during idle interval")
++        ticks = asyncio.run(_interval(extra_ticks=2))
++        from scripts import run_regime_swarm_daemon as mod
++
++        mod._metrics["ticks_last_cycle"] = ticks
++        body = render_metrics_text()
++        if ticks != 2 or "swarm_ticks_last_cycle 2" not in body:
++            _fail(f"expected swarm_ticks_last_cycle 2, got {ticks}\n{body}")
++
++
+ def test_gate_block_counter() -> None:
+     os.environ["SWARM_INFRA_GATES_ENABLED"] = "true"
+     reset_metrics()
+@@ -201,6 +259,7 @@ def main() -> int:
+     test_charter_live_execution_env_blocks()
+     test_env_overrides_json_file()
+     test_feed_worm_daemon_counters()
++    test_ticks_per_cycle_metric()
+     test_gate_block_counter()
+     print("LIVE_FEED_PROMETHEUS_PASS")
+     return 0

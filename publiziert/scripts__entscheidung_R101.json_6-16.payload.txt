@@ -1,0 +1,11 @@
+  "dateien_geschlossen": [
+    "scripts/lauf.py",
+    "Makefile",
+    "scripts/test_lauf_aufrufer.py",
+    "scripts/check_claude_md.py"
+  ],
+  "fix": {
+    "baseline_sha256": "d2c2ce695a79a482e10cf6e406992a2a53ffb84dcd04c1c7f107b8616c61f335",
+    "ziel_sha256": "f0587d46bb36dfaad44470c7741d7c26f465bcc5f936ce17f7b757cf2e5b7d93",
+    "hinweis": "Der Dreizustand aus R100 greift hier zum ersten Mal praktisch: AKTIV vor der Aenderung, VOLLZOGEN danach."
+  },

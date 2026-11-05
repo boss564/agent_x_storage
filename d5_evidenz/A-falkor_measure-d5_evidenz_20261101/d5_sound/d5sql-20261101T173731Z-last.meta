@@ -1,0 +1,15 @@
+{
+  "stamp": "20261101T173731Z-last",
+  "source": "/data/d5_schreiblast.db",
+  "integrity_check": "ok",
+  "counts": {
+    "drafts": 380,
+    "run_metrics": 80,
+    "cycles": 0,
+    "generation_state": 1
+  },
+  "pages": 39,
+  "source_seq": 80,
+  "bytes": 159744,
+  "t": 1793554652.054962
+}
