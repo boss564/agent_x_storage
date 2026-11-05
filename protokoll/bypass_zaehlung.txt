@@ -1,0 +1,22 @@
+# BYPASS-ZÄHLUNG — Messung
+# 2026-11-05T18:25:27Z · HEAD ff050c2f · Nachtrag 2026-11-05T20:45Z: HEAD 3c658971, sauber (kein Marker)
+# Methode: git rev-list --count --grep  (zählt COMMITS, nicht Zeilen)
+
+BYPASS_COUNT_RAW=3
+
+## Die Commits (Paste)
+ff050c2f FIX: Harness-Zaun 2/3 -> 3/3 (Live-Pfad aus scripts/ entfernt)
+3031a8d4 Freeze-Nachtrag: Anker fd20c565 + SP-830 widerlegt + embedded-repo-Hinweis
+fd20c565 FREEZE: vorbestehender unsauberer Stand + Review-Artefakte (2026-11-05T17:55Z)
+
+## Klassifikation
+fd20c565  Bypass 1  Freeze            — echter Hook-Umgeher
+ff050c2f  Bypass 2  Hook-Fix          — echter Hook-Umgeher (Bootstrap)
+3031a8d4  KEIN Bypass  Nachtrag       — Marker auf einem Commit ohne Hook-Lauf
+
+## Ursace nach SP-840
+(b) BUCHUNGS-DRIFT — nicht (a) Messungs-Artefakt, nicht (c) ungebuchter Bypass.
+Begruendung: kein Commit ist ein Messungs-Commit; fd20c565 und 3031a8d4
+teilen denselben gebypassten Stand (Freeze + Nachtrag). Der Nachtrag
+traegt einen Marker, obwohl er keinen eigenen Bypass darstellt.
+BYPASS_COUNT=3 OK (3 Commits mit Marker; 2 echte Bypaesse + 1 Nachtrag)
