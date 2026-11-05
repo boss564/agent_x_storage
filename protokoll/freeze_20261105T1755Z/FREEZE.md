@@ -55,4 +55,22 @@ gezogen) bis zur separaten Entscheidung — der Patch ist hier vollständig gesi
 Der Anker ist der **Commit-Hash des Freeze-Commits** (unten eingetragen) plus
 die Prüfung `git status --porcelain` = leer danach.
 
-**Freeze-Commit:** (wird nach dem Commit eingetragen)
+**Freeze-Commit:** `fd20c565b74bce976917a5c2c85041e23608b721` (2026-11-05T18:09Z)
+**Status danach:** `git status --porcelain` = **leer** · Stash unangetastet · kein Push
+**Bypass:** gebucht (SP-829/SP-831), Marker in der Commit-Message, Belege im Commit.
+
+## Nachträge zum Freeze (Anker fd20c565)
+
+| Buchung | Ergebnis |
+|---|---|
+| SP-829 Hook vorbestehend rot | **bestätigt** — `hook_fail_alt_anker.txt`, EXIT=1 gegen Anker 913af0dc; bleibt OFFEN |
+| SP-830 BOM in CLAUDE.md | **widerlegt** — kein BOM (`23 20 41`), `SP830_WIDERLEGT.md` |
+| SP-831 Verfahren | **angewendet** — `SP829_SP831_BYPASS.md`, 5/5 Bedingungen erfüllt |
+| SP-832 Hook-Fix | **offen** — nächster Schritt, eigener gebuchter Bypass (Bootstrap) |
+
+## Bemerkenswerter Nebenbefund
+
+`git add -A` hat `global_market_data` als **embedded git repository** gemeldet
+(Gitlink). Das Verzeichnis ist im Index als Verweis, nicht als Inhalt. Für den
+Freeze unkritisch (0 Payload-Bytes), aber für einen späteren Rebuild relevant —
+der Inhalt ist **nicht** im Commit, nur der Verweis.
