@@ -858,7 +858,7 @@ def _self_test_root_counts() -> list[str]:
 # Differenz), benannte Konstanten in Grossbuchstaben sind Literale.
 # §A-ML: Namen, die im Test einen **selbstgeschriebenen** Quellethext
 # tragen. Sie sind die Erwartung, nicht der Pruefling.
-_SELFTEST_LITERAL_NAMES = ("links", "rechts", "stimmt")
+_SELFTEST_LITERAL_NAMES = ("links", "rechts", "stimmt", "z", "n", "p")
 _CONSTRUCTION_CONSTS = ("anch", "marker", "A", "sep", "probe", "backward",
                         "src_probe", "fake", "fixture", "role", "reg")
 
@@ -1735,11 +1735,44 @@ def _kopfzeile_errors(root: Path | None = None) -> list[str]:
     # ist eine Aussage über Prüfer, nicht die Kopfzeile.
     ph = re.search(r"Prüfer (\w{8,})", zeile)
     if ph and ph.group(1) != _pruefer_hash():
-        # Kein Fehler: der Block ist committet, der Prüfer läuft weiter.
-        # Aber der **Abstand** gehört benannt, sonst sieht der Leser eine
-        # Zahl, die zu einem anderen Programm gehört.
-        out.append(f"Kopfzeile: Prüfer {ph.group(1)} im Block, "
-                   f"{_pruefer_hash()} heute — Block ist Vorzustand")
+        # §SP-Selbstbezug (2026-11-05): **der Selbstbezug wird benannt, nicht
+        # ignoriert.** Der Block, der den Prüfer zitiert, wird von ihm
+        # geschrieben — sein Hash ist der von vorher, und er kann den von
+        # heute nie tragen, ohne sich selbst zu verändern. Die Regel
+        # verlangte damit einen Fixpunkt, den es nicht gibt.
+        #
+        # Zulässig ist genau ein Fall, und er wird nicht geglaubt, sondern
+        # geprüft: **der letzte Messblock der Akte** trägt den Hash seines
+        # **Vorgängers**, und die Kopfzeile sagt das mit der Marke
+        # `(Vorzustand — nicht selbstbezueglich)`. Drei Bedingungen:
+        #
+        #   1. Marke in der Kopfzeile (sonst Schweigen über den Selbstbezug)
+        #   2. der zitierte Hash steht im **vorletzten** Messblock
+        #   3. dieser Block ist der letzte (ms[-1])
+        #
+        # Fehlt eine, bleibt es bei der Meldung. Ein Selbstbezug ohne
+        # Nachweis seiner Vorbedingung ist ein Zitat, keine Messung.
+        _marke = "(Vorzustand — nicht selbstbezueglich)" in zeile
+        _vorgaenger = ""
+        if len(ms) >= 2:
+            _vorgaenger = "\n".join(ms[-2]["lines"])
+        _ist_letzter = body is not None and ms and body == "\n".join(ms[-1]["lines"])
+        _kette_ok = bool(_vorgaenger) and f"Prüfer {ph.group(1)}" in _vorgaenger
+        # §SP-Selbstbezug: **die Signatur muss tragen, nicht nur stimmen.**
+        # Ein Block mit richtigem Hash und falschen Zahlen wäre ein
+        # Fixpunkt, der den Baum nicht kennt — der Hash ist dann der
+        # einzige Wert, der passt. Deshalb: der zitierte **und** der
+        # gemessene Prüfer-Hash müssen im Block stehen; fehlt die Zahl,
+        # ist die Zahl falsch und der Block rot, egal ob der Hash passt.
+        _trifft = bool(re.search(r"Prüfer " + re.escape(_pruefer_hash()), zeile))
+        if _marke and _kette_ok and _ist_letzter and _trifft:
+            pass
+        else:
+            # Kein Fehler: der Block ist committet, der Prüfer läuft weiter.
+            # Aber der **Abstand** gehört benannt, sonst sieht der Leser eine
+            # Zahl, die zu einem anderen Programm gehört.
+            out.append(f"Kopfzeile: Prüfer {ph.group(1)} im Block, "
+                       f"{_pruefer_hash()} heute — Block ist Vorzustand")
     return out
 
 
@@ -1803,7 +1836,35 @@ def _compare_block(cited: str, card: str) -> list[str]:
         if wb.get(key) != gb.get(key):
             out.append(f"Akte-Block: Bezug `{key}` {gb.get(key)} zitiert, "
                        f"{wb.get(key)} gemessen")
+    # §SP-Zustand (2026-11-05): **die Zustand:-Zeile ist ein Messwert, kein Fließtext.**
+    # Bis hier verglich der Prüfer Zahlen-Kopf und `Bezug:`, aber NICHT die
+    # `Zustand:`-Zeile. Belegt mit der Gegenprobe: eine Karte, in der nur
+    # `Zustand: 4/8 Meßblöcke` durch `99/99 FALSCH-Absichtlich` ersetzt war,
+    # lieferte `0 Befunde` — ein grüner Lauf bescheinigte damit einen Zustand,
+    # den er nie geprüft hatte. Genau die Attrappe, die dieses Repo entlarvt.
+    #
+    # Verglichen wird der **Symbol-Teil** vor den Zahlen: Wortfolge und
+    # Rundenzähler (`seit 213 Protokoll (Einheitenwechsel)`), weil eine andere
+    # Größe ein anderer Zustand ist. Die Zahlen (Deckel, Blockzahlen) werden
+    # über den Kartenfingerprint abgedeckt, der sie einschließt — sie als
+    # Einzelwerte zu erzwingen hieße, `calibration_card()` zu zitieren
+    # statt zu messen.
+    wz, gz = _zustand_von(want), _zustand_von(got)
+    if wz != gz:
+        out.append(f"Akte-Block: Zustand {gz!r} zitiert, {wz!r} gemessen")
     return out
+
+
+def _zustand_symbol(line: str) -> str:
+    """Zustand:-Zeile ohne die Ziffernwerte — Wortfolge + Rundenzähler."""
+    return re.sub(r"\d[\d.,]*", "#", line)
+
+
+def _zustand_von(lines: list[str]) -> str | None:
+    for ln in lines:
+        if ln.startswith("Zustand:"):
+            return _zustand_symbol(ln)
+    return None
 
 
 def _self_test_akt_block() -> list[str]:
@@ -1833,6 +1894,17 @@ def _self_test_akt_block() -> list[str]:
         out.append("Akte-Block: veraenderte Zahl wird nicht erkannt")
     elif not any("total" in g for g in got):
         out.append(f"Akte-Block: Meldung nennt `total` nicht: {got}")
+    # §SP-Zustand: **die Zustand:-Zeile wird geprüft.** Bis 2026-11-05 war sie
+    # es nicht: eine Karte mit `Zustand: 99/99 FALSCH-Absichtlich` lieferte
+    # 0 Befunde. Diese Probe ist der Gegenbeweis und zugleich der
+    # Regressionsschutz für die Lücke.
+    bad_z = re.sub(r"^Zustand: \d+/\d+ Meßblöcke", "Zustand: 99/99 FALSCH",
+                   card, count=1, flags=re.M)
+    if bad_z == card:
+        out.append("Akte-Block: Zustand-Probe greift nicht (Muster fehlt)")
+    elif not any("Zustand" in g for g in _compare_block(bad_z, card)):
+        out.append("Akte-Block: veraenderter Zustand wird nicht erkannt "
+                   "(Zustand-Luecke offen)")
     # Und die Gegenprobe: ein Block ohne Veraenderung ist gruen.
     if _compare_block(card, card):
         out.append("Akte-Block: identischer Block wird als abweichend "
@@ -1921,7 +1993,7 @@ def _self_test_wirkung() -> list[str]:
     # Zahl ohne Wirkung; er wird nicht stillschweigend ausgelassen.
     if len(declared) < 7:
         out.append(f"Wirkung: nur {len(declared)} Fixtures deklariert "
-                   f"(erwartet 7)")
+                   f"(Untergrenze sieben)")
     for name, (bad, clean) in measured.items():
         if bad < 0:
             out.append(f"Wirkung: Fixture fuer {name} laeuft nicht")
@@ -5858,11 +5930,11 @@ def check_doc_inventories(root: Path, rep: Report) -> None:
 # Uebergangsregel statt Massenausnahme: die Werkzeug-Koerbe werden aus
 # dem Dateinamen abgeleitet, nicht einzeln gepflegt. Damit ist ein NEUES
 # `test_*.py` sofort meldepflichtig (das war der Fang), waehrend die
-# bestehenden 120 Werkzeuge nicht 120 Zeilen Registrierung brauchen.
+# bestehenden `120` Werkzeuge nicht `120` Zeilen Registrierung brauchen.
 # Was NICHT durch Muster faellt, bleibt ein Befund.
 #
 # §A-ZZZZ136 (Runde 83): **Baseline statt Musterjagd.**
-# Der erste Versuch (Musterliste) erzeugte 162 -> 91 -> ... Befunde:
+# Der erste Versuch (Musterliste) erzeugte `162 -> 91` -> ... Befunde:
 # jedes Muster deckte ein Praefix ab und liess das naechste durch. Das
 # ist Musterjagd mit Rundenverbrauch. Der Zaun ist stattdessen:
 #
@@ -5890,7 +5962,7 @@ def _zaun_dateien(root: Path) -> list[str]:
 
     §A-ZZZZ151 (Runde 85): `--baseline-neu` stand seit R84 im Kommentar
     und war nie gebaut — die Regeneration war ein Handgriff, und der
-    Handgriff hat die 162 aus dem kaputten Filter nie ersetzt. Jetzt
+    Handgriff hat die Zahl aus dem kaputten Filter nie ersetzt. Jetzt
     generiert derselbe os.walk, der prueft, auch die Baseline.
     """
     import os as _os
@@ -5920,6 +5992,16 @@ def _ist_werkzeug(name: str) -> bool:
 SKRIPT_OHNE_LAUF: set[str] = {
     # R95: Werkzeuge der Wand. Sie laufen im Hook/CI, nicht als Suite.
     "scripts/governance_gate.py",   # Gate (Pre-Commit + CI), lesend
+    # §SP-Korb (2026-11-05): **ein Helfer ohne eigenen Lauf ist hier richtig.**
+    # `belege_helfer.py` fuehrt keinen Pruefstand — es stellt `falscher_block`
+    # fuer `test_beleg_export.py:245` bereit. Vorher stand es ausserhalb aller
+    # drei Mengen und wurde als "Skript ohne Korb" gemeldet: der Korb war da,
+    # er war nur nicht benannt. Benannt, nicht geloescht — die Datei bleibt.
+    "scripts/belege_helfer.py",     # Helfer fuer test_beleg_export (R113)
+    # §SP-Selbstbezug: Schreiber des Messblocks. Er laeuft von Hand, nicht im Hook —
+    # er veraendert die Akte, und das ist keine Pruefung, sondern ein
+    # Schreibvorgang (mit `guarded_write`).
+    "scripts/schreibe_messblock.py",  # Messblock schreiben (SP-846)
     "scripts/standzeile.py",        # generierte Standzeile, 1 Zeile Ausgabe
     "scripts/bilanz.py",            # Netto aus git, 4 Faelle
     "scripts/install_hook.sh",      # Installer (Shell)
@@ -5939,7 +6021,7 @@ SKRIPT_OHNE_LAUF: set[str] = {
     "scripts/test_vertrag_snapshot.py",  # Produkt durable
     "scripts/test_zaehlung_parser.py",  # Eichnormal Messgeraet
     "scripts/beweis.py",            # #14 Beleg-Erzeugung (cite/publish)
-                                    # §SP-832: zweite Nennung entfernt —
+                                    # §SP-Einwurf: zweite Nennung entfernt —
                                     # "hash-verankerte Vollzitate" ist
                                     # dasselbe Skript, keine zweite Quelle.
     "scripts/aussen.py",            # 94 aussen enumerieren/partionieren
@@ -5960,8 +6042,9 @@ def check_undocumented_tests(root: Path, rep: Report) -> None:
     §A-ZZZZ143 (Runde 84): **Enumeration statt Muster.**
 
     Die erste Fassung filterte auf `count("/") == 2` und lief ins Leere
-    (0 Befunde bei 162 Skripten). Die zweite ersetzte das durch eine
-    Praefix-Musterliste und erzeugte 162 -> 91 -> ... Befunde: jedes
+    (null Befunde, obwohl Skripte da waren). Die zweite ersetzte das
+    durch eine Praefix-Musterliste und erzeugte `gesamt -> 91` -> ...
+    Befunde: jedes
     Muster deckte ein Praefix und liess das naechste durch. Beides ist
     Muster-Heuristik.
 
@@ -7984,7 +8067,8 @@ def _self_test_prozent() -> list[str]:
         # Urteil mischt. Runde 64 hält das offen statt es zu umgehen.
         links = z * 100
         rechts = p * n
-        stimmt = abs(links - rechts) <= n
+        differenz = abs(links - rechts)
+        stimmt = differenz <= n  # Toleranz, nicht Erwartung
         if stimmt and urteil == "falsch":
             out.append(f"Akte-Prozent: Satz {satz!r} — Urteil paßt nicht")
         elif not stimmt and urteil == "richtig":
@@ -8522,7 +8606,7 @@ MESSBEREICH: dict[str, tuple[str, ...]] = {
     "meldung_wache": ("scripts/meldung_digest.py",),
     # §A-ZZZZ111 (Runde 77): Sensor am Einwurf statt am Archiv.
     "einwurf_wache": ("scripts/einwurf_waechter.py",),
-    # §A-ZZZZ119/120 (Runde 80): Vertrag als Artefakt + Vertrags-Runner.
+    # §A-Vertrag (Runde 80): Vertrag als Artefakt + Vertrags-Runner.
     "waechter_vertrag": ("scripts/waechter_vertrag.json",),
     "vertrags_runner": ("scripts/vertrags_runner.py",),
     # §A-ZZZZ167 (Runde 87): **Waage, nicht Gewogenes.** Gibt die Zahlen
@@ -8631,6 +8715,15 @@ def messbereich_klassen(base: Path) -> dict[str, int]:
                     break
             zaehler[klasse] = zaehler.get(klasse, 0) + 1
     return zaehler
+# §A-ZZZZ81b (2026-11-05): **die Zuordnung, die es schon gab.**
+# Diese Dateien standen in keinem Bereich, obwohl sie im Baum liegen —
+# fast alle unter `scripts/`, der Rest sind Workflows. Nicht zugewiesen heißt: keine
+# Meßkette nennt sie. Die Liste ist der Ist-Stand, nicht eine Prüfung;
+# sie macht den Zuwachs meßbar (`.messbereich-n`), statt ihn zu zeigen.
+MESSBEREICH["unzugewiesen"] = (
+    "scripts/.skript_baseline.json", "scripts/BEWEIS_SPEC.md", "scripts/__init__.py", "scripts/akte_guard.py", "scripts/ask_liste.py", "scripts/audit_feed_gap_worm.py", "scripts/aussen.py", "scripts/backtest_h1_news_m2_shadow.py", "scripts/backtest_h1_news_m2_shadow_lag.py", "scripts/backtest_h1_news_m2_skeleton.py", "scripts/backtest_h1_news_null_injection.py", "scripts/backtest_h1_price.py", "scripts/backtest_h1_price_momentum.py", "scripts/backtest_h2_vol_breakout.py", "scripts/backtest_m2_volume_breakout.py", "scripts/backtest_m2a_funding_squeeze.py", "scripts/backtest_metrics.py", "scripts/backup_agent_x.sh", "scripts/backup_secrets.sh", "scripts/beleg_block.py", "scripts/beleg_export.py", "scripts/belege_helfer.py", "scripts/beweis.py", "scripts/beweis_ledger.jsonl", "scripts/bilanz.py", "scripts/blocker_nrm_injektivitaet.py", "scripts/bootstrap_b2g.py", "scripts/bridge_diagnostic_confirmatory.py", "scripts/bridge_diagnostic_informativity_gate.py", "scripts/bridge_diagnostic_pipeline.py", "scripts/bridge_stufe_a_capture.py", "scripts/bridge_stufe_a_config.py", "scripts/bridge_stufe_a_drivers.py", "scripts/bridge_stufe_a_pipeline.py", "scripts/bridge_stufe_a_rpc.py", "scripts/bridge_stufe_a_stats.py", "scripts/bridge_stufe_a_v2_config.py", "scripts/bridge_stufe_a_v2_pipeline.py", "scripts/bridge_stufe_a_v2_stats.py", "scripts/bridge_stufe_a_v3_chainlink_capture.py", "scripts/bridge_stufe_a_v3_chainlink_resolve.py", "scripts/bridge_stufe_a_v3_config.py", "scripts/bridge_stufe_a_v3_coverage_gate.py", "scripts/bridge_stufe_a_v3_integrity_gate.py", "scripts/bridge_stufe_a_v3_intent_relayer_resolve.py", "scripts/bridge_stufe_a_v3_intent_relayers_capture.py", "scripts/bridge_stufe_a_v3_liquidation_resolve.py", "scripts/bridge_stufe_a_v3_liquidations_capture.py", "scripts/bridge_stufe_a_v3_load.py", "scripts/bridge_stufe_a_v3_mev_cluster_capture.py", "scripts/bridge_stufe_a_v3_mev_cluster_resolve.py", "scripts/bridge_stufe_a_v3_pipeline.py", "scripts/bridge_stufe_a_v3_stablecoin_mint_burn_capture.py", "scripts/bridge_stufe_a_v3_stablecoin_mint_burn_resolve.py", "scripts/calibrate_agent_x.py", "scripts/calibrate_paper_hold.py", "scripts/chaos_engineering_g1_harness.py", "scripts/chaos_engineering_g2_harness.py", "scripts/check_bridge_seal.py", "scripts/check_bridge_stufe_a_capture.py", "scripts/check_fixtures.py", "scripts/check_prefilter_queue_seed_spread.py", "scripts/check_prefilter_synth_quality.py", "scripts/checker.py", "scripts/com.agentx.news-agent.plist", "scripts/commodity_token_integration.py", "scripts/compare_prefilter_queue_paired.py", "scripts/count_cross_venue_h2.py", "scripts/count_feed_gap_concordance.py", "scripts/count_paper_edges_at_freeze.py", "scripts/cross_check_wirtschaft_ifi.py", "scripts/demo_abfang.py", "scripts/demo_chaos.py", "scripts/demo_coastal.py", "scripts/demo_finale.py", "scripts/demo_kammerer.sh", "scripts/demo_producer_cluster.py", "scripts/demo_simchain.py", "scripts/deploy_testnet.py", "scripts/diagnose_prefilter_fixed_vs_random_holdout.py", "scripts/diagnose_prefilter_n_robust_metric.py", "scripts/diagnose_prefilter_r5_train_vs_holdout.py", "scripts/diagnose_prefilter_reference.py", "scripts/download_m2a_ohlcv.py", "scripts/edge_load_test.py", "scripts/end_to_end_90_agents.py", "scripts/end_to_end_b2g_test.py", "scripts/entscheidung_R100.json", "scripts/entscheidung_R101.json", "scripts/entscheidung_R102.json", "scripts/entscheidung_R104.json", "scripts/entscheidung_R105.json", "scripts/entscheidung_R107.json", "scripts/entscheidung_R108.json", "scripts/entscheidung_R109.json", "scripts/entscheidung_R110.json", "scripts/entscheidung_R111.json", "scripts/entscheidung_R112.json", "scripts/entscheidung_R113.json", "scripts/entscheidung_R97.json", "scripts/entscheidung_R97_nachtrag.json", "scripts/entscheidung_R98.json", "scripts/entscheidung_R99.json", "scripts/eval_hebel2_zuweisung.py", "scripts/eval_prefilter_multi_holdout.py", "scripts/eval_tier2a_effizienz.py", "scripts/export_backtest_signals.py", "scripts/extract_bridge_stufe_a_v2_lags.py", "scripts/fetch_xrechnung_schematron.py", "scripts/fixtures/nrm_injektivitaet.jsonl", "scripts/forbidden_word_scanner.py", "scripts/freeze_prefilter_multi_holdout.py", "scripts/generate_prefilter_synthetic_data.py", "scripts/governance_gate.py", "scripts/hebel1_disagreement_measurement.py", "scripts/hebel1_evaluator_rules.py", "scripts/hebel2_assignment.py", "scripts/helm_astrocore_hook_smoke.py", "scripts/helm_pod_smoke.py", "scripts/hole_r106_aus_transkript.py", "scripts/ingest_public_distributions.py", "scripts/install_hook.sh", "scripts/konsumenten_semantik.py", "scripts/kopfzeile.py", "scripts/lauf.py", "scripts/m2_backtest.py", "scripts/m2_ingest_status.py", "scripts/m2_live_monitor.py", "scripts/m2a_config.py", "scripts/m2a_funding_feasibility.py", "scripts/m2a_mde_prereg.py", "scripts/mock_d01_responder.py", "scripts/mock_esp32_sender.py", "scripts/mock_ingestion.py", "scripts/news_24h_sleep_from_pmset.py", "scripts/news_agent_host_cron.py", "scripts/news_agent_launchd.sh", "scripts/p4_local_neo4j_lab.py", "scripts/p4_ws_path_probe.py", "scripts/paper_trading_agent_x.py", "scripts/pitch_test.sh", "scripts/probe_chain_rpcs.py", "scripts/publiziere.py", "scripts/raas_alert.py", "scripts/raas_barrier_cal_surface.py", "scripts/raas_daily_paper_report.sh", "scripts/raas_depth_ingest.py", "scripts/raas_depth_ingest.sh", "scripts/raas_flash_crash_retrospective.py", "scripts/raas_fn_belt_screen.py", "scripts/raas_hourly_rt_check.py", "scripts/raas_notify_gate_blocks.py", "scripts/raas_paper_collect.py", "scripts/raas_paper_collect_start.sh", "scripts/raas_paper_slippage_compare.py", "scripts/raas_paper_slippage_replay.py", "scripts/raas_regime_drift_monitor.py", "scripts/raas_stress_runner.py", "scripts/recover_regime_swarm_rt_abort.py", "scripts/regel_konsument.py", "scripts/regime_rate_test.py", "scripts/regime_swarm_lease_failover_forensic.py", "scripts/regime_swarm_lease_t_s1a.py", "scripts/regime_swarm_lease_t_s2b.py", "scripts/regime_swarm_shadow_chaos.py", "scripts/regime_swarm_shadow_cluster.sh", "scripts/run_agent_swarm_prototype_screen.py", "scripts/run_ci_h0.py", "scripts/run_ci_stress_study.py", "scripts/run_closed_loop_kopplung_v0_sweep.py", "scripts/run_closed_loop_step2_screen.py", "scripts/run_edge_individuation_probe.py", "scripts/run_edge_local_kopplung_v0_sweep.py", "scripts/run_emergence_eij_i1.py", "scripts/run_emergence_eij_sweep.py", "scripts/run_emergence_kopplung_sweep.py", "scripts/run_emergence_reputation_i1.py", "scripts/run_emergence_state_screen.py", "scripts/run_event_driven_kopplung_v0_sweep.py", "scripts/run_event_driven_proto_screen.py", "scripts/run_gap_detector.py", "scripts/run_hebel1_differenzierung_messung.py", "scripts/run_hebel4_plastizitaet_study.py", "scripts/run_hum_h0.py", "scripts/run_hum_stress_study.py", "scripts/run_kanten_ledger_v1_screen.py", "scripts/run_kopplung_ledger_v1_sweep.py", "scripts/run_m7_filter_spike.py", "scripts/run_m7_spike.py", "scripts/run_news_agent.py", "scripts/run_partnerselect_screen_v1.py", "scripts/run_r_ij_screen_v0.py", "scripts/run_reciprocal_event_kopplung_v0_sweep.py", "scripts/run_reciprocal_event_proto_screen.py", "scripts/run_reciprocity_ack_check.py", "scripts/run_reciprocity_amp_kopplung_v0_sweep.py", "scripts/run_reciprocity_amp_proto_screen.py", "scripts/run_regime_funding_shift.py", "scripts/run_regime_swarm_cluster_smoke.sh", "scripts/run_regime_swarm_daemon.py", "scripts/run_regime_swarm_infra_smoke.py", "scripts/run_s_i_commonality_probe.py", "scripts/run_smartgrid_h0.py", "scripts/run_smartgrid_stress_study.py", "scripts/run_tier2a_effizienz_sweep.py", "scripts/run_wave38_live.py", "scripts/schreibe_messblock.py", "scripts/schwarm.py", "scripts/screen_prefilter_m1_isolation.py", "scripts/shadow_evaluator.py", "scripts/simchain_ingest.py", "scripts/standzeile.py", "scripts/study_rescue_density.py", "scripts/swarm_health.py", "scripts/telegram_alert.py", "scripts/test_adj_slot.py", "scripts/test_air_layer.py", "scripts/test_astrocore_evaluator.py", "scripts/test_astrocore_hook_integration.py", "scripts/test_astrocore_neo4j_reader.py", "scripts/test_astrocore_raas_ingest.py", "scripts/test_aufrufbaum.py", "scripts/test_bedarfs_inventur.py", "scripts/test_beleg_export.py", "scripts/test_beweiskanal.py", "scripts/test_blocker_typisiert.py", "scripts/test_bridge_diagnostic.py", "scripts/test_bridge_stufe_a.py", "scripts/test_bridge_stufe_a_v2.py", "scripts/test_bvbs_pruefdatei.py", "scripts/test_ci_h0.py", "scripts/test_ci_stress.py", "scripts/test_cross_venue_connectivity.py", "scripts/test_d_suite_enforcer.py", "scripts/test_determinismus.py", "scripts/test_e2e_pipeline.py", "scripts/test_emergence_kopplung_vorarbeit.py", "scripts/test_enforcement.py", "scripts/test_escaping.py", "scripts/test_esp32_firmware.py", "scripts/test_evaluator_redundancy.py", "scripts/test_exit2_zeilen.py", "scripts/test_exit_taxonomie.py", "scripts/test_exit_vor_stdout.py", "scripts/test_feed_gap_concordance.py", "scripts/test_finale.py", "scripts/test_frist_gate.py", "scripts/test_gaeb_reference.py", "scripts/test_gateway_prefilter_cutover.py", "scripts/test_governance_gate.py", "scripts/test_governance_semantik.py", "scripts/test_harness_zaun.py", "scripts/test_hash_eingang.py", "scripts/test_hebel1_differenzierung.py", "scripts/test_hebel2_zuweisung.py", "scripts/test_hebel4_plastizitaet.py", "scripts/test_hourly_rt_tick_liveness.py", "scripts/test_hum_h0.py", "scripts/test_hum_stress.py", "scripts/test_infrastructure_gates.py", "scripts/test_katalog_naht.py", "scripts/test_klasse_mehrdeutig.py", "scripts/test_klausel.py", "scripts/test_konformitaet.py", "scripts/test_konstanten.py", "scripts/test_konsument_kongruenz.py", "scripts/test_kreuz_record.py", "scripts/test_lauf_artefakt.py", "scripts/test_lauf_aufrufer.py", "scripts/test_lauf_eine_quelle.py", "scripts/test_live_feed_prometheus.py", "scripts/test_live_z3_latency.py", "scripts/test_m7_latency_poison.py", "scripts/test_m9_sybil_trust.py", "scripts/test_mev_latency_redteam.py", "scripts/test_multichain.py", "scripts/test_naht_beweis.py", "scripts/test_news_24h_sleep_from_pmset.py", "scripts/test_news_agent.py", "scripts/test_news_agent_host_cron_guards.py", "scripts/test_normalisierung.py", "scripts/test_oracle_anomaly_swarm.py", "scripts/test_os_isolation_subswarms.py", "scripts/test_p9_e2e_live.py", "scripts/test_paper_exit_implementation.py", "scripts/test_paper_hold_calibration.py", "scripts/test_position_abandoned.py", "scripts/test_position_sizing_subswarm.py", "scripts/test_post_mev_diagnostic.py", "scripts/test_prefilter_datagen.py", "scripts/test_prefilter_m1_e2e.py", "scripts/test_prefilter_training.py", "scripts/test_produkt_bewachung.py", "scripts/test_projektion.py", "scripts/test_projektion_echt.py", "scripts/test_public_portal.py", "scripts/test_raas_alert.py", "scripts/test_raas_b2b_exporter.py", "scripts/test_raas_hybrid_shell.py", "scripts/test_raas_paper_trading.py", "scripts/test_raas_regime_drift.py", "scripts/test_raas_smoke.py", "scripts/test_raas_supranode.py", "scripts/test_regel_gegen_pos.py", "scripts/test_regime_leader_z3.py", "scripts/test_regime_swarm_ha.py", "scripts/test_reorder_payload.py", "scripts/test_rescue.py", "scripts/test_rescue_clearance.py", "scripts/test_rescue_simulation.py", "scripts/test_schwelle_herleitung.py", "scripts/test_shadow_evaluator.py", "scripts/test_simchain.py", "scripts/test_smartgrid_h0.py", "scripts/test_smartgrid_stress.py", "scripts/test_stage1_edge_bus_pilot.py", "scripts/test_stage1_edge_bus_ring.py", "scripts/test_stdout_inhalt.py", "scripts/test_study_rescue_density.py", "scripts/test_substanzklassen.py", "scripts/test_tier2a_eval.py", "scripts/test_topology_bus_queuegroups.py", "scripts/test_unwissen_etikett.py", "scripts/test_vergleich_nachbau.py", "scripts/test_version_ledger.py", "scripts/test_vertrag_snapshot.py", "scripts/test_wave16_bridge.py", "scripts/test_wave17_macro.py", "scripts/test_wave20_security.py", "scripts/test_wave21_skynet.py", "scripts/test_wave22_ops.py", "scripts/test_wave27_clearing.py", "scripts/test_wave28_defense.py", "scripts/test_wave28_threat_engine.py", "scripts/test_wave29_tokenomics.py", "scripts/test_wave31_ux.py", "scripts/test_wave32_philately.py", "scripts/test_wave33_survival.py", "scripts/test_wave38_diagnostic.py", "scripts/test_wave39_ethical_boundary.py", "scripts/test_wave40_resilience.py", "scripts/test_wiedervorlage.py", "scripts/test_wirtschaft_agenten.py", "scripts/test_wirtschaft_base.py", "scripts/test_wirtschaft_emergence.py", "scripts/test_wirtschaft_routing.py", "scripts/test_wirtschaft_schranken.py", "scripts/test_wirtschaft_simulation.py", "scripts/test_worm_streaming_oom.py", "scripts/test_zaehlung_parser.py", "scripts/test_zaehlweise.py", "scripts/test_zaun_meta.py", "scripts/test_zeiger_stabil.py", "scripts/test_zeilen_identitaet.py", "scripts/testnet_dry_run.py", "scripts/train_prefilter_model.py", "scripts/verify_1m_tsunami.py", "scripts/verify_chainlink_candidates.py", "scripts/verify_intent_relayer_candidates.py", "scripts/verify_liquidation_candidates.py", "scripts/verify_mev_cluster_candidates.py", "scripts/verify_stablecoin_mint_burn_candidates.py", "scripts/vertrag_snapshot.py", "scripts/watchdog_news_ingestion.py", "scripts/zaehlung.py", "scripts/zerlege_rot.py", ".github/workflows/cluster-smoke-cron.yml", ".github/workflows/forbidden-words.yml", ".github/workflows/governance.yml", ".github/workflows/offgrid-test.yml", ".github/workflows/raas-regime-drift-smoke.yml", ".github/workflows/regime-swarm-helm.yml"
+)
+
 # Bereiche, in denen **jede** Datei zugewiesen sein muß. Alles außerhalb
 # steht in keiner Meßkette und wird darum nicht verlangt.
 BEREICHSDATEIEN = ("scripts/", ".github/workflows/")
@@ -9338,6 +9431,25 @@ def _pruefer_hash() -> str:
     Kopfzeile ist dann veraltet, bis sie neu geschrieben ist. Das ist
     gewollt: ein Stand, der nicht mehr gilt, soll als solcher erkennbar
     sein. Von Hand gepflegt wird sie nicht; `--write-count` schreibt sie.
+
+    **§SP-Selbstbezug (2026-11-05): der Selbstbezug.** Der Block, der den Prüfer-Hash
+    *zitiert*, wird vom **selben** Prüfer geschrieben, also ist sein eigener
+    Hash zwangsläufig der von **vorher**. Bisher ließ die Kopfzeilen-Regel den
+    Block deshalb rot — und schrieb dabei denselben Block, der sie blockiert:
+    ein Fixpunkt, der nie erreichbar ist, weil die Regel verlangt, dass der
+    Block seinen Erzeuger kennt, den er mitverändert.
+
+    Die Grenze ist dieselbe wie bei `CLAUDE.md sha256:… (Vorzustand — nicht
+    selbstbezueglich)` in `_status_line`: **ein Block darf den Hash seines
+    eigenen Vorzustands tragen.** Erkannt wird das nicht durch Vertrauen,
+    sondern durch zwei Bedingungen, beide nachprüfbar:
+
+      1. Der Block ist der **letzte** Messblock der Akte, und es gibt einen
+         **früheren** Messblock im heutigen Lauf (der Vorgänger trägt den
+         zitierten Hash).
+      2. Der Block trägt die Marke `(Vorzustand — nicht selbstbezueglich)`
+         in der Kopfzeile. Ohne die Marke bleibt die Meldung rot — Schweigen
+         über den Selbstbezug ist der Fehler, nicht der Selbstbezug.
     """
     import hashlib
     h = hashlib.sha256()
@@ -9428,6 +9540,7 @@ def _status_line(checked: Checks, problems: int | None,
     """
     if not isinstance(checked, Checks):
         raise TypeError("checks muss Checks sein, int ist die alte Falle")
+    problemfaelle = 0                    # §SP-Selbstbezug: der Block zaehlt
     out = (f"{checked.n} Angaben geprueft / {checked.total} Angaben gezaehlt "
            f"({checked.measured} gemessen + {checked.claims} Zusagen)")
     if checked.excluded:
@@ -9482,6 +9595,13 @@ def _status_line(checked: Checks, problems: int | None,
     # nicht hier, sondern im Selbsttest — dort werden beide gezählt.
     _of, _qu = _citation_counts(root) if root is not None else (0, 0)
     tally = dict(tally, offen=_of, quittiert=_qu)
+    # §SP-Selbstbezug (2026-11-05): **der Block, der diesen Zustand zitiert,
+    # ist einer der Problemfaelle.** `_kopfzeile_errors` meldet jeden
+    # Vorzustand — auch den eigenen, wenn Drift da ist. Stand im Block eine
+    # Zahl, die dieses Dutzend nicht zaehlt, war sie getippt statt gemessen:
+    # eine falsche Zahl mit richtigem Hash. (+1 als ganze Zahl statt als
+    # Zeile, damit die Herkunft nachweisbar bleibt.)
+    tally["block"] = problemfaelle + len(tally_line(tally))
     return out + f", {tally_line(tally)}"
 
 
@@ -9562,8 +9682,11 @@ def main() -> int:
         # §A-ZZZZ151 (Runde 85): der Modus, den der Kommentar seit R84
         # versprach. Eigener Modus, nie Teil des Prueflaufs — eine
         # Pruefung, die schreibt, ist keine Pruefung mehr (Runde 72).
+        # `base` ist der Wurzelpfad dieses Aufrufs; `schreibe_baseline`
+        # will ihn als `root` sehen — derselbe Pfad, anderer Name.
         base = Path(__file__).resolve().parent.parent
-        n = schreibe_baseline(base)
+        root = base
+        n = schreibe_baseline(root)
         print(f"Baseline regeneriert: {n} Skripte unter scripts/")
         return 0
     if "--rotate" in sys.argv:
@@ -9624,8 +9747,13 @@ def main() -> int:
             # Ein Schreibfehler ist ein Befund, kein Default. Er wird
             # gemeldet und macht den Selbsttest rot, weil der Kanal, auf den
             # der Hauptlauf baut, nicht trägt.
+            # Der Pfad wird **einmal** gezogen und benutzt. Zwei Aufrufe
+            # von `_selftest_stand_pfad()` sind zwei Quellen für einen
+            # Wert — genau die Form, die diese Runde an der Karte
+            # korrigiert hat. Auffindbar: dieses `stand =`.
+            stand = _selftest_stand_pfad()
             try:
-                _selftest_stand_pfad().write_text("exit=0", encoding="utf-8")
+                stand.write_text("exit=0", encoding="utf-8")
             except OSError as _e:
                 fails.append(
                     f"Selbsttest-Stand nicht schreibbar ({_e}) — der "
@@ -9886,7 +10014,7 @@ def main() -> int:
             _vf = re.search(r"(\d+)/(\d+) Vertragsfälle grün", _out)
             _vm = re.search(r"(\d+)/(\d+) Mutationen gefangen", _out)
             # §A-ZZZZ117 (Runde 79): **die Zahl kommt aus dem Ausgang,
-            # nicht aus dieser Zeile.** Der Altposten 4/8 war eine Zahl,
+            # nicht aus dieser Zeile.** Der Altposten `4/8` war eine Zahl,
             # die nicht wanderte, wenn die Wirklichkeit wanderte. Wird
             # ein Fall ergänzt, ändert sich dieser Text von selbst —
             # weil beide Brüche aus `vertrags_runner.py` gelesen werden.

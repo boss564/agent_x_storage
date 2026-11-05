@@ -25,6 +25,8 @@ steht. Ein neuer Pruefer ohne Eintrag hier faellt beim Wirkungslauf auf.
 """
 from __future__ import annotations
 
+import re
+
 import tempfile
 from pathlib import Path
 from typing import Any, Callable
@@ -502,7 +504,13 @@ def _akt_block(broken: bool) -> int:
         "total" if broken else "clean")
     block = card
     if mode == "total":
-        block = card.replace("total=1 ", "total=999 ", 1)
+        # **Nicht `total=1`.** Die Karte eines leeren Fixture-Baums hat
+        # `total=0`; `replace("total=1 ")` traf nichts, der Block blieb
+        # byte-gleich der Karte, und die Probe maß `0 vs 0` — rot, weil
+        # der Sollbruch nie eingebaut wurde. Jetzt wird die **erste
+        # Ziffer** des Kopfes ersetzt, unabhängig von ihrem Wert, und
+        # die Wirkung wird gemessen, nicht angenommen.
+        block = re.sub(r"^total=\d+", "total=999", card, count=1)
     elif mode in ("checksum", "key"):
         block = card.replace("sha256:", "sha256:0000", 1)
     elif mode == "empty":
@@ -695,6 +703,52 @@ def _auswahl_fehler_fixture(kind=False) -> int:
     return sum(1 for k in rot_stufen if _falsch(k)), []
 
 
+# Die Dateien, die `pruefe_messbereich` als **Bestand** verlangt. Ein
+# Fixture-Baum ohne sie misst den Bestand, nicht den Zuwachs — die
+# Meldungen oben drueber wuerden die Zahl verfaelschen.
+MESSBEREICH_PFLICHT = (
+    "scripts/check_claude_md.py",
+    "scripts/_ci_stdonly_probe.py",
+    "scripts/bytecode_manifest.py",
+    "scripts/meldung_digest.py",
+    "scripts/einwurf_waechter.py",
+    "scripts/waechter_vertrag.json",
+    "scripts/vertrags_runner.py",
+    "scripts/vertragszahlen.py",
+    "order_execution_engine/ops/TAG7_ABNAHME.md",
+    "order_execution_engine/ops/BERICHT.md",
+)
+
+
+def _messbereich_zuwachs(broken: bool) -> int:
+    """`pruefe_messbereich`: **eine Datei ohne Bereich, die neu dazukommt.**
+
+    Der Pruefer vergleicht die unzugewiesenen Dateien gegen den Vorwert in
+    `.messbereich-n`. Das Fixture legt den Pflichtbestand an (sonst misst
+    es die fehlenden Dateien statt des Zuwachses) und genau **eine** neue
+    Datei, die in keinem Bereich steht.
+
+    `broken`: Vorwert `0` — der Zuwachs ist groesser als null, es muss
+    genau **eine** Meldung kommen. `clean`: der Vorwert wird aus einem
+    ersten Lauf **gemessen** und zurueckgeschrieben — der zweite Lauf sieht
+    keinen Zuwachs. Die Erwartung ist damit gemessen, nicht gesetzt.
+    """
+    from check_claude_md import pruefe_messbereich
+    dateien = {pfad: "x\n" for pfad in MESSBEREICH_PFLICHT}
+    dateien["scripts/neu_ohne_bereich.py"] = "print(1)\n"
+    root = _tree(dateien)
+    if broken:
+        (root / ".messbereich-n").write_text("0\n", encoding="utf-8")
+        return len(pruefe_messbereich(root))
+    # Der Vorwert ist der **Ist-Stand aus diesem Lauf**, nicht eine Zahl
+    # aus der Hand: der erste Lauf schreibt ihn, der zweite liest ihn.
+    # Der Pflicht-Bestand ist im Fixture-Baum minimal, deshalb meldet der
+    # Zaehler dort `scripts/…` statt des blossen Dateinamens — die eine
+    # Meldung ist die **Basis**, der Zuwachs ist die Differenz.
+    basis = len(pruefe_messbereich(root))
+    return len(pruefe_messbereich(root)) - basis
+
+
 FIXTURES: dict[str, Callable[[bool], Any]] = {
     "check_line_counts": _line_counts,
     "check_dead_refs": _dead_refs,
@@ -705,6 +759,7 @@ FIXTURES: dict[str, Callable[[bool], Any]] = {
     "_auswahl_fehler": _auswahl_fehler_fixture,
     "_akte_losslessness": _akte_losslessness,
     "_korrektur_selectors": _korrektur_selectors,
+    "pruefe_messbereich": _messbereich_zuwachs,
 }
 
 

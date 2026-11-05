@@ -10238,3 +10238,42 @@ gebucht als R86-Instanz, nicht stillschweigend korrigiert.)
 
 **Nicht getan:** `ING` nicht angeschlossen; kein Produktionslauf; die
 Zahl der Mutationsläufe pro Mutation ist weiter 1, nicht N.
+
+```
+total=0 chain_total=0 reported=0 unclassified=0 unchecked=0 unclassified_checkers=0
+  Zeilen: 0
+  Referenzen: 0
+  Wellen: 0
+  Tests ohne Skript: 0
+  Inventare: 0
+  Testpfade: 0
+  Schreibmodus: 0
+  Fließtext-Brüche: 0
+kopfzeile: 9 gemessen · 0 nicht gemessen · 0 ohne Skript (12 entfernt) · Prüfer a10e672be1c7
+Karte: e96b843c71a1
+Zustand: 4/8 Meßblöcke scheiterbar · seit 213 Protokoll (Einheitenwechsel) · Deckel 3000 ⇒ unter · 2792 Code-Blöcke · 320 Protokoll im Fenster ⇒ Rotation (>240) · 13/13 Regeln mit Gegenlauf · 1/2 quittiert · R→F 0/med 1/n 5/letzte 0/Prüfer · 9 Felder
+Bezug: root=/Volumes/THX_OS_ULTRA/Users/olivermueller/agent_x_storage, CLAUDE.md sha256:50fff349a031, Baum ff050c2f+dirty
+```
+
+
+
+
+### §71.76 — Messblock 2026-11-05 (Werkzeug `schreibe_messblock.py`)
+
+```
+total=0 chain_total=0 reported=0 unclassified=0 unchecked=0 unclassified_checkers=0
+  Zeilen: 0
+  Referenzen: 0
+  Wellen: 0
+  Tests ohne Skript: 0
+  Inventare: 0
+  Testpfade: 0
+  Schreibmodus: 0
+  Fließtext-Brüche: 0
+kopfzeile: 9 gemessen · 0 nicht gemessen · 0 ohne Skript (12 entfernt) · Prüfer d86d5e26e062
+Karte: 52390b01dfbe
+Zustand: 6/10 Meßblöcke scheiterbar · seit 213 Protokoll (Einheitenwechsel) · Deckel 3000 ⇒ unter · 2794 Code-Blöcke · 321 Protokoll im Fenster ⇒ Rotation (>240) · 13/13 Regeln mit Gegenlauf · 1/2 quittiert · R→F 0/med 1/n 5/letzte 0/Prüfer · 9 Felder
+Bezug: root=/Volumes/THX_OS_ULTRA/Users/olivermueller/agent_x_storage, CLAUDE.md sha256:50fff349a031, Baum ff050c2f+dirty
+```
+
+Prüfer `d86d5e26e062` · erzeugt aus dem Ist-Stand, nicht kopiert.

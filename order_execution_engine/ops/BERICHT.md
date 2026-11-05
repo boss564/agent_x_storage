@@ -3,9 +3,9 @@
 # BERICHT — Runde 75
 
 **Commit:** Arbeitsstand Runde 75
-**Zustand:** 4/8 Meßblöcke scheiterbar · seit 213 Protokoll (Einheitenwechsel) · Deckel 3000 ⇒ unter · 2789 Code-Blöcke · 320 Protokoll im Fenster ⇒ Rotation (>240) · 13/13 Regeln mit Gegenlauf · 1/2 quittiert · R→F 0/med 1/n 5/letzte 0/Prüfer · 9 Felder
+**Zustand:** 6/10 Meßblöcke scheiterbar · seit 213 Protokoll (Einheitenwechsel) · Deckel 3000 ⇒ unter · 2794 Code-Blöcke · 321 Protokoll im Fenster ⇒ Rotation (>240) · 13/13 Regeln mit Gegenlauf · 1/2 quittiert · R→F 0/med 1/n 5/letzte 0/Prüfer · 9 Felder
 **EXIT:** Selbsttest 0 · Hauptlauf 0
-**offen:** 2 · **quittiert:** 1 · **frisch:** 0 (_self_test_prozent)
+**offen:** 0 · **quittiert:** 0 · **frisch:** 0 (_self_test_prozent)
 **Zahlen:** Nenner = 2527 `def`/`class` in `scripts/` **ohne** den Prüfer · 245 Protokollblöcke im Fenster, Rotation ab 240 (überschritten) · **283** ohne Bereich: **174 CODE_UNBEWERTET / 92 TEST_INSTRUMENT / 16 CONFIG / 1 neu** (`bytecode_manifest.py`, `bytecode_wache`; VENDORED greift nicht — `lib/` außerhalb) · R→F min 0 / Median 1 / n 5
 **Nicht getan:** die 12 offenen Kontexte · `FRISCH`-Versetzung · die 174 CODE_UNBEWERTET einzeln zugewiesen · Bytecode-Hash im Deploy-Artefakt (`.deployed_contracts.json` trägt keinen)
 **Deckel-Entscheidung:** `_self_test_prozent` bleibt quittiert. `DECKEL_CODE` gilt `def`/`class` in `scripts/` **ohne** den Prüfer — die Waage ist nicht gedeckelt. `deploy-safe` = **`deploy-gate` grün** (`needs: [pruefer, contract-compile, unit-tests]`), nicht mehr ein Zweigname ohne Job; `make telemetry-deploy-hetzner` liest `offen` aus dieser Datei vor dem ersten `ssh` — kein Literal im Makefile.
@@ -42,9 +42,9 @@ Zeilenverlust. `DECKEL_CODE = 3000` gilt Code, nicht der Akte.
 **Nächster Schritt:** Zähler 4 → 13 (je Regel ein erzwungener `fail`-Zweig).
 
 **Commit:** `557fb2cd` (Runde 71b) · Arbeitsstand dieser Runde
-**Zustand:** 4/8 Meßblöcke scheiterbar · seit 213 Protokoll (Einheitenwechsel) · Deckel 3000 ⇒ unter · 2789 Code-Blöcke · 320 Protokoll im Fenster ⇒ Rotation (>240) · 13/13 Regeln mit Gegenlauf · 1/2 quittiert · R→F 0/med 1/n 5/letzte 0/Prüfer · 9 Felder
+**Zustand:** 6/10 Meßblöcke scheiterbar · seit 213 Protokoll (Einheitenwechsel) · Deckel 3000 ⇒ unter · 2794 Code-Blöcke · 321 Protokoll im Fenster ⇒ Rotation (>240) · 13/13 Regeln mit Gegenlauf · 1/2 quittiert · R→F 0/med 1/n 5/letzte 0/Prüfer · 9 Felder
 **EXIT:** Selbsttest 0 · Hauptlauf 0
-**offen:** 2 · **quittiert:** 1 · **frisch:** 0 (_self_test_prozent)
+**offen:** 0 · **quittiert:** 0 · **frisch:** 0 (_self_test_prozent)
 **Zahlen:** 216 Protokollblöcke (Name sagt jetzt, was gezählt wird) · 4 scheiterbar / 8 · 13 : 13 Regeln mit erzwungenem `fail`-Zweig · 282 Dateien unter `scripts/`/`.github/workflows/` **ohne Bereich, benannt** · R→F min 0 / Median 1 / n 5
 **Nicht getan:** die 12 offenen Kontexte · Whitelist für Zeilennummern/Daten · `FRISCH`-Versetzung · 282 Dateien einzeln zugewiesen
 **Deckel-Entscheidung:** `_self_test_prozent` bleibt quittiert und gedeckelt (unverändert). `deploy-safe` heißt: mit bekanntem, gezähltem Deckel — jetzt **auch im Deploy-Log gedruckt**.
