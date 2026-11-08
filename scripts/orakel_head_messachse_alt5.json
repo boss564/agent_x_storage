@@ -1,0 +1,13 @@
+{
+  "quelle": "git show HEAD:scripts/waechter_vertrag.json → ausgabe_grammatik.messachse",
+  "head_commit": "273a7d1e7bcca2e775039945cf5693992fee3ee6",
+  "vertrag_blob": "ea5e35be8afec13a69aaf255a07b76c89fa106e1",
+  "messachse": [
+    "KANAL-DUPLIKAT",
+    "Paare",
+    "WIEDERHOLUNG",
+    "json",
+    "uebersprungen"
+  ],
+  "hinweis": "Dual-Alt5-Orakel fuer Commit R. Nicht aus SCHEMA_KERN_ALT5 gespiegelt — Freeze der HEAD-Grammatik. Realer HEAD-Producer kann mehr emittieren als diese Grammatik."
+}

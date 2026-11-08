@@ -1,0 +1,19 @@
+{
+  "id": "R29-KORB",
+  "typ": "ENTSCHEIDUNG",
+  "datum": "2026-11-08",
+  "ziel": "Korb-Registrierung scripts/achsen_invariante.py vor Commit-R-Payload (R105).",
+  "entscheidungen": {
+    "registrierung": "scripts/achsen_invariante.py in scripts/.skript_baseline.json (known via Baseline).",
+    "rolle": "Helfer-Bibliothek Expand-Reader L0-L4; kein eigener x/y-Lauf; genutzt von mock_ingestion + test_konstanten + test_konformitaet.",
+    "reihenfolge": "Entscheidung (dieser Commit) -> Payload Commit R. Kein Schluessel in der Nutzlast."
+  },
+  "nicht_entschieden": {
+    "SKRIPT_OHNE_LAUF_liste": "Baseline genuegt fuer known-Menge; explizite SKRIPT_OHNE_LAUF-Zeile optional spaeter."
+  },
+  "nachtrag_forced_coupling": {
+    "befund": "HEAD mock_ingestion = 6/7 (Schema-Luecke Paare auf exit=3). Commit-R-Payload (re.M + erste_achsenzeile) stellt 7/7 her. Entscheidung-allein kann den Pre-Commit nicht passieren.",
+    "entscheidung": "Korb-Registrierung und Commit-R-Payload in EINEM Commit. R105-Spannung benannt, nicht verschwiegen: der Schluessel reist mit, weil die Wand sonst dauerhaft 6/7 blockiert.",
+    "messung": "git show HEAD mock_ingestion gegen HEAD-Waechter → FAIL fehlt/ungeprueft Schema-Luecke [Paare]; WT+achsen_invariante → 7/7."
+  }
+}

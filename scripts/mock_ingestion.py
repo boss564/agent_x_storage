@@ -28,18 +28,30 @@ die sie abweicht.
 """
 from __future__ import annotations
 
-import re
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
 
+from achsen_invariante import (
+    bewerte_achsenzeile,
+    erste_achsenzeile,
+    parse_messachse,
+)
+
 W = Path(__file__).resolve().parent / "einwurf_waechter.py"
 
 
 def konsumiere(code: int, stdout: str, stderr: str) -> dict:
-    """Die Schnittstelle. Aendert sich hier etwas, aendert sich der Vertrag."""
-    mess = dict(re.findall(r"(?:^|;)([A-Za-z_\-]+)=(\d+)", stdout))
+    """Die Schnittstelle. Aendert sich hier etwas, aendert sich der Vertrag.
+
+    Parser: kanonisch `achsen_invariante.parse_messachse` (re.M).
+    Diese Datei ist die Vertrags-Referenz-Ingestion (§A-ZZZZ125) — kein
+    Testdouble, sondern die ausfuehrbare Schnittstelle, gegen die jede
+    echte Ingestion gebaut werden MUSS. Es gibt im Repo keinen zweiten
+    Messachsen-Parser.
+    """
+    mess = {k: str(v) for k, v in parse_messachse(stdout).items()}
     if code == 0:
         aktion, marke = "zustellen", None
     elif code == 1:
@@ -60,6 +72,18 @@ def konsumiere(code: int, stdout: str, stderr: str) -> dict:
             "alarm": marke in ("AUFRUFFEHLER", "UNVOLLSTAENDIG",
                                "UNGEPRUEFT", "UNBEKANNT_FAIL_CLOSED"),
             "messung": mess, "warnung": bool(stderr.strip())}
+
+
+def schema_ok(stdout: str) -> tuple[bool, str]:
+    """Expand-Schema via V4-Pipeline auf der Achsenzeile (nicht ZEILE-Records).
+
+    Parser → L4 Fremd-Keys → Dispatcher. Fremd+Summe wird hier rot.
+    """
+    zeile = erste_achsenzeile(stdout)
+    if zeile is None:
+        return False, "Schema-Luecke: ['Paare']"
+    ok, grund, _klasse = bewerte_achsenzeile(zeile, modus="expand")
+    return ok, grund
 
 
 def _lauf(args: list[str], cwd: Path) -> tuple[int, str, str]:
@@ -114,18 +138,16 @@ def main() -> int:
             k_mess = k["messung"]
             gut = (code == exit_soll and k["aktion"] == aktion_soll
                    and k["marke"] == marke_soll)
-            # §A-ZZZZ132: Schema-Invarianz — die Achse muss auf JEDEM
-            # Exit lesbar sein, nicht nur dort, wo der Autor sie brauchte.
-            fehlend = [k for k in ("Paare", "KANAL-DUPLIKAT",
-                                   "WIEDERHOLUNG", "uebersprungen", "json")
-                       if k not in k_mess]
-            if gut and fehlend:
-                gut = False
-                print(f"     Schema-Luecke auf exit={code}: {fehlend}")
+            # §A-ZZZZ132 / R29 Expand: Schema auf Achsenzeile (L4 vor Dispatcher).
+            if gut:
+                sok, sgrund = schema_ok(out)
+                if not sok:
+                    gut = False
+                    print(f"     Schema-Fehler auf exit={code}: {sgrund}")
             if gut and code == 4:
                 # Die Messachse muss die Unvollstaendigkeit tragen.
-                gut = k["messung"].get("json") == "2" or \
-                      int(k["messung"].get("json", 0)) >= 1
+                gut = k_mess.get("json") == "2" or \
+                      int(k_mess.get("json", 0)) >= 1
             if gut and code == 1:
                 gut = k["messung"].get("Paare") == "1"
             print(f"{'ok  ' if gut else 'FAIL'} {name:28s} "

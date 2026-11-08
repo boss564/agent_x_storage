@@ -1,6 +1,7 @@
 [
   "scripts/__init__.py",
   "scripts/_ci_stdonly_probe.py",
+  "scripts/achsen_invariante.py",
   "scripts/akte_guard.py",
   "scripts/audit_feed_gap_worm.py",
   "scripts/backtest_h1_news_m2_shadow.py",
