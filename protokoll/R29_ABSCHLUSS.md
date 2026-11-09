@@ -61,5 +61,9 @@ Optionaler neuer Scope, falls später eine echte R29-A6-Akte entsteht.
 | SP-1871 | A6-Entscheidung: keine Bindung an A–F |
 | SP-1872 | A6-R29: Stempel „ohne Akte“ |
 | SP-1873 | Prio 5 abgeschlossen · R29-Durchlauf vollständig |
+| SP-1874 | R29 abgeschlossen (`4bb61a2b`) · Abschlussprotokoll vorhanden — **Abnahme** |
+| SP-1875 | Prio 1–5 bestätigt: alle Punkte erledigt |
+| SP-1876 | A6/SP-1571 final: beide „ohne Akte“, A–F archiviert |
+| SP-1877 | Betriebsdisziplin: `stash@{0}` unberührt, ahead lokal, kein Push |
 
-**Verdict: R29 ABGESCHLOSSEN.**
+**Verdict: R29 ABGESCHLOSSEN und ABGENOMMEN.** Kein offener Restpunkt · kein Folgezug.

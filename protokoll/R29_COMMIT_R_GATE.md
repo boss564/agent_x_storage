@@ -498,5 +498,6 @@ Optionaler neuer Scope für echte R29-A6-Akte bleibt offen — nicht Teil dieses
 
 ## R29-Abschluss
 
-**Verdict: R29 ABGESCHLOSSEN** — Prio 1–5 fertig · Messungen grün · Akten gestempelt ·
-`stash@{0}` unberührt · kein Push.
+**Verdict: R29 ABGESCHLOSSEN und ABGENOMMEN** (SP-1874–SP-1877) —
+Prio 1–5 fertig · Messungen grün · Akten gestempelt ·
+`stash@{0}` unberührt · kein Push · kein Folgezug.
