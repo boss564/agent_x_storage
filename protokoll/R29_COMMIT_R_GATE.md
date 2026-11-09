@@ -117,3 +117,218 @@ in Commit 1; E4/P10 dort bindend.
 
 D9 = Spot-Check (Konstanten-Validierung), formale Rekonziliation = Commit 1.
 D13a: Kommentar iteriert `_SCHEMA_KERN == sorted(SCHEMA_KERN_ALT5)`.
+
+## Post-hoc: Inhaltsgrenze `afd46c9e` (gemessen 2026-11-09T05:51Z)
+
+```
+$ git show --stat --name-only afd46c9e
+afd46c9e R29 Commit R: Expand-Reader — L0–L4
+
+docs/SWARM_INVENTORY.md
+protokoll/R29_COMMIT_R_GATE.md
+scripts/.skript_baseline.json
+scripts/achsen_invariante.py
+scripts/entscheidung_R29_commit_r_korb.json
+scripts/mock_ingestion.py
+scripts/orakel_head_messachse_alt5.json
+scripts/test_konformitaet.py
+scripts/test_konstanten.py
+```
+
+| Check | Ergebnis |
+|---|---|
+| Dateizahl | **9** (nicht 38 — 38 war D2 Related-Suite, nicht Commit-File-Liste) |
+| Producer in R? | **nein** — kein `einwurf_waechter`, kein `waechter_vertrag`, kein `test_projektion`, kein `check_claude_md` |
+| Diff-Grenze `afd46c9e~1..afd46c9e` | identisch zur File-Liste oben |
+| Urteil | **reiner Expand-Reader + Korb/Orakel/Gate-Doku** — kein Misch-Commit |
+
+### C1–C5 File-Referenz (nachdokumentiert, nicht rückwirkend blockierend)
+
+| # | File-Referenz in `afd46c9e` |
+|---|---|
+| C1 | `scripts/achsen_invariante.py` — `achsenzeile_fremdkeys` meta = `ERLAUBT_META_KEYS` |
+| C2 | `scripts/achsen_invariante.py` — `SCHEMA_KERN_ALT5` + Asserts |
+| C3 | `scripts/achsen_invariante.py` — `bewerte_achsenzeile` Shape→Kern→Fremd→Dispatcher |
+| C4/C5 | `scripts/orakel_head_messachse_alt5.json` + Nutzung in `test_konstanten.py` / `test_konformitaet.py` |
+
+## Commit-1 Scope-Schnitt (bindend, vor Staging)
+
+**Verboten:** `git add -A`, `git add scripts/`, breites Staging.
+
+| Klasse | Datei | Commit 1? |
+|---|---|---|
+| **IN** Producer-Flip | `scripts/einwurf_waechter.py` | **ja** — Achse 8 Keys, Summe json+kurz+envelope, E4/`ueber` |
+| **IN** Orakel-Grammatik | `scripts/waechter_vertrag.json` | **ja** — `messachse` Neu8 + `messachse_definition` |
+| **AUS** / eigener Gate | `scripts/test_projektion.py` | **nein** — Projektions-/Orakel-Rewrite, nicht Flip-Kern |
+| **AUS** | `scripts/check_claude_md.py` | **nein** — Stufe-2-Akte-WIP (vergiftet Hook, wenn live) |
+| **AUS** | `order_execution_engine/ops/TAG7_ABNAHME.md` | **nein** |
+| **AUS** | `protokoll/R29_*.md` Diff-Entwürfe (untracked) | **nein** — Review-Artefakte |
+
+Staging-Soll für Commit 1 (exakt):
+
+```
+git add -- scripts/einwurf_waechter.py scripts/waechter_vertrag.json
+```
+
+## D14 — Alt5-Orakel pre-flip (gemessen 2026-11-09T05:56Z auf `afd46c9e`)
+
+Rekonziliation = **Sequenz**, nicht Einzelgate:
+
+1. **Pre-flip (dieser Abschnitt):** Alt5 gegen Live auf R
+2. Flip anwenden (Commit-1-Scope)
+3. **Post-flip:** Neu8 gegen `STROM_8` / `gram["messachse"]` live
+4. E4/P10 + G3
+
+### Messung Pre-flip
+
+| Feld | Wert |
+|---|---|
+| Baum | `afd46c9e` (HEAD), Producer = `git show HEAD:scripts/einwurf_waechter.py` (kein WT-Flip) |
+| Orakel | `scripts/orakel_head_messachse_alt5.json` |
+| Freeze-Provenienz | `head_commit=273a7d1e` · `vertrag_blob=ea5e35be` · Quelle = HEAD-Vertrag `messachse` |
+| Orakel-Keys | `{Paare, KANAL-DUPLIKAT, WIEDERHOLUNG, uebersprungen, json}` |
+| HEAD-Gramm jetzt | **identisch** Orakel (`orakel == head_gram`) |
+| Live-Emission (Achsenzeile) | Orakel ∪ `{ZEITSTEMPEL-UNLESBAR, kurz, envelope}` + `Meldungen` |
+| `orakel ⊆ emitted` | **True** |
+| `orakel - emitted` | ∅ |
+
+**Verdict D14: PASS.** Orakel = Grammatik-Capture (nicht Spiegel von `SCHEMA_KERN_ALT5`). Live-Producer emittiert **mehr** als die Grammatik; Dual-Alt5 = Grammatik-Intersektion. Point-of-no-return damit **vor** dem Flip geschlossen.
+
+## D15 — `SWARM_INVENTORY` in R
+
+Mitgezogen als **Pre-Commit-Max-Age-Sync** (`make raas-swarm-inventory-sync`): nur der auto-Laufzeit-Block (`generated_at` 2026-11-05 → 2026-11-08). Kein Reader-Code. Zweck: Hook blockiert sonst bei >24h altem Laufzeit-Block.
+
+## D16 — Rekonziliation = Messung
+
+Beweis in diesem Gate-Doku (+ untracked `protokoll/R29_*`).
+**Commit-1: `36a4c7d7`** — Producer-Flip Neu8 (Format only); Scope 2 Dateien; post-commit `git show --name-only` = `einwurf_waechter.py` + `waechter_vertrag.json`.
+
+## D17 — `test_projektion.py`
+
+**Tracked** seit `2a0fac3a` (Runde 85). WT-Diff = separater Rewrite (eigenes Gate). Commit 1 fasst die Datei nicht an — kein Traceability-Loch „untracked Test“.
+
+## D18 — Consumer von `waechter_vertrag.json` (G3-relevant)
+
+Produktiv/Gate: `einwurf_waechter.py`, `governance_gate.py`, `check_claude_md.py`, `standzeile.py`, `lauf.py`, `bilanz.py`, `kopfzeile.py`, `konsumenten_semantik.py`, …
+
+Tests (Auszug): `test_konformitaet.py`, `test_konstanten.py`, `test_projektion.py`, `test_konsument_kongruenz.py`, `test_governance_gate.py`, `test_frist_gate.py`, …
+
+Reader (R) ist dual-tolerant. G3: Consumer dürfen nach Flip nicht hart gegen Alt5 assertieren.
+
+## D19 — `test_projektion.py` vor/nach Flip (gemessen 2026-11-09T06:04Z)
+
+| Baum | Ergebnis |
+|---|---|
+| HEAD test auf `afd46c9e` (R, committed Producer) | **5/5 grün** |
+| Format-Asserts (messachse/kurz/envelope/Alt5) in HEAD-Test | **keine** — Exit-aus-Zeilen-Orakel |
+| HEAD test + WT Producer/Vertrag (R+WIP) | **2/5 rot** — `ein Duplikat`/`Duplikat+Muell`/`alles drei`: exit=2 statt 1/4 |
+
+Ursache (nicht Format): WT-WIP ändert `exit_aus_zeilen` / Vertrag `projection_mapping`: Inhalts-`VERWERFEN` → **rc=2** (vorher rc=1). Zeilen-Urteile identisch; Exit-Aggregation weicht ab.
+
+**Fall-Klassifikation:** weder rein format-agnostisch noch Alt5-Key-Assert — der Scope-WIP ist **kein reiner Neu8-Flip**, sondern Flip **plus** Exit-Semantik (exit_codes.2). Commit 1 mit dem vollen WT-WIP würde einen **roten tracked Test** im Baum tragen.
+
+| Option | Folge |
+|---|---|
+| A — WIP splitten: nur Neu8-Flip in Commit 1; Exit-2 separat | Commit 1 hält test_projektion grün |
+| B — Test-Update atomar mit Exit-2 (oder vor Flip) | Baum bleibt grün; Scope > 2 Dateien oder Vor-Commit |
+| C — vollen WIP in Commit 1 ohne Test | **verboten** — roter Knoten |
+
+**Status D19:** gemessen. **Wahl: Option A** (2026-11-09) — WIP splitten.
+
+## D21 — WT auf nur Neu8 reduziert (gemessen 2026-11-09T06:10Z)
+
+| Check | Ergebnis |
+|---|---|
+| Exit-2 geparkt | `protokoll/R29_EXIT2_PARK_{einwurf,vertrag}.diff` + `R29_EXIT2_PARK.md` |
+| `git diff HEAD -- einwurf` enthält `_flag_wert` / `exit_aus_zeilen`-rc2 / `strom_ohne_wert` | **nein** |
+| `git diff HEAD -- vertrag` enthält `projection_mapping` / `flag_wert` / `_kommentar` | **nein** |
+| Format-Marker vorhanden | `kurz`/`envelope` in `achse()`, `messachse` Neu8, `messachse_definition` |
+| Diff-Stat | `einwurf` 40± · `vertrag` +25/−1 — **nur 2 Dateien** |
+| D19 Re-Check: HEAD `test_projektion` + Format-only WT | **5/5 grün** |
+| Neu8 Live ⊆ Vertrag | `live == messachse` (8 Keys inkl. kurz/envelope) |
+
+**Verdict D21: PASS.** Commit-1-WIP = reiner Format-Flip.
+
+## D20 — Pre-Commit vs. `SWARM_INVENTORY` (gemessen)
+
+| Check | Ergebnis |
+|---|---|
+| `.git/hooks/pre-commit` synced SWARM? | **nein** — kein swarm/inventory-Aufruf |
+| `check_claude_md` | nur **Age-Fail** wenn `generated_at` > 24h; **kein** Auto-Stage |
+| `generated_at` jetzt | 2026-11-08T19:49Z · ~9h alt · **frisch** (<24h) |
+| Fall | **No-op** — Scope hält; post-commit trotzdem `git show --stat` |
+
+**Status D20: PASS** (No-op-Fall).
+
+## Commit-1-Gate (Sequenz — geschlossen)
+
+| # | Schritt | Baum | Status |
+|---|---|---|---|
+| 1 | D14 Alt5 pre-flip | `afd46c9e` | **PASS** |
+| 2 | D19 Option A gewählt | — | **PASS** |
+| 3 | D21 Format-only Diff | WT | **PASS** |
+| 4 | D20 Hook vs. Scope | WT | **PASS** (No-op) |
+| 5 | Staging nur 2 Scope-Dateien (+ D22 Parks `??`) | WT | **PASS** |
+| 6 | Neu8-Rekonziliation auf Index (D23) | Index | **PASS** (gram==STROM_8, Live==gram, Summe) |
+| 7 | E4 / P10 | Index | **PASS** (ueber nur json; rc2/3 Summe) |
+| 8 | G3 (null Alt5-Hartasserts + LESESTAT-Paare) | Index | **PASS** |
+| 9 | Commit-Text Scope + Befristung bis T (D24) | — | **PASS** |
+| 10 | Post-commit `git show --stat` | `36a4c7d7` | **PASS** (exakt 2 Dateien) |
+| 11 | D24 Sichtprüfung Message | Historie | **PASS** (Scope-Liste + Befristung wörtlich) |
+
+### Post-commit Beleg Commit 1 (`36a4c7d7`)
+
+```
+$ git show --stat --format= 36a4c7d7
+ scripts/einwurf_waechter.py   | 40 ++++++++++++++++++++--------------------
+ scripts/waechter_vertrag.json | 25 ++++++++++++++++++++++++-
+ 2 files changed, 44 insertions(+), 21 deletions(-)
+```
+
+Message trägt: `Scope (exakt 2 Dateien):` + beide Pfade; `Befristung: … gilt nur bis Commit T`.
+
+### D22 / D23 / D24 (nachgezogen)
+
+| # | Inhalt | Status |
+|---|---|---|
+| D22 | Kein `git add -A`; Parks bleiben `??` bis Commit T | **PASS** |
+| D23 | Neu8-Rekonziliation auf Index (`git diff --cached`), nicht nur WT | **PASS** |
+| D24 | Message: Scope-Liste + Befristung bis Commit T | **PASS** — kein Amend |
+
+## Commit T — Gate-Doku + Exit-2-Park (dieser Commit)
+
+**Zweck:** Gate-Protokoll versionieren; geparkte Exit-2-Artefakte tracken; **Befristung aus Commit-1-Message endet formal mit diesem Commit T** (Doku-/Park-Halbakt). Contract-Alias-Ablehnung (Expand→Contract-Lesart) bleibt ein **eigenes Folge-Gate**, nicht Inhalt dieses Scopes.
+
+**Scope (exakt 4 Dateien):**
+
+| # | Datei | Art |
+|---|---|---|
+| 1 | `protokoll/R29_COMMIT_R_GATE.md` | tracked, Gate-Protokoll |
+| 2 | `protokoll/R29_EXIT2_PARK.md` | untracked → tracked, Park-Index |
+| 3 | `protokoll/R29_EXIT2_PARK_einwurf.diff` | untracked → tracked, Exit-Hunks Producer |
+| 4 | `protokoll/R29_EXIT2_PARK_vertrag.diff` | untracked → tracked, Exit-Hunks Vertrag |
+
+Staging-Soll:
+
+```
+git add -- protokoll/R29_COMMIT_R_GATE.md \
+  protokoll/R29_EXIT2_PARK.md \
+  protokoll/R29_EXIT2_PARK_einwurf.diff \
+  protokoll/R29_EXIT2_PARK_vertrag.diff
+```
+
+**Park-Zweck:** Exit-Semantik (`VERWERFEN`→rc=2, `projection_mapping`, …) bewusst aus Commit 1 gehalten; Vorlage für **Commit 2** (Exit-2 anwenden + `test_projektion` atomar). Nicht blind auf aktuellen Baum anwenden — Hunks auf HEAD+Neu8 portieren.
+
+**AUS Scope T:** `scripts/test_projektion.py`, `scripts/check_claude_md.py`, `TAG7_ABNAHME.md`, übrige `protokoll/R29_*` Review-Artefakte.
+
+### D25 Sichtvermerk (vor Staging)
+
+| Pflichtpunkt | Befund |
+|---|---|
+| Verweis Commit 1 + `git show --stat` | **ok** — Abschnitt oben, 2 Dateien 44+/21− |
+| Gate-Schritte 1–11 | **ok** — Tabelle geschlossen |
+| Messwerte (5/5, Rekonziliation, Diff-Muster) | **ok** — D14/D19/D21/D23 |
+| Referenz drei Park-Dateien + Zweck | **ok** — D21 + Scope-Tabelle T |
+| Befristung endet mit Commit T | **ok** — dieser Abschnitt |
+
+**Verdict D25: PASS** — Gate-Doku konsistent mit Durchgang; Staging freigegeben unter D26.
