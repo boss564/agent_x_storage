@@ -482,12 +482,14 @@ Protokoll: `protokoll/R29_D40_G1_MESSUNG.md` · Spec-Hash `7f675193` · Basis `f
 
 **D40: 10/10 + Live PASS.** Hinweis: Neu8-Null → SUMME (nicht META); Shape/Fremd-POS prüfen `ok`+Keys.
 
-## D36 / D39 — A6 / SP-1571
+## D36 / D39 / D42 — A6 / SP-1571
 
 | # | Inhalt | Status |
 |---|---|---|
-| D36 | Kandidaten A–F nur Kategorien; SP-1571 0 Treffer | **offen** (`R29_D36_AKTE_A6_SP1571.md`) |
-| D39 | Fundstellen A–F mit Quelle/Zitat vorgelegt; SP-1571-Vorschlag „ohne Akte“ | **Vorlage PASS · Bindung Prüfer** (`R29_D39_A6_AKTENSTELLEN.md`) |
+| D36 | Kandidaten A–F nur Kategorien; SP-1571 0 Treffer | **Vorarbeit** (`R29_D36_AKTE_A6_SP1571.md`) |
+| D39 | Fundstellen A–F mit Quelle/Zitat vorgelegt | **Vorlage PASS** (`R29_D39_A6_AKTENSTELLEN.md`) |
+| SP-1571 | Prüfer-Stempel „ohne Akte“ (SP-1866) | **geschlossen** |
+| D42 | Zitate A–F dem Prüfer vorgelegt | **PASS Vorlage** (`R29_D42_A6_ZITATE.md`) · **Bindung offen** |
 
 **A6-Arbeit gesperrt** bis Prüfer eine Zeile A–F (oder „ohne Akte / neuer Scope“) bindet.
-**SP-1571 gesperrt** bis Stempel „ohne Akte“ oder externe Quelle.
+**SP-1571 erledigt.**

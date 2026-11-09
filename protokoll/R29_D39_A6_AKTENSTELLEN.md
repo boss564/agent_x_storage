@@ -19,7 +19,7 @@ Kanonische Bindung trifft der Prüfer — hier nur Vorlage, keine Selbstbindung.
 | Weiter suchen | nur mit konkretem Archiv-Pfad |
 
 **Ingenieur-Vorschlag:** SP-1571 als **ohne Akte** dokumentieren und schließen.
-Endgültiger Stempel: Prüfer.
+**Prüfer-Stempel (SP-1866, 2026-11-09):** **ohne Akte — geschlossen.**
 
 ## A6 — sechs Kandidaten mit Fundstelle
 
@@ -101,6 +101,6 @@ R29-Gate-Abschnitt. Ein siebter Kandidat „R29-Messachse A6“ hat **keine Akte
 |---|---|
 | Fundstellen A–F mit Zitat | **vorgelegt** |
 | Kanonische Bindung | **ausstehend (Prüfer)** |
-| SP-1571-Entscheid | **Vorschlag „ohne Akte“ — Stempel Prüfer** |
+| SP-1571-Entscheid | **geschlossen — Stempel „ohne Akte“ (SP-1866)** |
 
-**D39-Auflage (Vorlage) erfüllt; Bindung = Prüfer-Zug.**
+**D39-Auflage (Vorlage) erfüllt; A6-Bindung = Prüfer-Zug nach D42-Zitaten.**
