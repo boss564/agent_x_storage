@@ -737,6 +737,7 @@ def self_test_check_counts() -> list[str]:
     failures.extend(_self_test_reads_without_root())
     failures.extend(_self_test_default_root())
     failures.extend(_self_test_gitlink())
+    failures.extend(_self_test_gate_naht())
     failures.extend(_self_test_akt_block())
     failures.extend(_self_test_tally_numbers())
     # §A-NS (Runde 52): der Beinahe-Verlust und seine Ursache.
@@ -1646,7 +1647,28 @@ def _akt_block_mismatch(root: Path | None = None,
         if karte is None or bloecke is None:
             return ["Akte-Auswahl: karte und bloecke nur gemeinsam oder "
                     "gar nicht injizierbar"]
-        return _auswahl_fehler(bloecke, karte)
+        # §A-ZZZZ152 (Runde 86): **ein Beleg, drei Stufen.**
+        #
+        # Der Akte-Befund bis hierher war die Naht `_auswahl_fehler(bloecke,
+        # karte)`. Sie findet den Block bei der **Karte dieses Laufs** —
+        # fehlt er, lautet der Befund „nicht gemessen" und der Leser
+        # liest „die Akte ist nicht gemessen", waehrend gemeint ist „der
+        # Block ist aelter als der Pruefer". Ein Befund mit dem falschen
+        # Gegenstand ist eine Maske in Textform.
+        #
+        # Stufe 1: die Karte dieses Laufs  -> voller Vergleich.
+        # Stufe 2: gelesen wird der juengste Block in der Akte, verglichen
+        #          gegen die Zitier-Karte (`Zitat:`) — **ohne Pruefer-Hash**
+        #          — und gegen die `Zustand:`/Zahlenfelder der Live-Karte.
+        #          Genau hier faellt eine per Hand editierte Zustand-Zeile.
+        # Stufe 3: kein Block -> „nicht gemessen" (bestehender Befund).
+        fehler = _auswahl_fehler(bloecke, karte)
+        if not fehler or not all("keine Messung" in f for f in fehler):
+            return fehler
+        letzte = _juengster_block(bloecke)
+        if letzte is None:
+            return fehler
+        return _zitat_fehler(letzte, karte)
     base = root or Path(__file__).resolve().parent.parent
     doc_path = base / "order_execution_engine" / "ops" / "TAG7_ABNAHME.md"
     if not doc_path.exists():
@@ -1668,6 +1690,75 @@ def _akt_block_mismatch(root: Path | None = None,
     # steht als `_auswahl_fehler(bloecke, karte)` daneben und wird hier
     # nur gefüttert. Der Baum liefert die Eingaben, er entscheidet nicht.
     return _auswahl_fehler(split_blocks(text), calibration_card(root))
+
+
+def _juengster_block(bloecke: list[dict]) -> dict | None:
+    """Der jüngste Block, der eine Karte zitiert (`Karte:` oder `Zitat:`).
+
+    Die Akte ist append-only — Position ist deshalb hier **zulässig**,
+    weil nur noch verglichen und nicht mehr ausgewählt wird: der
+    jüngste Zitatblock ist der Block, nach dem zuletzt geschrieben
+    wurde. Was er *ist*, entscheidet die Karte, nicht der Index.
+    """
+    for b in reversed(bloecke):
+        if any(l.strip().startswith(("Karte: ", "Zitat: ")) for l in b["lines"]):
+            return b
+    return None
+
+
+def _zitat_fehler(block: dict, karte: str) -> list[str]:
+    """Stufe 2: der jüngste Block gegen die `Zustand:`-Zeile der Live-Karte.
+
+    Nur die Felder, deren **Herkunft** die Live-Karte ist: die
+    `Zustand:`-Zeile. Die Zahlenfelder (`total=` usw.) gehören zur Karte
+    des Prüfer-Stands und sind in Stufe 1 verglichen; hier würde ein
+    Prüfer-Wechsel jeden Block rot machen (dauerrot ist so aussagelos
+    wie dauergrün).
+    """
+    body = "\n".join(block["lines"])
+    zaeune = body.split("```")
+    body = zaeune[1] if len(zaeune) >= 3 else ""
+    geliefert = "\n".join(l for l in body.splitlines()
+                          if not re.match(r"^Karte: \w+$", l.strip())).strip()
+    return _compare_block(geliefert, karte)
+
+
+_AKTE_KARTE_PIN: list[str] = []
+_AKTE_KARTE_PIN_ROOT: list[str] = []
+
+
+def _akte_karte(root) -> str:
+    """Die Soll-Karte der Akte — **einmal je Wurzel**, dann unveränderlich.
+
+    §A-ZZZZ152 (Runde 86, Akte-Naht): bis hierher rechnete jede
+    Vergleichsseite `calibration_card(root)` **im** Lauf. Für die
+    Zahlenfelder ist das unschädlich (sie leiten aus `CLAUDE.md` und
+    `scripts/` ab, nicht aus der Akte). Für die `Zustand:`-Zeile ist es
+    das **bewegte Orakel**: `_sch`/`_mess_n` kommen aus
+    `TAG7_ABNAHME.md`, und `_seit_txt` steht als Literal in
+    `calibration_card`. Ergebnis: eine per Hand editierte
+    `Zustand:`-Zeile wird vom Orakel **gelesen statt gemessen** — sie
+    stand in der Akte, das Orakel wiederholte sie am Vergleichsende.
+    Vier volle Läufe mit mutierter Akte gaben `EXIT=0`.
+
+    Der Pin nimmt den ersten Abruf je Wurzel als Soll und gibt ihn
+    danach unverändert zurück. Wer den gemessenen Wert braucht, ruft
+    `calibration_card(root)` direkt.
+
+    Grenze, benannt: der Pin macht die Zeile nicht **unabhängig**, er
+    macht sie **einmalig**. Die Herkunft der Zahlen (`_sch`/`_mess_n`
+    aus der Akte) bleibt — deshalb liest der Pin mit dem aktuellen
+    `--run-tests` die Mutation erst bei geänderter Meßblock-Zahl. Die
+    Verschiebung im Lauf ist beendet; die Herkunft aus der Akte bleibt
+    ein benannter Rest, siehe Protokoll.
+    """
+    key = str(Path(root).resolve())
+    if key in _AKTE_KARTE_PIN_ROOT:
+        return _AKTE_KARTE_PIN[_AKTE_KARTE_PIN_ROOT.index(key)]
+    karte = calibration_card(root)
+    _AKTE_KARTE_PIN_ROOT.append(key)
+    _AKTE_KARTE_PIN.append(karte)
+    return karte
 
 
 def _kopfzeile_errors(root: Path | None = None) -> list[str]:
@@ -1833,9 +1924,29 @@ def _compare_block(cited: str, card: str) -> list[str]:
         return {}
     wb, gb = bezug(want), bezug(got)
     for key in ("root", "CLAUDE.md sha256"):
-        if wb.get(key) != gb.get(key):
-            out.append(f"Akte-Block: Bezug `{key}` {gb.get(key)} zitiert, "
-                       f"{wb.get(key)} gemessen")
+        if wb.get(key) == gb.get(key):
+            continue
+        if key == "root":
+            # Hook Index-TMP (`git checkout-index` → mktemp, kein .git):
+            # `calibration_card(tmp)` setzt Bezug.root auf den Export-Pfad,
+            # die Akte zitiert die echte Repo-Wurzel. Stringungleichheit ist
+            # dann kein Drift — `Path.samefile` gegen die Prüfer-Wurzel
+            # (`__file__`/../..) entscheidet. Alias-Pfade (" - Data" vs.
+            # ohne) sind ebenfalls samefile und dürfen nicht rot werden.
+            cited, measured = gb.get(key), wb.get(key)
+            try:
+                cp = Path(cited or "")
+                mp = Path(measured or "")
+                real = Path(__file__).resolve().parent.parent
+                if measured and not (mp / ".git").is_dir():
+                    if cp.exists() and real.exists() and cp.samefile(real):
+                        continue
+                if mp.exists() and cp.exists() and mp.samefile(cp):
+                    continue
+            except OSError:
+                pass
+        out.append(f"Akte-Block: Bezug `{key}` {gb.get(key)} zitiert, "
+                   f"{wb.get(key)} gemessen")
     # §SP-Zustand (2026-11-05): **die Zustand:-Zeile ist ein Messwert, kein Fließtext.**
     # Bis hier verglich der Prüfer Zahlen-Kopf und `Bezug:`, aber NICHT die
     # `Zustand:`-Zeile. Belegt mit der Gegenprobe: eine Karte, in der nur
@@ -1865,6 +1976,49 @@ def _zustand_von(lines: list[str]) -> str | None:
         if ln.startswith("Zustand:"):
             return _zustand_symbol(ln)
     return None
+
+
+def _self_test_gate_naht() -> list[str]:
+    """§A-ZZZZ152 (Runde 86, Akte-Naht): **die Naht ist der Gegenstand.**
+
+    Der Akte-Befund war offen, weil eine Prüfung existierte und der Lauf nicht
+    an ihr hing. Zwei Erwartungen, beide auf Funktionsebene:
+
+      A. Eine per Hand editierte `Zustand:`-Zeile fällt durch Stufe 2
+         (`_akt_block_mismatch` mit injizierten Blöcken und Karte) und
+         nennt das Feld namentlich. Der Block trägt dabei einen
+         **fremden** Fingerprint — der Fall, der in keinem gesunden
+         Baum vorkommt.
+      B. Dieselbe Mutation ohne Edit fällt **nicht** — sonst ist die
+         Nachbarschaft dauerrot, und dauerrot sagt so wenig wie grün.
+
+    Was hier **nicht** belegt wird: dass `main()` auf dem Befund rot
+    wird. Das ist der Gate-Negativtest, und der läuft gegen
+    den Baum, nicht gegen eine Funktion.
+    """
+    out: list[str] = []
+    karte = calibration_card()
+    zitat = re.search(r"^Zustand: (.+)$", karte, re.M)
+    if not zitat:
+        return ["Gate-Naht: Karte traegt keine Zustand-Zeile"]
+
+    def bau(zustand: str) -> list[dict]:
+        return [{"kind": "Messung", "lines": [
+            "```", "total=0 chain_total=0 reported=0 unclassified=0 "
+            "unchecked=0 unclassified_checkers=0", f"Zustand: {zustand}",
+            "Zitat: 000000000000", "```"]}]
+
+    sauber = _akt_block_mismatch(bloecke=bau(zitat.group(1)), karte=karte)
+    zustands_befund = [f for f in sauber if f.startswith("Akte-Block: Zustand ")]
+    if zustands_befund:
+        out.append(f"Gate-Naht: sauberer Zustand gilt als Abweichung: "
+                   f"{zustands_befund[0][:60]}")
+    faelschung = "0/0 GEFAELSCHT · " + zitat.group(1)
+    krumm = _akt_block_mismatch(bloecke=bau(faelschung), karte=karte)
+    if not any(f.startswith("Akte-Block: Zustand ") for f in krumm):
+        out.append(f"Gate-Naht: editierte Zustand-Zeile faellt nicht: "
+                   f"{[f[:50] for f in krumm]}")
+    return out
 
 
 def _self_test_akt_block() -> list[str]:
@@ -6103,7 +6257,8 @@ _STATE_FREE = ("AGENTS_PER_WAVE SCRIPT_SCOPE MIN_AGENT_CLAIM _COUNTING_LABEL "
                "COMPLIANCE_AGENTS _COUNT_CONTEXT_CHARS _TOTAL_MARK "
                "_SELF_TEST_SCOPE INVENTORY_RUNTIME_MAX_AGE_H _COUNT_SNAPSHOT "
                "_PRUEFER_UMFANG _NO_ANSWER _RESET_GLOBALS _STATE_FREE "
-               "_ST_EXIT _OFFEN _QUIT _FRISCH PROSA_BILANZ")
+               "_ST_EXIT _OFFEN _QUIT _FRISCH PROSA_BILANZ "
+               "_AKTE_KARTE_PIN _AKTE_KARTE_PIN_ROOT")
 
 
 def _filter_fixture() -> str:
@@ -9829,6 +9984,38 @@ def main() -> int:
     # aufgerufen — eine Prüfung, die existiert, um zu existieren (§71.45
     # in neuer Form). Hier hängt sie am Lauf, den der Hook fährt, und
     # damit am Commit.
+    # §A-ZZZZ152 (Runde 86, Befund der Akte am Exit): **die Akte-Prüfung hängt am Exit.**
+    #
+    # Der Kontrollschritt hat gemessen: `_akt_block_mismatch()` existiert und nennt
+    # eine mutierte `Zustand:`-Zeile namentlich — aber nur im
+    # Selbsttest (`Akte-Block: der committete Block weicht …`) und im
+    # Modul-Aufruf. Der Lauf, den der Hook fährt, rief sie **nie** mit
+    # `root`; die einzige Nahstelle war `_kopfzeile_errors`, und die
+    # liest den Prüfer-Hash, nicht die Zahlen. Folge: mutierte Akte →
+    # `EXIT=0`. Eine Prüfung ohne Wirkung auf den Exit ist Dekoration.
+    #
+    # Zwei Dinge sind hier gepinnt, nicht dem Ist überlassen:
+    #   1. Die Soll-Karte steht als Modulwert `_AKTE_KARTE_PIN` **vor**
+    #      diesem Lauf fest. `--run-tests` darf sie nicht verschieben
+    #      (der Selbsttest rechnet mit `calibration_card()`, der Lauf
+    #      nicht).
+    #   2. Beide `root`-Typen laufen durch **einen** Ausdruck: relativer
+    #      Klon-Pfad und `Path` aus `main`. Zwei Aufrufe wären zwei
+    #      Wahrheiten.
+    _karte_pin = _akte_karte(root)
+    try:
+        _bloecke_pin = split_blocks(
+            (Path(root) / "order_execution_engine" / "ops" /
+             "TAG7_ABNAHME.md").read_text(encoding="utf-8"))
+    except OSError:
+        # Fehlende Akte ist ein Befund, kein stiller Ausgang — aber sie
+        # ist hier nicht der Gegenstand dieser Naht; `_kopfzeile_errors`
+        # meldet sie.
+        _bloecke_pin = []
+    for _msg in _akt_block_mismatch(root=Path(root), bloecke=_bloecke_pin,
+                                    karte=_karte_pin):
+        rep.fail(None, _msg, "siehe order_execution_engine/ops/TAG7_ABNAHME.md",
+                 _msg)
     for _msg in _kopfzeile_errors(root):
         if "Block ist Vorzustand" in _msg:
             # §A-ZZZZ25 (Runde 61): **geduldet, gezählt, gedeckelt.** Das
