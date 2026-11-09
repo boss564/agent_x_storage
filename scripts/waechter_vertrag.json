@@ -808,8 +808,11 @@
       "Paare",
       "KANAL-DUPLIKAT",
       "WIEDERHOLUNG",
+      "ZEITSTEMPEL-UNLESBAR",
       "uebersprungen",
-      "json"
+      "json",
+      "kurz",
+      "envelope"
     ],
     "regel": "Die Grammatik ist Vertrag. Ein Konsument parst per Grammatik, nicht per Positions-Annahme. Der Bindestrich ist erlaubt — R83 hatte ihn erzeugt und der Parser ihn zerlegt.",
     "geprueft_durch": "scripts/test_konformitaet.py — liest die Grammatik HIER, nicht im Test",
@@ -876,6 +879,26 @@
     "escaping": {
       "regel": "Freitext in Maschinenfeldern (grund=...) wird per Prozent-Encoding escaped; ; = % und Zeilenumbrueche sind im Wert verboten.",
       "grund": "Ein Semikolon in einer Fehlermeldung zerlegt sonst die key=value-Zeile."
+    },
+    "paar_terminator": ";",
+    "messachse_definition": {
+      "paar_achse": [
+        "Paare",
+        "KANAL-DUPLIKAT",
+        "WIEDERHOLUNG",
+        "ZEITSTEMPEL-UNLESBAR"
+      ],
+      "uebersprung_achse": [
+        "uebersprungen",
+        "json",
+        "kurz",
+        "envelope"
+      ],
+      "uebersprung_formel": "uebersprungen == json + kurz + envelope",
+      "uebersprung_bedeutung": "Geprueft, aber kein Paar: nicht-JSON (json), zu kurz (kurz), Envelope-Marker (envelope).",
+      "uebersprung_breaking_change": "Bis R22 war uebersprungen ein Alias auf json. Ab Commit 1 gilt die Summenformel. Konsumenten, die uebersprungen als reine json-Zahl lesen, sehen eine veraenderte Zahl.",
+      "paar_partition_formel": "KANAL-DUPLIKAT + WIEDERHOLUNG + ZEITSTEMPEL-UNLESBAR == Paare",
+      "pfadinvariante": "Auf JEDEM Pfad emittiert achse() die acht Schluessel aus messachse in dieser Reihenfolge; jede Zeile endet mit paar_terminator."
     }
   },
   "encoding": {

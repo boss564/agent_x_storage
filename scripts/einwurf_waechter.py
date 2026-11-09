@@ -467,18 +467,26 @@ def achse(paare: int, kanal: int, wieder: int, ueber: int | None = None,
           unlesbar: int = 0) -> str:
     """Die Messachse — auf JEDEM Zweig, mit denselben Schluesseln.
 
-    Runde 82 emittierte sie nur dort, wo der Autor sie gerade brauchte.
+    Die Achse wird auf JEDEM Pfad mit denselben acht Schluesseln emittiert.
     Ein Konsument, der `Paare` liest, darf je nach Exit nicht auf None
     stossen.
+
+    `ueber` ueberschreibt ausschliesslich `json`. `kurz` und `envelope`
+    kommen direkt aus LESESTAT. `uebersprungen` ist ab hier die SUMME
+    json+kurz+envelope — vorher ein Alias auf json. Die Semantik steht
+    in `waechter_vertrag.json::messachse_definition`.
     """
-    u = LESESTAT["json"] if ueber is None else ueber
+    _j = LESESTAT["json"] if ueber is None else ueber
+    _k = LESESTAT["kurz"]
+    _e = LESESTAT["envelope"]
+    _u = _j + _k + _e
     # §A-ZZZZ179: **eigener Eimer fuer Unwissen.** `paare - kanal` zaehlte
     # unlesbare Zeitstempel als WIEDERHOLUNG — eine Klassifikation, die
     # nicht stattfand. Jetzt vier disjunkte Eimer:
     # KANAL-DUPLIKAT + WIEDERHOLUNG + ZEITSTEMPEL-UNLESBAR = Paare.
     return (f"Paare={paare};KANAL-DUPLIKAT={kanal};WIEDERHOLUNG={wieder};"
             f"ZEITSTEMPEL-UNLESBAR={unlesbar};"
-            f"uebersprungen={u};json={u};")
+            f"uebersprungen={_u};json={_j};kurz={_k};envelope={_e};")
 
 
 def main(argv: list[str]) -> int:
@@ -535,14 +543,15 @@ def main(argv: list[str]) -> int:
                 # nicht ein Vorrang-If.
                 _u = LESESTAT["json"] >= JSON_SCHWELLE
                 print(achse(1, 1 if ts_gleich else 0,
-                            0 if ts_gleich else 1, LESESTAT["json"]),
+                            0 if ts_gleich else 1,
+                            unlesbar=LESESTAT.get("unlesbar", 0)),
                       end="")
                 print(f"{'KANAL-DUPLIKAT' if ts_gleich else 'WIEDERHOLUNG'};"
                       f"treffer={i + 1};"
                       f"sha={h[:12]};aktion="
                       f"{'blockieren' if not _u else 'blockieren+marke'}")
                 return aggregiere(1, 4 if _u else 1)
-        print(achse(0, 0, 0, LESESTAT["json"]), end="")
+        print(achse(0, 0, 0, unlesbar=LESESTAT.get("unlesbar", 0)), end="")
         print(f"NEU;sha={h[:12]};aktion="
               f"{'zustellen' if LESESTAT['json'] < JSON_SCHWELLE else 'zustellen+marke'}")
         return aggregiere(0, 4 if LESESTAT["json"] >= JSON_SCHWELLE else 0)
@@ -553,7 +562,7 @@ def main(argv: list[str]) -> int:
             strom = lese_strom(p)
         except StreamUnlesbar as e:
             print(f"STROM UNLESBAR;grund={_escape_grund(str(e))};")
-            print(achse(0, 0, 0, 0), end="")
+            print(achse(0, 0, 0), end="")
             print(f"DIE WACHE TRÄGT NICHT: {e}", file=sys.stderr)
             return 3
         paare, kanal, bericht = pruefe_strom(strom)
@@ -565,25 +574,16 @@ def main(argv: list[str]) -> int:
         # ausgeben zu lassen. Deshalb steht links der Detektor-Fakt
         # (`WIEDERHOLUNG: 1`) und rechts, klar abgesetzt, die
         # Interpretation, die ein Mensch später einträgt.
-        _us = ""
-        # §A-ZZZZ139b: json_pos ist eine Liste, nicht ein Zaehler. Wer
-        # alle Werte summiert, zaehlt Listen mit — die Summe ist dann
-        # ein Typfehler statt einer Zahl.
-        _ue = (LESESTAT["json"] + LESESTAT["kurz"]
-               + LESESTAT["envelope"])
-        if _ue:
-            _us = (f";uebersprungen={_ue};json={LESESTAT['json']};"
-                   f"kurz={LESESTAT['kurz']};"
-                   f"envelope={LESESTAT['envelope']}")
         # §A-ZZZZ122 (Runde 82): **maschinenlesbar statt Prosa.** Vorher
         # "Meldungen: 259 | Paare: 38 | KANAL-DUPLIKAT: 37". Ein Verbraucher
         # musste Etiketten parsen — jedes Relabel brach den Vertrag
         # (Runde 81: 8/9 rot bei reiner Textaenderung). Jetzt
         # `schluessel=wert;` mit stabilen ASCII-Schluesseln.
+        # Neu8: kurz/envelope/uebersprungen kommen aus achse() (Summe).
         print(f"Meldungen={len(strom)};"
-              + achse(paare, kanal, paare - kanal - LESESTAT.get("unlesbar", 0),
-                      unlesbar=LESESTAT.get("unlesbar", 0))[:-1]
-              + f";kurz={LESESTAT['kurz']};envelope={LESESTAT['envelope']}")
+              + achse(paare, kanal,
+                      paare - kanal - LESESTAT.get("unlesbar", 0),
+                      unlesbar=LESESTAT.get("unlesbar", 0)))
         # §A-ZZZZ121b: **die Schwelle ist Vertrag, nicht Gefühl.**
         if LESESTAT["json"] >= JSON_SCHWELLE:
             print(f"WARNUNG: {LESESTAT['json']} unparsbare Zeile(n) — "
@@ -609,7 +609,7 @@ def main(argv: list[str]) -> int:
     # eine leere Parse. Jetzt traegt auch der Meta-Fall genau EINE Zeile:
     # Zeiger `AUFRUF` (kein Inhalt, also kein Inhalts-Hash), Urteil
     # VERWERFEN — der Konsument blockiert, alarmiert, handelt nicht.
-    print(achse(0, 0, 0, 0), end="")
+    print(achse(0, 0, 0), end="")
     print("ZEILE AUFRUF VERWERFEN;grund=kein_modus;")
     print(__doc__.strip(), file=sys.stderr)
     return 2
