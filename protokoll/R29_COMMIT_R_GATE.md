@@ -458,4 +458,36 @@ nicht der Format-Flip allein, sondern der **Inhaltspfad** einer Achsenzeile.
 
 **Nicht G1-content:** Exit-2-Semantik (Commit 2), Hook-TMP, Messblock-Regeneration.
 
-**Status D34:** Spezifikation geschrieben — **Abnahme ausstehend**, Messung gesperrt bis Abnahme.
+**Status D34:** Spezifikation geschrieben.
+**Status D38:** **PASS** — Abnahme erteilt (2026-11-09); G1-Messung freigegeben als D40.
+**Nicht vermischt:** Exit-2, Hook-TMP, Messblock (D37), F-Messung (D35), A6-Akte (D36/D39).
+
+## D35 — F-Messung (PASS)
+
+Protokoll: `protokoll/R29_D35_F_MESSUNG.md` · Commit `f954060b`.
+F-1a / F-1b / F-3 grün · Konstanten 21/21 · Konformität 5/5 · Mock 7/7 · EXIT=0.
+**Prio 4 abgeschlossen.**
+
+## D40 — G1-content Messung (PASS)
+
+Protokoll: `protokoll/R29_D40_G1_MESSUNG.md` · Spec-Hash `7f675193` · Basis `f954060b`.
+
+| Schicht | Fälle | Verdict |
+|---|---|---|
+| 1 Shape | POS Neu8 · NEG partial shape | **PASS** |
+| 2 Kern | POS Kernkeys · NEG fehlt WIEDERHOLUNG | **PASS** |
+| 3 Fremd | POS kein Fremd · NEG Fremd-Key | **PASS** |
+| 4 Dispatcher | POS Summe/Alias/META · NEG WertRelation | **PASS** |
+| Live | Producer Neu8 8 Keys | **PASS** |
+
+**D40: 10/10 + Live PASS.** Hinweis: Neu8-Null → SUMME (nicht META); Shape/Fremd-POS prüfen `ok`+Keys.
+
+## D36 / D39 — A6 / SP-1571
+
+| # | Inhalt | Status |
+|---|---|---|
+| D36 | Kandidaten A–F nur Kategorien; SP-1571 0 Treffer | **offen** (`R29_D36_AKTE_A6_SP1571.md`) |
+| D39 | Fundstellen A–F mit Quelle/Zitat vorgelegt; SP-1571-Vorschlag „ohne Akte“ | **Vorlage PASS · Bindung Prüfer** (`R29_D39_A6_AKTENSTELLEN.md`) |
+
+**A6-Arbeit gesperrt** bis Prüfer eine Zeile A–F (oder „ohne Akte / neuer Scope“) bindet.
+**SP-1571 gesperrt** bis Stempel „ohne Akte“ oder externe Quelle.
