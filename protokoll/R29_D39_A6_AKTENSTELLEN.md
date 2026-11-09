@@ -100,7 +100,8 @@ R29-Gate-Abschnitt. Ein siebter Kandidat „R29-Messachse A6“ hat **keine Akte
 | Teil | Status |
 |---|---|
 | Fundstellen A–F mit Zitat | **vorgelegt** |
-| Kanonische Bindung | **ausstehend (Prüfer)** |
-| SP-1571-Entscheid | **geschlossen — Stempel „ohne Akte“ (SP-1866)** |
+| Kanonische Bindung | **abgelehnt** (SP-1871) — A–F = Fremdreferenzen |
+| A6-R29 | **ohne Akte** geschlossen (SP-1872) |
+| SP-1571-Entscheid | **geschlossen — Stempel „ohne Akte“ (SP-1866/SP-1870)** |
 
-**D39-Auflage (Vorlage) erfüllt; A6-Bindung = Prüfer-Zug nach D42-Zitaten.**
+**D39-Auflage erfüllt.** Prüfer bindet keine Zeile A–F; siehe `R29_ABSCHLUSS.md`.

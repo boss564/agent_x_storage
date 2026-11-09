@@ -482,14 +482,21 @@ Protokoll: `protokoll/R29_D40_G1_MESSUNG.md` · Spec-Hash `7f675193` · Basis `f
 
 **D40: 10/10 + Live PASS.** Hinweis: Neu8-Null → SUMME (nicht META); Shape/Fremd-POS prüfen `ok`+Keys.
 
-## D36 / D39 / D42 — A6 / SP-1571
+## D36 / D39 / D42 — A6 / SP-1571 (Prio 5 abgeschlossen)
 
 | # | Inhalt | Status |
 |---|---|---|
 | D36 | Kandidaten A–F nur Kategorien; SP-1571 0 Treffer | **Vorarbeit** (`R29_D36_AKTE_A6_SP1571.md`) |
 | D39 | Fundstellen A–F mit Quelle/Zitat vorgelegt | **Vorlage PASS** (`R29_D39_A6_AKTENSTELLEN.md`) |
-| SP-1571 | Prüfer-Stempel „ohne Akte“ (SP-1866) | **geschlossen** |
-| D42 | Zitate A–F dem Prüfer vorgelegt | **PASS Vorlage** (`R29_D42_A6_ZITATE.md`) · **Bindung offen** |
+| D42 | Zitate A–F dem Prüfer vorgelegt | **PASS** (`R29_D42_A6_ZITATE.md`) |
+| SP-1571 | Stempel „ohne Akte“ (SP-1866/SP-1870) | **geschlossen** |
+| A6-Bindung A–F | Prüfer: alle sechs Fremdkontexte · keine Bindung (SP-1871) | **abgelehnt** |
+| A6-R29 | Stempel „ohne Akte“ (SP-1872) · Fremdreferenzen archiviert | **geschlossen** |
 
-**A6-Arbeit gesperrt** bis Prüfer eine Zeile A–F (oder „ohne Akte / neuer Scope“) bindet.
-**SP-1571 erledigt.**
+**Prio 5 erledigt.** Abschluss: `protokoll/R29_ABSCHLUSS.md` (SP-1873).
+Optionaler neuer Scope für echte R29-A6-Akte bleibt offen — nicht Teil dieses Durchlaufs.
+
+## R29-Abschluss
+
+**Verdict: R29 ABGESCHLOSSEN** — Prio 1–5 fertig · Messungen grün · Akten gestempelt ·
+`stash@{0}` unberührt · kein Push.

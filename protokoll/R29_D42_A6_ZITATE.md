@@ -67,4 +67,15 @@ Nachricht zugänglich machen. Bindung bleibt Prüfer-Zug.
 Keine der sechs Stellen ist ein Expand/Contract-Messpunkt. Option „ohne Akte /
 neuer Scope“ bleibt für den Prüfer offen.
 
-**D42-Status:** Zitate vorgelegt · A6-Bindung ausstehend (Prüfer).
+**D42-Status:** Zitate vorgelegt · **PASS** (SP-1869).
+
+## Prüferentscheidung (SP-1871 / SP-1872)
+
+| Entscheidung | Wert |
+|---|---|
+| Bindung an A–F | **abgelehnt** — alles Fremdkontexte, kein R29 Expand/Contract |
+| A6-R29 | **Stempel „ohne Akte“** · geschlossen |
+| Fundstellen A–F | als Fremdreferenzen archiviert, nicht kanonisch gebunden |
+| Neuer Scope | optional offen, falls später echte R29-A6-Akte entsteht |
+
+Siehe `protokoll/R29_ABSCHLUSS.md`.
