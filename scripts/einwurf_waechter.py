@@ -223,16 +223,19 @@ def exit_aus_zeilen(bericht: list[str]) -> int:
     """Leitet den Strom-Exit aus den Zeilen-Urteilen ab — die einzige Quelle.
 
     §A-ZZZZ147 (Runde 85): `UNGEPRUEFT` ist unvollstaendig (4),
-    `VERWERFEN` ist ein Befund (1), sonst neu (0). Die Reihenfolge ist
-    nicht "hart gewinnt", sondern folgt `aggregiere`.
+    `WIEDERHOLT` ist Inhalt-Befund (1), `VERWERFEN` ist Meta-Aufruf-Fehler (2,
+    siehe exit_codes.2), sonst neu (0).
+
+    Warum 2 und nicht 1: ein `ZEILE AUFRUF VERWERFEN` ist kein Inhalts-
+    Duplikat, sondern ein Meta-Fall. Der Vertrag nennt 2 `aufruf_fehler`.
+    Vorher lieferte diese Funktion dafuer 1 — Widerspruch zu exit_codes.2.
+    `aggregiere` terminiert bei 2 hart, deshalb gewinnt 2 auch gegen 4.
     """
     urteile = {m.group(1) for z in bericht
                for m in [re.match(r"ZEILE \S+ ([A-Z]+);", z)] if m}
-    # WIEDERHOLT ist ein Befund (1), aber KEIN Verwerfen — es stehen
-    # beide in der Schwere 1, only die Aktion unterscheidet sich.
-    befunde = {"VERWERFEN", "WIEDERHOLT"} & urteile
     return aggregiere(4 if "UNGEPRUEFT" in urteile else 0,
-                      1 if befunde else 0)
+                      2 if "VERWERFEN" in urteile else
+                      (1 if "WIEDERHOLT" in urteile else 0))
 
 
 def _unparsbar_zeilen() -> list[str]:
@@ -489,6 +492,37 @@ def achse(paare: int, kanal: int, wieder: int, ueber: int | None = None,
             f"uebersprungen={_u};json={_j};kurz={_k};envelope={_e};")
 
 
+def _flag_wert(argv: list[str], name: str) -> str | None:
+    """§A-ZZZZ206: **Flags ohne Wert sind Aufruffehler, kein Crash.**
+
+    Bis R23 wurde jeder Flag-Wert per `argv[argv.index(name) + 1]` gelesen.
+    Fehlte der Wert, warf das einen ungefangenen `IndexError` — Exit 1,
+    nackter Traceback, KEIN Telemetrie-Token. Exit 1 ist aber bereits
+    als `WIEDERHOLT` belegt (Telemetrie-Befund). Zwei voellig
+    verschiedene Zustaende teilten sich denselben Code; der Konsument
+    konnte Absturz und Befund nicht unterscheiden.
+
+    R24 reparierte nur `--strom` — `--einwurf` behielt dasselbe Muster
+    (`--strom x --einwurf` -> IndexError, rc=1). Deshalb ist der Guard
+    jetzt GENERISCH: er gilt fuer jedes Flag, das einen Wert erwartet.
+
+    Fehlender Wert oder Folge-Flag -> None. Der Aufrufer emittiert eine
+    contract-konforme VERWERFEN-Zeile und gibt 2 zurueck — konsistent
+    mit `kein_modus` und `einwurf_ohne_strom`.
+
+    Bewusste Grenze: ein Dateiname, der selbst mit `--` beginnt, wird als
+    Folge-Flag gelesen. Diese Semantik ist im Vertrag dokumentiert
+    (`flag_wert.grenze`); fuer Dateinamen dieser Form muss `./--name`
+    geschrieben werden.
+    """
+    if name not in argv:
+        return None
+    i = argv.index(name) + 1
+    if i >= len(argv) or argv[i].startswith("--"):
+        return None
+    return argv[i]
+
+
 def main(argv: list[str]) -> int:
     # §A-ZZZZ111a: **`--einwurf` zuerst prüfen.** Die erste Fassung fragte
     # `--strom` zuerst ab, und weil `--einwurf` den Strom als Referenz
@@ -502,10 +536,21 @@ def main(argv: list[str]) -> int:
             print(f"ZEILE AUFRUF VERWERFEN;grund={escape('einwurf_ohne_strom')};")
             print("--einwurf braucht --strom als Referenz", file=sys.stderr)
             return 2
+        _sw = _flag_wert(argv, "--strom")
+        if _sw is None:
+            print(achse(0, 0, 0), end="")
+            print("ZEILE AUFRUF VERWERFEN;grund=strom_ohne_wert;")
+            print("--strom ohne Wert", file=sys.stderr)
+            return 2
+        _ew = _flag_wert(argv, "--einwurf")
+        if _ew is None:
+            print(achse(0, 0, 0), end="")
+            print("ZEILE AUFRUF VERWERFEN;grund=einwurf_ohne_wert;")
+            print("--einwurf ohne Wert", file=sys.stderr)
+            return 2
         try:
-            strom = lese_strom(Path(argv[argv.index("--strom") + 1]))
-            text = Path(argv[argv.index("--einwurf") + 1]).read_text(
-                encoding="utf-8")
+            strom = lese_strom(Path(_sw))
+            text = Path(_ew).read_text(encoding="utf-8")
         except (StreamUnlesbar, OSError) as e:
             # §A-ZZZZ128 (Runde 83): **das Schema ist ueber alle Urteile
             # invariant.** Runde 82 liess den Exit-3-Zweig ohne Messachse
@@ -557,7 +602,13 @@ def main(argv: list[str]) -> int:
         return aggregiere(0, 4 if LESESTAT["json"] >= JSON_SCHWELLE else 0)
 
     if "--strom" in argv:
-        p = Path(argv[argv.index("--strom") + 1])
+        _sw = _flag_wert(argv, "--strom")
+        if _sw is None:
+            print(achse(0, 0, 0), end="")
+            print("ZEILE AUFRUF VERWERFEN;grund=strom_ohne_wert;")
+            print("--strom ohne Wert", file=sys.stderr)
+            return 2
+        p = Path(_sw)
         try:
             strom = lese_strom(p)
         except StreamUnlesbar as e:

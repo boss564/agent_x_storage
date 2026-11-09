@@ -839,9 +839,65 @@
     },
     "exit_semantik": {
       "regel": "Exit ist Telemetrie, nicht Handlung — Konsumenten lesen die Zeilen.",
-      "projektion": "exit == exit_aus_zeilen(zeilen) (test_projektion.py)",
-      "exit2": "traegt genau EINE Zeile `ZEILE AUFRUF VERWERFEN;grund=...`",
-      "aktion2": "Konsument blockiert und alarmiert; keine Inhalts-Handlung moeglich."
+      "projektion": "fuer N in {0,1,2,4}: exit == exit_aus_zeilen(zeilen_aus_stdout) == N ; fuer N == 3: siehe projektion_je_code['3']",
+      "projektion_je_code": {
+        "0": "exit == exit_aus_zeilen(zeilen_aus_stdout) == 0",
+        "1": "exit == exit_aus_zeilen(zeilen_aus_stdout) == 1",
+        "2": "exit == exit_aus_zeilen(zeilen_aus_stdout) == 2",
+        "3": "exit == 3 && kein ZEILE-Token in stdout && eine Zeile matcht '^STROM UNLESBAR;grund=Stream nicht lesbar:'",
+        "4": "exit == exit_aus_zeilen(zeilen_aus_stdout) == 4"
+      },
+      "projection_mapping": {
+        "urlteil_zu_exit": {
+          "ZUSTELLEN": 0,
+          "WIEDERHOLT": 1,
+          "VERWERFEN": 2,
+          "UNGEPRUEFT": 4
+        },
+        "praezedenz": [
+          "VERWERFEN",
+          "UNGEPRUEFT",
+          "WIEDERHOLT",
+          "ZUSTELLEN"
+        ],
+        "schwere": {
+          "0": 0,
+          "1": 1,
+          "4": 2,
+          "3": 3,
+          "2": 4
+        },
+        "terminator": [
+          2
+        ],
+        "rolle": "ORAKEL — ausschliesslich von scripts/test_projektion.py gelesen. Der Produktionscode (einwurf_waechter.py) liest diese Datei NICHT; _SCHWERE und der 2-Terminator sind dort stehende Konstanten. Damit bleibt der Vertrag ein unabhaengiges Pruefdokument.",
+        "begruendung": "Wenn der Code den Vertrag laden wuerde, koennten Code und Orakel nicht mehr widersprechen — ein fachlicher Vertragsfehler waere automatisch in beiden und bliebe fuer jeden Test unsichtbar. Der Spiegel waere dann die einzige Quelle."
+      },
+      "exit2": "traegt genau EINE Zeile 'ZEILE AUFRUF VERWERFEN;grund=...' — grund in {kein_modus, einwurf_ohne_strom, strom_ohne_wert, einwurf_ohne_wert}",
+      "aktion2": "Konsument blockiert und alarmiert; keine Inhalts-Handlung moeglich.",
+      "aktion3": "Konsument zustellt als UNGEPRUEFT und alarmiert.",
+      "rc_kollision_aufgeloest": "Ab R25: _flag_wert(argv,name) generisch fuer --strom UND --einwurf. Jeder fehlende/flag-foermige Wert -> VERWERFEN-Zeile, rc=2. Grep-Beleg: 0 Treffer fuer 'argv.index(\"--'. rc=1 ist eindeutig WIEDERHOLT.",
+      "flag_wert": {
+        "funktion": "_flag_wert(argv,name) -> str|None",
+        "grenze": "Ein Dateiname, der mit '--' beginnt, wird als Folge-Flag gelesen; dafuer './--name' schreiben.",
+        "getestet": "test_projektion._wahl_grund V2/V3/V4/V5"
+      },
+      "praezedenz_cross_check": "test_projektion._drift_check prueft praezedenz-Liste gegen schwere-Zahlen paarweise. Widerspruch -> FAIL. Damit sind die zwei Encodings nicht mehr ungeprueft.",
+      "exit2_grund_matrix": {
+        "kein_modus": "weder --strom noch --einwurf gesetzt",
+        "einwurf_ohne_strom": "--einwurf gesetzt, --strom fehlt ganz",
+        "strom_ohne_wert": "--strom gesetzt, aber ohne Wert (oder Folge-Flag)",
+        "einwurf_ohne_wert": "--strom mit Wert, --einwurf ohne Wert",
+        "symmetrie": "strom_ohne_wert und einwurf_ohne_wert sind das Paar zum selben Guard _flag_wert; kein Pfad faellt auf kein_modus zurueck, wenn ein Modus gesetzt ist."
+      },
+      "drift_check_umfang": {
+        "einzelmarken": 4,
+        "kombinationen": 4,
+        "aggregiere_paare": 16,
+        "praezedenz_glieder": 3,
+        "summe": 27,
+        "hinweis": "Die 16 aggregiere-Paare ersetzen die 12 Schwere-Paare aus R24 (Doppelschleife ueber alle Nicht-Terminatoren inkl. Terminator als Partner) — kein Aufaddieren."
+      }
     },
     "aktionen": {
       "WIEDERHOLT": {
@@ -2208,5 +2264,25 @@
     "regel": "Ein veroeffentlichter Bericht hat keine Nachtrag-Commits. Braucht er einen, war die Runde nicht fertig — atomar neu publizieren.",
     "beleg": "R101 fc2ec647, R102 1e18cb8c — beide Nachträge nach Payload.",
     "status": "als Regel gebucht; R103 haelt sie (ein Commit)."
+  },
+  "_kommentar": {
+    "zweck": "Single Point of Truth fuer die Rollen aller Felder dieses Vertrags.",
+    "rollen": [
+      "NORM",
+      "ORAKEL",
+      "DOKU"
+    ],
+    "orakel_leser": {
+      "ausgabe_grammatik.exit_semantik.projection_mapping": "scripts/test_projektion.py — NUR dort gelesen",
+      "ausgabe_grammatik.messachse": "scripts/test_achse_vertrag.py",
+      "ausgabe_grammatik.paar_terminator": "scripts/test_achse_vertrag.py"
+    },
+    "produktions_code_liest_nichts": "einwurf_waechter.py oeffnet waechter_vertrag.json NICHT. Grep-Beleg: 0 Treffer fuer projection_mapping/_SCHWERE-Loading im Produktionscode.",
+    "ohne_leser": {
+      "paar_form": "DOKU",
+      "identifier_union": "DOKU",
+      "wert_typ": "DOKU",
+      "schluessel_zeichen": "DOKU"
+    }
   }
 }
