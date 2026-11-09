@@ -332,3 +332,100 @@ git add -- protokoll/R29_COMMIT_R_GATE.md \
 | Befristung endet mit Commit T | **ok** — dieser Abschnitt |
 
 **Verdict D25: PASS** — Gate-Doku konsistent mit Durchgang; Staging freigegeben unter D26.
+
+### Commit-T Ergebnis
+
+| Feld | Wert |
+|---|---|
+| Hash | `7a7824b8` |
+| Message | `R29 Commit T: Gate-Doku + Exit-2-Park versionieren` |
+| `git diff-tree --name-only -r 7a7824b8` | exakt 4 Dateien (s. Scope) |
+| Stat | 4 files, +574 |
+
+## D27 — Hook-Umgehung (Prozess, bindend)
+
+### Korrektur der Fehlannahme
+
+Es gab **keine** gestagte „Index-TMP-Datei“ im Commit-Scope. Der Pre-Commit-Hook
+(`githooks/pre-commit`, `core.hooksPath=githooks`) erzeugt selbst ein `mktemp`-Verzeichnis
+und exportiert den **Index** via `git checkout-index --prefix="$TMP/" -a`, dann:
+
+```
+python3 "$REPO_ROOT/scripts/check_claude_md.py" "$TMP" --run-tests
+```
+
+Der Hook liest den Checker immer aus dem **Arbeitsbaum** (`$REPO_ROOT/scripts/…`),
+prüft aber den **Index-Export** in `$TMP` (dort ohne `.git/` → „Vorlauf nicht schreibbar“).
+
+### Ursache (gemessen)
+
+| Checker | gegen Index-TMP `--run-tests` | Status |
+|---|---|---|
+| WT `scripts/check_claude_md.py` (Stufe-2-Akte-WIP, +169/−2 vs HEAD) | **exit:1** — „unvollstaendig“ | vergiftet den Hook |
+| HEAD `git show HEAD:scripts/check_claude_md.py` | **exit:0** | erlaubt Commit |
+
+`check_claude_md.py` steht seit Commit-1-Scope-Schnitt als **AUS** (WIP, nicht Flip-Kern).
+Untracked/unstaged WIP im WT reicht, um den Hook zu vergiften, weil `CHECKER` den WT-Pfad nutzt.
+
+### Gewählte Alternative (Commit 1 und Commit T, identisches Muster)
+
+1. WIP sichern: `cp scripts/check_claude_md.py /tmp/check_claude_md.wip.py`
+2. Temporär HEAD einsetzen: `git checkout HEAD -- scripts/check_claude_md.py`
+   (Index bleibt ohne diese Datei im Commit-Scope — nur WT für Hook-Pfad)
+3. Commit mit Standard-Hook (`githooks/pre-commit` aktiv, **nicht** deaktiviert,
+   kein `--no-verify`)
+4. WIP zurück: `cp /tmp/check_claude_md.wip.py scripts/check_claude_md.py`
+
+| Commit | Hash | Scope-Beweis (keine TMP) |
+|---|---|---|
+| Commit 1 | `36a4c7d7` | `diff-tree`: `einwurf_waechter.py`, `waechter_vertrag.json` |
+| Commit T | `7a7824b8` | `diff-tree`: 4× `protokoll/R29_*` (Gate + Park) |
+
+`git diff-tree … \| rg -i 'tmp\|temp\|/var/folders'` → **keine Treffer** (beide Commits).
+
+### Wiederherstellung (nach Commit T, gemessen)
+
+| Check | Ergebnis |
+|---|---|
+| `git config --get core.hooksPath` | `githooks` (aktiv, unverändert) |
+| `githooks/pre-commit` | vorhanden, ausführbar; `CHECKER=…/scripts/check_claude_md.py` |
+| Hook deaktiviert / `--no-verify`? | **nein** |
+| WIP wiederhergestellt? | **ja** — `git status --short` → ` M scripts/check_claude_md.py` |
+| TMP in Historie? | **nein** — nur erwartete Scope-Dateien |
+
+### Urteil D27
+
+| Anforderung | Status |
+|---|---|
+| Umgehung in Gate-Doku beschrieben (Grund, Alternative, Commits) | **PASS** (dieser Abschnitt) |
+| Hook-Zustand wiederhergestellt / nie abgeschaltet | **PASS** (`hooksPath=githooks`) |
+| Keine TMP-Dateien in Commit T (noch Commit 1) | **PASS** (`diff-tree`) |
+| Commit-1-Analog nachvollziehbar | **PASS** (gleiche 4-Schritt-Sequenz) |
+
+**Verdict D27: PASS.** Ausnahme bleibt **deklariert**, nicht normalisiert: Solange der
+Stufe-2-WIP in `check_claude_md.py` uncommittet im WT liegt, muss vor jedem Commit
+derselbe HEAD-Checker-Tausch erfolgen **oder** der WIP zuerst committed/verworfen
+werden. Commit 2-Gate muss diese Vorbedingung explizit führen.
+
+## D28 — Hook-WIP-Entscheidung (gemessen 2026-11-09)
+
+| Option | Bewertung |
+|---|---|
+| A fertigstellen + committen | **nicht jetzt** — WIP scheitert auf Index-TMP (`exit:1`); Finalisierung = eigenes Gate |
+| B HEAD wiederherstellen | **gewählt**, mit Park (Arbeit nicht vernichtet) |
+| C dauerhafte Umgehung | **abgelehnt** |
+
+**Umsetzung:**
+
+1. Diff geparkt: `protokoll/R29_CHECK_CLAUDE_MD_WIP.diff` (+ `R29_CHECK_CLAUDE_MD_WIP.md`)
+2. `git checkout HEAD -- scripts/check_claude_md.py` → WT = HEAD
+3. Hook-Pfad unverändert `githooks`; Standard-Lauf ohne Checker-Tausch erwartet
+
+**Verdict D28: PASS (B + Park).** Checker-WIP nicht in Commit 2.
+
+## D29 / D30
+
+| # | Inhalt | Status |
+|---|---|---|
+| D29 | Dieser Gate-Abschnitt + Checker-Park versionieren (Mini-Commit, Scope exakt) | **offen → Ausführung** |
+| D30 | WT nur Commit-2-relevante Dateien; Rest gestasht/geparkt | **offen → Ausführung** |
