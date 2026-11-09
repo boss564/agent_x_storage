@@ -427,5 +427,35 @@ werden. Commit 2-Gate muss diese Vorbedingung explizit führen.
 
 | # | Inhalt | Status |
 |---|---|---|
-| D29 | Dieser Gate-Abschnitt + Checker-Park versionieren (Mini-Commit, Scope exakt) | **offen → Ausführung** |
-| D30 | WT nur Commit-2-relevante Dateien; Rest gestasht/geparkt | **offen → Ausführung** |
+| D29 | Mini-Commit `cb59ddfc` — Gate-Nachtrag + Checker-Park | **PASS** |
+| D30 | `stash@{0}` non-C2 WIP; WT für C2 bereinigt | **PASS** |
+
+## D33 / D37 (nachgezogen)
+
+| # | Hash | Inhalt | Status |
+|---|---|---|---|
+| D33 | `41bf1026` | Checker-WIP final; Bezug-root via `samefile`; Index-TMP exit:0 | **PASS** |
+| D37 | `29865804` | Messblock Option C (`schreibe_messblock`); Plan in `R29_D37_REGENERATION_PLAN.md` | **PASS** |
+
+## D34 — G1-content (vierschichtig, Spezifikation)
+
+**Gegenstand:** Inhaltliche Gate-Prüfung der Expand-Reader-Achse nach Commit R+1+2 —
+nicht der Format-Flip allein, sondern der **Inhaltspfad** einer Achsenzeile.
+
+| Schicht | Name | Prüft | Pass-Kriterium |
+|---|---|---|---|
+| 1 | **Shape** | Zeilenform / Token-Struktur vor Semantik | parsebar; kein Shape-Reject vor Kern |
+| 2 | **Kern** | Pflichtkeys (`SCHEMA_KERN_ALT5` bzw. Neu8-Strom) | Kern vollständig; sonst `SCHEMA_LUECKE` |
+| 3 | **Fremd** | `achsenzeile_fremdkeys` — keine unerlaubten Keys | `fremdkeys` leer bzw. nur erlaubt |
+| 4 | **Dispatcher** | meta / Summe / Alias / `WERT_RELATION_FEHLER` | eindeutiger Zweig; Alias bis Contract-T geduldet, danach abgelehnt |
+
+**Messung (erst nach Abnahme dieser Spezifikation):**
+
+1. Fixtures: Alt5-Orakel + Neu8-Live (HEAD nach `e3bd1cf3`/`41bf1026`)
+2. Pro Schicht: mind. 1 Positiv- + 1 Negativfall
+3. Protokoll: Eingabe → Schicht-Verdict → Gesamt
+4. Gate-Formel: alle 4 Schichten grün **oder** deklarierte xfail mit Akte
+
+**Nicht G1-content:** Exit-2-Semantik (Commit 2), Hook-TMP, Messblock-Regeneration.
+
+**Status D34:** Spezifikation geschrieben — **Abnahme ausstehend**, Messung gesperrt bis Abnahme.
