@@ -249,3 +249,35 @@ def count_events(
             continue
         n += 1
     return n
+
+
+def sha256_file(path: Path) -> str:
+    """Hex digest of a segment file (GP-S2-6 provenance)."""
+    import hashlib
+
+    h = hashlib.sha256()
+    with Path(path).open("rb") as fh:
+        for chunk in iter(lambda: fh.read(1 << 16), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def write_segment_manifest(
+    segment_paths: Iterable[Path],
+    manifest_path: Path,
+) -> dict[str, str]:
+    """Write ``path\\tsha256`` lines for rolled event-log / probe segments."""
+    entries: dict[str, str] = {}
+    lines: list[str] = []
+    for p in segment_paths:
+        path = Path(p)
+        if not path.exists():
+            continue
+        digest = sha256_file(path)
+        key = str(path)
+        entries[key] = digest
+        lines.append(f"{digest}  {path.name}")
+    manifest_path = Path(manifest_path)
+    manifest_path.parent.mkdir(parents=True, exist_ok=True)
+    manifest_path.write_text("\n".join(lines) + ("\n" if lines else ""), encoding="utf-8")
+    return entries

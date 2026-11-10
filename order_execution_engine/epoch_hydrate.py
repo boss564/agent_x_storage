@@ -68,8 +68,11 @@ def positions_since_epoch(
     portfolio = VirtualPortfolio(cash=start_balance, start_balance=start_balance)
     if int(n) == 0:
         return portfolio
-    # Bewusst schlank: volle apply_fill-Kette ist Messlauf-Stoff.
-    # Marker+Count beweist den Lese-Pfad ohne Dual-Truth an fills.
+    # N-2 / W2.2-Versprechen (Messlauf-Bauplan): volle ``apply_fill``-
+    # Rekonstruktion der Positionen seit Epoch-Marker. Schritt 2 liefert
+    # nur den Lese-Andock + Issue-Anker + xfail-Stub
+    # (``test_epoch_restart_reconstructs_or_xfail``). Marker+Count beweist
+    # den Lese-Pfad ohne Dual-Truth an fills — kein stiller Teil-Rebuild.
     portfolio._epoch_fill_count = int(n)  # type: ignore[attr-defined]
     return portfolio
 

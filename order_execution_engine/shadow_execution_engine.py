@@ -145,6 +145,13 @@ class RiskController:
 
         Returns:
             RiskDecision mit Zulassung oder Ablehnungsgrund.
+
+        N-3 / GP-5 (Schritt 2): SELL ohne Inventar ist **kein** Risk-Reject.
+        Produzent ist die Engine-D2-Spaltung
+        (``TelemetryClass.UNACTIONABLE_SELL_NO_INVENTORY``, Meta-Anker
+        ``shadow_execution_engine`` ~Z.1372–1390) — außerhalb dieses
+        ``check``. Short-Reject hierher zurückzuholen wäre ein GP-5-Revert.
+        Optional Debug-only Assert bleibt dem Messlauf vorbehalten.
         """
         if self.evaluate_drawdown(portfolio, mark_prices):
             return RiskDecision.reject(RejectReason.DRAWDOWN_LOCKOUT)
