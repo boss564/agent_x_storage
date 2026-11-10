@@ -22,6 +22,12 @@ from order_execution_engine.fill_simulator import (
     RestingModel,
     StalenessPolicy,
 )
+from order_execution_engine.event_log import (
+    JsonlEventLog,
+    emit_tick_samples,
+    install_cache_tap,
+    resolve_event_log_path,
+)
 from order_execution_engine.hub_wiring import ShadowHub, attach_book_feed
 from order_execution_engine.market_data_feed import PolymarketWsFeed, SnapshotCache
 from order_execution_engine.models import RiskConfig
@@ -40,6 +46,8 @@ _LOG = logging.getLogger(__name__)
 # Messperiode v1: stündlicher News-Agent → ~65 min Fenster.
 DEFAULT_MAX_NEWS_AGE_S = 3900.0
 DEFAULT_TAIL_INTERVAL_S = 5.0
+# GP-S2-1: tick_sample at decision takt (~60 s); independent of book_update.
+DEFAULT_TICK_SAMPLE_S = 60.0
 
 
 def git_commit_short(repo: Path | None = None) -> str:
@@ -214,6 +222,19 @@ def build_runner(
         fill_sim_config=fill_cfg,
     )
     cache = SnapshotCache(max_age_seconds=float(policy_cfg.get("cache_max_age_s", 10)))
+    # GP-S2-1 / GP-S2-7: tap SnapshotCache.update → JSONL (never shadow.db).
+    elog_path = resolve_event_log_path()
+    if elog_path is not None:
+        event_log = JsonlEventLog(elog_path, producer="runner")
+        install_cache_tap(cache, event_log)
+        setattr(cache, "_event_log", event_log)
+        _LOG.info(
+            "event_log enabled path=%s tap=%s",
+            elog_path,
+            "market_data_feed.py:63",
+        )
+    else:
+        setattr(cache, "_event_log", None)
     binding = attach_book_feed(engine, cache=cache, start_ws_feed=start_ws)
 
     commit = git_commit if git_commit is not None else git_commit_short()
@@ -265,6 +286,7 @@ async def run_ws_hub_and_tail(
     sink: TelemetrySink,
     tail: JsonlTail,
     tail_interval_s: float = DEFAULT_TAIL_INTERVAL_S,
+    tick_sample_s: float = DEFAULT_TICK_SAMPLE_S,
     stop_event: Optional[asyncio.Event] = None,
     ws_reconnect_s: float = 5.0,
 ) -> None:
@@ -289,6 +311,23 @@ async def run_ws_hub_and_tail(
             except asyncio.TimeoutError:
                 continue
 
+    async def _tick_sample_loop() -> None:
+        # A-A6: tick_sample fires even when venue is deaf (no book_update).
+        elog = getattr(binding.cache, "_event_log", None)
+        if elog is None or not token_ids:
+            await stop.wait()
+            return
+        max_age = float(getattr(binding.cache, "_max_age", 10.0))
+        while not stop.is_set():
+            n = emit_tick_samples(
+                binding.cache, elog, token_ids, max_age_s=max_age,
+            )
+            _LOG.debug("tick_sample tokens=%s", n)
+            try:
+                await asyncio.wait_for(stop.wait(), timeout=tick_sample_s)
+            except asyncio.TimeoutError:
+                continue
+
     async def _ws_loop() -> None:
         if binding.feed is None or not token_ids:
             await stop.wait()
@@ -310,6 +349,7 @@ async def run_ws_hub_and_tail(
     tasks = [
         asyncio.create_task(hub.run(interval_seconds=1.0, stop_event=stop)),
         asyncio.create_task(_tail_loop()),
+        asyncio.create_task(_tick_sample_loop()),
         asyncio.create_task(_ws_loop()),
     ]
     try:
