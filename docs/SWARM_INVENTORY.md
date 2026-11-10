@@ -87,7 +87,7 @@ flowchart LR
 #### Laufzeit-Status (auto — Log-Frische)
 
 <!-- SWARM_RUNTIME_BEGIN -->
-<!-- generated_at: 2026-11-10T19:18:50.234941+00:00 -->
+<!-- generated_at: 2026-11-10T19:22:52.939505+00:00 -->
 <!-- generator: scripts/swarm_health.py (--sync-inventory) -->
 
 _**Laufzeit** = Log-Frische (ACTIVE/STALE/IDLE/MISSING/OFF). **Rolle** = Architektur-Zugehörigkeit — kein Prozess-Nachweis. Sync: `make raas-swarm-inventory-sync`_
@@ -105,7 +105,7 @@ _**Laufzeit** = Log-Frische (ACTIVE/STALE/IDLE/MISSING/OFF). **Rolle** = Archite
 | **A2.5 Transport Gate** | P6 | **MISSING** | — | `data/raas/audit/regime_swarm_cycles.jsonl` | Shadow-Pfad |
 | **B0 Position Sizing** | P5 | **OFF** | — | `data/raas/audit/position_sizing_audit.jsonl` | Opt-in (Helm off, Strang B n<50) |
 
-_Stand: 2026-11-10T19:18:50.234941+00:00 · 0 ACTIVE · 0 STALE (Laufzeit-Zeilen, nicht Rollen-Zeilen)_
+_Stand: 2026-11-10T19:22:52.939505+00:00 · 0 ACTIVE · 0 STALE (Laufzeit-Zeilen, nicht Rollen-Zeilen)_
 
 <!-- SWARM_RUNTIME_END -->
 
