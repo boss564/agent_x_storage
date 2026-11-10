@@ -308,6 +308,26 @@ class RejectContext(BaseModel):
     # Kategorie steht in `reject_detail`; beide zusammen sagen erst, ob
     # der Zähler stimmt *und* wo er herkommt.
     branch: int
+    # Schritt 1 / M6 — Pflichtfelder je Reason (Bauplan §2.3). Optional am
+    # Modell, damit Alt-Zeilen deserialisieren; Runtime-Befüllung + Schema-
+    # Validator erzwingen die Warum-Antwort (GP-2/GP-3).
+    available: Optional[Decimal] = None
+    order_size: Optional[Decimal] = None
+    pos_size: Optional[Decimal] = None
+    current_notional: Optional[Decimal] = None
+    order_notional: Optional[Decimal] = None
+    max_position_size_usdc: Optional[Decimal] = None
+    event_exposure: Optional[Decimal] = None
+    max_event_exposure_usdc: Optional[Decimal] = None
+    market_id: Optional[str] = None
+    cash: Optional[Decimal] = None
+    drawdown_pct: Optional[Decimal] = None
+    max_book_age_ms: Optional[int] = None
+    price: Optional[Decimal] = None
+    price_min: Optional[Decimal] = None
+    price_max: Optional[Decimal] = None
+    schema_violation: Optional[bool] = None
+    missing_keys: Optional[tuple[str, ...]] = None
 
 
 # ---------------------------------------------------------------------------

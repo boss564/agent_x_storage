@@ -686,6 +686,9 @@ class TelemetryRecord(BaseModel):
     # Zeilen Snapshot-Tabelle. Optional, wie `reject_detail`: NULL heißt
     # "vor dem Feld geschrieben", nicht "kein Kontext vorhanden".
     reject_context: Optional["RejectContext"] = None
+    # v9 / GP-5: D2-Klasse außerhalb Reject-Trichter. NULL = kein Klassen-Ereignis.
+    # reject_reason bleibt bei D2 NONE/NULL — siehe Bauplan §2.2.1.
+    telemetry_class: Optional[str] = None
     requested_size: Optional[Decimal] = None
     decision_seq: int = 0
     fill_metrics: Optional[FillMetrics] = None

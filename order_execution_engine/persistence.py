@@ -39,7 +39,7 @@ from order_execution_engine.shadow_execution_engine import TelemetryRecord
 
 _LOG = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 8
+SCHEMA_VERSION = 9
 # Same DNS-namespace as news_bridge.SIGNAL_NAMESPACE — claim↔telemetry bind.
 SIGNAL_NAMESPACE = uuid.UUID("6ba7b810-9dad-11d1-80b4-00c04fd430c8")
 
@@ -288,6 +288,7 @@ class SQLiteShadowStorage:
         self._migrate_v6()
         self._migrate_v7()
         self._migrate_v8()
+        self._migrate_v9()
         self._conn.execute(
             "INSERT OR REPLACE INTO schema_meta (key, value) VALUES ('schema_version', ?)",
             (str(SCHEMA_VERSION),),
@@ -499,6 +500,21 @@ class SQLiteShadowStorage:
                     (int(tel[0]), item_id),
                 )
 
+    def _migrate_v9(self) -> None:
+        """v8 → v9: ``telemetry_class`` (D2 / GP-5) — außerhalb Reject-Trichter.
+
+        Muster wie ``_migrate_v8``: idempotent via ``PRAGMA table_info``,
+        Versionsautorität bleibt ``schema_meta`` (gesetzt in ``__init__``).
+        ``reject_reason`` bleibt NULL bei D2-Zeilen; Klasse steht nur hier.
+        """
+        tel_cols = {
+            row[1] for row in self._conn.execute("PRAGMA table_info(telemetry)")
+        }
+        if "telemetry_class" not in tel_cols:
+            self._conn.execute(
+                "ALTER TABLE telemetry ADD COLUMN telemetry_class TEXT"
+            )
+
     def claim_dispatch(self, item_id: str, *, now: Optional[float] = None) -> bool:
         """Atomarer Dedup: INSERT OR IGNORE. True = neu, False = Duplikat.
 
@@ -649,6 +665,7 @@ class SQLiteShadowStorage:
 
         Phase B (v8): schreibt ``reject_detail`` + ``reject_context_json``,
         Stage ``out_dispatch`` + ``reject``/``approval``.
+        Phase C / Schritt 1 (v9): schreibt ``telemetry_class`` (D2; GP-5).
         """
         import time as _time
 
@@ -677,6 +694,10 @@ class SQLiteShadowStorage:
             else:
                 ctx_json = json.dumps(ctx_obj, default=str)
 
+        class_val = getattr(record, "telemetry_class", None)
+        if class_val is not None:
+            class_val = str(class_val)
+
         if isinstance(record, BaseModel):
             row = record.model_dump(mode="json")
         else:
@@ -699,8 +720,8 @@ class SQLiteShadowStorage:
             cur = self._conn.execute(
                 "INSERT INTO telemetry (signal_id, order_id, latency_ms, approved,"
                 " reject_reason, status, requested_size, decision_seq, run_id,"
-                " reject_detail, reject_context_json)"
-                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                " reject_detail, reject_context_json, telemetry_class)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     row["signal_id"],
                     row["order_id"],
@@ -715,6 +736,7 @@ class SQLiteShadowStorage:
                     self._active_run_id,
                     detail_val,
                     ctx_json,
+                    class_val,
                 ),
             )
             telemetry_seq = int(cur.lastrowid)
