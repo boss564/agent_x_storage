@@ -366,11 +366,15 @@ def test_engine_inversion() -> None:
     weak = SignalPayload(target_token_id="0xtokenA", market_id="mkt-1",
                          direction=Direction.UP, confidence=Decimal("40"))
     rec = eng.on_signal(weak, _book())
-    # UP + invert -> SELL; ohne offene Position -> Risiko-Ablehnung (Short-Verbot)
+    # UP + invert -> SELL; ohne Inventar -> D2 telemetry_class (nicht Risk-Reject)
     assert not rec.approved
-    rejected_order = eng._order_book[rec.order_id]
-    assert rejected_order.side == OrderSide.SELL
-    assert rec.reject_reason == RejectReason.MAX_POSITION_SIZE
+    assert rec.status is OrderStatus.UNACTIONABLE
+    assert rec.telemetry_class == "UNACTIONABLE_SELL_NO_INVENTORY"
+    assert rec.reject_reason is RejectReason.NONE
+    tel = eng.telemetry._records[-1]
+    assert tel.telemetry_class == "UNACTIONABLE_SELL_NO_INVENTORY"
+    assert tel.reject_context is not None
+    assert tel.reject_context.available == Decimal("0")
     assert eng.portfolio.cash == Decimal("10000.00")
     assert not eng.portfolio.positions
     print("OK test_engine_inversion")
@@ -381,8 +385,88 @@ def test_engine_neutral_rejected() -> None:
     neutral = SignalPayload(target_token_id="0xtokenA", market_id="mkt-1",
                             direction=Direction.NEUTRAL, confidence=Decimal("80"))
     rec = eng.on_signal(neutral, _book())
-    assert not rec.approved and rec.reject_reason == RejectReason.INVALID_PRICE
+    assert not rec.approved and rec.reject_reason == RejectReason.NEUTRAL_SIGNAL
     print("OK test_engine_neutral_rejected")
+
+
+def test_phase_b_neutral_signal_not_invalid_price() -> None:
+    """B-Abnahme 4: |s|-Pfad / Direction.NEUTRAL → NEUTRAL_SIGNAL."""
+    eng = ShadowExecutionEngine()
+    neutral = SignalPayload(
+        target_token_id="0xtokenA", market_id="mkt-1",
+        direction=Direction.NEUTRAL, confidence=Decimal("5"),
+    )
+    rec = eng.on_signal(neutral, _book())
+    assert not rec.approved
+    assert rec.reject_reason == RejectReason.NEUTRAL_SIGNAL
+    assert rec.reject_reason is not RejectReason.INVALID_PRICE
+    print("OK test_phase_b_neutral_signal_not_invalid_price")
+
+
+def test_phase_b_invalid_price_only_band() -> None:
+    """B-Abnahme 4: echte Preisband-Verletzung → INVALID_PRICE."""
+    eng = ShadowExecutionEngine()
+    bad = MarketSnapshot(
+        token_id="0xtokenA",
+        bids=(OrderBookLevel(price=Decimal("1.5"), size=Decimal("100")),),
+        asks=(OrderBookLevel(price=Decimal("1.6"), size=Decimal("100")),),
+        source="book",
+    )
+    sig = SignalPayload(
+        target_token_id="0xtokenA", market_id="mkt-1",
+        direction=Direction.UP, confidence=Decimal("80"),
+    )
+    rec = eng.on_signal(sig, bad)
+    assert not rec.approved
+    assert rec.reject_reason == RejectReason.INVALID_PRICE
+    print("OK test_phase_b_invalid_price_only_band")
+
+
+def test_phase_b_empty_side_routed() -> None:
+    """B-Abnahme 4: leere Buchseite → EMPTY_SIDE, nicht INVALID_PRICE."""
+    eng = ShadowExecutionEngine()
+    empty = MarketSnapshot(token_id="0xtokenA", bids=(), asks=(), source="book")
+    sig = SignalPayload(
+        target_token_id="0xtokenA", market_id="mkt-1",
+        direction=Direction.UP, confidence=Decimal("80"),
+    )
+    rec = eng.on_signal(sig, empty)
+    assert not rec.approved
+    assert rec.reject_reason == RejectReason.EMPTY_SIDE
+    print("OK test_phase_b_empty_side_routed")
+
+
+def test_phase_b_no_snapshot_routed() -> None:
+    """B-Abnahme 4: fehlendes Buch → NO_SNAPSHOT."""
+    eng = ShadowExecutionEngine()
+    sig = SignalPayload(
+        target_token_id="0xtokenA", market_id="mkt-1",
+        direction=Direction.DOWN, confidence=Decimal("80"),
+    )
+    rec = eng.on_signal(sig, None)
+    assert not rec.approved
+    assert rec.reject_reason == RejectReason.NO_SNAPSHOT
+    print("OK test_phase_b_no_snapshot_routed")
+
+
+def test_phase_b_side_not_delivered_routed() -> None:
+    """B-Abnahme 4: Ticker ohne Ask → SIDE_NOT_DELIVERED (SELL braucht Bid ok)."""
+    eng = ShadowExecutionEngine()
+    # BUY needs ask — ticker without asks → SIDE_NOT_DELIVERED
+    ticker = MarketSnapshot(
+        token_id="0xtokenA",
+        bids=(OrderBookLevel(price=Decimal("0.4"), size=Decimal("10")),),
+        asks=(),
+        source="ticker",
+    )
+    sig = SignalPayload(
+        target_token_id="0xtokenA", market_id="mkt-1",
+        direction=Direction.UP, confidence=Decimal("80"),
+    )
+    rec = eng.on_signal(sig, ticker)
+    assert not rec.approved
+    assert rec.reject_reason == RejectReason.SIDE_NOT_DELIVERED
+    print("OK test_phase_b_side_not_delivered_routed")
 
 
 def test_engine_guard_integrity() -> None:
@@ -601,6 +685,25 @@ def test_ankerd_meta_every_reject_reason_has_a_producer() -> None:
     print("OK test_ankerd_meta_every_reject_reason_has_a_producer")
 
 
+def test_ankerd_meta_every_telemetry_class_has_a_producer() -> None:
+    """P-2: Meta-Anker für TelemetryClass (D2-Raum, nicht RejectReason)."""
+    import re
+    from pathlib import Path as _P
+
+    from order_execution_engine.telemetry_classes import TelemetryClass
+
+    src = (
+        _P(__file__).resolve().parent.parent / "shadow_execution_engine.py"
+    ).read_text()
+    produced = set(re.findall(r"TelemetryClass\.([A-Z_]+)", src))
+    orphans = [c.name for c in TelemetryClass if c.name not in produced]
+    assert not orphans, (
+        f"TelemetryClass ohne Produzenten: {orphans}. "
+        f"D2-Raum ohne Wache wäre die nächste M5-Halbheit."
+    )
+    print("OK test_ankerd_meta_every_telemetry_class_has_a_producer")
+
+
 def test_anker_counter_lifetime_across_restart() -> None:
     """VM3: Zähler überlebt einen Prozessneustart (Replay-Korrelation)."""
     import sqlite3
@@ -635,7 +738,7 @@ def test_requested_size_null_table() -> None:
         Pfad                    | requested_size
         ------------------------|---------------
         ungültiger Preis        | NULL   (Sizing lief nie)
-        leere Buchseite         | NULL   (INVALID_PRICE-Pfad)
+        leere Buchseite         | NULL   (EMPTY_SIDE-Pfad, Phase B)
         Drawdown-Lockout        | gesetzt (Lockout sitzt NACH dem Sizing)
         Risk-Reject             | gesetzt
         Approved                | gesetzt
@@ -657,13 +760,13 @@ def test_requested_size_null_table() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         _db = Path(tmp) / "u1" / "shadow" / "shadow.db"
 
-        # (1) ungültiger Preis: keine Order-Seite -> Sizing lief nie
+        # (1) leere Buchseite: keine Order-Seite -> Sizing lief nie (EMPTY_SIDE)
         e1 = ShadowExecutionEngine(risk_config=RiskConfig(max_order_size_shares=Decimal("100")))
         empty = MarketSnapshot(token_id="0xtokenA", bids=(), asks=())
         sig = SignalPayload(target_token_id="0xtokenA", market_id="mkt-1",
                             direction=Direction.UP, confidence=Decimal("80"))
         r1 = e1.on_signal(sig, empty)
-        assert r1.reject_reason == RejectReason.INVALID_PRICE
+        assert r1.reject_reason == RejectReason.EMPTY_SIDE
         assert r1.requested_size is None, r1.requested_size
 
         # (2) Drawdown-Lockout: Sizing lief, Lockout greift danach
@@ -710,7 +813,7 @@ def test_requested_size_null_table() -> None:
         store.close()
 
     table = [(r[1], r[2]) for r in rows]
-    assert table[0] == ("INVALID_PRICE", None), table[0]
+    assert table[0] == ("EMPTY_SIDE", None), table[0]
     assert table[1] == ("DRAWDOWN_LOCKOUT", "70"), table[1]
     assert table[2][0] == "MAX_EVENT_EXPOSURE", table[2]
     assert table[2][1] == "500", table[2]
@@ -1016,6 +1119,13 @@ def test_w_stale_1_reject_stale_snapshot() -> None:
     assert report.reject_reason is RejectReason.STALE_SNAPSHOT
     assert eng.matcher.resting_count == 0
     assert report.fills == ()
+    # SP-1925: hartes Gate — Rejects tragen reject_detail (Live-NULL war STALE)
+    rec = eng.telemetry._records[-1]
+    assert rec.reject_detail is not None
+    assert rec.reject_detail.value == "STALE_SNAPSHOT"
+    assert rec.reject_context is not None
+    assert rec.reject_context.snapshot_age_s is not None
+    assert rec.reject_context.snapshot_age_s > 0
     print("OK test_w_stale_1_reject_stale_snapshot")
 
 

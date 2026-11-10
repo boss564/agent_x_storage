@@ -57,6 +57,7 @@ from order_execution_engine.models import (
     VirtualPortfolio,
     default_expiration,
 )
+from order_execution_engine.telemetry_classes import TelemetryClass
 
 
 # ---------------------------------------------------------------------------
@@ -175,11 +176,9 @@ class RiskController:
         if order.side == OrderSide.BUY and current_notional + order.notional > self.config.max_position_size_usdc:
             return RiskDecision.reject(RejectReason.MAX_POSITION_SIZE)
 
-        # SELL nur gegen bestehende Position (Short-Verbot im Dry-Run)
-        if order.side == OrderSide.SELL:
-            available = pos.size if pos else Decimal("0")
-            if available <= 0 or order.size > available:
-                return RiskDecision.reject(RejectReason.MAX_POSITION_SIZE)
+        # SELL-ohne-Inventar / Short-Verbot: nicht hier — D2/GP-5 als
+        # ``telemetry_class`` außerhalb des Reject-Trichters (Engine, nach
+        # Staleness-Preflight, vor diesem Risk-Cap-Pfad).
 
         # Event-Exposure: Token -> Market-Mapping über Position oder Mapping-Tabelle
         market_id = pos.market_id if pos else self._resolve_market(order)
@@ -1114,11 +1113,13 @@ class ShadowExecutionEngine:
         """
         fills = match.fills if match is not None else ()
         # Pre-Order-Rejects setzen status=None am Record; Hub braucht Enum.
-        status = (
-            record.status
-            if record.status is not None
-            else OrderStatus.REJECTED_BY_RISK
-        )
+        # D2: status=UNACTIONABLE am Record; sonst Fallback REJECTED_BY_RISK.
+        if record.status is not None:
+            status = record.status
+        elif record.telemetry_class:
+            status = OrderStatus.UNACTIONABLE
+        else:
+            status = OrderStatus.REJECTED_BY_RISK
         return ExecutionReport(
             signal_id=record.signal_id,
             order_id=record.order_id,
@@ -1126,6 +1127,7 @@ class ShadowExecutionEngine:
             approved=record.approved,
             status=status,
             reject_reason=record.reject_reason,
+            telemetry_class=record.telemetry_class,
             requested_size=record.requested_size,
             executed_size=sum(
                 (f.executed_size for f in fills), Decimal("0"),
@@ -1343,21 +1345,86 @@ class ShadowExecutionEngine:
             self.telemetry.log(record)
             return self._report(signal, record)
 
+        # GP-5 Präzedenz 2: D2 SELL-ohne-Inventar — außerhalb Reject-Trichter.
+        # Produzent für TelemetryClass.UNACTIONABLE_SELL_NO_INVENTORY (P-2 Meta-Anker).
+        if side == OrderSide.SELL:
+            pos = self.portfolio.positions.get(order.token_id)
+            available = pos.size if pos else Decimal("0")
+            pos_size = pos.size if pos else None
+            if available <= 0 or order.size > available:
+                record = TelemetryRecord(
+                    signal_id=signal.signal_id, order_id=order.order_id,
+                    latency_ms=self._elapsed_ms(t0), approved=False,
+                    reject_reason=RejectReason.NONE,
+                    status=OrderStatus.UNACTIONABLE,
+                    reject_detail=None,
+                    telemetry_class=TelemetryClass.UNACTIONABLE_SELL_NO_INVENTORY.value,
+                    reject_context=RejectContext(
+                        token_id=active.token_id, side=side.value,
+                        best_bid=active.best_bid(), best_ask=active.best_ask(),
+                        snapshot_age_s=max(0.0, time.time() - active.received_at),
+                        source=getattr(active, "source", None),
+                        branch=1346,
+                        available=available,
+                        order_size=order.size,
+                        pos_size=pos_size,
+                    ),
+                    requested_size=requested_size, decision_seq=decision_seq,
+                )
+                self.telemetry.log(record)
+                return self._report(signal, record)
+
         decision = self.risk.check(order, self.portfolio, marks)
         if not decision.approved:
             order = order.model_copy(update={"status": OrderStatus.REJECTED_BY_RISK, "reject_reason": decision.reason})
             self._order_book[order.order_id] = order
+            pos = self.portfolio.positions.get(order.token_id)
+            current_notional = (
+                pos.size * pos.avg_entry_price if pos else Decimal("0")
+            )
+            market_id = pos.market_id if pos else order.token_id
+            event_exposure = self.portfolio.exposure_per_market().get(
+                market_id, Decimal("0")
+            )
+            ctx_kw: dict[str, Any] = dict(
+                token_id=active.token_id, side=side.value,
+                best_bid=active.best_bid(), best_ask=active.best_ask(),
+                snapshot_age_s=max(0.0, time.time() - active.received_at),
+                source=getattr(active, "source", None),
+                branch=1370,
+            )
+            if decision.reason is RejectReason.MAX_POSITION_SIZE:
+                ctx_kw.update(
+                    current_notional=current_notional,
+                    order_notional=order.notional,
+                    max_position_size_usdc=self.risk.config.max_position_size_usdc,
+                )
+            elif decision.reason is RejectReason.MAX_EVENT_EXPOSURE:
+                ctx_kw.update(
+                    event_exposure=event_exposure,
+                    order_notional=order.notional,
+                    max_event_exposure_usdc=self.risk.config.max_event_exposure_usdc,
+                    market_id=market_id,
+                )
+            elif decision.reason is RejectReason.INSUFFICIENT_CASH:
+                ctx_kw.update(
+                    cash=self.portfolio.cash,
+                    order_notional=order.notional,
+                )
+            elif decision.reason is RejectReason.DRAWDOWN_LOCKOUT:
+                peak = self.portfolio.peak_equity
+                eq = self.portfolio.equity(marks)
+                dd = (
+                    ((peak - eq) / peak) * Decimal("100")
+                    if peak > 0 else Decimal("0")
+                )
+                ctx_kw.update(drawdown_pct=dd)
             record = TelemetryRecord(
                 signal_id=signal.signal_id, order_id=order.order_id,
                 latency_ms=self._elapsed_ms(t0), approved=False,
                 reject_reason=decision.reason, status=order.status,
                 reject_detail=RejectDetail(decision.reason.value),
-                reject_context=RejectContext(
-                    token_id=active.token_id, side=side.value,
-                    best_bid=active.best_bid(), best_ask=active.best_ask(),
-                    snapshot_age_s=max(0.0, time.time() - active.received_at),
-                    source=getattr(active, "source", None),
-                    branch=1337),
+                reject_context=RejectContext(**ctx_kw),
                 requested_size=requested_size, decision_seq=decision_seq,
             )
             self.telemetry.log(record)

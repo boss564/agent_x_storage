@@ -106,7 +106,8 @@ class ExecutionMode(str, Enum):
 class OrderStatus(str, Enum):
     """Lebenszyklus-Status einer Paper-Order.
 
-    Terminal: FILLED, PARTIALLY_FILLED, REJECTED_BY_RISK, CANCELLED, EXPIRED.
+    Terminal: FILLED, PARTIALLY_FILLED, REJECTED_BY_RISK, UNACTIONABLE,
+    CANCELLED, EXPIRED.
     NICHT-terminal: PENDING (dieser Tick nichts gefuellt), RESTING (GTC liegt
     im virtuellen Buch und wartet auf Buch-Updates). Jede Terminal-Iteration
     muss RESTING explizit ausschliessen.
@@ -116,6 +117,8 @@ class OrderStatus(str, Enum):
     FILLED = "FILLED"
     PARTIALLY_FILLED = "PARTIALLY_FILLED"
     REJECTED_BY_RISK = "REJECTED_BY_RISK"
+    # GP-5 / D2: Charter-unactionable (z. B. SELL ohne Inventar) — kein Risk-Reject.
+    UNACTIONABLE = "UNACTIONABLE"
     RESTING = "RESTING"  # Produzent: PaperMatchEngine._match_gtc (Rest-Registrierung)
     CANCELLED = "CANCELLED"
     EXPIRED = "EXPIRED"  # Produzent: Engine.reap_expired via PaperOrder.expiration
@@ -542,6 +545,7 @@ class ExecutionReport(BaseModel):
     TERMINAL_STATUSES: ClassVar[frozenset[OrderStatus]] = frozenset({
         OrderStatus.FILLED,
         OrderStatus.REJECTED_BY_RISK,
+        OrderStatus.UNACTIONABLE,
         OrderStatus.CANCELLED,  # Waisen vorab mit aufnehmen:
         OrderStatus.EXPIRED,    # Terminal-Menge ist zukunftsfest.
     })
@@ -552,6 +556,8 @@ class ExecutionReport(BaseModel):
     approved: bool
     status: OrderStatus
     reject_reason: RejectReason = RejectReason.NONE
+    # GP-5: D2-Klasse; wenn gesetzt, reject_reason darf NONE bleiben.
+    telemetry_class: Optional[str] = None
     requested_size: Optional[Decimal] = None
     executed_size: Decimal = Decimal("0")
     avg_execution_price: Optional[Decimal] = None
@@ -575,9 +581,16 @@ class ExecutionReport(BaseModel):
 
     @model_validator(mode="after")
     def _consistency(self) -> "ExecutionReport":
-        if not self.approved and self.reject_reason is RejectReason.NONE:
+        d2 = bool(self.telemetry_class)
+        if not self.approved and self.reject_reason is RejectReason.NONE and not d2:
             raise ValueError("Abgelehnt ohne reject_reason.")
-        if not self.approved and self.status is not OrderStatus.REJECTED_BY_RISK:
+        if not self.approved and d2:
+            if self.status is not OrderStatus.UNACTIONABLE:
+                raise ValueError(
+                    "telemetry_class gesetzt erfordert status=UNACTIONABLE "
+                    "(D2 außerhalb Risk-Trichter)."
+                )
+        elif not self.approved and self.status is not OrderStatus.REJECTED_BY_RISK:
             # Drei Zustände auf zwei Spalten gehen nicht (§5.4bh): `approved`
             # ist ein Boolean, `reject_reason` trägt nur den Grund. Ein
             # dritter Zustand "nicht entschieden" hätte keinen Platz —

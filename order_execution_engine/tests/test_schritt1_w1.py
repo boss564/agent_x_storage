@@ -105,10 +105,6 @@ def test_w1_migrate_v9_telemetry_class_idempotent() -> None:
 # --- W1 rot bis W2: M5 / M6 / A2.5 -----------------------------------------
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="W1 rot bis W2: D2-Spaltung noch nicht verdrahtet",
-)
 def test_w1_m5_sell_without_inventory_not_max_position() -> None:
     """M5/D2 Soll: SELL ohne Inventar → telemetry_class, nicht MAX_POSITION_SIZE."""
     eng = ShadowExecutionEngine(
@@ -127,10 +123,6 @@ def test_w1_m5_sell_without_inventory_not_max_position() -> None:
     print("OK test_w1_m5_sell_without_inventory_not_max_position")
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="W1 rot bis W2: Risk-Context ohne available/order_size",
-)
 def test_w1_m6_sell_context_answers_why() -> None:
     """M6 Soll: Context trägt available + order_size (Warum ohne Code-Lektüre)."""
     eng = ShadowExecutionEngine(
@@ -187,12 +179,8 @@ def test_w1_a34_validator_hot_path_never_raises() -> None:
     print("OK test_w1_a34_validator_hot_path_never_raises")
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="W1 rot bis W3: Validator noch nicht im Engine-Hot-Path",
-)
 def test_w1_a34_engine_flags_incomplete_sell_context() -> None:
-    """A3.4 Soll am Engine-Pfad: fehlende Pflichtfelder → schema_violation im Record."""
+    """A3.4: D2-Pfad nach W2 vollständig — complete erfüllt den Vertrag ohne Flag."""
     eng = ShadowExecutionEngine(
         risk_config=RiskConfig(max_order_size_shares=Decimal("100")),
         invert_weak_signals=True,
@@ -202,7 +190,6 @@ def test_w1_a34_engine_flags_incomplete_sell_context() -> None:
     rec = eng.telemetry._records[-1]
     assert not rec.approved
     assert rec.reject_context is not None
-    # Bis W2/W3: entweder Felder befüllt ODER schema_violation gesetzt.
     ctx = rec.reject_context
     complete = ctx.available is not None and ctx.order_size is not None
     flagged = ctx.schema_violation is True
@@ -213,22 +200,14 @@ def test_w1_a34_engine_flags_incomplete_sell_context() -> None:
 
 
 if __name__ == "__main__":
-    # W1: DDL/Validator-grün zuerst; Soll-Rot bewusst erwartet.
-    test_w1_schema_version_is_9()
-    test_w1_migrate_v9_telemetry_class_idempotent()
-    test_w1_a34_validator_hot_path_never_raises()
-    test_w1_a25_stale_precedes_d2()
-    failed = []
     for fn in (
+        test_w1_schema_version_is_9,
+        test_w1_migrate_v9_telemetry_class_idempotent,
+        test_w1_a34_validator_hot_path_never_raises,
+        test_w1_a25_stale_precedes_d2,
         test_w1_m5_sell_without_inventory_not_max_position,
         test_w1_m6_sell_context_answers_why,
         test_w1_a34_engine_flags_incomplete_sell_context,
     ):
-        try:
-            fn()
-            failed.append(f"UNEXPECTED_GREEN {fn.__name__}")
-        except AssertionError as exc:
-            print(f"EXPECTED_RED {fn.__name__}: {exc}")
-    if failed:
-        raise SystemExit("W1: Soll-Tests unerwartet grün: " + ", ".join(failed))
-    print("W1 NACHWEIS: DDL/Validator grün · M5/M6/A3.4-engine rot (Soll)")
+        fn()
+    print("W2 NACHWEIS: A2.1–A2.6 / M5/M6/A2.5/A3.4-D2 grün")

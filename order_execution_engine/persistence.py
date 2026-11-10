@@ -727,7 +727,8 @@ class SQLiteShadowStorage:
                     row["order_id"],
                     row["latency_ms"],
                     1 if row["approved"] else 0,
-                    reason.value,
+                    # GP-5: D2-Zeilen → reject_reason NULL (nicht NONE-String).
+                    None if class_val else reason.value,
                     row["status"],
                     _json_dec_as_text(row["requested_size"])
                     if row.get("requested_size") is not None
