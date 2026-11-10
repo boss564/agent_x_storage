@@ -57,6 +57,7 @@ from order_execution_engine.models import (
     VirtualPortfolio,
     default_expiration,
 )
+from order_execution_engine.reject_context_schema import validate_reject_context
 from order_execution_engine.telemetry_classes import TelemetryClass
 
 
@@ -722,6 +723,8 @@ class TelemetryLogger:
         """
         self._records: list[TelemetryRecord] = []
         self._decision_seq: int = initial_decision_seq
+        # GP-2 / A3.3: Schema-Drift darf nicht unsichtbar bleiben.
+        self.schema_violations_total: int = 0
 
     def next_decision_seq(self) -> int:
         """Vergibt die nächste Entscheidungs-Id (monoton, engine-seitig).
@@ -868,6 +871,17 @@ class ShadowExecutionEngine:
     def fill_sim(self) -> FillSimulator:
         """FillSimulator des Matchers — sichtbare Komponentengrenze."""
         return self.matcher.fill_sim
+
+    def _reject_context(self, key: Any, **fields: Any) -> RejectContext:
+        """Baut RejectContext über GP-2-Validator (Hot-Path: nie raise)."""
+        validated = validate_reject_context(key, fields, hot_path=True)
+        if validated.get("schema_violation"):
+            self.telemetry.schema_violations_total += 1
+        allowed = set(RejectContext.model_fields)
+        payload = {k: v for k, v in validated.items() if k in allowed}
+        if "branch" not in payload or payload["branch"] is None:
+            payload["branch"] = int(fields.get("branch") or 0)
+        return RejectContext(**payload)
 
     def _preflight_staleness(
         self,
@@ -1190,7 +1204,8 @@ class ShadowExecutionEngine:
                 latency_ms=self._elapsed_ms(t0), approved=False,
                 reject_reason=RejectReason.NEUTRAL_SIGNAL, status=None,
                 reject_detail=RejectDetail.NEUTRAL_SIGNAL,
-                reject_context=RejectContext(
+                reject_context=self._reject_context(
+                    RejectReason.NEUTRAL_SIGNAL,
                     token_id=signal.target_token_id, branch=1160),
                 decision_seq=self.telemetry.next_decision_seq(),
             )
@@ -1206,7 +1221,8 @@ class ShadowExecutionEngine:
                 latency_ms=self._elapsed_ms(t0), approved=False,
                 reject_reason=RejectReason.NO_SNAPSHOT, status=None,
                 reject_detail=RejectDetail.NO_SNAPSHOT,
-                reject_context=RejectContext(
+                reject_context=self._reject_context(
+                    RejectReason.NO_SNAPSHOT,
                     token_id=signal.target_token_id, side=side.value,
                     branch=1174, source=None),
                 decision_seq=self.telemetry.next_decision_seq(),
@@ -1250,7 +1266,8 @@ class ShadowExecutionEngine:
                 # Persistenz. Ohne Alter wäre der Kontext ein Schnappschuß
                 # ohne Uhr, und EMPTY_SIDE ließe sich nicht von
                 # STALE_SNAPSHOT trennen — zwei verschiedene Reparaturen.
-                reject_context=RejectContext(
+                reject_context=self._reject_context(
+                    _reason,
                     token_id=active.token_id, side=side.value,
                     best_bid=active.best_bid(), best_ask=active.best_ask(),
                     # `received_at` ist da (MarketSnapshot) — ohne Alter
@@ -1272,12 +1289,16 @@ class ShadowExecutionEngine:
                 latency_ms=self._elapsed_ms(t0), approved=False,
                 reject_reason=RejectReason.INVALID_PRICE, status=None,
                 reject_detail=RejectDetail.INVALID_PRICE,
-                reject_context=RejectContext(
+                reject_context=self._reject_context(
+                    RejectReason.INVALID_PRICE,
                     token_id=active.token_id, side=side.value,
                     best_bid=active.best_bid(), best_ask=active.best_ask(),
                     snapshot_age_s=max(
                         0.0, time.time() - active.received_at),
                     source=getattr(active, "source", None),
+                    price=ref_price,
+                    price_min=Decimal("0"),
+                    price_max=Decimal("1"),
                     branch=1260),
                 decision_seq=self.telemetry.next_decision_seq(),
             )
@@ -1334,11 +1355,13 @@ class ShadowExecutionEngine:
                 latency_ms=self._elapsed_ms(t0), approved=False,
                 reject_reason=stale_reason, status=None,
                 reject_detail=RejectDetail.STALE_SNAPSHOT,
-                reject_context=RejectContext(
+                reject_context=self._reject_context(
+                    RejectReason.STALE_SNAPSHOT,
                     token_id=active.token_id, side=side.value,
                     best_bid=active.best_bid(), best_ask=active.best_ask(),
                     snapshot_age_s=max(0.0, now_wall - active.received_at),
                     source=getattr(active, "source", None),
+                    max_book_age_ms=int(self.fill_sim.config.max_book_age_ms),
                     branch=1323),
                 requested_size=requested_size, decision_seq=decision_seq,
             )
@@ -1359,7 +1382,8 @@ class ShadowExecutionEngine:
                     status=OrderStatus.UNACTIONABLE,
                     reject_detail=None,
                     telemetry_class=TelemetryClass.UNACTIONABLE_SELL_NO_INVENTORY.value,
-                    reject_context=RejectContext(
+                    reject_context=self._reject_context(
+                        TelemetryClass.UNACTIONABLE_SELL_NO_INVENTORY,
                         token_id=active.token_id, side=side.value,
                         best_bid=active.best_bid(), best_ask=active.best_ask(),
                         snapshot_age_s=max(0.0, time.time() - active.received_at),
@@ -1424,7 +1448,7 @@ class ShadowExecutionEngine:
                 latency_ms=self._elapsed_ms(t0), approved=False,
                 reject_reason=decision.reason, status=order.status,
                 reject_detail=RejectDetail(decision.reason.value),
-                reject_context=RejectContext(**ctx_kw),
+                reject_context=self._reject_context(decision.reason, **ctx_kw),
                 requested_size=requested_size, decision_seq=decision_seq,
             )
             self.telemetry.log(record)

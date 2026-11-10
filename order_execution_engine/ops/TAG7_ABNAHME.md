@@ -10262,6 +10262,7 @@ Bezug: root=/Volumes/THX_OS_ULTRA/Users/olivermueller/agent_x_storage, CLAUDE.md
 
 
 
+
 ### §71.76 — Messblock 2026-11-05 (Werkzeug `schreibe_messblock.py`)
 
 ```
@@ -10277,7 +10278,7 @@ total=0 chain_total=0 reported=0 unclassified=0 unchecked=0 unclassified_checker
 kopfzeile: 9 gemessen · 0 nicht gemessen · 0 ohne Skript (12 entfernt) · Prüfer fbcbe4c42521
 Karte: d6aa48a83cb8
 Zustand: 6/10 Meßblöcke scheiterbar · seit 213 Protokoll (Einheitenwechsel) · Deckel 3000 ⇒ unter · 2814 Code-Blöcke · 321 Protokoll im Fenster ⇒ Rotation (>240) · 13/13 Regeln mit Gegenlauf · 1/2 quittiert · R→F 0/med 1/n 5/letzte 0/Prüfer · 9 Felder
-Bezug: root=/Volumes/THX_OS_ULTRA/Users/olivermueller/agent_x_storage, CLAUDE.md sha256:50fff349a031, Baum 1a3b00aa+dirty
+Bezug: root=/Volumes/THX_OS_ULTRA/Users/olivermueller/agent_x_storage, CLAUDE.md sha256:50fff349a031, Baum 42726b7f+dirty
 ```
 
 Prüfer `fbcbe4c42521` · erzeugt aus dem Ist-Stand, nicht kopiert.

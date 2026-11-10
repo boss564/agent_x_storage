@@ -411,6 +411,21 @@ def main(argv: Optional[list[str]] = None) -> int:
         _LOG.error("%s", exc)
         return 2
 
+    # D1 / A4.1: lesender Epoch-Hook hinter Flag (kein Marker-Schreiben).
+    import os as _os
+    from order_execution_engine.epoch_hydrate import try_hydrate_engine_portfolio
+
+    _epoch_on = _os.environ.get("EPOCH_HYDRATE", "").strip() in ("1", "true", "yes")
+    _epoch_marker = _os.environ.get("EPOCH_MARKER_ROWID", "").strip()
+    _marker_i = int(_epoch_marker) if _epoch_marker.isdigit() else None
+    if try_hydrate_engine_portfolio(
+        engine, store, epoch_marker_rowid=_marker_i, enabled=_epoch_on,
+    ):
+        _LOG.info(
+            "epoch_hydrate enabled marker_rowid=%s (read-only, D1)",
+            _marker_i,
+        )
+
     _LOG.info(
         "run_id=%s git_commit=%s max_news_age_s=%s ws_tokens=%s",
         store.active_run_id,

@@ -120,11 +120,8 @@ def validate_reject_context(
     name = _key_name(key)
     required = REQUIRED_FIELDS.get(name, ())
     base: MutableMapping[str, Any] = dict(ctx or {})
-    missing = [
-        f
-        for f in required
-        if f not in base or base[f] is None
-    ]
+    # Schlüssel muss existieren; Wert darf None sein (z. B. pos_size ohne Pos.).
+    missing = [f for f in required if f not in base]
     if not missing:
         base.setdefault("schema_violation", False)
         return dict(base)
