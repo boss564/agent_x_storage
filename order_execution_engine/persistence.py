@@ -39,7 +39,18 @@ from order_execution_engine.shadow_execution_engine import TelemetryRecord
 
 _LOG = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 8
+# Same DNS-namespace as news_bridge.SIGNAL_NAMESPACE — claim↔telemetry bind.
+SIGNAL_NAMESPACE = uuid.UUID("6ba7b810-9dad-11d1-80b4-00c04fd430c8")
+
+# SP-1898: Legacy bare discard reason (pre empty_list/mapping_miss split).
+# Taxonomy: bare ``unresolved_asset`` ≡ claim_then_discard synonym of
+# ``unresolved_asset:empty_list`` under old claim-before-empty order.
+# Live pin: item_id=9f568b38fd2b46b9d4d8d11943f4bd24 (2026-10-04).
+# Do NOT rewrite DB rows (append-only); readers canonicalize.
+LEGACY_BARE_UNRESOLVED = "unresolved_asset"
+LEGACY_BARE_CANONICAL = "unresolved_asset:empty_list"
+
 _USER_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
 
 
@@ -112,8 +123,8 @@ def _json_dec_as_text(value: object) -> Optional[str]:
 class ShadowStorage(Protocol):
     """Austauschbares Speicher-Protokoll (Migrationsweg zu Hub-DB)."""
 
-    def write_telemetry(self, record: TelemetryRecord) -> None:
-        """Persistiert einen Telemetrie-Eintrag."""
+    def write_telemetry(self, record: TelemetryRecord) -> int:
+        """Persistiert einen Telemetrie-Eintrag; gibt telemetry_seq zurück."""
         ...
 
     def write_fill(self, fill: FillResult) -> None:
@@ -207,12 +218,23 @@ class SQLiteShadowStorage:
     CREATE TABLE IF NOT EXISTS dispatched_signals (
         item_id TEXT PRIMARY KEY,
         dispatched_at REAL,
-        telemetry_seq INTEGER
+        telemetry_seq INTEGER,
+        signal_id TEXT
     );
     CREATE TABLE IF NOT EXISTS bridge_discards (
         item_id TEXT NOT NULL,
         reason TEXT NOT NULL,
         discarded_at REAL NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS funnel_events (
+        seq INTEGER PRIMARY KEY AUTOINCREMENT,
+        recorded_at REAL NOT NULL,
+        stage TEXT NOT NULL,
+        item_id TEXT,
+        signal_id TEXT,
+        reason TEXT,
+        run_id INTEGER,
+        telemetry_seq INTEGER
     );
     """
 
@@ -265,10 +287,13 @@ class SQLiteShadowStorage:
         self._migrate_v5()
         self._migrate_v6()
         self._migrate_v7()
+        self._migrate_v8()
         self._conn.execute(
             "INSERT OR REPLACE INTO schema_meta (key, value) VALUES ('schema_version', ?)",
             (str(SCHEMA_VERSION),),
         )
+        # Keep PRAGMA user_version in lockstep with schema_meta (A4: was 0).
+        self._conn.execute(f"PRAGMA user_version = {int(SCHEMA_VERSION)}")
         self._conn.commit()
 
     def _migrate_v2(self) -> None:
@@ -390,24 +415,119 @@ class SQLiteShadowStorage:
             """
         )
 
+    def _schema_meta_version(self) -> int:
+        """Autorität: schema_meta.schema_version (nicht PRAGMA user_version)."""
+        row = self._conn.execute(
+            "SELECT value FROM schema_meta WHERE key = 'schema_version'"
+        ).fetchone()
+        if row is None:
+            return 0
+        try:
+            return int(row[0])
+        except (TypeError, ValueError):
+            return 0
+
+    def _migrate_v8(self) -> None:
+        """v7 → v8: reject_detail/context, signal_id bind, funnel stages.
+
+        Versionsautorität ist ``schema_meta`` (A4/P2). Guard prüft
+        ``PRAGMA table_info`` *und* schema_meta — nicht user_version allein.
+        Idempotent: fehlende Spalten/Tabellen werden nachgezogen; Backfill
+        von ``signal_id``/``telemetry_seq`` nur wo NULL.
+        """
+        tel_cols = {
+            row[1] for row in self._conn.execute("PRAGMA table_info(telemetry)")
+        }
+        if "reject_detail" not in tel_cols:
+            self._conn.execute(
+                "ALTER TABLE telemetry ADD COLUMN reject_detail TEXT"
+            )
+        if "reject_context_json" not in tel_cols:
+            self._conn.execute(
+                "ALTER TABLE telemetry ADD COLUMN reject_context_json TEXT"
+            )
+
+        disp_cols = {
+            row[1]
+            for row in self._conn.execute("PRAGMA table_info(dispatched_signals)")
+        }
+        if "signal_id" not in disp_cols:
+            self._conn.execute(
+                "ALTER TABLE dispatched_signals ADD COLUMN signal_id TEXT"
+            )
+
+        self._conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS funnel_events (
+                seq INTEGER PRIMARY KEY AUTOINCREMENT,
+                recorded_at REAL NOT NULL,
+                stage TEXT NOT NULL,
+                item_id TEXT,
+                signal_id TEXT,
+                reason TEXT,
+                run_id INTEGER,
+                telemetry_seq INTEGER
+            )
+            """
+        )
+
+        # Backfill signal_id on claims (uuid5 same as news_bridge).
+        rows = self._conn.execute(
+            "SELECT item_id FROM dispatched_signals WHERE signal_id IS NULL"
+        ).fetchall()
+        for (item_id,) in rows:
+            sid = str(uuid.uuid5(SIGNAL_NAMESPACE, str(item_id)))
+            self._conn.execute(
+                "UPDATE dispatched_signals SET signal_id = ? WHERE item_id = ?",
+                (sid, item_id),
+            )
+
+        # Bind telemetry_seq where signal_id matches and still NULL.
+        unmatched = self._conn.execute(
+            "SELECT item_id, signal_id FROM dispatched_signals"
+            " WHERE telemetry_seq IS NULL AND signal_id IS NOT NULL"
+        ).fetchall()
+        for item_id, signal_id in unmatched:
+            tel = self._conn.execute(
+                "SELECT seq FROM telemetry WHERE signal_id = ? ORDER BY seq LIMIT 1",
+                (signal_id,),
+            ).fetchone()
+            if tel is not None:
+                self._conn.execute(
+                    "UPDATE dispatched_signals SET telemetry_seq = ?"
+                    " WHERE item_id = ?",
+                    (int(tel[0]), item_id),
+                )
+
     def claim_dispatch(self, item_id: str, *, now: Optional[float] = None) -> bool:
-        """Atomarer Dedup: INSERT OR IGNORE. True = neu, False = Duplikat."""
+        """Atomarer Dedup: INSERT OR IGNORE. True = neu, False = Duplikat.
+
+        Speichert ``signal_id`` (= uuid5) für spätere telemetry_seq-Bindung.
+        Stage: ``out_claim`` bei neuem Claim.
+        """
         import time as _time
 
         ts = float(now if now is not None else _time.time())
+        signal_id = str(uuid.uuid5(SIGNAL_NAMESPACE, str(item_id)))
         with self._lock:
             cur = self._conn.execute(
                 "INSERT OR IGNORE INTO dispatched_signals"
-                " (item_id, dispatched_at, telemetry_seq) VALUES (?, ?, NULL)",
-                (item_id, ts),
+                " (item_id, dispatched_at, telemetry_seq, signal_id)"
+                " VALUES (?, ?, NULL, ?)",
+                (item_id, ts, signal_id),
             )
+            claimed = cur.rowcount == 1
+            if claimed:
+                self._insert_funnel_event_locked(
+                    ts, "out_claim", item_id=item_id, signal_id=signal_id,
+                )
             self._conn.commit()
-            return cur.rowcount == 1
+            return claimed
 
     def bind_dispatch_telemetry(
         self, item_id: str, telemetry_seq: Optional[int],
     ) -> None:
-        """Nachziehen der telemetry_seq für einen Dispatch."""
+        """Nachziehen der telemetry_seq für einen Dispatch (per item_id)."""
         with self._lock:
             self._conn.execute(
                 "UPDATE dispatched_signals SET telemetry_seq = ?"
@@ -416,9 +536,26 @@ class SQLiteShadowStorage:
             )
             self._conn.commit()
 
+    def bind_dispatch_by_signal_id(
+        self, signal_id: str, telemetry_seq: int,
+    ) -> None:
+        """Bindet telemetry_seq über signal_id (Engine-Ingress ↔ Claim)."""
+        with self._lock:
+            self._conn.execute(
+                "UPDATE dispatched_signals SET telemetry_seq = ?"
+                " WHERE signal_id = ? AND (telemetry_seq IS NULL OR telemetry_seq = ?)",
+                (telemetry_seq, signal_id, telemetry_seq),
+            )
+            self._conn.commit()
+
     def log_bridge_discard(self, item_id: str, reason: str,
                            *, now: Optional[float] = None) -> None:
-        """Belegter Verwerf-Eintrag (unresolved / no_book / …)."""
+        """Belegter Verwerf-Eintrag (unresolved / no_book / …).
+
+        Stage: ``claim_then_discard`` wenn item bereits claimed, sonst
+        ``pre_claim_discard``. Bare ``unresolved_asset`` (SP-1898) wird
+        nicht umgeschrieben — Reader kanonisieren.
+        """
         import time as _time
 
         ts = float(now if now is not None else _time.time())
@@ -428,7 +565,42 @@ class SQLiteShadowStorage:
                 " VALUES (?, ?, ?)",
                 (item_id, reason, ts),
             )
+            claimed = self._conn.execute(
+                "SELECT signal_id FROM dispatched_signals WHERE item_id = ?",
+                (item_id,),
+            ).fetchone()
+            stage = "claim_then_discard" if claimed else "pre_claim_discard"
+            signal_id = claimed[0] if claimed else None
+            self._insert_funnel_event_locked(
+                ts, stage, item_id=item_id, signal_id=signal_id, reason=reason,
+            )
             self._conn.commit()
+
+    def _insert_funnel_event_locked(
+        self,
+        recorded_at: float,
+        stage: str,
+        *,
+        item_id: Optional[str] = None,
+        signal_id: Optional[str] = None,
+        reason: Optional[str] = None,
+        telemetry_seq: Optional[int] = None,
+    ) -> None:
+        """Schreibt eine funnel_events-Zeile (Aufrufer hält den Lock)."""
+        self._conn.execute(
+            "INSERT INTO funnel_events"
+            " (recorded_at, stage, item_id, signal_id, reason, run_id, telemetry_seq)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (
+                recorded_at,
+                stage,
+                item_id,
+                signal_id,
+                reason,
+                self._active_run_id,
+                telemetry_seq,
+            ),
+        )
 
     def latest_decision_seq(self) -> int:
         """Höchster persistierter `decision_seq` (0, wenn keiner existiert).
@@ -459,8 +631,8 @@ class SQLiteShadowStorage:
         directory = shadow_data_dir(base_dir, user_id)
         return cls(directory / "shadow.db")
 
-    def write_telemetry(self, record: TelemetryRecord) -> None:
-        """Persistiert einen Telemetrie-Eintrag (append-only).
+    def write_telemetry(self, record: TelemetryRecord) -> int:
+        """Persistiert einen Telemetrie-Eintrag (append-only); returns seq.
 
         Transport: ``model_dump(mode="json")`` wenn BaseModel — UUID/Enum als
         str. Spaltenliste explizit (keine implizite Feldreihenfolge).
@@ -474,7 +646,12 @@ class SQLiteShadowStorage:
 
         Die Normalisierung ist bewusst NICHT still — sie loggt eine Warnung.
         Zielwert ist ``RejectReason.NONE``, nicht NULL.
+
+        Phase B (v8): schreibt ``reject_detail`` + ``reject_context_json``,
+        Stage ``out_dispatch`` + ``reject``/``approval``.
         """
+        import time as _time
+
         reason = record.reject_reason
         if not isinstance(reason, RejectReason):
             _LOG.warning(
@@ -484,6 +661,21 @@ class SQLiteShadowStorage:
                 reason,
             )
             reason = RejectReason.NONE
+
+        detail_val: Optional[str] = None
+        detail_obj = getattr(record, "reject_detail", None)
+        if detail_obj is not None:
+            detail_val = (
+                detail_obj.value if hasattr(detail_obj, "value") else str(detail_obj)
+            )
+
+        ctx_json: Optional[str] = None
+        ctx_obj = getattr(record, "reject_context", None)
+        if ctx_obj is not None:
+            if isinstance(ctx_obj, BaseModel):
+                ctx_json = ctx_obj.model_dump_json()
+            else:
+                ctx_json = json.dumps(ctx_obj, default=str)
 
         if isinstance(record, BaseModel):
             row = record.model_dump(mode="json")
@@ -506,8 +698,9 @@ class SQLiteShadowStorage:
         with self._lock:
             cur = self._conn.execute(
                 "INSERT INTO telemetry (signal_id, order_id, latency_ms, approved,"
-                " reject_reason, status, requested_size, decision_seq, run_id)"
-                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                " reject_reason, status, requested_size, decision_seq, run_id,"
+                " reject_detail, reject_context_json)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     row["signal_id"],
                     row["order_id"],
@@ -520,13 +713,29 @@ class SQLiteShadowStorage:
                     else None,
                     row["decision_seq"] if row.get("decision_seq") else None,
                     self._active_run_id,
+                    detail_val,
+                    ctx_json,
                 ),
             )
             telemetry_seq = int(cur.lastrowid)
             metrics = getattr(record, "fill_metrics", None)
             if metrics is not None:
                 self._insert_fill_metrics(telemetry_seq, metrics)
+            ts = _time.time()
+            signal_id = str(row["signal_id"])
+            self._insert_funnel_event_locked(
+                ts, "out_dispatch",
+                signal_id=signal_id, telemetry_seq=telemetry_seq,
+            )
+            stage = "approval" if row["approved"] else "reject"
+            self._insert_funnel_event_locked(
+                ts, stage,
+                signal_id=signal_id,
+                reason=None if row["approved"] else reason.value,
+                telemetry_seq=telemetry_seq,
+            )
             self._conn.commit()
+        return telemetry_seq
 
     def open_run(
         self,
@@ -860,7 +1069,11 @@ class TelemetrySink:
         records = self._telemetry._records  # bewusst intern: Senke- Kopplung
         written = 0
         for record in records[self._drained:]:
-            self._storage.write_telemetry(record)
+            telemetry_seq = self._storage.write_telemetry(record)
+            # Phase B: Claim ↔ Engine-Ingress je Signal binden (nicht aggregiert).
+            bind = getattr(self._storage, "bind_dispatch_by_signal_id", None)
+            if callable(bind) and telemetry_seq is not None:
+                bind(str(record.signal_id), int(telemetry_seq))
             if self._fills_provider is not None and record.order_id is not None:
                 for idx, fill in enumerate(self._fills_provider(record.order_id)):
                     key = (str(record.order_id), idx)

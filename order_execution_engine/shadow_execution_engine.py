@@ -677,13 +677,10 @@ class TelemetryRecord(BaseModel):
     approved: bool
     status: Optional[OrderStatus]
     reject_reason: RejectReason = RejectReason.NONE
-    # `INVALID_PRICE` trägt drei Ursachen unter einem Etikett (§5.4bm):
-    # fehlende Orderseite (NEUTRAL_SIGNAL), fehlender Snapshot (NO_SNAPSHOT),
-    # leere Buchseite (EMPTY_SIDE). Sie zu trennen ist der Unterschied
-    # zwischen "der Markt hatte keinen Preis" und "wir hatten kein Buch" —
-    # zwei verschiedene Reparaturen an zwei verschiedenen Bauteilen.
-    # Optional, weil 26 Zeilen der Akte vor diesem Feld geschrieben wurden;
-    # NULL heißt dort "nicht erfaßt", nicht "keine Ursache".
+    # Phase B: reject_reason trägt die Ursache top-level (NEUTRAL_SIGNAL /
+    # NO_SNAPSHOT / EMPTY_SIDE / …). reject_detail bleibt Feinkorn + Legacy
+    # (vor v8: reason=INVALID_PRICE, detail=Ursache). Optional: NULL = vor
+    # dem Feld geschrieben, nicht "keine Ursache".
     reject_detail: Optional[RejectDetail] = None
     # Der Zeuge des Ablehnungsmoments (§5.4bt) — 200 Bytes statt 5,6 Mio
     # Zeilen Snapshot-Tabelle. Optional, wie `reject_detail`: NULL heißt
@@ -1186,8 +1183,8 @@ class ShadowExecutionEngine:
             record = TelemetryRecord(
                 signal_id=signal.signal_id, order_id=None,
                 latency_ms=self._elapsed_ms(t0), approved=False,
-                reject_reason=RejectReason.INVALID_PRICE, status=None,
-                reject_detail="NEUTRAL_SIGNAL",
+                reject_reason=RejectReason.NEUTRAL_SIGNAL, status=None,
+                reject_detail=RejectDetail.NEUTRAL_SIGNAL,
                 reject_context=RejectContext(
                     token_id=signal.target_token_id, branch=1160),
                 decision_seq=self.telemetry.next_decision_seq(),
@@ -1202,8 +1199,8 @@ class ShadowExecutionEngine:
             record = TelemetryRecord(
                 signal_id=signal.signal_id, order_id=None,
                 latency_ms=self._elapsed_ms(t0), approved=False,
-                reject_reason=RejectReason.INVALID_PRICE, status=None,
-                reject_detail="NO_SNAPSHOT",
+                reject_reason=RejectReason.NO_SNAPSHOT, status=None,
+                reject_detail=RejectDetail.NO_SNAPSHOT,
                 reject_context=RejectContext(
                     token_id=signal.target_token_id, side=side.value,
                     branch=1174, source=None),
@@ -1228,13 +1225,19 @@ class ShadowExecutionEngine:
             # unsichtbar, indem er ihn wie den behandelt, der nichts
             # verlangt. `None` sagt: Herkunft unbekannt, eigene Antwort.
             _source = getattr(active, "source", None)
-            _detail = {"ticker": "SIDE_NOT_DELIVERED",
-                       "book": "EMPTY_SIDE"}.get(
-                           _source, "SIDE_UNKNOWN_SOURCE")
+            _detail = {
+                "ticker": RejectDetail.SIDE_NOT_DELIVERED,
+                "book": RejectDetail.EMPTY_SIDE,
+            }.get(_source, RejectDetail.SIDE_UNKNOWN_SOURCE)
+            _reason = {
+                RejectDetail.SIDE_NOT_DELIVERED: RejectReason.SIDE_NOT_DELIVERED,
+                RejectDetail.EMPTY_SIDE: RejectReason.EMPTY_SIDE,
+                RejectDetail.SIDE_UNKNOWN_SOURCE: RejectReason.SIDE_UNKNOWN_SOURCE,
+            }[_detail]
             record = TelemetryRecord(
                 signal_id=signal.signal_id, order_id=None,
                 latency_ms=self._elapsed_ms(t0), approved=False,
-                reject_reason=RejectReason.INVALID_PRICE, status=None,
+                reject_reason=_reason, status=None,
                 reject_detail=_detail,
                 # Hier ist der Wert noch da — genau in diesem Moment.
                 # `snapshot_age_s`: die dritte Lücke der Akte ist nicht der
@@ -1252,6 +1255,25 @@ class ShadowExecutionEngine:
                         0.0, time.time() - active.received_at),
                     source=_source,
                     branch=1185),
+                decision_seq=self.telemetry.next_decision_seq(),
+            )
+            self.telemetry.log(record)
+            return self._report(signal, record)
+
+        # Phase B: INVALID_PRICE nur noch echte Preisband-Verletzung.
+        if not (Decimal("0") < ref_price < Decimal("1")):
+            record = TelemetryRecord(
+                signal_id=signal.signal_id, order_id=None,
+                latency_ms=self._elapsed_ms(t0), approved=False,
+                reject_reason=RejectReason.INVALID_PRICE, status=None,
+                reject_detail=RejectDetail.INVALID_PRICE,
+                reject_context=RejectContext(
+                    token_id=active.token_id, side=side.value,
+                    best_bid=active.best_bid(), best_ask=active.best_ask(),
+                    snapshot_age_s=max(
+                        0.0, time.time() - active.received_at),
+                    source=getattr(active, "source", None),
+                    branch=1260),
                 decision_seq=self.telemetry.next_decision_seq(),
             )
             self.telemetry.log(record)
@@ -1297,12 +1319,22 @@ class ShadowExecutionEngine:
 
         # Fill-Tiefe: Signal-Ref + Staleness-Preflight (vor Match).
         self.fill_sim.register_signal_ref(order.order_id, signal.suggested_price)
-        stale_reason = self._preflight_staleness(signal, active, now=time.time())
+        now_wall = time.time()
+        stale_reason = self._preflight_staleness(signal, active, now=now_wall)
         if stale_reason is not None:
+            # SP-1924/1925: STALE war der Live-NULL-Reject unter run_id=12 —
+            # reject_detail + Kontext Pflicht für hartes 100-%-Gate.
             record = TelemetryRecord(
                 signal_id=signal.signal_id, order_id=order.order_id,
                 latency_ms=self._elapsed_ms(t0), approved=False,
                 reject_reason=stale_reason, status=None,
+                reject_detail=RejectDetail.STALE_SNAPSHOT,
+                reject_context=RejectContext(
+                    token_id=active.token_id, side=side.value,
+                    best_bid=active.best_bid(), best_ask=active.best_ask(),
+                    snapshot_age_s=max(0.0, now_wall - active.received_at),
+                    source=getattr(active, "source", None),
+                    branch=1323),
                 requested_size=requested_size, decision_seq=decision_seq,
             )
             self.telemetry.log(record)
@@ -1316,6 +1348,13 @@ class ShadowExecutionEngine:
                 signal_id=signal.signal_id, order_id=order.order_id,
                 latency_ms=self._elapsed_ms(t0), approved=False,
                 reject_reason=decision.reason, status=order.status,
+                reject_detail=RejectDetail(decision.reason.value),
+                reject_context=RejectContext(
+                    token_id=active.token_id, side=side.value,
+                    best_bid=active.best_bid(), best_ask=active.best_ask(),
+                    snapshot_age_s=max(0.0, time.time() - active.received_at),
+                    source=getattr(active, "source", None),
+                    branch=1337),
                 requested_size=requested_size, decision_seq=decision_seq,
             )
             self.telemetry.log(record)

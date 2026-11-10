@@ -14,6 +14,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any, Callable, Mapping, Optional, Protocol
 
+from order_execution_engine.allowlist_freeze import is_market_expired
 from order_execution_engine.models import Direction, SignalPayload
 from order_execution_engine.market_data_feed import SnapshotCache
 
@@ -30,19 +31,22 @@ class MarketTarget:
     asset: str
     token_id: str
     market_id: str
+    end_date: Optional[str] = None
 
 
 class MarketResolver:
-    """Statische Allowlist Asset → token_id/market_id (v1, bewusst begrenzt)."""
+    """Statische Allowlist Asset → token_id/market_id/end_date (v1 + C1)."""
 
     def __init__(self, allowlist: Mapping[str, Mapping[str, str]]) -> None:
         self._map: dict[str, MarketTarget] = {}
         for asset, entry in allowlist.items():
             key = asset.strip().upper()
+            end_raw = entry.get("end_date")
             self._map[key] = MarketTarget(
                 asset=key,
                 token_id=str(entry["token_id"]),
                 market_id=str(entry["market_id"]),
+                end_date=None if end_raw is None else str(end_raw),
             )
 
     def resolve(self, target_assets: list[str] | tuple[str, ...] | None) -> Optional[MarketTarget]:
@@ -57,10 +61,13 @@ class MarketResolver:
 
     def entries(self) -> dict[str, dict[str, str]]:
         """Allowlist für config_json / Auswertung."""
-        return {
-            t.asset: {"token_id": t.token_id, "market_id": t.market_id}
-            for t in self._map.values()
-        }
+        out: dict[str, dict[str, str]] = {}
+        for t in self._map.values():
+            row = {"token_id": t.token_id, "market_id": t.market_id}
+            if t.end_date is not None:
+                row["end_date"] = t.end_date
+            out[t.asset] = row
+        return out
 
 
 _THETA_PINNED = Decimal("0.1")
@@ -286,6 +293,21 @@ class NewsBridge:
             self._log_discard(str(item_id), "unresolved_asset:mapping_miss")
             return False
 
+        # C1: Pre-Flight end_date > now(UTC). NULL/unparseable → fail-closed.
+        now_dt = (
+            datetime.fromtimestamp(now, tz=timezone.utc)
+            if now is not None
+            else datetime.now(timezone.utc)
+        )
+        if is_market_expired(target.end_date, now=now_dt):
+            reason = (
+                "MARKET_EXPIRED"
+                if target.end_date not in (None, "")
+                else "MARKET_EXPIRED:null_end_date"
+            )
+            self._log_discard(str(item_id), reason)
+            return False
+
         snapshot = self._cache.get(target.token_id)
         if snapshot is None:
             self._log_discard(str(item_id), "no_book")
@@ -302,10 +324,11 @@ class NewsBridge:
         #
         # Die Entscheidung (kein Signal ohne Sentiment) ist gewollt; die
         # verkleidete Form war der Defekt. `_policy.direction_from` behandelt
-        # `0` als NEUTRAL → `resolved_side()` None → INVALID_PRICE mit
-        # NEUTRAL_SIGNAL. Belegt am 17.10.: `sentiment_absent = 0` von 502
-        # echten Items — die Regel greift nie, weil das Feld nie fehlt.
-        # Fehlte es, stünde es in `preflight` als `neutral_without_sentiment`.
+        # `0` als NEUTRAL → `resolved_side()` None → RejectReason.NEUTRAL_SIGNAL
+        # (Phase B; früher INVALID_PRICE+detail). Belegt am 17.10.:
+        # `sentiment_absent = 0` von 502 echten Items — die Regel greift nie,
+        # weil das Feld nie fehlt. Fehlte es, stünde es in `preflight` als
+        # `neutral_without_sentiment`.
         score = item.get("sentiment_score", _ABSENT_SENTIMENT)
         if score is _ABSENT_SENTIMENT:
             # §5.4de: `str(None)` wäre `"None"` — eine Zeichenkette, die wie

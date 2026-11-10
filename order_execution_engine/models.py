@@ -170,6 +170,11 @@ class RejectReason(str, Enum):
     `MAX_ORDER_SIZE` und `MAX_ORDER_NOTIONAL` haben keinen Produzenten mehr.
     Das Enum zählt nach F1b genau die Ablehnungen auf, die auftreten können.
     Die Trennung war der Zwischenschritt, der die Sites sichtbar machte.
+
+    Phase B (v8): `NEUTRAL_SIGNAL` / `NO_SNAPSHOT` / `EMPTY_SIDE` /
+    `SIDE_NOT_DELIVERED` / `SIDE_UNKNOWN_SOURCE` sind eigene Reasons —
+    nicht mehr unter `INVALID_PRICE` versteckt. `INVALID_PRICE` feuert nur
+    noch bei echter Preisband-Verletzung (0 < p < 1).
     """
 
     NONE = "NONE"
@@ -184,6 +189,21 @@ class RejectReason(str, Enum):
     DRAWDOWN_LOCKOUT = "DRAWDOWN_LOCKOUT"
     INSUFFICIENT_CASH = "INSUFFICIENT_CASH"
     INVALID_PRICE = "INVALID_PRICE"
+    """Preis existiert, verletzt aber das Polymarket-Band ``0 < p < 1``.
+
+    Produzent: ``ShadowExecutionEngine.on_signal`` nach ``best_ask``/
+    ``best_bid`` — nicht NEUTRAL/NO_SNAPSHOT/EMPTY_SIDE (Phase B).
+    """
+    NEUTRAL_SIGNAL = "NEUTRAL_SIGNAL"
+    """``resolved_side()`` war ``None`` — Richtung NEUTRAL. Strategie, kein Buch."""
+    NO_SNAPSHOT = "NO_SNAPSHOT"
+    """Kein Buch für den Token, oder Buch gehört zu anderem Token."""
+    EMPTY_SIDE = "EMPTY_SIDE"
+    """Vollständiges Buch, Gegenseite leer (Markteigenschaft)."""
+    SIDE_NOT_DELIVERED = "SIDE_NOT_DELIVERED"
+    """Ticker-Snapshot: fehlende Seite konstruktiv weggelassen."""
+    SIDE_UNKNOWN_SOURCE = "SIDE_UNKNOWN_SOURCE"
+    """Leere Seite, Snapshot-Herkunft unbekannt."""
     STALE_SNAPSHOT = "STALE_SNAPSHOT"
     """Buch- oder Signal-Alter über ``FillSimConfig.max_book_age_ms``.
 
@@ -194,11 +214,12 @@ class RejectReason(str, Enum):
 
 
 class RejectDetail(str, Enum):
-    """Warum genau `INVALID_PRICE` — drei Ursachen, ein Etikett (§5.4bm).
+    """Feinkorn zum Reject — früher Unter-Etiketten von `INVALID_PRICE`.
 
-    Der Code lehnt an drei Stellen mit demselben Grund ab; nur die Stelle
-    unterscheidet sie. Ohne dieses Feld sagt `INVALID_PRICE` nichts über
-    den Ort, und der Ort ist die Reparatur:
+    Phase B: dieselben Werte sind auch Top-Level-``RejectReason``. Das Feld
+    bleibt für Branch-/Kontext-Zählung und Legacy-Zeilen (vor v8), in denen
+    ``reject_reason`` noch ``INVALID_PRICE`` heißt und nur ``reject_detail``
+    die Ursache trägt.
 
     - ``NEUTRAL_SIGNAL``: `resolved_side()` war `None` — die Richtung war
       NEUTRAL. Kein Buch nötig, es gab keine Seite. Reparatur: Strategie.
@@ -239,6 +260,14 @@ class RejectDetail(str, Enum):
     diese Trennung erzeugt ein Fehleretikett auf einer Markteigenschaft
     eine Reparatur, die nichts reparieren kann.
     """
+    STALE_SNAPSHOT = "STALE_SNAPSHOT"
+    """Spiegel von ``RejectReason.STALE_SNAPSHOT`` — hartes Gate: Rejects tragen Detail."""
+    INVALID_PRICE = "INVALID_PRICE"
+    """Preisband ``0 < p < 1`` verletzt (Phase B: INVALID_PRICE nur noch das)."""
+    MAX_POSITION_SIZE = "MAX_POSITION_SIZE"
+    MAX_EVENT_EXPOSURE = "MAX_EVENT_EXPOSURE"
+    DRAWDOWN_LOCKOUT = "DRAWDOWN_LOCKOUT"
+    INSUFFICIENT_CASH = "INSUFFICIENT_CASH"
 
 
 class RejectContext(BaseModel):
