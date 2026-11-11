@@ -69,6 +69,16 @@ def _jsonable(value: Any) -> Any:
     return value
 
 
+# N-7: reader observation counter (not a Gate verdict — Charter: observation only).
+corrupt_line_total: int = 0
+
+
+def reset_corrupt_line_total() -> None:
+    """Test helper — reset module corrupt_line_total."""
+    global corrupt_line_total
+    corrupt_line_total = 0
+
+
 class JsonlEventLog:
     """Thread-safe append-only JSONL sink (observations only)."""
 
@@ -86,10 +96,16 @@ class JsonlEventLog:
         self.cycle_seq = cycle_seq
         self._lock = threading.Lock()
         self._rowid = 0
+        # N-7: emit failures are observations, not Gate judgments.
+        self.emit_drop_total: int = 0
         self.path.parent.mkdir(parents=True, exist_ok=True)
 
-    def emit(self, event_type: str, **fields: Any) -> dict[str, Any]:
-        """Append one observation. Always sets ts_mono + wall_ts (GP-S2-2)."""
+    def emit(self, event_type: str, **fields: Any) -> Optional[dict[str, Any]]:
+        """Append one observation. Always sets ts_mono + wall_ts (GP-S2-2).
+
+        N-7: disk/IO errors are swallowed; ``emit_drop_total`` increments; feed
+        continues. Returns the in-memory row on success, None on drop.
+        """
         with self._lock:
             self._rowid += 1
             row: dict[str, Any] = {
@@ -114,8 +130,12 @@ class JsonlEventLog:
                 ):
                     row[key] = _jsonable(value)
             line = json.dumps(row, separators=(",", ":"), sort_keys=True)
-            with self.path.open("a", encoding="utf-8") as fh:
-                fh.write(line + "\n")
+            try:
+                with self.path.open("a", encoding="utf-8") as fh:
+                    fh.write(line + "\n")
+            except OSError:
+                self.emit_drop_total += 1
+                return None
             return row
 
     def emit_book_update(self, snapshot: MarketSnapshot) -> dict[str, Any]:
@@ -189,15 +209,21 @@ class JsonlEventLog:
 
 
 def install_cache_tap(cache: SnapshotCache, log: JsonlEventLog) -> Callable[[MarketSnapshot], None]:
-    """Wrap ``SnapshotCache.update`` (tap :63) so each write emits ``book_update``.
+    """Wrap ``SnapshotCache.update`` so each write emits ``book_update``.
 
+    N-7: cache.update always runs; emit failures never abort the feed.
     Returns the wrapped update for tests; restores via ``cache.update = orig``.
     """
     orig = cache.update
 
     def tapped(snapshot: MarketSnapshot) -> None:
         orig(snapshot)
-        log.emit_book_update(snapshot)
+        try:
+            log.emit_book_update(snapshot)
+        except Exception:
+            # Belt-and-suspenders: emit already swallows OSError; any other
+            # escape must not break the book feed.
+            log.emit_drop_total += 1
 
     cache.update = tapped  # type: ignore[method-assign]
     return tapped
@@ -222,6 +248,12 @@ def emit_tick_samples(
 
 
 def iter_events(path: Path) -> list[dict[str, Any]]:
+    """Load JSONL events. N-7: torn/corrupt lines are skipped (no raise).
+
+    Increments module ``corrupt_line_total`` per skipped line. Counter is
+    observation only — never a Gate verdict (Charter).
+    """
+    global corrupt_line_total
     if not path.exists():
         return []
     out: list[dict[str, Any]] = []
@@ -229,7 +261,11 @@ def iter_events(path: Path) -> list[dict[str, Any]]:
         line = line.strip()
         if not line:
             continue
-        out.append(json.loads(line))
+        try:
+            out.append(json.loads(line))
+        except json.JSONDecodeError:
+            corrupt_line_total += 1
+            continue
     return out
 
 
