@@ -71,7 +71,7 @@ def test_schema_version_and_tables() -> None:
         store = SQLiteShadowStorage.for_user(Path(tmp), "u1")
         conn = sqlite3.connect(str(Path(tmp) / "u1" / "shadow" / "shadow.db"))
         version = conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'").fetchone()[0]
-        assert version == "7"  # v7: dispatched_signals + bridge_discards
+        assert version == "9"  # v9: telemetry_class (D2); v8 reject_detail/funnel
         for table in (
             "telemetry", "fills", "portfolio_snapshots",
             "peak_events", "telemetry_fill_metrics", "telemetry_runs",
@@ -162,10 +162,10 @@ def test_schema_migrates_v3_to_v4_peak_events() -> None:
 
         store = SQLiteShadowStorage(db)
         conn2 = sqlite3.connect(str(db))
-        # Kette: v3 → … → v7 (dedup)
+        # Kette: v3 → … → v9 (dedup + reject_detail + telemetry_class)
         assert conn2.execute(
             "SELECT value FROM schema_meta WHERE key='schema_version'"
-        ).fetchone()[0] == "7"
+        ).fetchone()[0] == "9"
         conn2.execute("SELECT 1 FROM peak_events LIMIT 0")
         conn2.execute("SELECT 1 FROM telemetry_fill_metrics LIMIT 0")
         conn2.execute("SELECT 1 FROM telemetry_runs LIMIT 0")
@@ -252,7 +252,7 @@ def test_schema_migrates_v4_to_v5_fill_metrics() -> None:
         conn2 = sqlite3.connect(str(db))
         assert conn2.execute(
             "SELECT value FROM schema_meta WHERE key='schema_version'"
-        ).fetchone()[0] == "7"
+        ).fetchone()[0] == "9"
         conn2.execute("SELECT 1 FROM telemetry_fill_metrics LIMIT 0")
         n = conn2.execute(
             "SELECT COUNT(*) FROM telemetry_fill_metrics"
@@ -326,7 +326,7 @@ def test_schema_migrates_v5_to_v6_runs() -> None:
         conn2 = sqlite3.connect(str(db))
         assert conn2.execute(
             "SELECT value FROM schema_meta WHERE key='schema_version'"
-        ).fetchone()[0] == "7"
+        ).fetchone()[0] == "9"
         cols = {r[1] for r in conn2.execute("PRAGMA table_info(telemetry)")}
         assert "run_id" in cols
         conn2.execute("SELECT 1 FROM telemetry_runs LIMIT 0")

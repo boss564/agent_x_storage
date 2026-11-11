@@ -1652,9 +1652,20 @@ def test_invalid_price_carries_three_causes_not_one_label() -> None:
     """
     from order_execution_engine.models import RejectDetail
 
+    # Basis B / HEAD: RejectDetail carries risk+liquidity causes (expanded set).
     assert {d.value for d in RejectDetail} == {
-        "NEUTRAL_SIGNAL", "NO_SNAPSHOT", "EMPTY_SIDE", "SIDE_NOT_DELIVERED",
-        "SIDE_UNKNOWN_SOURCE"}
+        "NEUTRAL_SIGNAL",
+        "NO_SNAPSHOT",
+        "EMPTY_SIDE",
+        "SIDE_NOT_DELIVERED",
+        "SIDE_UNKNOWN_SOURCE",
+        "INVALID_PRICE",
+        "STALE_SNAPSHOT",
+        "INSUFFICIENT_CASH",
+        "MAX_POSITION_SIZE",
+        "MAX_EVENT_EXPOSURE",
+        "DRAWDOWN_LOCKOUT",
+    }
     # Optional, weil 26 Zeilen der Akte das Feld nicht kennen.
     from order_execution_engine.shadow_execution_engine import TelemetryRecord
     assert TelemetryRecord.model_fields["reject_detail"].default is None

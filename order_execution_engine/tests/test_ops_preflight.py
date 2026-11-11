@@ -131,7 +131,13 @@ def test_w_ops_3_jsonl_tail_batch_dedup() -> None:
         jsonl = root / "news.jsonl"
         offset = root / "news_tail.offset"
         jsonl.write_text("")
-        amap = {"BTC": {"token_id": "tokBTC", "market_id": "mBTC"}}
+        amap = {
+            "BTC": {
+                "token_id": "tokBTC",
+                "market_id": "mBTC",
+                "end_date": "2099-01-01T00:00:00Z",
+            }
+        }
         cfg = load_policy_cfg(OPS / "run_policy.json" if (OPS / "run_policy.json").exists() else None)
         engine, bridge, store, binding, _cfg = build_runner(
             data_root=root,

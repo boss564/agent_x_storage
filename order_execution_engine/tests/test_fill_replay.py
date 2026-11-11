@@ -4,7 +4,7 @@ Zwei Fälle aus demselben Korpus, damit C unterscheiden kann:
 
 * Positiv: konstruiertes Book mit Bid/Ask -> Fill, fill_ratio > 0, VWAP
   innerhalb des Spreads.
-* Negativ: konstruiertes Book ohne Bid/Ask -> ``INVALID_PRICE``, kein Fill.
+* Negativ: konstruiertes Book ohne Bid/Ask -> ``EMPTY_SIDE``, kein Fill.
 
 Ersetzt wird ausschliesslich die Datenquelle (der Snapshot). Die
 Entscheidungslogik der Engine (``ShadowExecutionEngine.on_signal``) und der
@@ -130,7 +130,7 @@ def test_c1_positive_fill_inside_spread(tmp_path: Path) -> None:
 
 
 def test_c2_negative_no_book_rejects_invalid_price(tmp_path: Path) -> None:
-    """(b) Book ohne Bid/Ask -> INVALID_PRICE, kein Fill."""
+    """(b) Book ohne Bid/Ask -> EMPTY_SIDE (Phase B), kein Fill."""
     engine, store, sink = _engine(tmp_path)
     empty = MarketSnapshot(token_id="tok-negative")
     before_fills = len(engine.telemetry._records)
@@ -138,15 +138,15 @@ def test_c2_negative_no_book_rejects_invalid_price(tmp_path: Path) -> None:
     report = engine.on_signal(_signal("tok-negative"), empty)
 
     assert not report.approved
-    assert report.reject_reason is RejectReason.INVALID_PRICE
+    assert report.reject_reason is RejectReason.EMPTY_SIDE
     assert report.fills == ()
     records = engine.telemetry._records[before_fills:]
     assert len(records) == 1
-    assert records[0].reject_reason is RejectReason.INVALID_PRICE
+    assert records[0].reject_reason is RejectReason.EMPTY_SIDE
     assert records[0].fill_metrics is None
     sink.drain()
     assert store._conn.execute(
-        "SELECT COUNT(*) FROM telemetry WHERE reject_reason='INVALID_PRICE'"
+        "SELECT COUNT(*) FROM telemetry WHERE reject_reason='EMPTY_SIDE'"
     ).fetchone()[0] == 1
     assert store._conn.execute(
         "SELECT COUNT(*) FROM telemetry_fill_metrics"
@@ -175,6 +175,6 @@ def test_c3_replay_does_not_touch_measurement_db(tmp_path: Path) -> None:
     rows = store._conn.execute(
         "SELECT reject_reason, COUNT(*) FROM telemetry GROUP BY 1"
     ).fetchall()
-    assert dict(rows) == {"NONE": 1, "INVALID_PRICE": 1}
+    assert dict(rows) == {"NONE": 1, "EMPTY_SIDE": 1}
     print("OK test_c3_replay_does_not_touch_measurement_db")
     store.close()

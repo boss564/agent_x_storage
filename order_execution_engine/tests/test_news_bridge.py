@@ -24,7 +24,12 @@ from order_execution_engine.persistence import SQLiteShadowStorage, TelemetrySin
 from order_execution_engine.shadow_execution_engine import ShadowExecutionEngine
 
 ALLOW = {
-    "BTC": {"token_id": "0xtokenBTC", "market_id": "mkt-btc"},
+    "BTC": {
+        "token_id": "0xtokenBTC",
+        "market_id": "mkt-btc",
+        # C1: live end_date required (NULL fail-closes as MARKET_EXPIRED).
+        "end_date": "2099-01-01T00:00:00Z",
+    },
 }
 
 
