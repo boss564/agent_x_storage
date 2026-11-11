@@ -171,24 +171,67 @@ def streak_wall_s_from_events(
     ok_event_types: frozenset[str] = frozenset({"cycle_end"}),
     ok_field: str = "books_ok_full",
 ) -> Optional[float]:
-    """Derive streak as Δwall_ts between first and last consecutive OK observations.
+    """Derive streak as Δwall_ts of the last contiguous OK run.
+
+    N-8 (Bauplan v1.2): consumes ``detect_cycle_gaps``. A missing ``cycle_seq``
+    between OK events breaks the streak (ends before the gap; new run after).
+    Explicit ``books_ok_full=False`` still breaks. Legacy events without
+    ``cycle_seq`` keep the pre-N-8 books_ok_full-only path (A-B2' ±1 s).
 
     Returns None if no OK run. Never reads a stored streak_min (GP-S2-3 / A-B2').
     """
+    ev_list = list(events)
+    gaps = detect_cycle_gaps(ev_list)
+    missing = {
+        (str(g["instance_id"]), int(g["cycle_seq"]))
+        for g in gaps
+        if g.get("kind") == "missing_cycle_seq"
+        and g.get("instance_id") is not None
+        and g.get("cycle_seq") is not None
+    }
+
     first: Optional[float] = None
     last: Optional[float] = None
-    for ev in events:
+    last_seq: Optional[int] = None
+    last_iid: Optional[str] = None
+
+    for ev in ev_list:
         if ev.get("event_type") not in ok_event_types:
             continue
         if not ev.get(ok_field):
             # Break streak on explicit non-OK cycle_end.
             if ev.get(ok_field) is False:
                 first, last = None, None
+                last_seq, last_iid = None, None
             continue
         ts = float(ev["wall_ts"])
+        seq_raw = ev.get("cycle_seq")
+        iid_raw = ev.get("instance_id")
+        seq = int(seq_raw) if seq_raw is not None else None
+        iid = str(iid_raw) if iid_raw is not None else None
+
+        # N-8: gap between previous OK seq and current OK seq → new streak.
+        if (
+            last_seq is not None
+            and seq is not None
+            and iid is not None
+            and iid == last_iid
+        ):
+            lo, hi = (last_seq, seq) if last_seq <= seq else (seq, last_seq)
+            crossed = [
+                s for s in range(lo + 1, hi) if (iid, s) in missing
+            ]
+            if crossed or seq != last_seq + 1:
+                first, last = ts, ts
+                last_seq, last_iid = seq, iid
+                continue
+
         if first is None:
             first = ts
         last = ts
+        if seq is not None:
+            last_seq = seq
+            last_iid = iid
     if first is None or last is None:
         return None
     return max(0.0, last - first)

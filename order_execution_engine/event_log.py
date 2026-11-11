@@ -127,6 +127,8 @@ class JsonlEventLog:
                     "source",
                     "age_s",
                     "cache_state",
+                    "max_age_s",
+                    "threshold_s",
                 ):
                     row[key] = _jsonable(value)
             line = json.dumps(row, separators=(",", ":"), sort_keys=True)
@@ -169,6 +171,9 @@ class JsonlEventLog:
                 source=None,
                 age_s=None,
                 cache_state="MISS",
+                # N-5: emit named threshold with baked cache_state (or None).
+                max_age_s=max_age_s,
+                threshold_s=max_age_s,
             )
         age = max(0.0, wall - float(peeked.received_at))
         state = "OK"
@@ -183,6 +188,9 @@ class JsonlEventLog:
             source=getattr(peeked, "source", None),
             age_s=age,
             cache_state=state,
+            # N-5: threshold travels with the observation (M3 antidote).
+            max_age_s=max_age_s,
+            threshold_s=max_age_s,
         )
 
     def emit_probe_sample(
@@ -195,6 +203,7 @@ class JsonlEventLog:
         best_ask: Any = None,
         received_at: Any = None,
         source: Any = None,
+        threshold_s: Optional[float] = None,
     ) -> dict[str, Any]:
         return self.emit(
             "probe_sample",
@@ -205,6 +214,9 @@ class JsonlEventLog:
             source=source,
             age_s=age_s,
             cache_state=cache_state,
+            # N-5: named probe threshold (default probe_fresh_s=30 at call site).
+            threshold_s=threshold_s,
+            max_age_s=threshold_s,
         )
 
 
