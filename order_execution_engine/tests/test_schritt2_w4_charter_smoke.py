@@ -9,10 +9,7 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-try:
-    import pytest
-except ImportError:  # pragma: no cover
-    pytest = None  # type: ignore[assignment]
+import pytest
 
 from order_execution_engine.event_log import sha256_file, write_segment_manifest
 from order_execution_engine.fill_simulator import FillSimConfig
@@ -28,11 +25,10 @@ _N2_MSG = (
 )
 
 
+@pytest.mark.xfail(strict=True, reason=_N2_MSG)
 def test_w4_n2_epoch_restart_reconstructs_or_xfail() -> None:
-    """N-2: volle apply_fill-Rekonstruktion ist W2.2-Versprechen — Stub xfail."""
-    if pytest is not None:
-        pytest.xfail(_N2_MSG)
-    raise AssertionError(f"XFAIL: {_N2_MSG}")
+    """N-2: volle apply_fill-Rekonstruktion ist W2.2-Versprechen — Stub xfail (N-10)."""
+    raise AssertionError(_N2_MSG)
 
 
 def test_w4_n3_risk_check_documents_d2_outside() -> None:
@@ -119,12 +115,8 @@ def test_w4_segment_manifest_sha256() -> None:
 
 if __name__ == "__main__":
     os.environ.setdefault("SHADOW_EVENT_LOG", "off")
-    # Run non-xfail tests under __main__; xfail via pytest when available.
+    # Run non-xfail tests under __main__; N-2 stays @pytest.mark.xfail(strict=True).
     test_w4_n3_risk_check_documents_d2_outside()
     test_w4_charter_smoke_r5_analog()
     test_w4_segment_manifest_sha256()
-    try:
-        test_w4_n2_epoch_restart_reconstructs_or_xfail()
-    except BaseException as exc:  # pytest.xfail raises
-        print(f"OK test_w4_n2_xfail_raised: {type(exc).__name__}")
-    print("S2-W4 NACHWEIS grün (N-2 xfail erwartet)")
+    print("S2-W4 NACHWEIS grün (N-2 nur unter pytest xfail strict)")
