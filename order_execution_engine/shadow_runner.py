@@ -23,6 +23,7 @@ from order_execution_engine.fill_simulator import (
     StalenessPolicy,
 )
 from order_execution_engine.event_log import (
+    TAP_ANCHOR_UPDATE,
     JsonlEventLog,
     emit_tick_samples,
     install_cache_tap,
@@ -228,10 +229,11 @@ def build_runner(
         event_log = JsonlEventLog(elog_path, producer="runner")
         install_cache_tap(cache, event_log)
         setattr(cache, "_event_log", event_log)
+        # N-6 Start-Log: resolved absolute path (never cwd-relative).
         _LOG.info(
-            "event_log enabled path=%s tap=%s",
+            "event_log enabled absolute_path=%s tap=%s",
             elog_path,
-            "market_data_feed.py:63",
+            TAP_ANCHOR_UPDATE,
         )
     else:
         setattr(cache, "_event_log", None)

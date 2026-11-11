@@ -30,14 +30,37 @@ TAP_ANCHOR_UPDATE = "market_data_feed.py:57"
 TAP_ANCHOR_ON_BOOK_UPDATE_CALL = "market_data_feed.py:175"
 
 
+def find_repo_root(start: Optional[Path] = None) -> Path:
+    """Walk up to the directory that contains ``order_execution_engine/``.
+
+    N-6 (Bauplan v1.2): Event-log default must not depend on process cwd.
+    Same walk-up contract as ``newsagent/scripts/night_probe.sh``.
+    """
+    cur = (start or Path(__file__).resolve()).parent
+    for candidate in (cur, *cur.parents):
+        if (candidate / "order_execution_engine").is_dir():
+            return candidate
+    raise FileNotFoundError(
+        "order_execution_engine/ not found walking up from "
+        f"{start or Path(__file__).resolve()}"
+    )
+
+
 def resolve_event_log_path(raw: Optional[str] = None) -> Optional[Path]:
-    """Return log path or None when disabled (``0``/``off``/``false``/empty)."""
+    """Return absolute log path or None when disabled (``0``/``off``/``false``/empty).
+
+    N-6: relative paths resolve against repo root (walk-up), never against cwd.
+    Absolute env/plist values are kept (``.resolve()`` only).
+    """
     if raw is None:
         raw = os.environ.get("SHADOW_EVENT_LOG", DEFAULT_EVENT_LOG_PATH)
     text = (raw or "").strip()
     if text.lower() in ("", "0", "off", "false", "no"):
         return None
-    return Path(text)
+    path = Path(text)
+    if path.is_absolute():
+        return path.resolve()
+    return (find_repo_root() / path).resolve()
 
 
 def _jsonable(value: Any) -> Any:
