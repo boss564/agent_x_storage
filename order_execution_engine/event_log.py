@@ -21,11 +21,13 @@ from order_execution_engine.shadow_execution_engine import MarketSnapshot
 
 DEFAULT_EVENT_LOG_PATH = "newsagent/logs/shadow_events.jsonl"
 
-# Tap anchors verified 2026-11-10 on live tree (W1 start duty):
-#   SnapshotCache.update          market_data_feed.py:63
-#   PolySentinelBookHandler.on_book_update → cache.update  :155–182 (call :181)
-TAP_ANCHOR_UPDATE = "market_data_feed.py:63"
-TAP_ANCHOR_ON_BOOK_UPDATE_CALL = "market_data_feed.py:181"
+# Tap anchors — re-pinned 2026-11-11 after G8 SP-1926 (M-a).
+# Fund: peek-Insert 2195610f (+ Test d2889bdb) shifted live lines;
+# Anker-Test was ROT on HEAD. Conscious re-pin (Fund, kein stiller Fix).
+#   SnapshotCache.update          market_data_feed.py:57
+#   PolySentinelBookHandler.on_book_update → cache.update  (call :175)
+TAP_ANCHOR_UPDATE = "market_data_feed.py:57"
+TAP_ANCHOR_ON_BOOK_UPDATE_CALL = "market_data_feed.py:175"
 
 
 def resolve_event_log_path(raw: Optional[str] = None) -> Optional[Path]:

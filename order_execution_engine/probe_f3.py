@@ -33,15 +33,21 @@ def heartbeat_path(log_dir: Path) -> Path:
     return Path(log_dir) / HEARTBEAT_NAME
 
 
-def load_or_birth_identity(log_dir: Path) -> dict[str, Any]:
+def load_or_birth_identity(
+    log_dir: Path, *, supervisor_pid: Optional[int] = None
+) -> dict[str, Any]:
     """Return identity for this process birth.
 
-    New process → new ``instance_id``, ``cycle_seq`` starts at 0 (next_cycle → 1).
-    Persists under ``logs/`` (never runner DB).
+    New supervisor process → new ``instance_id``, ``cycle_seq`` starts at 0
+    (next_cycle → 1). Persists under ``logs/`` (never runner DB).
+
+    ``supervisor_pid`` must be the long-lived wrapper PID (bash ``$$`` under
+    launchd). Using the short-lived Python helper PID caused G8 M-c
+    instance-churn (every cycle new UUID, cycle_seq stuck at 1).
     """
     path = cycle_state_path(log_dir)
     path.parent.mkdir(parents=True, exist_ok=True)
-    pid = os.getpid()
+    pid = int(supervisor_pid) if supervisor_pid is not None else os.getpid()
     born = {
         "instance_id": str(uuid.uuid4()),
         "cycle_seq": 0,
@@ -56,19 +62,21 @@ def load_or_birth_identity(log_dir: Path) -> dict[str, Any]:
     except (json.JSONDecodeError, OSError):
         path.write_text(json.dumps(born, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         return born
-    # Same PID continuing (e.g. helper re-entry) keeps identity; else birth.
+    # Same supervisor PID continuing keeps identity; else birth.
     if int(data.get("pid") or -1) == pid and data.get("instance_id"):
         return data
     path.write_text(json.dumps(born, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return born
 
 
-def next_cycle(log_dir: Path) -> dict[str, Any]:
+def next_cycle(
+    log_dir: Path, *, supervisor_pid: Optional[int] = None
+) -> dict[str, Any]:
     """Increment persisted ``cycle_seq``; return identity for this cycle."""
     path = cycle_state_path(log_dir)
-    data = load_or_birth_identity(log_dir)
+    data = load_or_birth_identity(log_dir, supervisor_pid=supervisor_pid)
     data["cycle_seq"] = int(data.get("cycle_seq") or 0) + 1
-    data["pid"] = os.getpid()
+    data["pid"] = int(supervisor_pid) if supervisor_pid is not None else os.getpid()
     data["last_cycle_wall_ts"] = time.time()
     path.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return data

@@ -6,8 +6,9 @@ Kein Netzwerk — nur Datei → Resolver-Map + config_json-Einträge.
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Mapping, Optional
 
 REQUIRED_FIELDS = (
     "asset",
@@ -22,6 +23,50 @@ REQUIRED_FIELDS = (
 
 class FreezeError(ValueError):
     """Freeze-Datei ungültig oder unvollständig."""
+
+
+def parse_market_end_date(raw: Any) -> Optional[datetime]:
+    """Parse end_date to aware UTC; None if missing/unparseable (fail-closed input)."""
+    if raw is None:
+        return None
+    text = str(raw).strip()
+    if not text or text.lower() in ("none", "null"):
+        return None
+    if text.endswith("Z"):
+        text = text[:-1] + "+00:00"
+    try:
+        ts = datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    if ts.tzinfo is None:
+        # Naive → treat as UTC (documented); never as local.
+        ts = ts.replace(tzinfo=timezone.utc)
+    return ts.astimezone(timezone.utc)
+
+
+def is_market_expired(
+    end_date_raw: Any,
+    *,
+    now: Optional[datetime] = None,
+) -> bool:
+    """C1: True when market must not dispatch.
+
+    - NULL / unparseable → fail-closed (True)
+    - end_date <= now(UTC) → expired (True)
+    - end_date > now → live (False)
+
+    Restored 2026-11-11 for G8 SP-1926 M-a suite green: function lived in
+    stash@{0} while news_bridge still imported it (stash left HEAD unimportable).
+    """
+    end = parse_market_end_date(end_date_raw)
+    if end is None:
+        return True
+    clock = now if now is not None else datetime.now(timezone.utc)
+    if clock.tzinfo is None:
+        clock = clock.replace(tzinfo=timezone.utc)
+    else:
+        clock = clock.astimezone(timezone.utc)
+    return end <= clock
 
 
 def load_freeze(path: Path) -> dict[str, Any]:

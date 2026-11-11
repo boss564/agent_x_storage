@@ -47,19 +47,19 @@ def test_w1_tap_anchors_match_live_source() -> None:
 
     src = Path(inspect.getsourcefile(mdf.SnapshotCache)).read_text(encoding="utf-8")
     lines = src.splitlines()
-    # 1-indexed
-    assert "def update(" in lines[62], f"expected update at L63, got: {lines[62]!r}"
-    assert TAP_ANCHOR_UPDATE.endswith(":63")
+    # 1-indexed — pinned after G8 SP-1926 M-a (peek-Insert 2195610f Anker-Drift)
+    assert "def update(" in lines[56], f"expected update at L57, got: {lines[56]!r}"
+    assert TAP_ANCHOR_UPDATE.endswith(":57")
     # on_book_update body calls self._cache.update(snapshot)
     assert "self._cache.update(snapshot)" in src
     on_book_line = next(
         i for i, ln in enumerate(lines, 1) if "self._cache.update(snapshot)" in ln
     )
-    assert on_book_line == 181, (
-        f"on_book_update→update expected L181, found L{on_book_line} "
+    assert on_book_line == 175, (
+        f"on_book_update→update expected L175, found L{on_book_line} "
         f"(Fund, kein stiller Fix — Anker melden)"
     )
-    assert TAP_ANCHOR_ON_BOOK_UPDATE_CALL.endswith(":181")
+    assert TAP_ANCHOR_ON_BOOK_UPDATE_CALL.endswith(":175")
     print(
         f"OK test_w1_tap_anchors_match_live_source "
         f"update={TAP_ANCHOR_UPDATE} on_book_update_call=L{on_book_line}"
