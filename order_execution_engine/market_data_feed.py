@@ -80,6 +80,15 @@ class SnapshotCache:
             return None
         return snap
 
+    def peek(self, token_id: str) -> Optional[MarketSnapshot]:
+        """Return cached snapshot without freshness filter.
+
+        Used by observation probes (phase_c_monitor) to classify STALE vs
+        MISSING via age_s. Engine hot path keeps using get()/snapshot_for().
+        """
+        with self._lock:
+            return self._snapshots.get(token_id)
+
     def snapshot_for(self, token_id: str, wait_seconds: float = 0.0) -> Optional[MarketSnapshot]:
         """Wartet optional kurz auf ein Update und liefert den Snapshot.
 
