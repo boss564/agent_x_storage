@@ -55,6 +55,23 @@ def test_cache_staleness() -> None:
     print("OK test_cache_staleness")
 
 
+def test_cache_peek_ignores_freshness() -> None:
+    """Observation probes need STALE vs MISSING; get() collapses both to None."""
+    cache = SnapshotCache(max_age_seconds=0.05)
+    h = PolySentinelBookHandler(cache)
+    h.on_book_update(
+        "0xtokenA",
+        bids=[(Decimal("0.6"), Decimal("10"))],
+        asks=[(Decimal("0.61"), Decimal("10"))],
+    )
+    assert cache.peek("0xtokenA") is not None
+    time.sleep(0.08)
+    assert cache.get("0xtokenA") is None
+    assert cache.peek("0xtokenA") is not None
+    assert cache.peek("0xmissing") is None
+    print("OK test_cache_peek_ignores_freshness")
+
+
 def test_cache_snapshot_for_wait() -> None:
     cache = SnapshotCache(max_age_seconds=60)
     # ohne Daten: gibt nach Wartezeit None zurück
