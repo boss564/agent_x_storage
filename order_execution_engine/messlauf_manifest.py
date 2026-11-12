@@ -127,12 +127,14 @@ def _is_docs_only(paths: List[str]) -> bool:
 
 def charter_snapshot() -> Dict[str, Any]:
     cfg = FillSimConfig()
+    # Default lives on FillSimConfig — no literal year/ms copy in this module.
+    default_ms = int(FillSimConfig.model_fields["max_book_age_ms"].default)
     return {
         "order_send": False,
         "diagnostic_only": True,
         "max_book_age_ms": int(cfg.max_book_age_ms),
-        "max_book_age_ms_expected": 2000,
-        "max_book_age_ms_ok": int(cfg.max_book_age_ms) == 2000,
+        "max_book_age_ms_default": default_ms,
+        "max_book_age_ms_ok": int(cfg.max_book_age_ms) == default_ms,
     }
 
 
