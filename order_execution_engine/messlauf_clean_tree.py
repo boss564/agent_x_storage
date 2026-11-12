@@ -45,6 +45,8 @@ NA_MESS_PREFIXES: tuple[str, ...] = (
     "scripts/vacuity_",
     "scripts/write_messlauf_manifest.py",
     "scripts/vacuity_m_w4_",
+    "scripts/rotprobe_m_w4_",
+    "scripts/abnahme_booking_",
 )
 
 # Ignored paths that are never measurement contamination.
