@@ -41,7 +41,9 @@ HASH_RELATION_DE = (
     "487b3547… = stash@{0}-Rev mit konfligierendem Freeze/Feed-Dirty (Quarantäne); "
     "43445de8… = SHA-256 des Stash-Patches; "
     "code_freeze_pin = Git-SHA des letzten M-W4-Code-Commits (welcher Code gegen "
-    "5adab542… laufen darf) — Tip danach nur docs/reports."
+    "5adab542… laufen darf) — Tip danach nur docs/reports; "
+    "gate_pin = SHA-256 von abnahme_booking_gate.py + abnahme_booking_commit.sh "
+    "(4. Pin: Enforcement-Artefakt-Integrität)."
 )
 
 
@@ -66,6 +68,8 @@ class MesslaufManifest:
     pin_to_tip_na_docs_only: bool
     pin_to_tip_ax_paths: List[str] = field(default_factory=list)
     pin_to_tip_na_paths: List[str] = field(default_factory=list)
+    # 4th pin: integrity of booking enforcement artefacts (not Clean-Tree cleanliness).
+    gate_pin: Dict[str, Any] = field(default_factory=dict)
     kein_lauf: bool = True
     push: str = "held"
     notes: List[str] = field(default_factory=list)
@@ -138,6 +142,27 @@ def charter_snapshot() -> Dict[str, Any]:
     }
 
 
+def measure_gate_pin(na_root: Path) -> Dict[str, Any]:
+    """SHA-256 anchors for booking gate script + commit wrapper (4th pin)."""
+    gate_py = na_root / "scripts" / "abnahme_booking_gate.py"
+    gate_sh = na_root / "scripts" / "abnahme_booking_commit.sh"
+    if not gate_py.is_file() or not gate_sh.is_file():
+        raise AssertionError(
+            f"gate artefacts missing: py={gate_py.is_file()} sh={gate_sh.is_file()}"
+        )
+    return {
+        "gate_py_path": "scripts/abnahme_booking_gate.py",
+        "gate_py_sha256": sha256_file(gate_py),
+        "gate_commit_sh_path": "scripts/abnahme_booking_commit.sh",
+        "gate_commit_sh_sha256": sha256_file(gate_sh),
+        "booking_flag_mandatory": True,
+        "note": (
+            "Clean-Tree checks mess-path cleanliness only; gate_pin anchors "
+            "integrity of the booking enforcement artefacts themselves."
+        ),
+    }
+
+
 def build_manifest(
     *,
     ax_root: Path,
@@ -147,6 +172,20 @@ def build_manifest(
     suite: Optional[Dict[str, Any]] = None,
     allow_dirty_for_test: bool = False,
 ) -> MesslaufManifest:
+    """Build Messlauf manifest.
+
+    Path order (fail-closed):
+      1) allowlist.freeze.json sha vs ALLOWLIST_FREEZE_SHA_HISTORICAL
+      2) stash@{0} rev + patch sha quarantine
+      3) Clean-Tree on mess prefixes (skipped only if allow_dirty_for_test=True)
+      4) tip rev-parse + pin→tip docs-only paths
+      5) gate_pin (sha256 of booking gate + wrapper)
+
+    allow_dirty_for_test: test-only. Skips step 3 so Mutation B/C can exercise
+    the freeze-sha branch without Clean-Tree short-circuiting first. Production
+    writers (write_messlauf_manifest.py without --allow-dirty) must leave this
+    False. Mutation A covers Clean-Tree separately.
+    """
     ax_root = ax_root.resolve()
     na_root = na_root.resolve()
     freeze_path = ax_root / "order_execution_engine" / "ops" / "allowlist.freeze.json"
@@ -180,6 +219,7 @@ def build_manifest(
     tip_na = _git(na_root, "rev-parse", "HEAD")
     ax_paths = paths_changed(ax_root, code_freeze_pin_ax, tip_ax)
     na_paths = paths_changed(na_root, code_freeze_pin_na, tip_na)
+    gate_pin = measure_gate_pin(na_root)
 
     return MesslaufManifest(
         utc=datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
@@ -215,11 +255,13 @@ def build_manifest(
         pin_to_tip_na_docs_only=_is_docs_only(na_paths),
         pin_to_tip_ax_paths=ax_paths,
         pin_to_tip_na_paths=na_paths,
+        gate_pin=gate_pin,
         kein_lauf=True,
         push="held",
         notes=[
             "allowlist.freeze.json content pin unchanged (historical 5adab542…)",
             "code_freeze_pin = last M-W4 code commit; tip may advance docs/reports only",
+            "gate_pin = sha256 of abnahme_booking_gate.py + abnahme_booking_commit.sh",
             "S2-W4 N-2 xfail stub not in scope (M-W5)",
         ],
     )
