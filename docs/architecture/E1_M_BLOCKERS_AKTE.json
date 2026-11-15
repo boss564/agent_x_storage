@@ -1,41 +1,54 @@
 {
-  "title": "M1–M4 Blocker — Umsetzung vor E (98a6f307-Nachfolger)",
-  "measured_at": "2026-11-15T16:20:00Z",
+  "title": "M1–M4 Blocker — 1124f703-Nachfolger (M4 allow_live through + M2 post-parse)",
+  "measured_at": "2026-11-15T17:30:00Z",
   "environment": "host",
   "e1_granted": false,
   "push_blocked": true,
-  "reviewer_verdict_on_98a6f307": "nicht freigabefähig — accepted; blockers addressed in WT then commit",
+  "reviewer_verdict_on_1124f703": "M1/M3 tragen; M2/M4 nicht geschlossen — accepted; closed in this revision",
   "implemented": {
     "M1": {
-      "fix": "gatectl issue-token writes O_EXCL 0600 token file under data-root/leases/; stdout only token_sha256+token_file; runner --lease-token-file reads+unlinks after claim; refuse SHADOW_LEASE_TOKEN; refuse --lease-token on LIVE",
+      "fix": "gatectl issue-token → O_EXCL 0600 token-file; runner --lease-token-file; refuse env + LIVE raw --lease-token; revoke on write fail; stale O_EXCL replace",
       "test": "test_m1_gatectl_issue_token_file_then_runner"
     },
     "M2": {
-      "fix": "--run-lock override refused when --data-root is Application Support/agentx",
-      "test": "test_m2_run_lock_override_refused_on_live_data_root"
+      "fix": "early argv peek (space + equals) + post-parse args.data_root re-check; allow_abbrev=False on runner+gatectl",
+      "tests": [
+        "test_m2_run_lock_override_refused_on_live_data_root",
+        "test_m2_equals_form_refused_on_live_data_root",
+        "test_m2_abbrev_data_root_rejected_by_parser"
+      ]
     },
     "M3": {
-      "fix": "SIGTERM via asyncio add_signal_handler → stop_event → finally close_run(COMMITTED)",
+      "fix": "SIGTERM → STOPPED (not COMMITTED); handler installed before claim; early SIGTERM between claim and loop → STOPPED",
       "test": "test_m3_sigterm_handler_wired_in_source",
-      "note": "KeyboardInterrupt remains ABORTED; --once/--no-ws still COMMITTED"
+      "note": "ABORTED only via KeyboardInterrupt / exception / abort-run"
     },
     "M4": {
-      "fix": "connect_control_plane(allow_live=False default); gatectl --allow-live-db explicit switch",
+      "fix": "allow_live threaded into migrate_control_plane / issue_token / revoke_token / abort_run; gatectl --allow-live-db; live-marked temp path tests",
+      "test": "test_m4_allow_live_db_migrate_issue_abort_on_live_marked_temp",
       "canary_abnahme": "NOT_RUN — operator; between canary PASS and E no hash change",
       "retire_package_lock": "still TABU hard-coded"
     },
-    "gaps_partial": {
-      "manifest_pin": "PINNED_CONTROL_PLANE_MANIFEST_SHA256 + expected() cleanup TemporaryDirectory",
-      "retire_upload_digest_bind": "upload gate checks logical_digest_sha256 when present",
-      "retire_quiescence": "build_snapshot_manifest before retire",
-      "mirror_folder": "DEFAULT_AUDIT_OBJECTS_FOLDER_ID via AUDIT_OBJECTS_FOLDER_ID env — operator must set distinct from incr bundle before E-1",
-      "abort_write_ahead_gap": "documented intentional; crash between append and COMMIT still possible — L3/L4 follow-up"
+    "gaps": {
+      "token_write_fail_revoke": "issue-token revokes on OSError after issue",
+      "stale_token_file": "write_lease_token_file replaces revoked/expired/unknown",
+      "stopped_status": "SCHEMA_V13 + persistence close_run STOPPED",
+      "sigterm_before_claim": "early handler before claim",
+      "upload_digest_mandatory": "retire gate requires 64-char logical_digest_sha256 == current",
+      "audit_folder_no_fallback": "_require_audit_folder_id; test_gap_audit_folder_refused_without_env",
+      "manifest_pin": "PINNED v13 8f75665569a0daacac189c43a297154d4907b058f5866d0436b2577bf3528a95"
     }
   },
-  "pytest_scratch": "69 passed (control-plane suites)",
+  "abnahme_rule_added": "Every live switch needs live-marked temp-path test; every CLI lock needs = form + abbrev test",
+  "pytest_scratch": "73 passed (control-plane + run_lease_phase1)",
+  "host_measurement_live_marked_temp": {
+    "open_without_allow_live": "LivePathRefused",
+    "migrate_issue_revoke_abort_with_allow_live": "OK",
+    "m2_equals_form": "Exit 75",
+    "RUN.lock": "58340c1e…a69845b untouched"
+  },
   "still_open_before_E": [
-    "Canary Abnahme of --allow-live-db migrate/abort/post-run on LIVE copy",
-    "Distinct AUDIT_OBJECTS_FOLDER_ID on Drive",
+    "Canary Abnahme of --allow-live-db on real LIVE (operator)",
     "L3 WAL crash window proof",
     "L4 who may use abort-run / skip switches (policy)",
     "E-1 Freigabe"

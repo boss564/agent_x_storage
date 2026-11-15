@@ -825,9 +825,11 @@ class SQLiteShadowStorage:
         return self._active_run_id
 
     def close_run(self, status: str = "COMMITTED") -> None:
-        """Terminalize active run (Gate #6). ``ABORTED`` or ``COMMITTED`` only."""
-        if status not in ("ABORTED", "COMMITTED"):
-            raise ValueError(f"close_run status must be ABORTED|COMMITTED, got {status!r}")
+        """Terminalize active run. ``ABORTED`` | ``COMMITTED`` | ``STOPPED``."""
+        if status not in ("ABORTED", "COMMITTED", "STOPPED"):
+            raise ValueError(
+                f"close_run status must be ABORTED|COMMITTED|STOPPED, got {status!r}"
+            )
         with self._lock:
             rid = self._active_run_id
             if rid is None:

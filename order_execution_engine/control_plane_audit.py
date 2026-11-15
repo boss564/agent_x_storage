@@ -182,10 +182,10 @@ def compute_trigger_manifest_sha256(conn: sqlite3.Connection) -> str:
     return compute_control_plane_manifest_sha256(conn)
 
 
-# Release pin (Gate #5 / v12 DDL). Code mutations that change triggers must
+# Release pin (Gate #5 / v13 DDL — STOPPED terminal). Code mutations that change triggers must
 # update this constant in the same commit — otherwise ensure/gatectl refuse.
 PINNED_CONTROL_PLANE_MANIFEST_SHA256 = (
-    "3e685b7d98349aeefae3ab591908dd672b731f89f06a7d71fedbd0e49574c9d9"
+    "8f75665569a0daacac189c43a297154d4907b058f5866d0436b2577bf3528a95"
 )
 
 @functools.lru_cache(maxsize=1)

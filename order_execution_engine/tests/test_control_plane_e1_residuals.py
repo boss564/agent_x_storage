@@ -40,7 +40,7 @@ PKG = Path(__file__).resolve().parents[1]
 SHADOW_RUNNER = PKG / "shadow_runner.py"
 # Updated after A1/A3 forbid-gating residual fix (was Gate-6 93ed1267…).
 GUARD_SHA_RESIDUAL = (
-    "702fd2fb4829692d8a9a4e0076c16e6ee9641b3ea93e5e819f689cc8cd912af1"
+    "707e444d0e6502a81f80e2e93313266d0b96c7d036cd58af42340f94a382149a"
 )
 POST_RETIRE_PARSE = {"locked": False, "forbid_run_id_gt": None}
 
@@ -85,6 +85,27 @@ def _bundle(tmp_path: Path) -> dict[str, Path]:
         "repo": repo,
         "journal": journal,
     }
+
+
+
+def _gate_base(paths: dict[str, Path]) -> list[str]:
+    return [
+        "--db",
+        str(paths["db"]),
+        "--data-root",
+        str(paths["data_root"]),
+        "--runner",
+        str(paths["runner"]),
+        "--lock",
+        str(paths["lock"]),
+        "--repo-root",
+        str(paths["repo"]),
+        "--journal",
+        str(paths["journal"]),
+        "--mirror-folder-id",
+        "test-audit-folder-id",
+        "--skip-disk-check",
+    ]
 
 
 def _runner_argv(paths: dict[str, Path], lock: Path) -> list[str]:
@@ -337,6 +358,9 @@ def test_a3_scratch_parse_matches_post_retire(tmp_path: Path) -> None:
                 str(paths["repo"]),
                 "--journal",
                 str(paths["journal"]),
+                "--mirror-folder-id",
+                "test-audit-folder-id",
+                "--skip-disk-check",
                 "retire-run-lock",
                 "--skip-e1-upload-gate",
             ]
@@ -559,6 +583,9 @@ def test_d3_retire_writes_marker_and_archive(tmp_path: Path) -> None:
                 str(paths["repo"]),
                 "--journal",
                 str(paths["journal"]),
+                "--mirror-folder-id",
+                "test-audit-folder-id",
+                "--skip-disk-check",
                 "retire-run-lock",
             ]
         )
@@ -582,6 +609,9 @@ def test_d3_retire_writes_marker_and_archive(tmp_path: Path) -> None:
                 str(paths["repo"]),
                 "--journal",
                 str(paths["journal"]),
+                "--mirror-folder-id",
+                "test-audit-folder-id",
+                "--skip-disk-check",
                 "retire-run-lock",
                 "--skip-e1-upload-gate",
             ]
@@ -634,6 +664,9 @@ def test_d2b_abort_requires_confirm(tmp_path: Path) -> None:
             str(paths["repo"]),
             "--journal",
             str(paths["journal"]),
+            "--mirror-folder-id",
+            "test-audit-folder-id",
+            "--skip-disk-check",
             "abort-run",
             "--run-id",
             str(rid),
@@ -687,6 +720,9 @@ def test_d3a_preexisting_marker_refuses_retire(tmp_path: Path) -> None:
                 str(paths["repo"]),
                 "--journal",
                 str(paths["journal"]),
+                "--mirror-folder-id",
+                "test-audit-folder-id",
+                "--skip-disk-check",
                 "retire-run-lock",
                 "--skip-e1-upload-gate",
             ]
@@ -738,6 +774,9 @@ def test_m1_gatectl_issue_token_file_then_runner(tmp_path: Path) -> None:
                     str(paths["repo"]),
                     "--journal",
                     str(paths["journal"]),
+                    "--mirror-folder-id",
+                    "test-audit-folder-id",
+                    "--skip-disk-check",
                     "issue-token",
                     "--run-id",
                     str(rid),
@@ -809,8 +848,224 @@ def test_m2_run_lock_override_refused_on_live_data_root(tmp_path: Path) -> None:
 
 
 def test_m3_sigterm_handler_wired_in_source() -> None:
-    """M3: runner source installs SIGTERM → ordered stop (COMMITTED path)."""
+    """M3: runner source installs SIGTERM → ordered stop (STOPPED path)."""
     text = SHADOW_RUNNER.read_text(encoding="utf-8")
     assert "SIGTERM" in text
     assert "add_signal_handler" in text
+    assert "STOPPED" in text
     assert "ordered stop" in text
+    assert "early SIGTERM" in text or "_early_sigterm" in text
+
+
+def test_m2_equals_form_refused_on_live_data_root(tmp_path: Path) -> None:
+    """M2: --data-root=<live> with --run-lock must Exit 75 (equals form)."""
+    live_root = (
+        tmp_path / "Library" / "Application Support" / "agentx" / "shadow_live"
+    )
+    live_root.mkdir(parents=True)
+    scratch_lock = tmp_path / "absent.lock"
+    allow = tmp_path / "allowlist.json"
+    allow.write_text(
+        json.dumps({"BTC": {"token_id": "t", "market_id": "m"}}),
+        encoding="utf-8",
+    )
+    news = tmp_path / "news.jsonl"
+    news.write_text("", encoding="utf-8")
+    rc = runner_main(
+        [
+            f"--data-root={live_root}",
+            "--user-id",
+            "shadow",
+            "--allowlist",
+            str(allow),
+            "--news-jsonl",
+            str(news),
+            "--run-lock",
+            str(scratch_lock),
+            "--once",
+            "--no-ws",
+        ]
+    )
+    assert rc == EXIT_RUN_LOCK
+
+
+def test_m2_abbrev_data_root_rejected_by_parser(tmp_path: Path) -> None:
+    """M2: allow_abbrev=False → --data-r is not accepted."""
+    live_root = (
+        tmp_path / "Library" / "Application Support" / "agentx" / "shadow_live"
+    )
+    live_root.mkdir(parents=True)
+    scratch_lock = tmp_path / "absent.lock"
+    allow = tmp_path / "allowlist.json"
+    allow.write_text(
+        json.dumps({"BTC": {"token_id": "t", "market_id": "m"}}),
+        encoding="utf-8",
+    )
+    news = tmp_path / "news.jsonl"
+    news.write_text("", encoding="utf-8")
+    with pytest.raises(SystemExit) as ei:
+        runner_main(
+            [
+                "--data-r",
+                str(live_root),
+                "--user-id",
+                "shadow",
+                "--allowlist",
+                str(allow),
+                "--news-jsonl",
+                str(news),
+                "--run-lock",
+                str(scratch_lock),
+                "--once",
+                "--no-ws",
+            ]
+        )
+    assert ei.value.code == 2
+
+
+def test_m4_allow_live_db_migrate_issue_abort_on_live_marked_temp(
+    tmp_path: Path,
+) -> None:
+    """M4: live-marked temp path + --allow-live-db reaches migrate/issue/abort."""
+    live_root = (
+        tmp_path / "Library" / "Application Support" / "agentx" / "m4_scratch"
+    )
+    live_root.mkdir(parents=True)
+    store = SQLiteShadowStorage.for_user(live_root, "shadow")
+    db = store._db_path  # noqa: SLF001
+    store.close()
+    lock = tmp_path / "RUN.lock"
+    lock.write_text("LOCKED=0\n", encoding="utf-8")
+    runner = tmp_path / "shadow_runner.py"
+    runner.write_text("# stub\n", encoding="utf-8")
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    journal = live_root / "audit_chain.jsonl"
+    paths = {
+        "db": db,
+        "data_root": live_root,
+        "runner": runner,
+        "lock": lock,
+        "repo": repo,
+        "journal": journal,
+    }
+
+    def fake_run(cmd, **kwargs):  # noqa: ANN001
+        from unittest.mock import MagicMock
+
+        m = MagicMock()
+        m.returncode = 0
+        m.stdout = "[]" if len(cmd) > 1 and cmd[1] == "lsjson" else ""
+        m.stderr = ""
+        return m
+
+    with patch(
+        "order_execution_engine.control_plane_audit.subprocess.run",
+        side_effect=fake_run,
+    ):
+        import io
+        from contextlib import redirect_stdout
+
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            rc_m = gatectl_main(
+                _gate_base(paths) + ["--allow-live-db", "--allow-live-skip-disk-check", "migrate"]
+            )
+        assert rc_m == EXIT_OK, buf.getvalue()
+
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            rc_i = gatectl_main(
+                _gate_base(paths)
+                + [
+                    "--allow-live-db",
+                    "--allow-live-skip-disk-check",
+                    "issue-token",
+                    "--ttl",
+                    "60",
+                ]
+            )
+        assert rc_i == EXIT_OK, buf.getvalue()
+        out = json.loads(buf.getvalue().strip().splitlines()[-1])
+        assert out["ok"] is True
+        assert Path(out["token_file"]).is_file()
+        rid = int(out["run_id"])
+
+        # claim so abort has RUNNING
+        conn = sqlite3.connect(str(db))
+        tok = Path(out["token_file"]).read_text(encoding="utf-8").strip()
+        claim_run(conn, git_commit="m4", config_json="{}", token=tok)
+        conn.close()
+
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            rc_a = gatectl_main(
+                _gate_base(paths)
+                + [
+                    "--allow-live-db",
+                    "--allow-live-skip-disk-check",
+                    "abort-run",
+                    "--run-id",
+                    str(rid),
+                    "--confirm-abort",
+                    str(rid),
+                    "--reason",
+                    "m4-test",
+                ]
+            )
+        assert rc_a == EXIT_OK, buf.getvalue()
+
+
+def test_gap_audit_folder_refused_without_env(tmp_path: Path) -> None:
+    """Gap: issue-token without AUDIT_OBJECTS_FOLDER_ID / --mirror-folder-id refuses."""
+    paths = _bundle(tmp_path)
+    paths["lock"].write_text("LOCKED=0\n", encoding="utf-8")
+
+    def fake_run(cmd, **kwargs):  # noqa: ANN001
+        from unittest.mock import MagicMock
+
+        m = MagicMock()
+        m.returncode = 0
+        m.stdout = "[]"
+        m.stderr = ""
+        return m
+
+    with patch(
+        "order_execution_engine.control_plane_audit.subprocess.run",
+        side_effect=fake_run,
+    ):
+        import io
+        from contextlib import redirect_stdout
+        import os
+
+        with patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("AUDIT_OBJECTS_FOLDER_ID", None)
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                rc = gatectl_main(
+                    [
+                        "--db",
+                        str(paths["db"]),
+                        "--data-root",
+                        str(paths["data_root"]),
+                        "--runner",
+                        str(paths["runner"]),
+                        "--lock",
+                        str(paths["lock"]),
+                        "--repo-root",
+                        str(paths["repo"]),
+                        "--journal",
+                        str(paths["journal"]),
+                        "--skip-disk-check",
+                        "issue-token",
+                        "--ttl",
+                        "30",
+                    ]
+                )
+            assert rc == EXIT_POLICY
+            err = buf.getvalue()
+            assert (
+                "AUDIT_OBJECTS_FOLDER_ID" in err
+                or "mirror-folder" in err.lower()
+                or "no silent fallback" in err
+            )

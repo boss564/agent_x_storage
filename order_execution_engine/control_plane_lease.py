@@ -22,7 +22,8 @@ from typing import Any, Callable, Optional
 SCHEMA_V10 = 10  # first control-plane stamp (historical)
 SCHEMA_V11 = 11  # hardened lease BI + run_id floor (pre-G1)
 SCHEMA_V12 = 12  # G1: issued_at wall-clock skew; G2: expanded manifest
-SCHEMA_CONTROL = SCHEMA_V12
+SCHEMA_V13 = 13  # STOPPED terminal (ordered SIGTERM; not ABORTED/COMMITTED)
+SCHEMA_CONTROL = SCHEMA_V13
 
 TTL_MAX_S = 900
 # Max seconds issued_at may lie ahead of DB now (clock skew only).
@@ -125,7 +126,7 @@ BEGIN
     SELECT CASE
         WHEN OLD.status IS NEW.status THEN NULL
         WHEN OLD.status = 'RUNNING'
-             AND NEW.status IN ('ABORTED', 'COMMITTED') THEN NULL
+             AND NEW.status IN ('ABORTED', 'COMMITTED', 'STOPPED') THEN NULL
         ELSE RAISE(ABORT, 'telemetry_runs status transition forbidden')
     END;
 END
@@ -217,19 +218,36 @@ def assert_scratch_db_path(db_path: Path) -> Path:
     return resolved
 
 
-def db_path_from_conn(conn: sqlite3.Connection) -> Path:
-    """Resolve main DB file from the connection (F3)."""
+def db_file_from_conn(conn: sqlite3.Connection) -> Path:
+    """Resolve main DB file path (no LIVE policy)."""
     for row in conn.execute("PRAGMA database_list"):
         if row[1] == "main":
             file_path = row[2]
             if not file_path:
                 raise LivePathRefused("refuse: main database has empty file path")
-            return assert_scratch_db_path(Path(file_path))
+            return Path(file_path).resolve()
     raise LivePathRefused("refuse: no main database in PRAGMA database_list")
 
 
+def db_path_from_conn(
+    conn: sqlite3.Connection, *, allow_live: bool = False
+) -> Path:
+    """Resolve main DB file; refuse LIVE unless ``allow_live`` (M4)."""
+    path = db_file_from_conn(conn)
+    if allow_live:
+        return path
+    return assert_scratch_db_path(path)
+
+
+def _guard_live_conn(
+    conn: sqlite3.Connection, *, allow_live: bool = False
+) -> Path:
+    return db_path_from_conn(conn, allow_live=allow_live)
+
+
 def _refuse_live_conn(conn: sqlite3.Connection) -> Path:
-    return db_path_from_conn(conn)
+    """Scratch default: always refuse LIVE markers."""
+    return _guard_live_conn(conn, allow_live=False)
 
 
 def _open_sqlite(path: Path) -> sqlite3.Connection:
@@ -338,15 +356,20 @@ def migrate_control_plane(
     conn: sqlite3.Connection,
     *,
     db_path: Optional[Path] = None,
+    allow_live: bool = False,
     _abort_after: Optional[str] = None,
 ) -> None:
     """Apply control-plane schema up to SCHEMA_CONTROL (atomic; no executescript).
 
     Not called from SQLiteShadowStorage.__init__. Only tests / gatectl migrate.
+    ``allow_live`` must match gatectl ``--allow-live-db`` (M4).
     """
-    _refuse_live_conn(conn)
+    _guard_live_conn(conn, allow_live=allow_live)
     if db_path is not None:
-        assert_scratch_db_path(db_path)
+        if allow_live:
+            Path(db_path).resolve()
+        else:
+            assert_scratch_db_path(db_path)
 
     ver = _schema_version(conn)
     if ver < 9:
@@ -418,6 +441,14 @@ def migrate_control_plane(
         _add("trg_bi_lease", _trigger_telemetry_runs_bi_lease())
         _add("trg_lease_bi", _trigger_run_lease_before_insert())
 
+    if ver < SCHEMA_V13 and ver >= SCHEMA_V10:
+        # → v13: allow STOPPED terminal transition (refresh status trigger).
+        def _drop_status_trg() -> None:
+            conn.execute("DROP TRIGGER IF EXISTS trg_telemetry_runs_bu_status")
+
+        steps.append(("drop_status_trg", _drop_status_trg))
+        _add("trg_bu_status", TRIGGER_BEFORE_UPDATE_STATUS)
+
     def _stamp_version() -> None:
         conn.execute(
             "INSERT OR REPLACE INTO schema_meta (key, value)"
@@ -461,9 +492,10 @@ def issue_token(
     run_id: int,
     ttl_s: int = 300,
     now: Optional[int] = None,
+    allow_live: bool = False,
 ) -> str:
     """Issue a lease token for exactly next_run_id; revoke expired opens first."""
-    _refuse_live_conn(conn)
+    _guard_live_conn(conn, allow_live=allow_live)
     if run_id < 1:
         raise LeaseError("run_id must be >= 1")
     if ttl_s < 1 or ttl_s > TTL_MAX_S:
@@ -522,10 +554,14 @@ def issue_token(
 
 
 def revoke_token(
-    conn: sqlite3.Connection, token: str, *, now: Optional[int] = None
+    conn: sqlite3.Connection,
+    token: str,
+    *,
+    now: Optional[int] = None,
+    allow_live: bool = False,
 ) -> None:
     """Revoke an unconsumed token and allow re-issue for its run_id."""
-    _refuse_live_conn(conn)
+    _guard_live_conn(conn, allow_live=allow_live)
     ts = int(now if now is not None else time.time())
     conn.execute("BEGIN IMMEDIATE")
     try:
@@ -689,13 +725,14 @@ def abort_run(
     *,
     reason: str = "",
     now: Optional[int] = None,
+    allow_live: bool = False,
 ) -> dict[str, Any]:
     """Atomically mark RUNNING run ABORTED; revoke leftover open leases (L2).
 
     Caller must wrap with audit journal: on audit failure, ``ROLLBACK`` this
     transaction (gatectl holds BEGIN until audit succeeds).
     """
-    _refuse_live_conn(conn)
+    _guard_live_conn(conn, allow_live=allow_live)
     rid = int(run_id)
     ts = int(now if now is not None else time.time())
     cur = conn.execute(

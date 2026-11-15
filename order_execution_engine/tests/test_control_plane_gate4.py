@@ -74,6 +74,8 @@ def _argv(paths: dict[str, Path], *extra: str) -> list[str]:
         str(paths["repo"]),
         "--journal",
         str(paths["journal"]),
+        "--mirror-folder-id",
+        "test-audit-folder-id",
         "--skip-disk-check",
         *extra,
     ]
@@ -265,7 +267,7 @@ def test_gatectl_migrate_idempotent_with_audit(tmp_path: Path) -> None:
             rc = gatectl_main(_argv(paths, "migrate"))
         assert rc == EXIT_OK
         out = json.loads(buf.getvalue().strip().splitlines()[-1])
-        assert out["schema_version"] == 12
+        assert out["schema_version"] == 13
         assert out["audit_seq"] >= 1
         # Idempotent second call
         buf2 = io.StringIO()

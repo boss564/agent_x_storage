@@ -1,6 +1,6 @@
 # Architektur-Härtung & Revidierter E-Plan (K1–K8)
 
-**Status:** PLAN ABGENOMMEN — **Revision 10** (**E-1 Freigabe ≠ erteilt**; D1–D6 **commit-gebunden** @ `98a6f307` / tests tip)  
+**Status:** PLAN ABGENOMMEN — **Revision 11** (**E-1 Freigabe ≠ erteilt**; M2/M4 nach `1124f703`-Urteil geschlossen — v13 STOPPED; live-temp Tests; E-1 gesperrt)  
 **Freeze-Produktion:** `RUN.lock` am Paketpfad (`LOCKED=1`) + LIVE_DB (`max_run_id=15` / `user_version=9`) bleibt bis **nach** `post-run-check --run-id 16` GRÜN (Lock = letzter Akt).  
 **Allowlist-Freeze `5adab542`:** Messlauf-Artefakt; Code-Härtung auf Branch + Scratch; neuer Tag+Manifest am Ende.  
 **Ziel:** fail-closed, schema-enforced Control-Plane vor `run_id=16`.  

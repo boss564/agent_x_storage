@@ -19,9 +19,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from order_execution_engine.control_plane_audit import (
-    DEFAULT_AUDIT_MIRROR_FOLDER_ID,
     DEFAULT_AUDIT_MIRROR_REMOTE_PREFIX,
-    DEFAULT_AUDIT_OBJECTS_FOLDER_ID,
     AppendOnlyAuditChain,
     AuditChainError,
     ManifestMismatchError,
@@ -64,10 +62,43 @@ def lease_token_path(data_root: Path, run_id: int) -> Path:
     return Path(data_root) / "leases" / f"run_{int(run_id)}.token"
 
 
-def write_lease_token_file(data_root: Path, run_id: int, token: str) -> Path:
-    """Write raw token with O_EXCL + mode 0600; never overwrite."""
+def write_lease_token_file(
+    data_root: Path,
+    run_id: int,
+    token: str,
+    *,
+    conn: Optional[sqlite3.Connection] = None,
+) -> Path:
+    """Write raw token with O_EXCL + mode 0600.
+
+    Stale file for same run_id: replace only if on-disk token is revoked/expired
+    or unknown to an open lease (gap). Caller must revoke on any OSError.
+    """
     path = lease_token_path(data_root, run_id)
     path.parent.mkdir(parents=True, exist_ok=True)
+    if path.is_file() and conn is not None:
+        try:
+            old = path.read_text(encoding="utf-8").strip()
+        except OSError:
+            old = ""
+        if old:
+            row = conn.execute(
+                "SELECT consumed_at, revoked_at, expires_at FROM run_lease"
+                " WHERE token = ?",
+                (old,),
+            ).fetchone()
+            now = int(time.time())
+            stale = row is None or row[0] is not None or row[1] is not None or (
+                row[2] is not None and int(row[2]) <= now
+            )
+            if stale:
+                path.unlink(missing_ok=True)
+            else:
+                raise OSError(
+                    f"lease token file exists for open lease: {path}"
+                )
+        else:
+            path.unlink(missing_ok=True)
     flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
     fd = os.open(str(path), flags, 0o600)
     try:
@@ -77,6 +108,23 @@ def write_lease_token_file(data_root: Path, run_id: int, token: str) -> Path:
         os.close(fd)
     os.chmod(path, 0o600)
     return path
+
+
+def _allow_live(args: argparse.Namespace) -> bool:
+    return bool(getattr(args, "allow_live_db", False))
+
+
+def _require_audit_folder_id(args: argparse.Namespace) -> str:
+    """Refuse fallback to incr-bundle folder (gap)."""
+    fid = getattr(args, "mirror_folder_id", None) or os.environ.get(
+        "AUDIT_OBJECTS_FOLDER_ID"
+    )
+    if not fid:
+        raise AuditChainError(
+            "AUDIT_OBJECTS_FOLDER_ID or --mirror-folder-id required "
+            "(no silent fallback to incr-bundle folder)"
+        )
+    return str(fid)
 
 EXIT_OK = 0
 EXIT_POLICY = 2
@@ -142,9 +190,7 @@ def _mirror_required_entry(
     return mirror_audit_entry(
         entry,
         remote,
-        folder_id=getattr(
-            args, "mirror_folder_id", DEFAULT_AUDIT_MIRROR_FOLDER_ID
-        ),
+        folder_id=_require_audit_folder_id(args),
     )
 
 
@@ -208,17 +254,13 @@ def cmd_verify_snapshot(args: argparse.Namespace) -> int:
 def cmd_issue_token(args: argparse.Namespace) -> int:
     """Intent → issue → confirm + M1 token-file (O_EXCL 0600). No raw token on stdout."""
     mirror_remote = args.mirror_remote or DEFAULT_AUDIT_MIRROR_REMOTE_PREFIX
-    mirror_folder = (
-        args.mirror_folder_id
-        or DEFAULT_AUDIT_OBJECTS_FOLDER_ID
-        or DEFAULT_AUDIT_MIRROR_FOLDER_ID
-    )
 
     journal = AppendOnlyAuditChain(_journal_path(args))
     conn = None
     token: Optional[str] = None
     token_file: Optional[Path] = None
     try:
+        mirror_folder = _require_audit_folder_id(args)
         journal.verify()
         manifest = build_snapshot_manifest(
             Path(args.db),
@@ -243,10 +285,22 @@ def cmd_issue_token(args: argparse.Namespace) -> int:
             intent, mirror_remote, folder_id=mirror_folder
         )
 
-        token = issue_token(conn, run_id=run_id, ttl_s=ttl_s)
+        allow_live = _allow_live(args)
+        token = issue_token(
+            conn, run_id=run_id, ttl_s=ttl_s, allow_live=allow_live
+        )
         digest = token_sha256(token)
-        # M1: handoff via exclusive file under data-root (not argv / not env).
-        token_file = write_lease_token_file(Path(args.data_root), run_id, token)
+        # M1: handoff via exclusive file; revoke if write fails (gap).
+        try:
+            token_file = write_lease_token_file(
+                Path(args.data_root), run_id, token, conn=conn
+            )
+        except OSError:
+            try:
+                revoke_token(conn, token, allow_live=allow_live)
+            except Exception:  # noqa: BLE001
+                pass
+            raise
         try:
             confirm = journal.append(
                 "issue_token_confirm",
@@ -264,7 +318,7 @@ def cmd_issue_token(args: argparse.Namespace) -> int:
             )
         except AuditChainError as exc:
             try:
-                revoke_token(conn, token)
+                revoke_token(conn, token, allow_live=_allow_live(args))
             except Exception as rev_exc:  # noqa: BLE001
                 _print_json(
                     {
@@ -429,7 +483,7 @@ def cmd_migrate(args: argparse.Namespace) -> int:
         )
         conn = _conn(args)
         try:
-            migrate_control_plane(conn, db_path=Path(args.db))
+            migrate_control_plane(conn, db_path=Path(args.db), allow_live=_allow_live(args))
             row = conn.execute(
                 "SELECT value FROM schema_meta WHERE key='schema_version'"
             ).fetchone()
@@ -467,8 +521,7 @@ def cmd_migrate(args: argparse.Namespace) -> int:
             mirror_audit_entry(
                 entry,
                 args.mirror_remote,
-                folder_id=args.mirror_folder_id
-                or DEFAULT_AUDIT_MIRROR_FOLDER_ID,
+                folder_id=_require_audit_folder_id(args),
             )
     except (
         LeaseError,
@@ -528,7 +581,7 @@ def cmd_abort_run(args: argparse.Namespace) -> int:
         conn = _conn(args)
         reason = str(getattr(args, "reason", "") or "")
         conn.execute("BEGIN IMMEDIATE")
-        info = abort_run(conn, rid, reason=reason)
+        info = abort_run(conn, rid, reason=reason, allow_live=_allow_live(args))
         ph = hashlib.sha256(
             f"abort-run:{rid}:{reason}".encode("utf-8")
         ).hexdigest()
@@ -564,8 +617,7 @@ def cmd_abort_run(args: argparse.Namespace) -> int:
             mirror_audit_entry(
                 entry,
                 args.mirror_remote,
-                folder_id=args.mirror_folder_id
-                or DEFAULT_AUDIT_MIRROR_FOLDER_ID,
+                folder_id=_require_audit_folder_id(args),
             )
     except AuditChainError as exc:
         _print_json(
@@ -674,14 +726,13 @@ def cmd_retire_run_lock(args: argparse.Namespace) -> int:
             for e in reversed(entries):
                 if e.get("action") == "db_artefact_upload":
                     payload = e.get("payload") or {}
-                    digest_ok = (
-                        not payload.get("logical_digest_sha256")
-                        or payload.get("logical_digest_sha256") == cur_digest
-                    )
+                    dig = payload.get("logical_digest_sha256")
                     upload_ok = (
                         bool(payload.get("ok"))
                         and bool(payload.get("sha256"))
-                        and digest_ok
+                        and isinstance(dig, str)
+                        and len(dig) == 64
+                        and dig == cur_digest
                     )
                     break
             if not upload_ok:
@@ -752,8 +803,7 @@ def cmd_retire_run_lock(args: argparse.Namespace) -> int:
             mirror_audit_entry(
                 entry,
                 args.mirror_remote,
-                folder_id=args.mirror_folder_id
-                or DEFAULT_AUDIT_MIRROR_FOLDER_ID,
+                folder_id=_require_audit_folder_id(args),
             )
     except (AuditChainError, OSError) as exc:
         _print_json({"ok": False, "error": str(exc)})
@@ -815,7 +865,7 @@ def cmd_post_run_check(args: argparse.Namespace) -> int:
                     raise SnapshotError(
                         f"post-run-check: run_id={rid} not found"
                     )
-                if run_row["status"] not in ("ABORTED", "COMMITTED"):
+                if run_row["status"] not in ("ABORTED", "COMMITTED", "STOPPED"):
                     raise SnapshotError(
                         f"post-run-check: run_id={rid} status="
                         f"{run_row['status']!r} not terminal"
@@ -865,8 +915,7 @@ def cmd_post_run_check(args: argparse.Namespace) -> int:
             mirror_audit_entry(
                 entry,
                 args.mirror_remote,
-                folder_id=args.mirror_folder_id
-                or DEFAULT_AUDIT_MIRROR_FOLDER_ID,
+                folder_id=_require_audit_folder_id(args),
             )
     except (
         QuiescenceError,
@@ -903,7 +952,7 @@ def cmd_verify_mirror(args: argparse.Namespace) -> int:
         result = verify_audit_mirror(
             _journal_path(args),
             args.mirror_remote or DEFAULT_AUDIT_MIRROR_REMOTE_PREFIX,
-            folder_id=args.mirror_folder_id or DEFAULT_AUDIT_MIRROR_FOLDER_ID,
+            folder_id=_require_audit_folder_id(args),
         )
         entry = journal.append(
             "verify_mirror",
@@ -934,7 +983,7 @@ def cmd_verify_mirror(args: argparse.Namespace) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="gatectl")
+    p = argparse.ArgumentParser(prog="gatectl", allow_abbrev=False)
     p.add_argument("--db", type=Path, required=True)
     p.add_argument(
         "--data-root",
@@ -975,10 +1024,10 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--mirror-folder-id",
         type=str,
-        default=DEFAULT_AUDIT_OBJECTS_FOLDER_ID,
+        default=None,
         help=(
-            "Drive folder for audit objects (set AUDIT_OBJECTS_FOLDER_ID; "
-            "must differ from incr-bundle folder before E-1)"
+            "Drive folder for audit objects (required: env "
+            "AUDIT_OBJECTS_FOLDER_ID or this flag; no incr-bundle fallback)"
         ),
     )
     p.add_argument(

@@ -36,7 +36,7 @@ from order_execution_engine.persistence import SCHEMA_VERSION, SQLiteShadowStora
 # Gate #6 + E-1 residual pin (fail-closed claim / forbid only while LOCKED=1).
 # Pre-Gate-6 baseline was 2157113ad64c88c0e5c2ab346e2c6b3530b869440981aa5a708a3f73c6faefb3.
 GUARD_SHA_PRE_PHASE1 = (
-    "702fd2fb4829692d8a9a4e0076c16e6ee9641b3ea93e5e819f689cc8cd912af1"
+    "707e444d0e6502a81f80e2e93313266d0b96c7d036cd58af42340f94a382149a"
 )
 
 

@@ -12,6 +12,7 @@ import json
 import logging
 import os
 import signal
+import threading
 import sqlite3
 import subprocess
 import sys
@@ -468,12 +469,16 @@ def evaluate_start_lock(
 
 
 def _peek_argv_path(argv_list: list[str], flag: str) -> Optional[Path]:
-    if flag not in argv_list:
-        return None
-    i = argv_list.index(flag)
-    if i + 1 >= len(argv_list):
-        return None
-    return Path(argv_list[i + 1])
+    """Space form ``--flag PATH`` and equals form ``--flag=PATH``."""
+    eq = flag + "="
+    for i, tok in enumerate(argv_list):
+        if tok == flag:
+            if i + 1 >= len(argv_list):
+                return None
+            return Path(argv_list[i + 1])
+        if tok.startswith(eq):
+            return Path(tok[len(eq) :])
+    return None
 
 
 def _is_live_data_root(path: Path) -> bool:
@@ -500,11 +505,10 @@ def main(argv: Optional[list[str]] = None) -> int:
     argv_list = list(sys.argv[1:] if argv is None else argv)
     lock_path = default_run_lock_path()
     run_lock_override = False
-    if "--run-lock" in argv_list:
-        peeked = _peek_argv_path(argv_list, "--run-lock")
-        if peeked is not None:
-            lock_path = peeked
-            run_lock_override = True
+    peeked = _peek_argv_path(argv_list, "--run-lock")
+    if peeked is not None:
+        lock_path = peeked
+        run_lock_override = True
     data_root_peek = _peek_argv_path(argv_list, "--data-root") or Path(
         "data/shadow_live"
     )
@@ -520,7 +524,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         sys.stderr.write(reason + "\n")
         return EXIT_RUN_LOCK
 
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description=__doc__, allow_abbrev=False)
     parser.add_argument(
         "--data-root", type=Path,
         default=Path("data/shadow_live"),
@@ -566,6 +570,13 @@ def main(argv: Optional[list[str]] = None) -> int:
         help="Scratch/unit-test only; prefer --lease-token-file (not for LIVE)",
     )
     args = parser.parse_args(argv)
+
+    # M2: re-check after parse (covers --data-root= and abbreviations if any).
+    if args.run_lock is not None and _is_live_data_root(args.data_root):
+        sys.stderr.write(
+            "refuse --run-lock override on LIVE data-root (M2 post-parse)\n"
+        )
+        return EXIT_RUN_LOCK
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
@@ -617,8 +628,25 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     store: Optional[SQLiteShadowStorage] = None
     run_status = "COMMITTED"
-    # M3: set by SIGTERM from within the running asyncio loop.
-    stop_flag = {"stop": None}  # filled with asyncio.Event after loop start
+    # M3: STOPPED = ordered SIGTERM; ABORTED = interrupt/exception/abort-run only.
+    shutdown = threading.Event()
+    stop_flag = {"stop": None}  # asyncio.Event after loop start
+
+    def _early_sigterm(_signum: int, _frame: Any) -> None:
+        _LOG.info("SIGTERM early (pre-loop) — will STOPPED")
+        shutdown.set()
+        ev = stop_flag.get("stop")
+        if ev is not None:
+            try:
+                loop = asyncio.get_event_loop()
+                loop.call_soon_threadsafe(ev.set)
+            except Exception:  # noqa: BLE001
+                pass
+
+    try:
+        signal.signal(signal.SIGTERM, _early_sigterm)
+    except (ValueError, OSError) as exc:
+        _LOG.warning("early SIGTERM handler not installed: %s", exc)
 
     try:
         # Gate #6: enforce v12 + Soll-manifest + forbid_run_id_gt, then claim.
@@ -680,6 +708,21 @@ def main(argv: Optional[list[str]] = None) -> int:
             except Exception:  # noqa: BLE001
                 pass
         raise
+
+    if shutdown.is_set():
+        run_status = "STOPPED"
+        _LOG.info("SIGTERM between claim and loop — STOPPED without WS")
+        try:
+            if store is not None and store.active_run_id is not None:
+                store.close_run(run_status)
+        except Exception as exc:  # noqa: BLE001
+            _LOG.error("close_run failed: %s", exc)
+        try:
+            if store is not None:
+                store.close()
+        except Exception:  # noqa: BLE001
+            pass
+        return 0
 
     from order_execution_engine.epoch_hydrate import try_hydrate_engine_portfolio
 
@@ -746,7 +789,8 @@ def main(argv: Optional[list[str]] = None) -> int:
             loop = asyncio.get_running_loop()
 
             def _on_sigterm() -> None:
-                _LOG.info("SIGTERM — ordered stop (M3 → COMMITTED)")
+                _LOG.info("SIGTERM — ordered stop (M3 → STOPPED)")
+                shutdown.set()
                 stop_event.set()
 
             try:
@@ -756,7 +800,8 @@ def main(argv: Optional[list[str]] = None) -> int:
                 _LOG.warning("add_signal_handler unavailable: %s", exc)
 
                 def _sync_sigterm(_s: int, _f: Any) -> None:
-                    _LOG.info("SIGTERM — ordered stop (M3 → COMMITTED)")
+                    _LOG.info("SIGTERM — ordered stop (M3 → STOPPED)")
+                    shutdown.set()
                     loop.call_soon_threadsafe(stop_event.set)
 
                 signal.signal(signal.SIGTERM, _sync_sigterm)
@@ -775,7 +820,8 @@ def main(argv: Optional[list[str]] = None) -> int:
             asyncio.run(_run_until_stop())
         except KeyboardInterrupt:
             run_status = "ABORTED"
-        # SIGTERM ordered stop keeps run_status=COMMITTED
+        if shutdown.is_set():
+            run_status = "STOPPED"
         return 0
     except Exception:
         run_status = "ABORTED"

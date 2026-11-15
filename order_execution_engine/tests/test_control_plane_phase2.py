@@ -77,6 +77,8 @@ def _argv(paths: dict[str, Path], *extra: str) -> list[str]:
         str(paths["repo"]),
         "--journal",
         str(paths["journal"]),
+        "--mirror-folder-id",
+        "test-audit-folder-id",
         "--skip-disk-check",
         *extra,
     ]
