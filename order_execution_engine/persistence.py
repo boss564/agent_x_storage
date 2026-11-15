@@ -821,6 +821,28 @@ class SQLiteShadowStorage:
         """Aktiver Run-Kontext (None = Legacy/kein Messlauf)."""
         return self._active_run_id
 
+    def close_run(self, status: str = "COMMITTED") -> None:
+        """Terminalize active run (Gate #6). ``ABORTED`` or ``COMMITTED`` only."""
+        if status not in ("ABORTED", "COMMITTED"):
+            raise ValueError(f"close_run status must be ABORTED|COMMITTED, got {status!r}")
+        with self._lock:
+            rid = self._active_run_id
+            if rid is None:
+                return
+            import time as _time
+
+            cur = self._conn.execute(
+                "UPDATE telemetry_runs SET status=?,"
+                " closed_at=?"
+                " WHERE run_id=? AND status='RUNNING'",
+                (status, int(_time.time()), int(rid)),
+            )
+            self._conn.commit()
+            if cur.rowcount != 1:
+                # Already terminal or missing — still clear local handle.
+                pass
+            self._active_run_id = None
+
     def _insert_fill_metrics(self, telemetry_seq: int, metrics: Any) -> None:
         """Schreibt typed Spalten + payload_json (Aufrufer hält den Lock)."""
         slip = metrics.slippage

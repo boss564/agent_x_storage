@@ -383,23 +383,41 @@ async def run_ws_and_hub(
             t.cancel()
 
 
+# Gate #6 exit codes (lock vs control-plane).
+EXIT_RUN_LOCK = 75
+EXIT_CONTROL_PLANE = 76
+
+
 def default_run_lock_path() -> Path:
     """ops/RUN.lock next to this package — Abort sets LOCKED=1 before kill."""
     return Path(__file__).resolve().parent / "ops" / "RUN.lock"
 
 
-def run_lock_blocks(lock_path: Path) -> bool:
-    """True if RUN.lock exists and declares LOCKED=1 (runtime gate)."""
+def parse_run_lock(lock_path: Path) -> dict[str, Any]:
+    """Parse RUN.lock → ``locked`` + optional ``forbid_run_id_gt``."""
+    out: dict[str, Any] = {"locked": False, "forbid_run_id_gt": None, "path": str(lock_path)}
     if not lock_path.is_file():
-        return False
+        return out
     try:
         text = lock_path.read_text(encoding="utf-8")
     except OSError:
-        return True  # fail-closed: unreadable lock blocks start
+        out["locked"] = True  # fail-closed: unreadable lock blocks start
+        return out
     for line in text.splitlines():
-        if line.strip() == "LOCKED=1" or line.strip().startswith("LOCKED=1"):
-            return True
-    return False
+        raw = line.strip()
+        if raw == "LOCKED=1" or raw.startswith("LOCKED=1"):
+            out["locked"] = True
+        if raw.startswith("forbid_run_id_gt="):
+            try:
+                out["forbid_run_id_gt"] = int(raw.split("=", 1)[1].strip())
+            except ValueError:
+                out["locked"] = True  # malformed forbid → refuse
+    return out
+
+
+def run_lock_blocks(lock_path: Path) -> bool:
+    """True if RUN.lock exists and declares LOCKED=1 (runtime gate)."""
+    return bool(parse_run_lock(lock_path)["locked"])
 
 
 def main(argv: Optional[list[str]] = None) -> int:
@@ -411,9 +429,10 @@ def main(argv: Optional[list[str]] = None) -> int:
         i = argv_list.index("--run-lock")
         if i + 1 < len(argv_list):
             lock_path = Path(argv_list[i + 1])
-    if run_lock_blocks(lock_path):
+    lock_info = parse_run_lock(lock_path)
+    if lock_info["locked"]:
         sys.stderr.write(f"RUN.lock active — refuse start path={lock_path}\n")
-        return 75
+        return EXIT_RUN_LOCK
 
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -475,18 +494,56 @@ def main(argv: Optional[list[str]] = None) -> int:
         _LOG.error("%s", exc)
         return 2
 
+    from order_execution_engine.control_plane_lease import (
+        ControlPlaneError,
+        LeaseError,
+        ensure_control_plane_ready,
+    )
+
+    store: Optional[SQLiteShadowStorage] = None
+    run_status = "COMMITTED"
     try:
-        engine, bridge, store, binding, config_json = build_runner(
-            data_root=args.data_root,
-            user_id=args.user_id,
-            allowlist=allowlist,
-            policy_cfg=policy_cfg,
-            start_ws=not args.no_ws and not args.once,
-            config_allowlist=config_allowlist,
-        )
-    except ValueError as exc:
-        _LOG.error("%s", exc)
-        return 2
+        # Gate #6: enforce v12 + Soll-manifest + forbid_run_id_gt, then claim.
+        store = SQLiteShadowStorage.for_user(args.data_root, args.user_id)
+        try:
+            ready = ensure_control_plane_ready(store._conn)  # noqa: SLF001
+        except ControlPlaneError as exc:
+            _LOG.error("control-plane preflight: %s", exc)
+            store.close()
+            return EXIT_CONTROL_PLANE
+        nxt = int(ready["next_run_id"])
+        forbid = lock_info.get("forbid_run_id_gt")
+        if forbid is not None and nxt > int(forbid):
+            sys.stderr.write(
+                f"RUN.lock forbid_run_id_gt={forbid} — refuse run_id={nxt}\n"
+            )
+            store.close()
+            return EXIT_RUN_LOCK
+        store.close()
+        store = None
+
+        try:
+            engine, bridge, store, binding, config_json = build_runner(
+                data_root=args.data_root,
+                user_id=args.user_id,
+                allowlist=allowlist,
+                policy_cfg=policy_cfg,
+                start_ws=not args.no_ws and not args.once,
+                config_allowlist=config_allowlist,
+            )
+        except LeaseError as exc:
+            _LOG.error("lease claim refused (no valid token): %s", exc)
+            return EXIT_CONTROL_PLANE
+        except ValueError as exc:
+            _LOG.error("%s", exc)
+            return 2
+    except Exception:
+        if store is not None:
+            try:
+                store.close()
+            except Exception:  # noqa: BLE001
+                pass
+        raise
 
     # D1 / A4.1: lesender Epoch-Hook hinter Flag (kein Marker-Schreiben).
     import os as _os
@@ -521,49 +578,62 @@ def main(argv: Optional[list[str]] = None) -> int:
     offset_path = user_dir / "news_tail.offset"
     tail = JsonlTail(args.news_jsonl, offset_path)
 
-    if args.once:
-        dispatched = 0
-        for item in iter_news_jsonl(args.news_jsonl):
-            if bridge.on_news_item(item):
-                dispatched += 1
-        sink.drain()
-        _LOG.info(
-            "once dispatched=%s discards=%s run_id=%s",
-            dispatched, len(bridge.discards), store.active_run_id,
-        )
-        store.close()
-        return 0
-
-    # Erststart: Altbestand überspringen. KeepAlive-Restart: Offset behalten.
-    if (
-        not args.no_tail_from_end
-        and args.tail_from_end
-        and not offset_path.exists()
-    ):
-        tail.seek_end()
-        _LOG.info("tail_from_end offset=%s path=%s", tail._offset, args.news_jsonl)
-    else:
-        _LOG.info("tail_resume offset=%s path=%s", tail._offset, args.news_jsonl)
-
-    if args.no_ws:
-        store.close()
-        return 0
-
-    hub = ShadowHub(engine)
     try:
-        asyncio.run(
-            run_ws_hub_and_tail(
-                binding, hub, token_ids,
-                bridge=bridge, sink=sink, tail=tail,
-                tail_interval_s=args.tail_interval_s,
+        if args.once:
+            dispatched = 0
+            for item in iter_news_jsonl(args.news_jsonl):
+                if bridge.on_news_item(item):
+                    dispatched += 1
+            sink.drain()
+            _LOG.info(
+                "once dispatched=%s discards=%s run_id=%s",
+                dispatched, len(bridge.discards), store.active_run_id,
             )
-        )
-    except KeyboardInterrupt:
-        pass
+            return 0
+
+        # Erststart: Altbestand überspringen. KeepAlive-Restart: Offset behalten.
+        if (
+            not args.no_tail_from_end
+            and args.tail_from_end
+            and not offset_path.exists()
+        ):
+            tail.seek_end()
+            _LOG.info("tail_from_end offset=%s path=%s", tail._offset, args.news_jsonl)
+        else:
+            _LOG.info("tail_resume offset=%s path=%s", tail._offset, args.news_jsonl)
+
+        if args.no_ws:
+            return 0
+
+        hub = ShadowHub(engine)
+        try:
+            asyncio.run(
+                run_ws_hub_and_tail(
+                    binding, hub, token_ids,
+                    bridge=bridge, sink=sink, tail=tail,
+                    tail_interval_s=args.tail_interval_s,
+                )
+            )
+        except KeyboardInterrupt:
+            run_status = "ABORTED"
+        return 0
+    except Exception:
+        run_status = "ABORTED"
+        raise
     finally:
-        sink.drain()
-        store.close()
-    return 0
+        try:
+            sink.drain()
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            if store.active_run_id is not None:
+                store.close_run(run_status)
+        except Exception as exc:  # noqa: BLE001
+            _LOG.error("close_run failed: %s", exc)
+        try:
+            store.close()
+        except Exception:  # noqa: BLE001
+            pass
 
 
 if __name__ == "__main__":

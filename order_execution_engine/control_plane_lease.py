@@ -530,8 +530,12 @@ def claim_run(
     config_json: str,
     started_at: Optional[float] = None,
 ) -> int:
-    """BEGIN IMMEDIATE claim: INSERT telemetry_runs with explicit next_run_id."""
-    _refuse_live_conn(conn)
+    """BEGIN IMMEDIATE claim: INSERT telemetry_runs with explicit next_run_id.
+
+    Gate #6: used by production ``open_run`` — does **not** refuse LIVE paths
+    (unlike ``connect_scratch`` / ``issue_token`` / ``migrate_control_plane``).
+    Lease BI trigger still requires a valid open ``run_lease`` for ``run_id``.
+    """
     started = float(started_at if started_at is not None else time.time())
     conn.execute("BEGIN IMMEDIATE")
     try:
@@ -562,6 +566,40 @@ def claim_run(
         except sqlite3.Error:
             pass
         raise
+
+
+class ControlPlaneError(RuntimeError):
+    """Schema / trigger-manifest preflight refused (Gate #6)."""
+
+
+def ensure_control_plane_ready(conn: sqlite3.Connection) -> dict[str, Any]:
+    """Fail-closed: schema == SCHEMA_CONTROL and DDL manifest == Soll."""
+    from order_execution_engine.control_plane_audit import (
+        compute_control_plane_manifest_sha256,
+        expected_control_plane_manifest_sha256,
+    )
+
+    ver = _schema_version(conn)
+    if ver < SCHEMA_CONTROL:
+        raise ControlPlaneError(
+            f"control-plane schema_version={ver} < {SCHEMA_CONTROL} — refuse start"
+        )
+    if ver > SCHEMA_CONTROL:
+        raise ControlPlaneError(
+            f"control-plane schema_version={ver} > {SCHEMA_CONTROL} — refuse start"
+        )
+    ist = compute_control_plane_manifest_sha256(conn)
+    soll = expected_control_plane_manifest_sha256()
+    if ist != soll:
+        raise ControlPlaneError(
+            f"trigger manifest mismatch: observed={ist} expected={soll}"
+        )
+    return {
+        "schema_version": ver,
+        "trigger_manifest_sha256": ist,
+        "expected_trigger_manifest_sha256": soll,
+        "next_run_id": next_run_id(conn),
+    }
 
 
 def lease_snapshot(conn: sqlite3.Connection) -> list[dict[str, Any]]:
