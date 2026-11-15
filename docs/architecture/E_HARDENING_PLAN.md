@@ -1,6 +1,6 @@
 # Architektur-Härtung & Revidierter E-Plan (K1–K8)
 
-**Status:** PLAN ABGENOMMEN — **Revision 11** (**E-1 Freigabe ≠ erteilt**; M2/M4 nach `1124f703`-Urteil geschlossen — v13 STOPPED; live-temp Tests; E-1 gesperrt)  
+**Status:** PLAN ABGENOMMEN — **Revision 12.2** (Working-Tree: Code-Schnitt SIGTERM-vor-Claim / Audit≠Bundle / L3 Intent-Confirm — Review vor Commit) (**E-1 Freigabe ≠ erteilt**; Vor-2a #1 auf TEILWEISE zurückgestuft; Bundle-Kette OK; E-1 gesperrt)  
 **Freeze-Produktion:** `RUN.lock` am Paketpfad (`LOCKED=1`) + LIVE_DB (`max_run_id=15` / `user_version=9`) bleibt bis **nach** `post-run-check --run-id 16` GRÜN (Lock = letzter Akt).  
 **Allowlist-Freeze `5adab542`:** Messlauf-Artefakt; Code-Härtung auf Branch + Scratch; neuer Tag+Manifest am Ende.  
 **Ziel:** fail-closed, schema-enforced Control-Plane vor `run_id=16`.  
@@ -17,18 +17,39 @@ Nach **jedem** Commit auf `hardening/control-plane` (und Nachfolge-Härtungs-Bra
 2. Eigenes Verzeichnis neben dem verankerten Ordner (Anker **nicht** anfassen), mit eigener `SHA256SUMS.txt`.
 3. Spiegel per `rclone copy`/`copyto` (kein Config-Dump); Anker-Ordner bleibt unverändert.
 
-Gemessen 2026-11-15: Drive-Anker endet bei `1e934cff`; Commits `ca57b4e0` (Phase 1), `7e5bfb32` (Phase 2), `b0d700df` (H4 preflight + Ordner-ID) → Inkrement unter `reports/P0_P1_PREFLIGHT_SP1933/git_bundle_incr_20261115T133457Z/` (+ Folge-Inkrement für `b0d700df` noch offen). **Drive-Ordner** `newsagent-backup/hardening_incr_20261115T133457Z` (ID `1VxqOIvk1a2qTBuQlpJ4PE3Z3p6Co7Tzz`) — Anker unberührt. **Vor-2a #1 PASS (2026-11-15):** Drive-API Projekt `457475396064` aktiv; `rclone lsd/lsf` ohne 403; H4-Codepfad fail-closed (`refuse overwrite`); Ordner-ID fest in `DEFAULT_AUDIT_MIRROR_FOLDER_ID`; Scratch `issue-token` Spiegel 2 Objekte SHA-MATCH.
+**Beweis-Anker (kein Git-Bundle):** `p0_p1_preflight_sp1933_offhost_20261115T0954Z` — ID `1D6QE987XWN_R0U2MMK8OUwCXUYbIKxqI` (Gate-Akten, Guard, `RUN.lock`, Plan). Unberührt lassen.
+
+**Git-Wiederherstellungskette im Drive (Host nur gelesen):**
+
+| # | Drive-Ordner | ID | Deckt |
+|---|---|---|---|
+| 1 | `git_bundle_20261115T094918Z` | `1w3wvOt9FTCVsovMw97zF58yBZz8OW4Rn` | Voll-Bundle bis `1e934cff` |
+| 2 | `hardening_incr_20261115T133457Z` | `1VxqOIvk1a2qTBuQlpJ4PE3Z3p6Co7Tzz` | `1e934cff..7e5bfb32` |
+| 3 | `hardening_incr_20261115T164147Z` | `1_kKwsiO3S1mgth4yWKFurIUDqw3F3seu` | `7e5bfb32..2d9df0cf` |
+
+Lokal: `reports/P0_P1_PREFLIGHT_SP1933/git_bundle_incr_20261115T164147Z/` — Bundle SHA256 `89ed461f…072186` (83 591 B). `git_bundle_incr_20261115T1705Z` + drei `residual`-Bundles sind durch #3 abgedeckt (nicht hochladen). **Punkt 8 erledigt.** **Ketten-Gegentest (Host, leere Temp-Kopien):** clone #1 → fetch #2 → fetch #3 → Tip `2d9df0cf`; Beweis `CHAIN_RESTORE_PROOF.json`. Drive-Redownload-Rehash ausstehend.
 
 ### Reihenfolge vor Phase 2a
 
 | # | Punkt | Status |
 |---|---|---|
-| 1 | OAuth-Token / eigene rclone-Client-ID (Spiegel = Freigabe-Pfad) | **PASS** — API aktiv; Ordner-ID `1VxqOIvk1a2qTBuQlpJ4PE3Z3p6Co7Tzz` verdrahtet; H4 Preflight |
+| 1 | OAuth-Token / eigene rclone-Client-ID + eigener Audit-Ordner (Spiegel = Freigabe-Pfad) | **TEILWEISE** — siehe Kriterien unten; **nicht** PASS |
 | 2 | Systemplatte unter 85 % nach bestätigtem Off-Host-Backup | **PASS** — Data **65 %** / **~655 GiB** frei (nach `container prune` + Docker-Restart; `Docker.raw` 714 G→113 G) |
 | 3 | Repo-Plist `KeepAlive=false`, `RunAtLoad=false` | **PASS** — Repo `false`/`false`; kein `WatchPaths`; Install fehlt; Service nicht geladen; plistlib-Regression |
 | 4 | Lücken-Schnitt (`retire-run-lock`, `migrate`, `abort-run`, `post-run-check --run-id`, `news_scores.jsonl`-Präfix, `verify-mirror`, Digest streamen, `--skip-disk-check` × Live-Freigabe) | **PASS** — 8 Bausteine + Scratch-Suite `test_control_plane_gate4.py` (44 Control-Plane-Tests gesamt) |
 | 5 | Canary-Kopie LIVE_DB (explizite Freigabe nötig): Migration, Soll-Manifest, Digest-Laufzeit/RAM | **PASS** — siehe Messwerte unten (2026-11-15T14:44Z); LIVE unverändert max=15/schema=9 |
 | 6 | Runner-Anbindung: Claim/`open_run`, Exit bei fehlendem Token, Guard-Pin-Test | **PASS** — Preflight v12+Manifest; Claim via Lease; Exit 75/76; Pin `93ed1267…7116cc` |
+
+**Vor-2a #1 — Abnahmekriterien (alle vier nötig für PASS):**
+
+| # | Kriterium | Stand |
+|---|---|---|
+| 1a | Klartext-OAuth-Token im Google-Konto widerrufen | **ungeprüft** (kein Beleg im Plan) |
+| 1b | rclone mit eigener Client-ID schreibt wieder | **ungeprüft** — bekannt: 403 um 14:46; Bundle #2/#3 kamen über Drive-Connector, nicht als rclone-Schreibbeweis |
+| 1c | Eigener Drive-Ordner für Audit-Objekte; ID im Plan | **offen** — `1VxqOIvk…` ist **Inkrement-Bundle-Ordner**, kein Audit-Ziel; `gatectl` verlangt seit `2d9df0cf` explizite ID; Restpunkt „Audit ≠ Bundle-ID“ |
+| 1d | Überschreib-Test im Zielordner dokumentiert (2. Upload gleicher Name, anderer Inhalt → Vorprüfung abweist) | **Code/Scratch:** H4 `refuse overwrite` in Suite; **Live-Zielordner:** nicht belegt |
+
+Früherer PASS-Eintrag (API aktiv / `1VxqOIvk…` verdrahtet) war **überzogen** und ist mit Rev. 12.2 widerrufen.
 
 **Verifiziert (RO, Host):**
 - **Gate #6 Pin** `shadow_runner.py` SHA256 = `93ed12674cefa183aea8d21e751edc5bf7c4cd297429639e333db1f6b27116cc` (Preflight + Claim; Exit 75 lock / 76 control-plane)
@@ -72,12 +93,13 @@ Gemessen 2026-11-15: Drive-Anker endet bei `1e934cff`; Commits `ca57b4e0` (Phase
 
 - [x] Zeitvergleich run15 ≺ Lock (Akte `K1_RUN15_VS_FORBID14.txt`)
 - [x] Guard nur im WT (gemessen); Akte um 19:49Z-Nachtrag ergänzt
-- [x] **Off-Host (GDrive) 2026-11-15T09:54Z** — Host nur gelesen; kein Unlock/checkout/stash/commit
+- [x] **Off-Host Beweis-Anker (GDrive) 2026-11-15T09:54Z** — Host nur gelesen; **kein Git-Bundle**
   - Ordner: `gdrive:newsagent-backup/p0_p1_preflight_sp1933_offhost_20261115T0954Z`
-  - Drive-ID: `1D6QE987XWN_R0U2MMK8OUwCXUYbIKxqI`
+  - Drive-ID: `1D6QE987XWN_R0U2MMK8OUwCXUYbIKxqI` (Gate-Akten, Guard, `RUN.lock`, Plan — getrennt von der Bundle-Kette)
   - `SHA256SUMS.txt` (58 Einträge) SHA256 = `76523c5611f1f531e17d91425f51dbc982eb6967e31b70c6769b07764283aa08` ← **Anker** (kein WORM; Anker = dieser Hash)
   - Archiv `…tar.gz` 64912 B / `573892aac6a73d677a0f60d19347eb973f1f1b056834c10e8c42f32f32964882`
   - Einzelkopien: Guard `2157113a…efaefb3`, Lock `58340c1e…a69845b`, Plan `61275a46…87c3b4` (7831 B) — Host-Nachmessung MATCH
+- [x] **Git-Voll-Bundle** `git_bundle_20261115T094918Z` — Drive-ID `1w3wvOt9FTCVsovMw97zF58yBZz8OW4Rn` (bis `1e934cff`; Start der Wiederherstellungskette)
 - [ ] Dirty WT: Guard weiterhin **nicht** per `checkout` verlieren; zusätzlich auf Härtungs-Branch committen (Off-Host ersetzt Commit nicht)
 - [ ] Grabstein-Event später in `audit_chain.jsonl`; `forbid_*` ablösen
 

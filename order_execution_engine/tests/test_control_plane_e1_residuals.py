@@ -40,7 +40,7 @@ PKG = Path(__file__).resolve().parents[1]
 SHADOW_RUNNER = PKG / "shadow_runner.py"
 # Updated after A1/A3 forbid-gating residual fix (was Gate-6 93ed1267…).
 GUARD_SHA_RESIDUAL = (
-    "707e444d0e6502a81f80e2e93313266d0b96c7d036cd58af42340f94a382149a"
+    "cfc79b2b46191ab54b7850f063242d2ad19f03424951ab182b93ecfd0f6dcf01"
 )
 POST_RETIRE_PARSE = {"locked": False, "forbid_run_id_gt": None}
 
@@ -848,13 +848,20 @@ def test_m2_run_lock_override_refused_on_live_data_root(tmp_path: Path) -> None:
 
 
 def test_m3_sigterm_handler_wired_in_source() -> None:
-    """M3: runner source installs SIGTERM → ordered stop (STOPPED path)."""
+    """M3: SIGTERM → STOPPED; flag checked before claim (no run_id burn)."""
     text = SHADOW_RUNNER.read_text(encoding="utf-8")
     assert "SIGTERM" in text
     assert "add_signal_handler" in text
     assert "STOPPED" in text
     assert "ordered stop" in text
-    assert "early SIGTERM" in text or "_early_sigterm" in text
+    assert "_early_sigterm" in text
+    assert "SIGTERM before claim" in text
+    assert "EXIT_STOPPED_BEFORE_CLAIM" in text
+    claim_call = text.find(
+        "engine, bridge, store, binding, config_json = build_runner("
+    )
+    assert claim_call > 0
+    assert 0 < text.find("SIGTERM before claim") < claim_call
 
 
 def test_m2_equals_form_refused_on_live_data_root(tmp_path: Path) -> None:
@@ -960,6 +967,9 @@ def test_m4_allow_live_db_migrate_issue_abort_on_live_marked_temp(
         return m
 
     with patch(
+        "order_execution_engine.gatectl._list_shadow_runner_pids",
+        return_value=[],
+    ), patch(
         "order_execution_engine.control_plane_audit.subprocess.run",
         side_effect=fake_run,
     ):
@@ -1069,3 +1079,71 @@ def test_gap_audit_folder_refused_without_env(tmp_path: Path) -> None:
                 or "mirror-folder" in err.lower()
                 or "no silent fallback" in err
             )
+
+
+def test_gap_audit_folder_refuses_bundle_id() -> None:
+    """Audit folder id equal to incr-bundle folder is refused."""
+    from order_execution_engine.control_plane_audit import (
+        INCR_BUNDLE_FOLDER_ID,
+        require_audit_objects_folder_id,
+        AuditChainError,
+    )
+
+    with pytest.raises(AuditChainError, match="incr-bundle"):
+        require_audit_objects_folder_id(INCR_BUNDLE_FOLDER_ID)
+    with pytest.raises(AuditChainError):
+        require_audit_objects_folder_id(None)
+    assert require_audit_objects_folder_id("distinctAuditFolder9") == (
+        "distinctAuditFolder9"
+    )
+
+
+def test_gap_audit_folder_cli_refuses_bundle_id(tmp_path: Path) -> None:
+    """gatectl --mirror-folder-id=<bundle> → policy refuse."""
+    from order_execution_engine.control_plane_audit import INCR_BUNDLE_FOLDER_ID
+
+    paths = _bundle(tmp_path)
+    paths["lock"].write_text("LOCKED=0\n", encoding="utf-8")
+
+    def fake_run(cmd, **kwargs):  # noqa: ANN001
+        from unittest.mock import MagicMock
+
+        m = MagicMock()
+        m.returncode = 0
+        m.stdout = "[]"
+        m.stderr = ""
+        return m
+
+    with patch(
+        "order_execution_engine.control_plane_audit.subprocess.run",
+        side_effect=fake_run,
+    ):
+        import io
+        from contextlib import redirect_stdout
+
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            rc = gatectl_main(
+                [
+                    "--db",
+                    str(paths["db"]),
+                    "--data-root",
+                    str(paths["data_root"]),
+                    "--runner",
+                    str(paths["runner"]),
+                    "--lock",
+                    str(paths["lock"]),
+                    "--repo-root",
+                    str(paths["repo"]),
+                    "--journal",
+                    str(paths["journal"]),
+                    "--mirror-folder-id",
+                    INCR_BUNDLE_FOLDER_ID,
+                    "--skip-disk-check",
+                    "issue-token",
+                    "--ttl",
+                    "30",
+                ]
+            )
+        assert rc == EXIT_POLICY
+        assert "incr-bundle" in buf.getvalue()

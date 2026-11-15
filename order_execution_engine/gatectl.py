@@ -31,6 +31,8 @@ from order_execution_engine.control_plane_audit import (
     compute_logical_digest_sha256,
     expected_control_plane_manifest_sha256,
     mirror_audit_entry,
+    require_audit_objects_folder_id,
+    _list_shadow_runner_pids,
     sha256_file_streaming,
     token_sha256,
     verify_audit_mirror,
@@ -115,16 +117,11 @@ def _allow_live(args: argparse.Namespace) -> bool:
 
 
 def _require_audit_folder_id(args: argparse.Namespace) -> str:
-    """Refuse fallback to incr-bundle folder (gap)."""
+    """Require explicit audit folder id ≠ incr-bundle folder."""
     fid = getattr(args, "mirror_folder_id", None) or os.environ.get(
         "AUDIT_OBJECTS_FOLDER_ID"
     )
-    if not fid:
-        raise AuditChainError(
-            "AUDIT_OBJECTS_FOLDER_ID or --mirror-folder-id required "
-            "(no silent fallback to incr-bundle folder)"
-        )
-    return str(fid)
+    return require_audit_objects_folder_id(fid)
 
 EXIT_OK = 0
 EXIT_POLICY = 2
@@ -372,6 +369,48 @@ def cmd_issue_token(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+
+def _open_audit_intents(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Intents lacking confirm/refused closure (L3 observability)."""
+    closed: set[int] = set()
+    intents: list[dict[str, Any]] = []
+    for e in entries:
+        action = e.get("action")
+        payload = e.get("payload") or {}
+        if action in (
+            "abort_run_confirm",
+            "abort_run_refused",
+            "issue_token_confirm",
+        ):
+            seq = payload.get("intent_seq")
+            if seq is not None:
+                try:
+                    closed.add(int(seq))
+                except (TypeError, ValueError):
+                    pass
+        if action in ("abort_run_intent", "issue_token_intent"):
+            intents.append(e)
+    open_rows: list[dict[str, Any]] = []
+    for e in intents:
+        try:
+            seq = int(e["seq"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        if seq in closed:
+            continue
+        payload = e.get("payload") or {}
+        open_rows.append(
+            {
+                "action": e.get("action"),
+                "seq": seq,
+                "run_id": payload.get("run_id"),
+                "reason": payload.get("reason"),
+                "ttl_s": payload.get("ttl_s"),
+            }
+        )
+    return open_rows
+
+
 def cmd_status(args: argparse.Namespace) -> int:
     out: dict[str, Any] = {"ok": True, "action": "status"}
     try:
@@ -403,8 +442,10 @@ def cmd_status(args: argparse.Namespace) -> int:
         out["manifest_error"] = str(exc)
 
     journal = AppendOnlyAuditChain(_journal_path(args))
+    audit_entries: list[dict[str, Any]] = []
     try:
         count = journal.verify()
+        audit_entries = journal.read_entries()
         out["audit"] = {
             "ok": True,
             "entries": count,
@@ -455,11 +496,40 @@ def cmd_status(args: argparse.Namespace) -> int:
             }
             if schema_version < SCHEMA_CONTROL or running_detail:
                 out["ok"] = False
+
+            # L3: incomplete intent/confirm pairs + DB truth.
+            open_intents = _open_audit_intents(audit_entries)
+            enriched: list[dict[str, Any]] = []
+            for oi in open_intents:
+                row = dict(oi)
+                rid = oi.get("run_id")
+                if rid is not None:
+                    try:
+                        r = conn.execute(
+                            "SELECT status, closed_at FROM telemetry_runs"
+                            " WHERE run_id=?",
+                            (int(rid),),
+                        ).fetchone()
+                        if r is None:
+                            row["db_status"] = None
+                            row["db_closed_at"] = None
+                        else:
+                            row["db_status"] = r[0]
+                            row["db_closed_at"] = r[1]
+                    except (TypeError, ValueError, sqlite3.Error):
+                        row["db_status"] = "lookup_error"
+                enriched.append(row)
+            out["open_intents"] = enriched
+            if enriched:
+                out["ok"] = False
         finally:
             conn.close()
     except (LivePathRefused, sqlite3.Error, OSError, TypeError, ValueError) as exc:
         out["ok"] = False
         out["db_state_error"] = str(exc)
+        # Still surface open intents if audit was readable.
+        if audit_entries:
+            out["open_intents"] = _open_audit_intents(audit_entries)
 
     _print_json(out)
     return EXIT_OK if out.get("ok") else EXIT_POLICY
@@ -549,20 +619,28 @@ def cmd_migrate(args: argparse.Namespace) -> int:
 
 
 def cmd_abort_run(args: argparse.Namespace) -> int:
-    """Abort RUNNING run + revoke open leases; audit fail → DB rollback.
+    """Abort RUNNING run (L3: local intent → COMMIT → confirm; mirror after).
 
-    D2-a (write-ahead audit): ``journal.append`` runs **before** ``COMMIT``.
-    If append raises, ``ROLLBACK`` undoes the lease transition — the DB never
-    reaches ABORTED without an audit row. Mirror is post-commit best-effort.
+    Network mirror never gates the abort (plan: refuse/abort must not depend
+    on the network). Mirror both audit rows only *after* COMMIT; mirror errors
+    are reported, DB abort stands.
 
-    D2-b: requires ``--confirm-abort <run_id>`` (operator intentionality gate).
+    Liveness: refuse while ``shadow_runner`` PIDs are present (process would
+    keep writing under an ABORTED run_id).
+
+    Refused abort (not RUNNING / lease error after intent): writes
+    ``abort_run_refused`` closing the intent pair.
     """
     journal = AppendOnlyAuditChain(_journal_path(args))
     conn = None
-    entry: Optional[dict[str, Any]] = None
+    intent: Optional[dict[str, Any]] = None
+    confirm_entry: Optional[dict[str, Any]] = None
+    refused_entry: Optional[dict[str, Any]] = None
     info: Optional[dict[str, Any]] = None
     rid = 0
     reason = ""
+    db_aborted = False
+    mirror_error: Optional[str] = None
     try:
         rid = int(args.run_id)
         confirm = str(getattr(args, "confirm_abort", "") or "")
@@ -578,32 +656,137 @@ def cmd_abort_run(args: argparse.Namespace) -> int:
             )
             return EXIT_POLICY
         journal.verify()
-        conn = _conn(args)
         reason = str(getattr(args, "reason", "") or "")
-        conn.execute("BEGIN IMMEDIATE")
-        info = abort_run(conn, rid, reason=reason, allow_live=_allow_live(args))
-        ph = hashlib.sha256(
-            f"abort-run:{rid}:{reason}".encode("utf-8")
+
+        # Liveness gate (local pgrep — not network).
+        try:
+            pids = _list_shadow_runner_pids()
+        except Exception as exc:  # noqa: BLE001 — QuiescenceError etc.
+            _print_json(
+                {
+                    "ok": False,
+                    "error": f"abort-run refused: cannot attest runner liveness: {exc}",
+                }
+            )
+            return EXIT_POLICY
+        if pids:
+            _print_json(
+                {
+                    "ok": False,
+                    "error": (
+                        "abort-run refused: shadow_runner still running "
+                        f"(pids={','.join(pids)}); stop process before abort"
+                    ),
+                    "runner_pids": pids,
+                }
+            )
+            return EXIT_POLICY
+
+        ph_intent = hashlib.sha256(
+            f"abort-run-intent:{rid}:{reason}".encode("utf-8")
         ).hexdigest()
-        # Write-ahead audit (D2-a): append before COMMIT so failure rolls back.
-        entry = journal.append(
-            "abort_run",
-            ph,
+        # Local journal only — no mirror yet (network must not block abort).
+        intent = journal.append(
+            "abort_run_intent",
+            ph_intent,
+            {"run_id": rid, "reason": reason},
+        )
+
+        conn = _conn(args)
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            info = abort_run(
+                conn, rid, reason=reason, allow_live=_allow_live(args)
+            )
+            conn.execute("COMMIT")
+            db_aborted = True
+        except LeaseError as lease_exc:
+            try:
+                conn.execute("ROLLBACK")
+            except sqlite3.Error:
+                pass
+            ph_ref = hashlib.sha256(
+                f"abort-run-refused:{rid}:{reason}:{lease_exc}".encode("utf-8")
+            ).hexdigest()
+            refused_entry = journal.append(
+                "abort_run_refused",
+                ph_ref,
+                {
+                    "run_id": rid,
+                    "reason": reason,
+                    "intent_seq": intent["seq"],
+                    "error": str(lease_exc),
+                },
+            )
+            # Best-effort mirror of intent+refused after local close.
+            if args.mirror_remote:
+                try:
+                    fid = _require_audit_folder_id(args)
+                    mirror_audit_entry(
+                        intent, args.mirror_remote, folder_id=fid
+                    )
+                    mirror_audit_entry(
+                        refused_entry, args.mirror_remote, folder_id=fid
+                    )
+                except AuditChainError as mex:
+                    mirror_error = str(mex)
+            _print_json(
+                {
+                    "ok": False,
+                    "error": str(lease_exc),
+                    "action": "abort_run_refused",
+                    "run_id": rid,
+                    "intent_seq": intent["seq"],
+                    "refused_seq": refused_entry["seq"],
+                    "db_aborted": False,
+                    "mirror_error": mirror_error,
+                }
+            )
+            return EXIT_POLICY
+
+        ph_confirm = hashlib.sha256(
+            f"abort-run-confirm:{rid}:{reason}:{info['closed_at']}".encode(
+                "utf-8"
+            )
+        ).hexdigest()
+        confirm_entry = journal.append(
+            "abort_run_confirm",
+            ph_confirm,
             {
                 "run_id": rid,
                 "reason": reason,
                 "leases_revoked": info["leases_revoked"],
                 "closed_at": info["closed_at"],
+                "intent_seq": intent["seq"],
             },
         )
-        conn.execute("COMMIT")
-    except (LeaseError, LivePathRefused, AuditChainError, sqlite3.Error) as exc:
-        if conn is not None:
+
+        # Mirror only after COMMIT — failure does not undo abort.
+        if args.mirror_remote:
+            try:
+                fid = _require_audit_folder_id(args)
+                mirror_audit_entry(intent, args.mirror_remote, folder_id=fid)
+                mirror_audit_entry(
+                    confirm_entry, args.mirror_remote, folder_id=fid
+                )
+            except AuditChainError as mex:
+                mirror_error = str(mex)
+    except (LivePathRefused, AuditChainError, sqlite3.Error) as exc:
+        if conn is not None and not db_aborted:
             try:
                 conn.execute("ROLLBACK")
             except sqlite3.Error:
                 pass
-        _print_json({"ok": False, "error": str(exc)})
+        _print_json(
+            {
+                "ok": False,
+                "error": str(exc),
+                "action": "abort_run",
+                "run_id": rid or None,
+                "db_aborted": db_aborted,
+                "intent_seq": intent["seq"] if intent else None,
+            }
+        )
         return EXIT_POLICY
     finally:
         if conn is not None:
@@ -611,36 +794,21 @@ def cmd_abort_run(args: argparse.Namespace) -> int:
                 conn.close()
             except sqlite3.Error:
                 pass
-    assert entry is not None and info is not None
-    try:
-        if args.mirror_remote:
-            mirror_audit_entry(
-                entry,
-                args.mirror_remote,
-                folder_id=_require_audit_folder_id(args),
-            )
-    except AuditChainError as exc:
-        _print_json(
-            {
-                "ok": False,
-                "error": str(exc),
-                "action": "abort_run",
-                "run_id": rid,
-                "audit_seq": entry["seq"],
-                "db_aborted": True,
-            }
-        )
-        return EXIT_POLICY
-    _print_json(
-        {
-            "ok": True,
-            "action": "abort_run",
-            "run_id": rid,
-            "reason": reason,
-            "audit_seq": entry["seq"],
-            "leases_revoked": info["leases_revoked"],
-        }
-    )
+    assert confirm_entry is not None and info is not None and intent is not None
+    out = {
+        "ok": True,
+        "action": "abort_run",
+        "run_id": rid,
+        "reason": reason,
+        "intent_seq": intent["seq"],
+        "audit_seq": confirm_entry["seq"],
+        "leases_revoked": info["leases_revoked"],
+        "db_aborted": True,
+        "mirror_ok": mirror_error is None,
+    }
+    if mirror_error is not None:
+        out["mirror_error"] = mirror_error
+    _print_json(out)
     return EXIT_OK
 
 

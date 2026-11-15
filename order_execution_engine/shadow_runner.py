@@ -395,6 +395,7 @@ async def run_ws_and_hub(
 # Gate #6 exit codes (lock vs control-plane).
 EXIT_RUN_LOCK = 75
 EXIT_CONTROL_PLANE = 76
+EXIT_STOPPED_BEFORE_CLAIM = 77  # SIGTERM before claim; token unused
 
 
 def default_run_lock_path() -> Path:
@@ -648,6 +649,11 @@ def main(argv: Optional[list[str]] = None) -> int:
     except (ValueError, OSError) as exc:
         _LOG.warning("early SIGTERM handler not installed: %s", exc)
 
+    if shutdown.is_set():
+        # Restpunkt: do not claim — leave lease token unused (no run_id burn).
+        _LOG.info("SIGTERM before claim — exit without claim (token unused)")
+        return EXIT_STOPPED_BEFORE_CLAIM
+
     try:
         # Gate #6: enforce v12 + Soll-manifest + forbid_run_id_gt, then claim.
         store = SQLiteShadowStorage.for_user(args.data_root, args.user_id)
@@ -660,6 +666,10 @@ def main(argv: Optional[list[str]] = None) -> int:
         _ = ready
         store.close()
         store = None
+
+        if shutdown.is_set():
+            _LOG.info("SIGTERM before claim — exit without claim (token unused)")
+            return EXIT_STOPPED_BEFORE_CLAIM
 
         try:
             engine, bridge, store, binding, config_json = build_runner(
@@ -711,7 +721,7 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     if shutdown.is_set():
         run_status = "STOPPED"
-        _LOG.info("SIGTERM between claim and loop — STOPPED without WS")
+        _LOG.info("SIGTERM after claim before loop — STOPPED (run_id consumed)")
         try:
             if store is not None and store.active_run_id is not None:
                 store.close_run(run_status)

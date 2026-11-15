@@ -124,7 +124,7 @@ F0 vollständig wird am Tip **nach** dem Docs-Commit gemessen (Chat-Akte).
 | ID | Festlegung | Beleg |
 |---|---|---|
 | **D1-a** | Kein Auto-Abort; `gatectl status` meldet `running[].age_s` für Operator-Watchdog (E-1-LA Alert-Pfad) | `cmd_status` |
-| **D2-a** | Write-ahead Audit: `journal.append` **vor** `COMMIT`; Fail → `ROLLBACK` | `cmd_abort_run` · `test_abort_run_atomic_and_audit_rollback` |
+| **D2-a / L3** | Local intent → `COMMIT` → confirm; **mirror only after COMMIT** (Netz darf Abort nicht blockieren); refused → `abort_run_refused`; `status.open_intents`; liveness-pgrep before abort; Exit 77 = SIGTERM before claim | `cmd_abort_run` · `cmd_status` · gate4 L3 tests |
 | **D2-b** | `--confirm-abort` muss `== --run-id` (operator intentionality) | `test_d2b_abort_requires_confirm` |
 | **D3-a** | Marker nur **nach** rename, `O_EXCL`; pre-existing marker → refuse | `test_d3a_preexisting_marker_refuses_retire` |
 | **D4-a** | Upload-Gate **default-on**; Opt-out nur `--skip-e1-upload-gate` | `test_d3_retire_writes_marker_and_archive` |

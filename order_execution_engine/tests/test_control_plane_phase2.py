@@ -188,7 +188,7 @@ def test_h4_mirror_is_immutable_per_entry(tmp_path: Path) -> None:
         return m
 
     remotes = mirror_audit_journal(
-        journal, "gdrive:backup/audit_entries", run_rclone=fake_run
+        journal, "gdrive:backup/audit_entries", folder_id="testAuditObjectsFolderId001", run_rclone=fake_run
     )
     assert len(remotes) == 2
     copy_cmds = [c for c in calls if len(c) > 1 and c[1] == "copyto"]
@@ -217,7 +217,7 @@ def test_h4_mirror_is_immutable_per_entry(tmp_path: Path) -> None:
 
     with pytest.raises(AuditChainError, match="refuse overwrite"):
         mirror_audit_entry(
-            e1, "gdrive:backup/audit_entries", run_rclone=conflicting_run
+            e1, "gdrive:backup/audit_entries", folder_id="testAuditObjectsFolderId001", run_rclone=conflicting_run
         )
 
 

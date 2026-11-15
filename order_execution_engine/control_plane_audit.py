@@ -712,22 +712,35 @@ class AppendOnlyAuditChain:
 
 
 # Off-host audit mirror. H4: existence+checksum preflight (Drive ignores
-# --immutable). Incr-bundle folder must NOT be the audit-object target (M-gap).
-# Override audit objects via env AUDIT_OBJECTS_FOLDER_ID before E-1.
-DEFAULT_AUDIT_MIRROR_FOLDER_ID = "1VxqOIvk1a2qTBuQlpJ4PE3Z3p6Co7Tzz"
+# --immutable). Incr-bundle folder must NEVER be the audit-object target.
+INCR_BUNDLE_FOLDER_ID = "1VxqOIvk1a2qTBuQlpJ4PE3Z3p6Co7Tzz"
 DEFAULT_AUDIT_MIRROR_REMOTE_PREFIX = "gdrive:audit_chain"
-DEFAULT_AUDIT_OBJECTS_FOLDER_ID = os.environ.get(
-    "AUDIT_OBJECTS_FOLDER_ID", DEFAULT_AUDIT_MIRROR_FOLDER_ID
-)
+# Back-compat alias name — value is the *forbidden* incr-bundle id, not a default.
+DEFAULT_AUDIT_MIRROR_FOLDER_ID = INCR_BUNDLE_FOLDER_ID
 
 
-def audit_mirror_rclone_flags(
-    *, folder_id: str = DEFAULT_AUDIT_MIRROR_FOLDER_ID
-) -> list[str]:
+def require_audit_objects_folder_id(folder_id: Optional[str]) -> str:
+    """Fail-closed: require explicit folder id distinct from incr-bundle."""
+    if not folder_id or not str(folder_id).strip():
+        raise AuditChainError(
+            "AUDIT_OBJECTS_FOLDER_ID or --mirror-folder-id required "
+            "(no silent fallback to incr-bundle folder)"
+        )
+    fid = str(folder_id).strip()
+    if not re.fullmatch(r"[A-Za-z0-9_-]+", fid):
+        raise AuditChainError(f"invalid drive folder id: {fid!r}")
+    if fid == INCR_BUNDLE_FOLDER_ID:
+        raise AuditChainError(
+            f"refuse audit folder_id={fid}: equals incr-bundle folder "
+            "(use a distinct AUDIT_OBJECTS_FOLDER_ID)"
+        )
+    return fid
+
+
+def audit_mirror_rclone_flags(*, folder_id: str) -> list[str]:
     """Flags that pin every mirror call to the verified Drive folder."""
-    if not folder_id or not re.fullmatch(r"[A-Za-z0-9_-]+", folder_id):
-        raise AuditChainError(f"invalid drive folder id: {folder_id!r}")
-    return ["--drive-root-folder-id", folder_id]
+    fid = require_audit_objects_folder_id(folder_id)
+    return ["--drive-root-folder-id", fid]
 
 
 def _run_rclone_cmd(
@@ -753,8 +766,8 @@ def mirror_audit_entry(
     entry: dict[str, Any],
     remote_prefix: str,
     *,
+    folder_id: str,
     run_rclone: Callable[..., subprocess.CompletedProcess[str]] | None = None,
-    folder_id: str = DEFAULT_AUDIT_MIRROR_FOLDER_ID,
 ) -> str:
     """Upload one off-host object ``{seq}_{entry_hash}.json`` (H4 fail-closed).
 
@@ -834,8 +847,8 @@ def mirror_audit_journal(
     journal_path: Path,
     remote_prefix: str,
     *,
+    folder_id: str,
     run_rclone: Callable[..., subprocess.CompletedProcess[str]] | None = None,
-    folder_id: str = DEFAULT_AUDIT_MIRROR_FOLDER_ID,
 ) -> list[str]:
     """Mirror each journal entry as its own immutable remote object (H4)."""
     chain = AppendOnlyAuditChain(Path(journal_path))
@@ -856,8 +869,8 @@ def verify_audit_mirror(
     journal_path: Path,
     remote_prefix: str,
     *,
+    folder_id: str,
     run_rclone: Callable[..., subprocess.CompletedProcess[str]] | None = None,
-    folder_id: str = DEFAULT_AUDIT_MIRROR_FOLDER_ID,
 ) -> dict[str, Any]:
     """Fail-closed: every journal entry must exist off-host with matching SHA.
 

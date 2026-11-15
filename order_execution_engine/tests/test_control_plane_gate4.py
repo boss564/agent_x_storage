@@ -166,7 +166,7 @@ def test_verify_mirror_pass_and_mismatch(tmp_path: Path) -> None:
     from order_execution_engine.control_plane_audit import mirror_audit_entry
 
     mirror_audit_entry(
-        e1, "gdrive:gate4_test", run_rclone=run_upload
+        e1, "gdrive:gate4_test", folder_id="testAuditObjectsFolderId001", run_rclone=run_upload
     )
 
     def run_verify(cmd, **kwargs):  # noqa: ANN001
@@ -186,7 +186,7 @@ def test_verify_mirror_pass_and_mismatch(tmp_path: Path) -> None:
         return m
 
     ok = verify_audit_mirror(
-        paths["journal"], "gdrive:gate4_test", run_rclone=run_verify
+        paths["journal"], "gdrive:gate4_test", folder_id="testAuditObjectsFolderId001", run_rclone=run_verify
     )
     assert ok["entries"] == 1
     assert ok["checked"][0]["seq"] == 1
@@ -195,7 +195,7 @@ def test_verify_mirror_pass_and_mismatch(tmp_path: Path) -> None:
     remote_store[next(iter(remote_store))] = '{"tampered":true}\n'
     with pytest.raises(AuditChainError, match="SHA mismatch"):
         verify_audit_mirror(
-            paths["journal"], "gdrive:gate4_test", run_rclone=run_verify
+            paths["journal"], "gdrive:gate4_test", folder_id="testAuditObjectsFolderId001", run_rclone=run_verify
         )
 
 
@@ -339,6 +339,9 @@ def test_abort_run_atomic_and_audit_rollback(tmp_path: Path) -> None:
     conn.close()
 
     with patch(
+        "order_execution_engine.gatectl._list_shadow_runner_pids",
+        return_value=[],
+    ), patch(
         "order_execution_engine.control_plane_audit.subprocess.run",
         side_effect=_fake_rclone_ok,
     ):
@@ -360,6 +363,12 @@ def test_abort_run_atomic_and_audit_rollback(tmp_path: Path) -> None:
         out = json.loads(buf.getvalue().strip().splitlines()[-1])
         assert out["run_id"] == rid
         assert out["reason"] == "gate4"
+        assert out.get("mirror_ok") is True
+        assert "intent_seq" in out
+        actions = [e["action"] for e in AppendOnlyAuditChain(paths["journal"]).read_entries()]
+        assert "abort_run_intent" in actions
+        assert "abort_run_confirm" in actions
+        assert "abort_run" not in actions
 
     conn = connect_scratch(paths["db"])
     row = conn.execute(
@@ -374,7 +383,7 @@ def test_abort_run_atomic_and_audit_rollback(tmp_path: Path) -> None:
     conn.close()
     assert open_leases == 0
 
-    # Fail-closed: audit error rolls back DB change
+    # Intent journal failure → no DB change
     paths2 = _bundle(tmp_path / "rollback")
     conn = connect_scratch(paths2["db"])
     rid2 = next_run_id(conn)
@@ -384,12 +393,15 @@ def test_abort_run_atomic_and_audit_rollback(tmp_path: Path) -> None:
 
     real_append = AppendOnlyAuditChain.append
 
-    def boom(self, action, manifest_sha256, payload=None):  # noqa: ANN001
-        if action == "abort_run":
+    def boom_intent(self, action, manifest_sha256, payload=None):  # noqa: ANN001
+        if action == "abort_run_intent":
             raise AuditChainError("disk full")
         return real_append(self, action, manifest_sha256, payload)
 
-    with patch.object(AppendOnlyAuditChain, "append", boom):
+    with patch(
+        "order_execution_engine.gatectl._list_shadow_runner_pids",
+        return_value=[],
+    ), patch.object(AppendOnlyAuditChain, "append", boom_intent):
         rc = gatectl_main(
             _argv(
                 paths2,
@@ -408,7 +420,209 @@ def test_abort_run_atomic_and_audit_rollback(tmp_path: Path) -> None:
         "SELECT status FROM telemetry_runs WHERE run_id=?", (rid2,)
     ).fetchone()["status"]
     conn.close()
-    assert st == "RUNNING"  # rolled back
+    assert st == "RUNNING"
+
+    # Confirm local failure after COMMIT → ABORTED
+    paths3 = _bundle(tmp_path / "confirm_fail")
+    conn = connect_scratch(paths3["db"])
+    rid3 = next_run_id(conn)
+    tok = issue_token(conn, run_id=rid3, ttl_s=60)
+    assert claim_run(conn, git_commit="c", config_json="{}", token=tok) == rid3
+    conn.close()
+
+    def boom_confirm(self, action, manifest_sha256, payload=None):  # noqa: ANN001
+        if action == "abort_run_confirm":
+            raise AuditChainError("disk full after commit")
+        return real_append(self, action, manifest_sha256, payload)
+
+    with patch(
+        "order_execution_engine.gatectl._list_shadow_runner_pids",
+        return_value=[],
+    ), patch(
+        "order_execution_engine.control_plane_audit.subprocess.run",
+        side_effect=_fake_rclone_ok,
+    ), patch.object(AppendOnlyAuditChain, "append", boom_confirm):
+        rc = gatectl_main(
+            _argv(
+                paths3,
+                "abort-run",
+                "--run-id",
+                str(rid3),
+                "--confirm-abort",
+                str(rid3),
+                "--reason",
+                "y",
+            )
+        )
+    assert rc == EXIT_POLICY
+    conn = connect_scratch(paths3["db"])
+    st = conn.execute(
+        "SELECT status FROM telemetry_runs WHERE run_id=?", (rid3,)
+    ).fetchone()["status"]
+    conn.close()
+    assert st == "ABORTED"
+
+
+def test_abort_run_mirror_fail_after_commit_still_aborted(tmp_path: Path) -> None:
+    """L3: mirror after COMMIT — network fail reports, abort stands (EXIT_OK)."""
+    paths = _bundle(tmp_path)
+    conn = connect_scratch(paths["db"])
+    rid = next_run_id(conn)
+    tok = issue_token(conn, run_id=rid, ttl_s=60)
+    assert claim_run(conn, git_commit="c", config_json="{}", token=tok) == rid
+    conn.close()
+
+    def boom_rclone(cmd, **kwargs):  # noqa: ANN001
+        from unittest.mock import MagicMock
+
+        m = MagicMock()
+        m.returncode = 1
+        m.stdout = ""
+        m.stderr = "network down"
+        return m
+
+    with patch(
+        "order_execution_engine.gatectl._list_shadow_runner_pids",
+        return_value=[],
+    ), patch(
+        "order_execution_engine.control_plane_audit.subprocess.run",
+        side_effect=boom_rclone,
+    ):
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            rc = gatectl_main(
+                _argv(
+                    paths,
+                    "abort-run",
+                    "--run-id",
+                    str(rid),
+                    "--confirm-abort",
+                    str(rid),
+                    "--reason",
+                    "net",
+                )
+            )
+        out = json.loads(buf.getvalue().strip().splitlines()[-1])
+    assert rc == EXIT_OK
+    assert out["ok"] is True
+    assert out["db_aborted"] is True
+    assert out["mirror_ok"] is False
+    assert out.get("mirror_error")
+    conn = connect_scratch(paths["db"])
+    assert (
+        conn.execute(
+            "SELECT status FROM telemetry_runs WHERE run_id=?", (rid,)
+        ).fetchone()[0]
+        == "ABORTED"
+    )
+    conn.close()
+
+
+def test_abort_run_refuses_when_runner_alive(tmp_path: Path) -> None:
+    paths = _bundle(tmp_path)
+    conn = connect_scratch(paths["db"])
+    rid = next_run_id(conn)
+    tok = issue_token(conn, run_id=rid, ttl_s=60)
+    assert claim_run(conn, git_commit="c", config_json="{}", token=tok) == rid
+    conn.close()
+    with patch(
+        "order_execution_engine.gatectl._list_shadow_runner_pids",
+        return_value=["99999"],
+    ):
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            rc = gatectl_main(
+                _argv(
+                    paths,
+                    "abort-run",
+                    "--run-id",
+                    str(rid),
+                    "--confirm-abort",
+                    str(rid),
+                    "--reason",
+                    "live",
+                )
+            )
+        out = json.loads(buf.getvalue().strip().splitlines()[-1])
+    assert rc == EXIT_POLICY
+    assert "still running" in out["error"]
+    conn = connect_scratch(paths["db"])
+    assert (
+        conn.execute(
+            "SELECT status FROM telemetry_runs WHERE run_id=?", (rid,)
+        ).fetchone()[0]
+        == "RUNNING"
+    )
+    conn.close()
+
+
+def test_abort_run_refused_closes_intent_pair(tmp_path: Path) -> None:
+    """Not-RUNNING abort writes abort_run_refused closing the intent."""
+    paths = _bundle(tmp_path)
+    # no RUNNING row — next abort should refuse
+    with patch(
+        "order_execution_engine.gatectl._list_shadow_runner_pids",
+        return_value=[],
+    ), patch(
+        "order_execution_engine.control_plane_audit.subprocess.run",
+        side_effect=_fake_rclone_ok,
+    ):
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            rc = gatectl_main(
+                _argv(
+                    paths,
+                    "abort-run",
+                    "--run-id",
+                    "999",
+                    "--confirm-abort",
+                    "999",
+                    "--reason",
+                    "gone",
+                )
+            )
+        out = json.loads(buf.getvalue().strip().splitlines()[-1])
+    assert rc == EXIT_POLICY
+    assert out["action"] == "abort_run_refused"
+    actions = {
+        e["action"]: e
+        for e in AppendOnlyAuditChain(paths["journal"]).read_entries()
+    }
+    assert "abort_run_intent" in actions
+    assert "abort_run_refused" in actions
+    assert actions["abort_run_refused"]["payload"]["intent_seq"] == actions[
+        "abort_run_intent"
+    ]["seq"]
+
+
+def test_status_lists_open_intent_with_db_state(tmp_path: Path) -> None:
+    paths = _bundle(tmp_path)
+    # Orphan intent without confirm/refused
+    journal = AppendOnlyAuditChain(paths["journal"])
+    journal.append(
+        "abort_run_intent",
+        "a" * 64,
+        {"run_id": 42, "reason": "orphan"},
+    )
+    conn = connect_scratch(paths["db"])
+    # no run 42 in DB
+    conn.close()
+    with patch(
+        "order_execution_engine.control_plane_audit._list_shadow_runner_pids",
+        return_value=[],
+    ), patch(
+        "order_execution_engine.control_plane_audit.subprocess.run",
+        side_effect=_fake_rclone_ok,
+    ):
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            rc = gatectl_main(_argv(paths, "status", "--allow-busy"))
+        out = json.loads(buf.getvalue().strip().splitlines()[-1])
+    assert rc == EXIT_POLICY  # open intent → ok False
+    assert out["open_intents"]
+    assert out["open_intents"][0]["action"] == "abort_run_intent"
+    assert out["open_intents"][0]["run_id"] == 42
+    assert out["open_intents"][0]["db_status"] is None
 
 
 # --- 8. post-run-check --run-id ------------------------------------------
