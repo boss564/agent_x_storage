@@ -232,9 +232,7 @@ def _refuse_live_conn(conn: sqlite3.Connection) -> Path:
     return db_path_from_conn(conn)
 
 
-def connect_scratch(db_path: Path) -> sqlite3.Connection:
-    """Open scratch DB with WAL/FK/busy_timeout. Refuses LIVE paths."""
-    path = assert_scratch_db_path(db_path)
+def _open_sqlite(path: Path) -> sqlite3.Connection:
     path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(path), timeout=30.0, isolation_level=None)
     conn.row_factory = sqlite3.Row
@@ -242,8 +240,35 @@ def connect_scratch(db_path: Path) -> sqlite3.Connection:
     conn.execute("PRAGMA busy_timeout = 5000")
     conn.execute("PRAGMA journal_mode = WAL")
     conn.execute("PRAGMA synchronous = FULL")
+    return conn
+
+
+def connect_scratch(db_path: Path) -> sqlite3.Connection:
+    """Open scratch DB with WAL/FK/busy_timeout. Refuses LIVE paths."""
+    path = assert_scratch_db_path(db_path)
+    conn = _open_sqlite(path)
     _refuse_live_conn(conn)
     return conn
+
+
+def is_live_agentx_path(path: Path) -> bool:
+    """True if path sits under Application Support/agentx (LIVE marker)."""
+    lowered = str(path.resolve()).lower()
+    return any(m.lower() in lowered for m in _LIVE_PATH_MARKERS)
+
+
+def connect_control_plane(
+    db_path: Path, *, allow_live: bool = False
+) -> sqlite3.Connection:
+    """Open DB for gatectl. LIVE requires ``allow_live=True`` (M4 explicit switch)."""
+    path = Path(db_path).resolve()
+    if is_live_agentx_path(path):
+        if not allow_live:
+            raise LivePathRefused(
+                f"refuse LIVE path without --allow-live-db: {path}"
+            )
+        return _open_sqlite(path)
+    return connect_scratch(path)
 
 
 def _schema_version(conn: sqlite3.Connection) -> int:

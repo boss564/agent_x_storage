@@ -10,6 +10,8 @@ import argparse
 import asyncio
 import json
 import logging
+import os
+import signal
 import sqlite3
 import subprocess
 import sys
@@ -465,20 +467,52 @@ def evaluate_start_lock(
     return False, "scratch lock allows start"
 
 
+def _peek_argv_path(argv_list: list[str], flag: str) -> Optional[Path]:
+    if flag not in argv_list:
+        return None
+    i = argv_list.index(flag)
+    if i + 1 >= len(argv_list):
+        return None
+    return Path(argv_list[i + 1])
+
+
+def _is_live_data_root(path: Path) -> bool:
+    from order_execution_engine.control_plane_lease import is_live_agentx_path
+
+    return is_live_agentx_path(path)
+
+
+def _consume_lease_token_file(path: Path) -> str:
+    """Read token file; caller deletes after successful claim (M1)."""
+    raw = path.read_text(encoding="utf-8").strip()
+    if not raw:
+        raise ValueError(f"empty lease token file: {path}")
+    return raw
+
+
 def main(argv: Optional[list[str]] = None) -> int:
     # FIRST instruction on the start path: refuse if RUN.lock is set.
     # No logging, no SQLite, no WS, no Falkor — stderr only, then exit 75.
     # A4: --run-lock is never the default; package ops/RUN.lock unless explicit.
     # D3: package absent without RUN.RETIRED → refuse (freeze fail-closed).
+    # M2: --run-lock override refused when --data-root is LIVE.
     # D6b: Exit 76 = control-plane refusal — callers must NOT retry as transient.
     argv_list = list(sys.argv[1:] if argv is None else argv)
     lock_path = default_run_lock_path()
     run_lock_override = False
     if "--run-lock" in argv_list:
-        i = argv_list.index("--run-lock")
-        if i + 1 < len(argv_list):
-            lock_path = Path(argv_list[i + 1])
+        peeked = _peek_argv_path(argv_list, "--run-lock")
+        if peeked is not None:
+            lock_path = peeked
             run_lock_override = True
+    data_root_peek = _peek_argv_path(argv_list, "--data-root") or Path(
+        "data/shadow_live"
+    )
+    if run_lock_override and _is_live_data_root(data_root_peek):
+        sys.stderr.write(
+            "refuse --run-lock override on LIVE data-root (M2)\n"
+        )
+        return EXIT_RUN_LOCK
     refuse, reason = evaluate_start_lock(
         lock_path, run_lock_override=run_lock_override
     )
@@ -521,9 +555,15 @@ def main(argv: Optional[list[str]] = None) -> int:
         help="Path to RUN.lock (default: order_execution_engine/ops/RUN.lock)",
     )
     parser.add_argument(
+        "--lease-token-file",
+        type=Path,
+        default=None,
+        help="M1: path from gatectl issue-token (O_EXCL 0600); deleted after claim",
+    )
+    parser.add_argument(
         "--lease-token",
         default=None,
-        help="D1 fencing token from gatectl issue-token (or SHADOW_LEASE_TOKEN)",
+        help="Scratch/unit-test only; prefer --lease-token-file (not for LIVE)",
     )
     args = parser.parse_args(argv)
 
@@ -543,6 +583,24 @@ def main(argv: Optional[list[str]] = None) -> int:
         _LOG.error("allowlist empty — abort")
         return 2
 
+    # M1: no env token; LIVE refuses raw --lease-token (ps-visible).
+    token_file_path: Optional[Path] = args.lease_token_file
+    lease_tok: Optional[str] = None
+    if token_file_path is not None:
+        try:
+            lease_tok = _consume_lease_token_file(token_file_path)
+        except (OSError, ValueError) as exc:
+            _LOG.error("lease token file refused: %s", exc)
+            return EXIT_CONTROL_PLANE
+    elif args.lease_token:
+        if _is_live_data_root(args.data_root):
+            _LOG.error("refuse --lease-token on LIVE data-root (M1 use --lease-token-file)")
+            return EXIT_CONTROL_PLANE
+        lease_tok = args.lease_token
+    elif os.environ.get("SHADOW_LEASE_TOKEN"):
+        _LOG.error("refuse SHADOW_LEASE_TOKEN env (M1 — use --lease-token-file)")
+        return EXIT_CONTROL_PLANE
+
     policy_cfg = load_policy_cfg(args.policy_json)
     token_ids = [e["token_id"] for e in allowlist.values()]
     try:
@@ -559,6 +617,9 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     store: Optional[SQLiteShadowStorage] = None
     run_status = "COMMITTED"
+    # M3: set by SIGTERM from within the running asyncio loop.
+    stop_flag = {"stop": None}  # filled with asyncio.Event after loop start
+
     try:
         # Gate #6: enforce v12 + Soll-manifest + forbid_run_id_gt, then claim.
         store = SQLiteShadowStorage.for_user(args.data_root, args.user_id)
@@ -568,16 +629,11 @@ def main(argv: Optional[list[str]] = None) -> int:
             _LOG.error("control-plane preflight: %s", exc)
             store.close()
             return EXIT_CONTROL_PLANE
-        # forbid_run_id_gt is freeze metadata only while LOCKED=1 (early exit
-        # above). After retire (LOCKED=0 / lock absent) it must NOT block.
-        _ = ready  # next_run_id available for logs after claim
+        _ = ready
         store.close()
         store = None
 
         try:
-            import os as _os
-
-            lease_tok = args.lease_token or _os.environ.get("SHADOW_LEASE_TOKEN")
             engine, bridge, store, binding, config_json = build_runner(
                 data_root=args.data_root,
                 user_id=args.user_id,
@@ -587,12 +643,15 @@ def main(argv: Optional[list[str]] = None) -> int:
                 config_allowlist=config_allowlist,
                 lease_token=lease_tok,
             )
+            if token_file_path is not None and token_file_path.is_file():
+                try:
+                    token_file_path.unlink()
+                except OSError as exc:
+                    _LOG.warning("token file unlink after claim: %s", exc)
         except LeaseError as exc:
-            # D6b: Exit 76 = refusal — callers must not retry as transient fault.
             _LOG.error("lease claim refused (D1/D6b no-retry): %s", exc)
             return EXIT_CONTROL_PLANE
         except (sqlite3.Error, OSError) as exc:
-            # A1 fail-closed: DB/IO faults on claim path → refuse, never proceed.
             _LOG.error("lease claim path failed closed: %s", exc)
             return EXIT_CONTROL_PLANE
         except ValueError as exc:
@@ -622,18 +681,16 @@ def main(argv: Optional[list[str]] = None) -> int:
                 pass
         raise
 
-    # D1 / A4.1: lesender Epoch-Hook hinter Flag (kein Marker-Schreiben).
-    import os as _os
     from order_execution_engine.epoch_hydrate import try_hydrate_engine_portfolio
 
-    _epoch_on = _os.environ.get("EPOCH_HYDRATE", "").strip() in ("1", "true", "yes")
-    _epoch_marker = _os.environ.get("EPOCH_MARKER_ROWID", "").strip()
+    _epoch_on = os.environ.get("EPOCH_HYDRATE", "").strip() in ("1", "true", "yes")
+    _epoch_marker = os.environ.get("EPOCH_MARKER_ROWID", "").strip()
     _marker_i = int(_epoch_marker) if _epoch_marker.isdigit() else None
     if try_hydrate_engine_portfolio(
         engine, store, epoch_marker_rowid=_marker_i, enabled=_epoch_on,
     ):
         _LOG.info(
-            "epoch_hydrate enabled marker_rowid=%s (read-only, D1)",
+            "epoch_hydrate enabled marker_rowid=%s (read-only)",
             _marker_i,
         )
 
@@ -668,7 +725,6 @@ def main(argv: Optional[list[str]] = None) -> int:
             )
             return 0
 
-        # Erststart: Altbestand überspringen. KeepAlive-Restart: Offset behalten.
         if (
             not args.no_tail_from_end
             and args.tail_from_end
@@ -683,16 +739,43 @@ def main(argv: Optional[list[str]] = None) -> int:
             return 0
 
         hub = ShadowHub(engine)
-        try:
-            asyncio.run(
-                run_ws_hub_and_tail(
-                    binding, hub, token_ids,
-                    bridge=bridge, sink=sink, tail=tail,
-                    tail_interval_s=args.tail_interval_s,
-                )
+
+        async def _run_until_stop() -> None:
+            stop_event = asyncio.Event()
+            stop_flag["stop"] = stop_event
+            loop = asyncio.get_running_loop()
+
+            def _on_sigterm() -> None:
+                _LOG.info("SIGTERM — ordered stop (M3 → COMMITTED)")
+                stop_event.set()
+
+            try:
+                loop.add_signal_handler(signal.SIGTERM, _on_sigterm)
+            except (NotImplementedError, RuntimeError) as exc:
+                # Windows / non-main thread: fall back to signal.signal
+                _LOG.warning("add_signal_handler unavailable: %s", exc)
+
+                def _sync_sigterm(_s: int, _f: Any) -> None:
+                    _LOG.info("SIGTERM — ordered stop (M3 → COMMITTED)")
+                    loop.call_soon_threadsafe(stop_event.set)
+
+                signal.signal(signal.SIGTERM, _sync_sigterm)
+            await run_ws_hub_and_tail(
+                binding,
+                hub,
+                token_ids,
+                bridge=bridge,
+                sink=sink,
+                tail=tail,
+                tail_interval_s=args.tail_interval_s,
+                stop_event=stop_event,
             )
+
+        try:
+            asyncio.run(_run_until_stop())
         except KeyboardInterrupt:
             run_status = "ABORTED"
+        # SIGTERM ordered stop keeps run_status=COMMITTED
         return 0
     except Exception:
         run_status = "ABORTED"

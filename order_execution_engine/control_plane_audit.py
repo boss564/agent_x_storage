@@ -182,18 +182,36 @@ def compute_trigger_manifest_sha256(conn: sqlite3.Connection) -> str:
     return compute_control_plane_manifest_sha256(conn)
 
 
+# Release pin (Gate #5 / v12 DDL). Code mutations that change triggers must
+# update this constant in the same commit — otherwise ensure/gatectl refuse.
+PINNED_CONTROL_PLANE_MANIFEST_SHA256 = (
+    "3e685b7d98349aeefae3ab591908dd672b731f89f06a7d71fedbd0e49574c9d9"
+)
+
 @functools.lru_cache(maxsize=1)
 def expected_control_plane_manifest_sha256() -> str:
-    """Sollwert: migrate a scratch v9 DB with module code, then G2-hash."""
+    """Sollwert: migrate a scratch v9 DB with module code, then G2-hash.
+
+    Temp dir is always removed (disk headroom). Result must equal
+    ``PINNED_CONTROL_PLANE_MANIFEST_SHA256`` or the release pin is stale.
+    """
     from order_execution_engine.control_plane_lease import migrate_control_plane
     from order_execution_engine.persistence import SQLiteShadowStorage
 
-    tmp = Path(tempfile.mkdtemp(prefix="cp_manifest_expected_"))
-    store = SQLiteShadowStorage.for_user(tmp, "expected")
-    db_path = store._db_path  # noqa: SLF001
-    migrate_control_plane(store._conn, db_path=db_path)  # noqa: SLF001
-    digest = compute_control_plane_manifest_sha256(store._conn)  # noqa: SLF001
-    store.close()
+    with tempfile.TemporaryDirectory(prefix="cp_manifest_expected_") as tmp_s:
+        tmp = Path(tmp_s)
+        store = SQLiteShadowStorage.for_user(tmp, "expected")
+        try:
+            db_path = store._db_path  # noqa: SLF001
+            migrate_control_plane(store._conn, db_path=db_path)  # noqa: SLF001
+            digest = compute_control_plane_manifest_sha256(store._conn)  # noqa: SLF001
+        finally:
+            store.close()
+    if digest != PINNED_CONTROL_PLANE_MANIFEST_SHA256:
+        raise RuntimeError(
+            "control-plane Soll-manifest drifted from release pin: "
+            f"computed={digest} pinned={PINNED_CONTROL_PLANE_MANIFEST_SHA256}"
+        )
     return digest
 
 
@@ -693,12 +711,14 @@ class AppendOnlyAuditChain:
             os.close(fd)
 
 
-# Off-host audit mirror root (Drive folder for hardening_incr + audit objects).
-# Measured 2026-11-15: rclone --immutable alone does NOT refuse overwrite on
-# Google Drive (copyto reports "Copied (replaced existing)"). H4 is enforced
-# by an existence+checksum preflight before any upload.
+# Off-host audit mirror. H4: existence+checksum preflight (Drive ignores
+# --immutable). Incr-bundle folder must NOT be the audit-object target (M-gap).
+# Override audit objects via env AUDIT_OBJECTS_FOLDER_ID before E-1.
 DEFAULT_AUDIT_MIRROR_FOLDER_ID = "1VxqOIvk1a2qTBuQlpJ4PE3Z3p6Co7Tzz"
 DEFAULT_AUDIT_MIRROR_REMOTE_PREFIX = "gdrive:audit_chain"
+DEFAULT_AUDIT_OBJECTS_FOLDER_ID = os.environ.get(
+    "AUDIT_OBJECTS_FOLDER_ID", DEFAULT_AUDIT_MIRROR_FOLDER_ID
+)
 
 
 def audit_mirror_rclone_flags(

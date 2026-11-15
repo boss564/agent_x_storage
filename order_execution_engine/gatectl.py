@@ -21,6 +21,7 @@ from typing import Any, Optional
 from order_execution_engine.control_plane_audit import (
     DEFAULT_AUDIT_MIRROR_FOLDER_ID,
     DEFAULT_AUDIT_MIRROR_REMOTE_PREFIX,
+    DEFAULT_AUDIT_OBJECTS_FOLDER_ID,
     AppendOnlyAuditChain,
     AuditChainError,
     ManifestMismatchError,
@@ -29,6 +30,7 @@ from order_execution_engine.control_plane_audit import (
     assert_skip_disk_check_allowed,
     build_snapshot_manifest,
     compute_jsonl_prefix_sha256,
+    compute_logical_digest_sha256,
     expected_control_plane_manifest_sha256,
     mirror_audit_entry,
     sha256_file_streaming,
@@ -40,12 +42,41 @@ from order_execution_engine.control_plane_lease import (
     LeaseError,
     LivePathRefused,
     abort_run,
+    connect_control_plane,
     connect_scratch,
     issue_token,
     migrate_control_plane,
     next_run_id,
     revoke_token,
 )
+
+
+def _conn(args: argparse.Namespace) -> sqlite3.Connection:
+    """DB open for gatectl — LIVE only with ``--allow-live-db`` (M4)."""
+    return connect_control_plane(
+        Path(args.db),
+        allow_live=bool(getattr(args, "allow_live_db", False)),
+    )
+
+
+def lease_token_path(data_root: Path, run_id: int) -> Path:
+    """M1: exclusive token file under data-root (not argv / not env)."""
+    return Path(data_root) / "leases" / f"run_{int(run_id)}.token"
+
+
+def write_lease_token_file(data_root: Path, run_id: int, token: str) -> Path:
+    """Write raw token with O_EXCL + mode 0600; never overwrite."""
+    path = lease_token_path(data_root, run_id)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
+    fd = os.open(str(path), flags, 0o600)
+    try:
+        os.write(fd, token.encode("utf-8"))
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+    os.chmod(path, 0o600)
+    return path
 
 EXIT_OK = 0
 EXIT_POLICY = 2
@@ -175,13 +206,18 @@ def cmd_verify_snapshot(args: argparse.Namespace) -> int:
 
 
 def cmd_issue_token(args: argparse.Namespace) -> int:
-    """Intent → issue → confirm (+ optional immutable mirror). No raw token."""
+    """Intent → issue → confirm + M1 token-file (O_EXCL 0600). No raw token on stdout."""
     mirror_remote = args.mirror_remote or DEFAULT_AUDIT_MIRROR_REMOTE_PREFIX
-    mirror_folder = args.mirror_folder_id or DEFAULT_AUDIT_MIRROR_FOLDER_ID
+    mirror_folder = (
+        args.mirror_folder_id
+        or DEFAULT_AUDIT_OBJECTS_FOLDER_ID
+        or DEFAULT_AUDIT_MIRROR_FOLDER_ID
+    )
 
     journal = AppendOnlyAuditChain(_journal_path(args))
     conn = None
     token: Optional[str] = None
+    token_file: Optional[Path] = None
     try:
         journal.verify()
         manifest = build_snapshot_manifest(
@@ -194,7 +230,7 @@ def cmd_issue_token(args: argparse.Namespace) -> int:
             persist_artefact=False,
             check_disk_headroom=_check_disk(args),
         )
-        conn = connect_scratch(Path(args.db))
+        conn = _conn(args)
         run_id = int(args.run_id) if args.run_id is not None else next_run_id(conn)
         ttl_s = int(args.ttl)
 
@@ -209,6 +245,8 @@ def cmd_issue_token(args: argparse.Namespace) -> int:
 
         token = issue_token(conn, run_id=run_id, ttl_s=ttl_s)
         digest = token_sha256(token)
+        # M1: handoff via exclusive file under data-root (not argv / not env).
+        token_file = write_lease_token_file(Path(args.data_root), run_id, token)
         try:
             confirm = journal.append(
                 "issue_token_confirm",
@@ -217,6 +255,7 @@ def cmd_issue_token(args: argparse.Namespace) -> int:
                     "run_id": run_id,
                     "ttl_s": ttl_s,
                     "token_sha256": digest,
+                    "token_file": str(token_file),
                     "intent_seq": intent["seq"],
                 },
             )
@@ -237,6 +276,11 @@ def cmd_issue_token(args: argparse.Namespace) -> int:
                     }
                 )
                 return EXIT_REVOKE_FAILED
+            if token_file is not None and token_file.is_file():
+                try:
+                    token_file.unlink()
+                except OSError:
+                    pass
             token = None
             raise
     except (
@@ -265,6 +309,7 @@ def cmd_issue_token(args: argparse.Namespace) -> int:
             "run_id": run_id,
             "ttl_s": ttl_s,
             "token_sha256": digest,
+            "token_file": str(token_file),
             "manifest_sha256": manifest["manifest_sha256"],
             "intent_seq": intent["seq"],
             "confirm_seq": confirm["seq"],
@@ -321,7 +366,7 @@ def cmd_status(args: argparse.Namespace) -> int:
 
     # Schema / open leases / RUNNING
     try:
-        conn = connect_scratch(Path(args.db))
+        conn = _conn(args)
         try:
             row = conn.execute(
                 "SELECT value FROM schema_meta WHERE key='schema_version'"
@@ -382,7 +427,7 @@ def cmd_migrate(args: argparse.Namespace) -> int:
             check_disk_headroom=_check_disk(args),
             require_manifest_match=False,
         )
-        conn = connect_scratch(Path(args.db))
+        conn = _conn(args)
         try:
             migrate_control_plane(conn, db_path=Path(args.db))
             row = conn.execute(
@@ -480,7 +525,7 @@ def cmd_abort_run(args: argparse.Namespace) -> int:
             )
             return EXIT_POLICY
         journal.verify()
-        conn = connect_scratch(Path(args.db))
+        conn = _conn(args)
         reason = str(getattr(args, "reason", "") or "")
         conn.execute("BEGIN IMMEDIATE")
         info = abort_run(conn, rid, reason=reason)
@@ -604,16 +649,39 @@ def cmd_retire_run_lock(args: argparse.Namespace) -> int:
     journal = AppendOnlyAuditChain(_journal_path(args))
     try:
         journal.verify()
-        # D4-a: default-on; --skip-e1-upload-gate is the only opt-out.
+        # Quiescence + schema preconditions (gap).
+        build_snapshot_manifest(
+            Path(args.db),
+            Path(args.runner),
+            Path(args.lock),
+            Path(args.repo_root),
+            check_quiescent=True,
+            snapshot_dir=_snapshot_dir(args),
+            persist_artefact=False,
+            check_disk_headroom=_check_disk(args),
+            require_manifest_match=False,
+        )
+        # D4-a: default-on; bind upload to current logical digest when present.
         skip_upload = bool(getattr(args, "skip_e1_upload_gate", False))
         if not skip_upload:
+            conn_r = _conn(args)
+            try:
+                cur_digest = compute_logical_digest_sha256(conn_r)
+            finally:
+                conn_r.close()
             entries = journal.read_entries()
             upload_ok = False
             for e in reversed(entries):
                 if e.get("action") == "db_artefact_upload":
                     payload = e.get("payload") or {}
-                    upload_ok = bool(payload.get("ok")) and bool(
-                        payload.get("sha256")
+                    digest_ok = (
+                        not payload.get("logical_digest_sha256")
+                        or payload.get("logical_digest_sha256") == cur_digest
+                    )
+                    upload_ok = (
+                        bool(payload.get("ok"))
+                        and bool(payload.get("sha256"))
+                        and digest_ok
                     )
                     break
             if not upload_ok:
@@ -622,12 +690,21 @@ def cmd_retire_run_lock(args: argparse.Namespace) -> int:
                         "ok": False,
                         "error": (
                             "retire refused: E-1 upload gate (default-on) "
-                            "requires prior db_artefact_upload ok=true (D4-a); "
+                            "requires prior db_artefact_upload ok=true bound to "
+                            "current logical digest; "
                             "scratch opt-out: --skip-e1-upload-gate"
                         ),
                     }
                 )
                 return EXIT_POLICY
+        if not getattr(args, "mirror_remote", None):
+            _print_json(
+                {
+                    "ok": False,
+                    "error": "retire refused: --mirror-remote required (gap)",
+                }
+            )
+            return EXIT_POLICY
         before_sha = sha256_file_streaming(lock)
         ts = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
         archive = lock.with_name(f"{lock.name}.retired.{before_sha[:12]}.{ts}")
@@ -717,7 +794,7 @@ def cmd_post_run_check(args: argparse.Namespace) -> int:
                 "post-run-check runner SHA drift: "
                 f"manifest={manifest['runner_sha256']} live={runner_sha}"
             )
-        conn = connect_scratch(Path(args.db))
+        conn = _conn(args)
         try:
             running = conn.execute(
                 "SELECT COUNT(*) FROM telemetry_runs WHERE status='RUNNING'"
@@ -898,10 +975,10 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--mirror-folder-id",
         type=str,
-        default=DEFAULT_AUDIT_MIRROR_FOLDER_ID,
+        default=DEFAULT_AUDIT_OBJECTS_FOLDER_ID,
         help=(
-            "Google Drive folder id pinned for audit mirrors "
-            f"(default: {DEFAULT_AUDIT_MIRROR_FOLDER_ID})"
+            "Drive folder for audit objects (set AUDIT_OBJECTS_FOLDER_ID; "
+            "must differ from incr-bundle folder before E-1)"
         ),
     )
     p.add_argument(
@@ -916,6 +993,11 @@ def build_parser() -> argparse.ArgumentParser:
             "Explicit LIVE Freigabe for --skip-disk-check on "
             "Application Support/agentx paths (default: refuse)"
         ),
+    )
+    p.add_argument(
+        "--allow-live-db",
+        action="store_true",
+        help="M4: allow gatectl DB ops on Application Support/agentx (explicit)",
     )
     p.add_argument(
         "--news-jsonl",
