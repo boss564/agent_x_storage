@@ -1,0 +1,43 @@
+{
+  "title": "M1–M4 Blocker — Umsetzung vor E (98a6f307-Nachfolger)",
+  "measured_at": "2026-11-15T16:20:00Z",
+  "environment": "host",
+  "e1_granted": false,
+  "push_blocked": true,
+  "reviewer_verdict_on_98a6f307": "nicht freigabefähig — accepted; blockers addressed in WT then commit",
+  "implemented": {
+    "M1": {
+      "fix": "gatectl issue-token writes O_EXCL 0600 token file under data-root/leases/; stdout only token_sha256+token_file; runner --lease-token-file reads+unlinks after claim; refuse SHADOW_LEASE_TOKEN; refuse --lease-token on LIVE",
+      "test": "test_m1_gatectl_issue_token_file_then_runner"
+    },
+    "M2": {
+      "fix": "--run-lock override refused when --data-root is Application Support/agentx",
+      "test": "test_m2_run_lock_override_refused_on_live_data_root"
+    },
+    "M3": {
+      "fix": "SIGTERM via asyncio add_signal_handler → stop_event → finally close_run(COMMITTED)",
+      "test": "test_m3_sigterm_handler_wired_in_source",
+      "note": "KeyboardInterrupt remains ABORTED; --once/--no-ws still COMMITTED"
+    },
+    "M4": {
+      "fix": "connect_control_plane(allow_live=False default); gatectl --allow-live-db explicit switch",
+      "canary_abnahme": "NOT_RUN — operator; between canary PASS and E no hash change",
+      "retire_package_lock": "still TABU hard-coded"
+    },
+    "gaps_partial": {
+      "manifest_pin": "PINNED_CONTROL_PLANE_MANIFEST_SHA256 + expected() cleanup TemporaryDirectory",
+      "retire_upload_digest_bind": "upload gate checks logical_digest_sha256 when present",
+      "retire_quiescence": "build_snapshot_manifest before retire",
+      "mirror_folder": "DEFAULT_AUDIT_OBJECTS_FOLDER_ID via AUDIT_OBJECTS_FOLDER_ID env — operator must set distinct from incr bundle before E-1",
+      "abort_write_ahead_gap": "documented intentional; crash between append and COMMIT still possible — L3/L4 follow-up"
+    }
+  },
+  "pytest_scratch": "69 passed (control-plane suites)",
+  "still_open_before_E": [
+    "Canary Abnahme of --allow-live-db migrate/abort/post-run on LIVE copy",
+    "Distinct AUDIT_OBJECTS_FOLDER_ID on Drive",
+    "L3 WAL crash window proof",
+    "L4 who may use abort-run / skip switches (policy)",
+    "E-1 Freigabe"
+  ]
+}
