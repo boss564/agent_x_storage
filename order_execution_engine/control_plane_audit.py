@@ -611,16 +611,55 @@ class AppendOnlyAuditChain:
             os.close(fd)
 
 
+# Off-host audit mirror root (Drive folder for hardening_incr + audit objects).
+# Measured 2026-11-15: rclone --immutable alone does NOT refuse overwrite on
+# Google Drive (copyto reports "Copied (replaced existing)"). H4 is enforced
+# by an existence+checksum preflight before any upload.
+DEFAULT_AUDIT_MIRROR_FOLDER_ID = "1VxqOIvk1a2qTBuQlpJ4PE3Z3p6Co7Tzz"
+DEFAULT_AUDIT_MIRROR_REMOTE_PREFIX = "gdrive:audit_chain"
+
+
+def audit_mirror_rclone_flags(
+    *, folder_id: str = DEFAULT_AUDIT_MIRROR_FOLDER_ID
+) -> list[str]:
+    """Flags that pin every mirror call to the verified Drive folder."""
+    if not folder_id or not re.fullmatch(r"[A-Za-z0-9_-]+", folder_id):
+        raise AuditChainError(f"invalid drive folder id: {folder_id!r}")
+    return ["--drive-root-folder-id", folder_id]
+
+
+def _run_rclone_cmd(
+    cmd: list[str],
+    *,
+    runner: Callable[..., subprocess.CompletedProcess[str]],
+) -> subprocess.CompletedProcess[str]:
+    try:
+        return runner(
+            cmd,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+    except FileNotFoundError as exc:
+        raise AuditChainError(f"rclone not found: {exc}") from exc
+    except subprocess.SubprocessError as exc:
+        raise AuditChainError(f"rclone failed: {exc}") from exc
+
+
 def mirror_audit_entry(
     entry: dict[str, Any],
     remote_prefix: str,
     *,
     run_rclone: Callable[..., subprocess.CompletedProcess[str]] | None = None,
+    folder_id: str = DEFAULT_AUDIT_MIRROR_FOLDER_ID,
 ) -> str:
-    """Upload one immutable off-host object named ``{seq}_{entry_hash}.json``.
+    """Upload one off-host object ``{seq}_{entry_hash}.json`` (H4 fail-closed).
 
-    Uses ``rclone copyto … --immutable`` so a truncated local journal cannot
-    overwrite an existing remote proof object.
+    Preflight: if the remote object already exists, compare SHA-256 of remote
+    bytes to the local payload. Same hash → idempotent skip. Different hash →
+    refuse (truncated local journal must not overwrite the off-host anchor).
+    Measured: rclone ``--immutable`` alone is insufficient on Google Drive.
     """
     if not remote_prefix or not isinstance(remote_prefix, str):
         raise AuditChainError("remote_prefix required")
@@ -634,22 +673,53 @@ def mirror_audit_entry(
 
     name = f"{seq:08d}_{entry_hash}.json"
     remote = remote_prefix.rstrip("/") + "/" + name
-    tmp = Path(tempfile.mkdtemp(prefix="audit_mirror_")) / name
-    tmp.write_text(_canonical_json(entry) + "\n", encoding="utf-8")
-    cmd = ["rclone", "copyto", str(tmp), remote, "--immutable"]
+    payload = _canonical_json(entry) + "\n"
+    local_sha = hashlib.sha256(payload.encode("utf-8")).hexdigest()
+    tmp_dir = Path(tempfile.mkdtemp(prefix="audit_mirror_"))
+    tmp = tmp_dir / name
+    tmp.write_text(payload, encoding="utf-8")
+    drive_flags = audit_mirror_rclone_flags(folder_id=folder_id)
     runner = run_rclone or subprocess.run
-    try:
-        proc = runner(
-            cmd,
-            check=False,
-            capture_output=True,
-            text=True,
-            timeout=120,
+
+    # Existence probe (lsjson on the object path).
+    ls = _run_rclone_cmd(
+        ["rclone", "lsjson", remote, *drive_flags],
+        runner=runner,
+    )
+    ls_out = ls.stdout if isinstance(ls.stdout, str) else ""
+    if ls.returncode == 0 and ls_out.strip() not in ("", "[]"):
+        cat = _run_rclone_cmd(
+            ["rclone", "cat", remote, *drive_flags],
+            runner=runner,
         )
-    except FileNotFoundError as exc:
-        raise AuditChainError(f"rclone not found: {exc}") from exc
-    except subprocess.SubprocessError as exc:
-        raise AuditChainError(f"rclone failed: {exc}") from exc
+        if cat.returncode != 0:
+            err = cat.stderr if isinstance(cat.stderr, str) else ""
+            out = cat.stdout if isinstance(cat.stdout, str) else ""
+            raise AuditChainError(
+                f"remote object exists but cat failed: {remote}: "
+                f"{(err or out).strip()}"
+            )
+        cat_out = cat.stdout if isinstance(cat.stdout, str) else ""
+        remote_sha = hashlib.sha256(cat_out.encode("utf-8")).hexdigest()
+        if remote_sha != local_sha:
+            raise AuditChainError(
+                f"refuse overwrite of immutable audit object {remote}: "
+                f"local_sha={local_sha} remote_sha={remote_sha}"
+            )
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+        return remote
+
+    cmd = [
+        "rclone",
+        "copyto",
+        str(tmp),
+        remote,
+        "--immutable",
+        "--checksum",
+        *drive_flags,
+    ]
+    proc = _run_rclone_cmd(cmd, runner=runner)
+    shutil.rmtree(tmp_dir, ignore_errors=True)
     if proc.returncode != 0:
         err = (proc.stderr or proc.stdout or "").strip()
         raise AuditChainError(
@@ -663,13 +733,19 @@ def mirror_audit_journal(
     remote_prefix: str,
     *,
     run_rclone: Callable[..., subprocess.CompletedProcess[str]] | None = None,
+    folder_id: str = DEFAULT_AUDIT_MIRROR_FOLDER_ID,
 ) -> list[str]:
     """Mirror each journal entry as its own immutable remote object (H4)."""
     chain = AppendOnlyAuditChain(Path(journal_path))
     remotes: list[str] = []
     for entry in chain.read_entries():
         remotes.append(
-            mirror_audit_entry(entry, remote_prefix, run_rclone=run_rclone)
+            mirror_audit_entry(
+                entry,
+                remote_prefix,
+                run_rclone=run_rclone,
+                folder_id=folder_id,
+            )
         )
     return remotes
 

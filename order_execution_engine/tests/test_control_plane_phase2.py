@@ -180,7 +180,7 @@ def test_h4_mirror_is_immutable_per_entry(tmp_path: Path) -> None:
         calls.append(list(cmd))
         m = MagicMock()
         m.returncode = 0
-        m.stdout = ""
+        m.stdout = "[]" if cmd[1] == "lsjson" else ""
         m.stderr = ""
         return m
 
@@ -188,24 +188,34 @@ def test_h4_mirror_is_immutable_per_entry(tmp_path: Path) -> None:
         journal, "gdrive:backup/audit_entries", run_rclone=fake_run
     )
     assert len(remotes) == 2
-    assert len(calls) == 2
-    for cmd, entry in zip(calls, (e1, e2), strict=True):
+    copy_cmds = [c for c in calls if len(c) > 1 and c[1] == "copyto"]
+    assert len(copy_cmds) == 2
+    for cmd, entry in zip(copy_cmds, (e1, e2), strict=True):
         assert cmd[0] == "rclone"
-        assert cmd[1] == "copyto"
         assert "--immutable" in cmd
-        assert "--checksum" not in cmd
+        assert "--checksum" in cmd
+        assert "--drive-root-folder-id" in cmd
         assert f"{entry['seq']:08d}_{entry['entry_hash']}.json" in cmd[3]
 
-    # Overwrite of a single remote object is refused by --immutable flag contract
-    m = MagicMock()
-    m.returncode = 1
-    m.stderr = "immutable"
-    with patch(
-        "order_execution_engine.control_plane_audit.subprocess.run",
-        return_value=m,
-    ):
-        with pytest.raises(AuditChainError, match="immutable"):
-            mirror_audit_entry(e1, "gdrive:backup/audit_entries")
+    # Existing remote with different content → refuse (H4; Drive ignores --immutable)
+    def conflicting_run(cmd, **kwargs):  # noqa: ANN001
+        m = MagicMock()
+        if cmd[1] == "lsjson":
+            m.returncode = 0
+            m.stdout = '[{"Name":"x"}]'
+        elif cmd[1] == "cat":
+            m.returncode = 0
+            m.stdout = '{"tampered":true}\n'
+        else:
+            m.returncode = 0
+            m.stdout = ""
+        m.stderr = ""
+        return m
+
+    with pytest.raises(AuditChainError, match="refuse overwrite"):
+        mirror_audit_entry(
+            e1, "gdrive:backup/audit_entries", run_rclone=conflicting_run
+        )
 
 
 def test_audit_chain_tamper_truncate_swap(tmp_path: Path) -> None:
@@ -253,7 +263,7 @@ def test_gatectl_issue_token_intent_confirm_no_raw_token(tmp_path: Path) -> None
     def fake_run(cmd, **kwargs):  # noqa: ANN001
         m = MagicMock()
         m.returncode = 0
-        m.stdout = ""
+        m.stdout = "[]" if len(cmd) > 1 and cmd[1] == "lsjson" else ""
         m.stderr = ""
         return m
 
@@ -264,10 +274,6 @@ def test_gatectl_issue_token_intent_confirm_no_raw_token(tmp_path: Path) -> None
         "order_execution_engine.control_plane_audit._list_shadow_runner_pids",
         return_value=[],
     ):
-        # Missing mirror → refuse
-        rc = gatectl_main(_argv(paths, "issue-token", "--ttl", "60"))
-        assert rc == EXIT_POLICY
-
         rc = gatectl_main(
             _argv(
                 paths,
@@ -321,6 +327,8 @@ def test_gatectl_issue_token_fail_closed_revoke(tmp_path: Path) -> None:
     def ok_run(cmd, **kwargs):  # noqa: ANN001
         m = MagicMock()
         m.returncode = 0
+        m.stdout = "[]" if len(cmd) > 1 and cmd[1] == "lsjson" else ""
+        m.stderr = ""
         return m
 
     with patch(
@@ -547,6 +555,8 @@ def test_i2_status_uses_temp_snapshot_verify_persists(tmp_path: Path) -> None:
     def fake_run(cmd, **kwargs):  # noqa: ANN001
         m = MagicMock()
         m.returncode = 0
+        m.stdout = "[]" if len(cmd) > 1 and cmd[1] == "lsjson" else ""
+        m.stderr = ""
         return m
 
     with patch(

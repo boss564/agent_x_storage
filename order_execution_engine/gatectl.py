@@ -17,6 +17,8 @@ from pathlib import Path
 from typing import Any, Optional
 
 from order_execution_engine.control_plane_audit import (
+    DEFAULT_AUDIT_MIRROR_FOLDER_ID,
+    DEFAULT_AUDIT_MIRROR_REMOTE_PREFIX,
     AppendOnlyAuditChain,
     AuditChainError,
     ManifestMismatchError,
@@ -87,7 +89,13 @@ def _mirror_required_entry(
     remote = getattr(args, "mirror_remote", None)
     if not remote:
         return None
-    return mirror_audit_entry(entry, remote)
+    return mirror_audit_entry(
+        entry,
+        remote,
+        folder_id=getattr(
+            args, "mirror_folder_id", DEFAULT_AUDIT_MIRROR_FOLDER_ID
+        ),
+    )
 
 
 def cmd_verify_snapshot(args: argparse.Namespace) -> int:
@@ -141,14 +149,8 @@ def cmd_verify_snapshot(args: argparse.Namespace) -> int:
 
 def cmd_issue_token(args: argparse.Namespace) -> int:
     """Intent → issue → confirm (+ optional immutable mirror). No raw token."""
-    if not args.mirror_remote:
-        _print_json(
-            {
-                "ok": False,
-                "error": "issue-token requires --mirror-remote (off-host anchor)",
-            }
-        )
-        return EXIT_POLICY
+    mirror_remote = args.mirror_remote or DEFAULT_AUDIT_MIRROR_REMOTE_PREFIX
+    mirror_folder = args.mirror_folder_id or DEFAULT_AUDIT_MIRROR_FOLDER_ID
 
     journal = AppendOnlyAuditChain(_journal_path(args))
     conn = None
@@ -174,7 +176,9 @@ def cmd_issue_token(args: argparse.Namespace) -> int:
             manifest["manifest_sha256"],
             {"run_id": run_id, "ttl_s": ttl_s},
         )
-        mirror_audit_entry(intent, args.mirror_remote)
+        mirror_audit_entry(
+            intent, mirror_remote, folder_id=mirror_folder
+        )
 
         token = issue_token(conn, run_id=run_id, ttl_s=ttl_s)
         digest = token_sha256(token)
@@ -189,7 +193,9 @@ def cmd_issue_token(args: argparse.Namespace) -> int:
                     "intent_seq": intent["seq"],
                 },
             )
-            mirror_audit_entry(confirm, args.mirror_remote)
+            mirror_audit_entry(
+                confirm, mirror_remote, folder_id=mirror_folder
+            )
         except AuditChainError as exc:
             try:
                 revoke_token(conn, token)
@@ -371,7 +377,12 @@ def cmd_abort_run(args: argparse.Namespace) -> int:
                 {"run_id": rid},
             )
             if args.mirror_remote:
-                mirror_audit_entry(entry, args.mirror_remote)
+                mirror_audit_entry(
+                    entry,
+                    args.mirror_remote,
+                    folder_id=args.mirror_folder_id
+                    or DEFAULT_AUDIT_MIRROR_FOLDER_ID,
+                )
         finally:
             conn.close()
     except (LeaseError, LivePathRefused, AuditChainError, sqlite3.Error) as exc:
@@ -443,7 +454,12 @@ def cmd_post_run_check(args: argparse.Namespace) -> int:
             },
         )
         if args.mirror_remote:
-            mirror_audit_entry(entry, args.mirror_remote)
+            mirror_audit_entry(
+                entry,
+                args.mirror_remote,
+                folder_id=args.mirror_folder_id
+                or DEFAULT_AUDIT_MIRROR_FOLDER_ID,
+            )
     except (
         QuiescenceError,
         SnapshotError,
@@ -497,8 +513,20 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--mirror-remote",
         type=str,
-        default=None,
-        help="rclone remote prefix for immutable per-entry mirrors",
+        default=DEFAULT_AUDIT_MIRROR_REMOTE_PREFIX,
+        help=(
+            "rclone remote prefix for per-entry mirrors "
+            f"(default: {DEFAULT_AUDIT_MIRROR_REMOTE_PREFIX})"
+        ),
+    )
+    p.add_argument(
+        "--mirror-folder-id",
+        type=str,
+        default=DEFAULT_AUDIT_MIRROR_FOLDER_ID,
+        help=(
+            "Google Drive folder id pinned for audit mirrors "
+            f"(default: {DEFAULT_AUDIT_MIRROR_FOLDER_ID})"
+        ),
     )
     p.add_argument(
         "--skip-disk-check",
