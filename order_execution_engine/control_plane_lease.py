@@ -251,6 +251,7 @@ def _refuse_live_conn(conn: sqlite3.Connection) -> Path:
 
 
 def _open_sqlite(path: Path) -> sqlite3.Connection:
+    """RW open with WAL/FULL — writers only (migrate / issue / abort / claim)."""
     path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(path), timeout=30.0, isolation_level=None)
     conn.row_factory = sqlite3.Row
@@ -258,6 +259,21 @@ def _open_sqlite(path: Path) -> sqlite3.Connection:
     conn.execute("PRAGMA busy_timeout = 5000")
     conn.execute("PRAGMA journal_mode = WAL")
     conn.execute("PRAGMA synchronous = FULL")
+    return conn
+
+
+def _open_sqlite_ro(path: Path) -> sqlite3.Connection:
+    """Read-only URI open — no journal_mode / synchronous pragmas (E-0 safe)."""
+    abs_path = Path(path).resolve()
+    if not abs_path.is_file():
+        raise LivePathRefused(f"db not found for RO open: {abs_path}")
+    uri = f"file:{abs_path.as_posix()}?mode=ro"
+    conn = sqlite3.connect(uri, uri=True, timeout=30.0)
+    conn.row_factory = sqlite3.Row
+    try:
+        conn.execute("PRAGMA query_only = ON")
+    except sqlite3.Error:
+        pass
     return conn
 
 
@@ -278,7 +294,7 @@ def is_live_agentx_path(path: Path) -> bool:
 def connect_control_plane(
     db_path: Path, *, allow_live: bool = False
 ) -> sqlite3.Connection:
-    """Open DB for gatectl. LIVE requires ``allow_live=True`` (M4 explicit switch)."""
+    """RW open for gatectl writers. LIVE requires ``allow_live=True`` (M4)."""
     path = Path(db_path).resolve()
     if is_live_agentx_path(path):
         if not allow_live:
@@ -287,6 +303,25 @@ def connect_control_plane(
             )
         return _open_sqlite(path)
     return connect_scratch(path)
+
+
+def connect_control_plane_ro(
+    db_path: Path, *, allow_live: bool = False
+) -> sqlite3.Connection:
+    """RO open for status / retire prechecks / post-run reads — never sets WAL.
+
+    LIVE still requires ``allow_live=True`` so RO is not a silent LIVE channel.
+    """
+    path = Path(db_path).resolve()
+    if is_live_agentx_path(path):
+        if not allow_live:
+            raise LivePathRefused(
+                f"refuse LIVE path without --allow-live-db: {path}"
+            )
+        return _open_sqlite_ro(path)
+    # Scratch RO: still refuse LIVE markers via resolve path check
+    assert_scratch_db_path(path)
+    return _open_sqlite_ro(path)
 
 
 def _schema_version(conn: sqlite3.Connection) -> int:

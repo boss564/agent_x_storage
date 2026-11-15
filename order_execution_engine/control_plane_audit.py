@@ -473,13 +473,35 @@ def build_snapshot_manifest(
         assert_quiescent(list_pids=list_pids)
         assert_db_writer_quiescent(Path(db_path))
 
+    lock_p = Path(lock_path)
+    retired_marker = lock_p.parent / "RUN.RETIRED"
+    lock_absent_post_retire = (not lock_p.is_file()) and retired_marker.is_file()
+
     for label, path in (
         ("db_path", db_path),
         ("runner_path", runner_path),
-        ("lock_path", lock_path),
     ):
         if not Path(path).is_file():
             raise SnapshotError(f"{label} missing: {path}")
+    if not lock_p.is_file() and not lock_absent_post_retire:
+        raise SnapshotError(f"lock_path missing: {lock_path}")
+
+    if lock_absent_post_retire:
+        # Rev. B post-retire: lock renamed away; prefer before_sha from marker.
+        lock_sha256 = hashlib.sha256(b"ABSENT+RUN.RETIRED").hexdigest()
+        try:
+            for line in retired_marker.read_text(encoding="utf-8").splitlines():
+                if line.startswith("before_sha256="):
+                    cand = line.split("=", 1)[1].strip()
+                    if len(cand) == 64 and all(
+                        c in "0123456789abcdef" for c in cand
+                    ):
+                        lock_sha256 = cand
+                        break
+        except OSError:
+            pass
+    else:
+        lock_sha256 = _sha256_file(lock_p)
 
     tmp_dir: Optional[Path] = None
     disk_info: Optional[dict[str, float]] = None
@@ -529,8 +551,9 @@ def build_snapshot_manifest(
             "expected_trigger_manifest_sha256": expected,
             "git_head": _git_head(Path(repo_root)),
             "integrity_check": "ok",
-            "lock_path": str(Path(lock_path).resolve()),
-            "lock_sha256": _sha256_file(Path(lock_path)),
+            "lock_path": str(lock_p.resolve()),
+            "lock_sha256": lock_sha256,
+            "lock_post_retire_absent": lock_absent_post_retire,
             "logical_digest_sha256": logical_digest_sha256,
             "manifest_match": manifest_match,
             "max_run_id": max_run_id,

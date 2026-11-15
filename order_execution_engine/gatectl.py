@@ -13,7 +13,11 @@ import argparse
 import hashlib
 import json
 import os
+import secrets
+import shutil
 import sqlite3
+import subprocess
+import sys
 import time
 from pathlib import Path
 from typing import Any, Optional
@@ -29,6 +33,7 @@ from order_execution_engine.control_plane_audit import (
     build_snapshot_manifest,
     compute_jsonl_prefix_sha256,
     compute_logical_digest_sha256,
+    compute_trigger_manifest_sha256,
     expected_control_plane_manifest_sha256,
     mirror_audit_entry,
     require_audit_objects_folder_id,
@@ -43,7 +48,9 @@ from order_execution_engine.control_plane_lease import (
     LivePathRefused,
     abort_run,
     connect_control_plane,
+    connect_control_plane_ro,
     connect_scratch,
+    is_live_agentx_path,
     issue_token,
     migrate_control_plane,
     next_run_id,
@@ -52,8 +59,16 @@ from order_execution_engine.control_plane_lease import (
 
 
 def _conn(args: argparse.Namespace) -> sqlite3.Connection:
-    """DB open for gatectl — LIVE only with ``--allow-live-db`` (M4)."""
+    """RW DB open for writers — LIVE only with ``--allow-live-db`` (M4)."""
     return connect_control_plane(
+        Path(args.db),
+        allow_live=bool(getattr(args, "allow_live_db", False)),
+    )
+
+
+def _conn_ro(args: argparse.Namespace) -> sqlite3.Connection:
+    """RO DB open — no WAL pragma (E-0 / status / retire prechecks)."""
+    return connect_control_plane_ro(
         Path(args.db),
         allow_live=bool(getattr(args, "allow_live_db", False)),
     )
@@ -127,8 +142,119 @@ EXIT_OK = 0
 EXIT_POLICY = 2
 EXIT_REVOKE_FAILED = 3
 
-_PKG = Path(__file__).resolve().parent
-_REAL_LOCK = (_PKG / "ops" / "RUN.lock").resolve()
+def _package_root() -> Path:
+    """Package dir next to this file — identical rule to runner ``__file__``/ops.
+
+    No env override (N1): an env package-root must not redefine the package
+    boundary; Temp-Paket-Abnahme runs the *copied* ``gatectl.py`` so ``__file__``
+    already points at the copy.
+    """
+    return Path(__file__).resolve().parent
+
+
+def _real_lock_path() -> Path:
+    return (_package_root() / "ops" / "RUN.lock").resolve()
+
+
+_PKG = Path(__file__).resolve().parent  # import-site defaults (runner path)
+
+
+def _is_package_lock(lock: Path) -> bool:
+    """True iff lock is the package ``ops/RUN.lock`` or any path under package ``ops/``."""
+    lock_r = lock.resolve()
+    if lock_r == _real_lock_path():
+        return True
+    ops_dir = (_package_root() / "ops").resolve()
+    try:
+        lock_r.relative_to(ops_dir)
+        return True
+    except ValueError:
+        return False
+
+
+def _require_typed_confirm(args: argparse.Namespace, phrase_stem: str) -> Optional[str]:
+    """L4 human gate — return error message or None if confirmation satisfied.
+
+    Live-marked DB **or** package lock (strict):
+      - ``--i-am-a-test`` refused
+      - ``--typed-confirm`` refused (not a second flag)
+      - interactive TTY required
+      - challenge = ``{stem}:{8 hex}`` shown on stderr, typed back exactly
+
+    Scratch only:
+      - ``--i-am-a-test`` or ``--typed-confirm {stem}`` (fixed, no nonce) for suite
+    """
+    live_db = is_live_agentx_path(Path(args.db))
+    pkg_lock = _is_package_lock(Path(args.lock))
+    strict = live_db or pkg_lock
+
+    if bool(getattr(args, "i_am_a_test", False)):
+        if strict:
+            return (
+                "refuse --i-am-a-test on live-marked DB path or package lock"
+            )
+        return None
+
+    provided = getattr(args, "typed_confirm", None)
+    if strict:
+        if provided is not None:
+            return (
+                "refuse --typed-confirm on live-marked DB or package lock "
+                "(interactive TTY required)"
+            )
+        if not sys.stdin.isatty():
+            return (
+                "typed confirm required: interactive TTY on live/package "
+                f"(challenge stem {phrase_stem!r})"
+            )
+        nonce = secrets.token_hex(4)
+        expected = f"{phrase_stem}:{nonce}"
+        sys.stderr.write(f"Type exactly: {expected}\n")
+        sys.stderr.flush()
+        try:
+            got = sys.stdin.readline().strip()
+        except EOFError:
+            return "typed confirm refused: EOF"
+        if got != expected:
+            return f"typed confirm refused: got {got!r}"
+        return None
+
+    # Scratch / suite path
+    if provided is not None:
+        if str(provided) == phrase_stem:
+            return None
+        return f"typed confirm mismatch: expected {phrase_stem!r}"
+    if not sys.stdin.isatty():
+        return (
+            "typed confirm required (non-TTY scratch): pass "
+            f"--typed-confirm {phrase_stem} or --i-am-a-test"
+        )
+    sys.stderr.write(f"Type exactly: {phrase_stem}\n")
+    sys.stderr.flush()
+    try:
+        got = sys.stdin.readline().strip()
+    except EOFError:
+        return "typed confirm refused: EOF"
+    if got != phrase_stem:
+        return f"typed confirm refused: got {got!r}"
+    return None
+
+
+def _probe_mirror_reachable(args: argparse.Namespace) -> None:
+    """V7: fail-closed rclone reachability (no mutation)."""
+    remote = getattr(args, "mirror_remote", None) or DEFAULT_AUDIT_MIRROR_REMOTE_PREFIX
+    folder_id = _require_audit_folder_id(args)
+    flags = ["--drive-root-folder-id", folder_id]
+    proc = subprocess.run(
+        ["rclone", "lsjson", remote.rstrip("/") + "/", *flags],
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+    if proc.returncode != 0:
+        err = (proc.stderr or proc.stdout or "").strip()
+        raise AuditChainError(f"mirror unreachable: {err}")
 
 
 def _print_json(obj: Any) -> None:
@@ -381,6 +507,9 @@ def _open_audit_intents(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
             "abort_run_confirm",
             "abort_run_refused",
             "issue_token_confirm",
+            "retire_run_lock_confirm",
+            "restore_run_lock_confirm",
+            "restore_db_artefact_confirm",
         ):
             seq = payload.get("intent_seq")
             if seq is not None:
@@ -388,7 +517,13 @@ def _open_audit_intents(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
                     closed.add(int(seq))
                 except (TypeError, ValueError):
                     pass
-        if action in ("abort_run_intent", "issue_token_intent"):
+        if action in (
+            "abort_run_intent",
+            "issue_token_intent",
+            "retire_run_lock_intent",
+            "restore_run_lock_intent",
+            "restore_db_artefact_intent",
+        ):
             intents.append(e)
     open_rows: list[dict[str, Any]] = []
     for e in intents:
@@ -406,40 +541,20 @@ def _open_audit_intents(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "run_id": payload.get("run_id"),
                 "reason": payload.get("reason"),
                 "ttl_s": payload.get("ttl_s"),
+                "path": payload.get("path"),
             }
         )
     return open_rows
 
 
 def cmd_status(args: argparse.Namespace) -> int:
+    """Describe control-plane state via RO open — never flips journal_mode."""
     out: dict[str, Any] = {"ok": True, "action": "status"}
     try:
         out["lock"] = _load_lock_readonly(Path(args.lock))
     except OSError as exc:
         _print_json({"ok": False, "error": f"lock read failed: {exc}"})
         return EXIT_POLICY
-
-    try:
-        out["manifest"] = build_snapshot_manifest(
-            Path(args.db),
-            Path(args.runner),
-            Path(args.lock),
-            Path(args.repo_root),
-            check_quiescent=not args.allow_busy,
-            snapshot_dir=_snapshot_dir(args),
-            require_manifest_match=False,
-            persist_artefact=False,
-            check_disk_headroom=_check_disk(args),
-        )
-        out["expected_trigger_manifest_sha256"] = (
-            expected_control_plane_manifest_sha256()
-        )
-        if not out["manifest"].get("manifest_match"):
-            out["ok"] = False
-            out["manifest_error"] = "DDL manifest mismatch vs code Sollwert"
-    except (QuiescenceError, SnapshotError) as exc:
-        out["ok"] = False
-        out["manifest_error"] = str(exc)
 
     journal = AppendOnlyAuditChain(_journal_path(args))
     audit_entries: list[dict[str, Any]] = []
@@ -459,14 +574,45 @@ def cmd_status(args: argparse.Namespace) -> int:
             "path": str(_journal_path(args)),
         }
 
-    # Schema / open leases / RUNNING
+    # Schema / open leases / RUNNING — RO only (Rev. B §A)
     try:
-        conn = _conn(args)
+        conn = _conn_ro(args)
         try:
-            row = conn.execute(
-                "SELECT value FROM schema_meta WHERE key='schema_version'"
+            uv = int(conn.execute("PRAGMA user_version").fetchone()[0])
+            has_lease = conn.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='run_lease'"
             ).fetchone()
+            row = None
+            try:
+                row = conn.execute(
+                    "SELECT value FROM schema_meta WHERE key='schema_version'"
+                ).fetchone()
+            except sqlite3.Error:
+                row = None
             schema_version = int(row[0]) if row else 0
+
+            if not has_lease or schema_version < SCHEMA_CONTROL or uv < SCHEMA_CONTROL:
+                out["db_state"] = {
+                    "schema": "not_migrated",
+                    "user_version": uv,
+                    "schema_version": schema_version,
+                    "control_plane": False,
+                    "schema_ok": False,
+                    "open_leases": 0,
+                    "running_runs": 0,
+                    "running": [],
+                }
+                out["expected_trigger_manifest_sha256"] = (
+                    expected_control_plane_manifest_sha256()
+                )
+                # Descriptive ok=true for pre-migrate; open intents still fail closed.
+                open_intents = _open_audit_intents(audit_entries)
+                out["open_intents"] = open_intents
+                if open_intents:
+                    out["ok"] = False
+                _print_json(out)
+                return EXIT_OK if out.get("ok") else EXIT_POLICY
+
             open_leases = conn.execute(
                 "SELECT COUNT(*) FROM run_lease"
                 " WHERE consumed_at IS NULL AND revoked_at IS NULL"
@@ -487,21 +633,44 @@ def cmd_status(args: argparse.Namespace) -> int:
                     }
                 )
             out["db_state"] = {
+                "schema": "migrated",
+                "user_version": uv,
                 "schema_version": schema_version,
+                "control_plane": True,
                 "schema_ok": schema_version >= SCHEMA_CONTROL,
                 "open_leases": int(open_leases),
                 "running_runs": len(running_detail),
-                # D1-a: lease age visible for operator watchdog (no auto-abort).
                 "running": running_detail,
             }
-            if schema_version < SCHEMA_CONTROL or running_detail:
+            if running_detail:
                 out["ok"] = False
 
-            # L3: incomplete intent/confirm pairs + DB truth.
+            try:
+                out["manifest"] = build_snapshot_manifest(
+                    Path(args.db),
+                    Path(args.runner),
+                    Path(args.lock),
+                    Path(args.repo_root),
+                    check_quiescent=not args.allow_busy,
+                    snapshot_dir=_snapshot_dir(args),
+                    require_manifest_match=False,
+                    persist_artefact=False,
+                    check_disk_headroom=_check_disk(args),
+                )
+                out["expected_trigger_manifest_sha256"] = (
+                    expected_control_plane_manifest_sha256()
+                )
+                if not out["manifest"].get("manifest_match"):
+                    out["ok"] = False
+                    out["manifest_error"] = "DDL manifest mismatch vs code Sollwert"
+            except (QuiescenceError, SnapshotError) as exc:
+                out["ok"] = False
+                out["manifest_error"] = str(exc)
+
             open_intents = _open_audit_intents(audit_entries)
             enriched: list[dict[str, Any]] = []
             for oi in open_intents:
-                row = dict(oi)
+                row_oi = dict(oi)
                 rid = oi.get("run_id")
                 if rid is not None:
                     try:
@@ -511,14 +680,14 @@ def cmd_status(args: argparse.Namespace) -> int:
                             (int(rid),),
                         ).fetchone()
                         if r is None:
-                            row["db_status"] = None
-                            row["db_closed_at"] = None
+                            row_oi["db_status"] = None
+                            row_oi["db_closed_at"] = None
                         else:
-                            row["db_status"] = r[0]
-                            row["db_closed_at"] = r[1]
+                            row_oi["db_status"] = r[0]
+                            row_oi["db_closed_at"] = r[1]
                     except (TypeError, ValueError, sqlite3.Error):
-                        row["db_status"] = "lookup_error"
-                enriched.append(row)
+                        row_oi["db_status"] = "lookup_error"
+                enriched.append(row_oi)
             out["open_intents"] = enriched
             if enriched:
                 out["ok"] = False
@@ -527,7 +696,6 @@ def cmd_status(args: argparse.Namespace) -> int:
     except (LivePathRefused, sqlite3.Error, OSError, TypeError, ValueError) as exc:
         out["ok"] = False
         out["db_state_error"] = str(exc)
-        # Still surface open intents if audit was readable.
         if audit_entries:
             out["open_intents"] = _open_audit_intents(audit_entries)
 
@@ -654,6 +822,10 @@ def cmd_abort_run(args: argparse.Namespace) -> int:
                     ),
                 }
             )
+            return EXIT_POLICY
+        tc_err = _require_typed_confirm(args, f"ABORT_RUN_{rid}")
+        if tc_err:
+            _print_json({"ok": False, "error": tc_err})
             return EXIT_POLICY
         journal.verify()
         reason = str(getattr(args, "reason", "") or "")
@@ -812,21 +984,101 @@ def cmd_abort_run(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def _retire_upload_gate_ok(
+    journal: AppendOnlyAuditChain, cur_digest: str
+) -> bool:
+    entries = journal.read_entries()
+    for e in reversed(entries):
+        if e.get("action") == "db_artefact_upload":
+            payload = e.get("payload") or {}
+            dig = payload.get("logical_digest_sha256")
+            return (
+                bool(payload.get("ok"))
+                and bool(payload.get("sha256"))
+                and isinstance(dig, str)
+                and len(dig) == 64
+                and dig == cur_digest
+            )
+    return False
+
+
+def _package_retire_prechecks(args: argparse.Namespace) -> Optional[str]:
+    """V1–V8 for package retire. Returns error string or None. Lock untouched."""
+    # V1
+    journal = AppendOnlyAuditChain(_journal_path(args))
+    journal.verify()
+    # V4
+    pids = _list_shadow_runner_pids()
+    if pids:
+        return f"retire refused: shadow_runner PIDs present: {pids}"
+    # V2/V3/V5/V6 + digest via RO
+    conn = _conn_ro(args)
+    try:
+        row = conn.execute(
+            "SELECT value FROM schema_meta WHERE key='schema_version'"
+        ).fetchone()
+        schema_version = int(row[0]) if row else 0
+        if schema_version < SCHEMA_CONTROL:
+            return (
+                f"retire refused: schema_version={schema_version} "
+                f"< SCHEMA_CONTROL={SCHEMA_CONTROL} (V2)"
+            )
+        trig = compute_trigger_manifest_sha256(conn)
+        expected = expected_control_plane_manifest_sha256()
+        if trig != expected:
+            return (
+                "retire refused: trigger manifest mismatch (V3): "
+                f"observed={trig} expected={expected}"
+            )
+        running = conn.execute(
+            "SELECT COUNT(*) FROM telemetry_runs WHERE status='RUNNING'"
+        ).fetchone()[0]
+        if running:
+            return f"retire refused: RUNNING rows present (V5): {running}"
+        open_leases = conn.execute(
+            "SELECT COUNT(*) FROM run_lease"
+            " WHERE consumed_at IS NULL AND revoked_at IS NULL"
+        ).fetchone()[0]
+        if open_leases:
+            return f"retire refused: open leases present (V6): {open_leases}"
+        cur_digest = compute_logical_digest_sha256(conn)
+    finally:
+        conn.close()
+    # V7
+    _probe_mirror_reachable(args)
+    # V8
+    if not _retire_upload_gate_ok(journal, cur_digest):
+        return (
+            "retire refused: E-1 upload gate (V8) requires prior "
+            "db_artefact_upload ok=true bound to current logical digest"
+        )
+    # Quiescence + manifest match required for package
+    build_snapshot_manifest(
+        Path(args.db),
+        Path(args.runner),
+        Path(args.lock),
+        Path(args.repo_root),
+        check_quiescent=True,
+        snapshot_dir=_snapshot_dir(args),
+        persist_artefact=False,
+        check_disk_headroom=_check_disk(args),
+        require_manifest_match=True,
+    )
+    return None
+
+
 def cmd_retire_run_lock(args: argparse.Namespace) -> int:
-    """Refuse production ops/RUN.lock; scratch locks only (TABU + audit).
+    """Retire RUN.lock → archive + RUN.RETIRED.
 
-    Retire is reversible: rename/archive the lock (never delete). Writes
-    ``RUN.RETIRED`` marker beside the lock (D3 post-retire). Before-SHA is
-    fixed in the audit journal prior to rename.
-
-    D4-a: upload gate is **default-on**. Prior ``db_artefact_upload`` with
-    ok=true+sha256 required unless ``--skip-e1-upload-gate`` (scratch/test hook).
-
-    D3-a: ``RUN.RETIRED`` is created **only after** rename-archive succeeds
-    (exclusive create). Pre-existing marker → refuse (fail-closed).
+    Scratch: single ``retire_run_lock`` audit (legacy).
+    Package (``--allow-package-retire``): Intent→mirror→rename→marker→Confirm
+    (Rev. B §4). Soft-TABU without the switch.
     """
     lock = Path(args.lock).resolve()
-    if lock == _REAL_LOCK:
+    package_retire = bool(getattr(args, "allow_package_retire", False))
+    is_pkg = _is_package_lock(lock)
+
+    if is_pkg and not package_retire:
         _print_json(
             {
                 "ok": False,
@@ -834,19 +1086,45 @@ def cmd_retire_run_lock(args: argparse.Namespace) -> int:
             }
         )
         return EXIT_POLICY
-    # Also refuse any lock under the package ops/ directory (path tricks).
-    ops_dir = (_PKG / "ops").resolve()
-    try:
-        lock.relative_to(ops_dir)
+    if package_retire and not is_pkg:
         _print_json(
             {
                 "ok": False,
-                "error": "retire-run-lock refused for package ops/ lock (TABU)",
+                "error": (
+                    "--allow-package-retire refused on scratch lock "
+                    "(switch only for package ops/RUN.lock)"
+                ),
             }
         )
         return EXIT_POLICY
-    except ValueError:
-        pass
+    if package_retire and bool(getattr(args, "skip_e1_upload_gate", False)):
+        _print_json(
+            {
+                "ok": False,
+                "error": (
+                    "--skip-e1-upload-gate refused on package retire "
+                    "(Rev. B §3)"
+                ),
+            }
+        )
+        return EXIT_POLICY
+    if package_retire:
+        tc_err = _require_typed_confirm(args, "RETIRE_PACKAGE_LOCK")
+        if tc_err:
+            _print_json({"ok": False, "error": tc_err})
+            return EXIT_POLICY
+        if is_live_agentx_path(Path(args.db)) and not _allow_live(args):
+            _print_json(
+                {
+                    "ok": False,
+                    "error": (
+                        "package retire refused: --allow-live-db required "
+                        "for RO prechecks on live-marked DB (Rev. B §A.4)"
+                    ),
+                }
+            )
+            return EXIT_POLICY
+
     if not lock.is_file():
         _print_json({"ok": False, "error": f"lock missing: {lock}"})
         return EXIT_POLICY
@@ -866,64 +1144,56 @@ def cmd_retire_run_lock(args: argparse.Namespace) -> int:
             }
         )
         return EXIT_POLICY
+
     journal = AppendOnlyAuditChain(_journal_path(args))
     try:
-        journal.verify()
-        # Quiescence + schema preconditions (gap).
-        build_snapshot_manifest(
-            Path(args.db),
-            Path(args.runner),
-            Path(args.lock),
-            Path(args.repo_root),
-            check_quiescent=True,
-            snapshot_dir=_snapshot_dir(args),
-            persist_artefact=False,
-            check_disk_headroom=_check_disk(args),
-            require_manifest_match=False,
-        )
-        # D4-a: default-on; bind upload to current logical digest when present.
-        skip_upload = bool(getattr(args, "skip_e1_upload_gate", False))
-        if not skip_upload:
-            conn_r = _conn(args)
-            try:
-                cur_digest = compute_logical_digest_sha256(conn_r)
-            finally:
-                conn_r.close()
-            entries = journal.read_entries()
-            upload_ok = False
-            for e in reversed(entries):
-                if e.get("action") == "db_artefact_upload":
-                    payload = e.get("payload") or {}
-                    dig = payload.get("logical_digest_sha256")
-                    upload_ok = (
-                        bool(payload.get("ok"))
-                        and bool(payload.get("sha256"))
-                        and isinstance(dig, str)
-                        and len(dig) == 64
-                        and dig == cur_digest
+        if package_retire:
+            err = _package_retire_prechecks(args)
+            if err:
+                _print_json({"ok": False, "error": err})
+                return EXIT_POLICY
+        else:
+            journal.verify()
+            build_snapshot_manifest(
+                Path(args.db),
+                Path(args.runner),
+                Path(args.lock),
+                Path(args.repo_root),
+                check_quiescent=True,
+                snapshot_dir=_snapshot_dir(args),
+                persist_artefact=False,
+                check_disk_headroom=_check_disk(args),
+                require_manifest_match=False,
+            )
+            skip_upload = bool(getattr(args, "skip_e1_upload_gate", False))
+            if not skip_upload:
+                conn_r = _conn_ro(args)
+                try:
+                    cur_digest = compute_logical_digest_sha256(conn_r)
+                finally:
+                    conn_r.close()
+                if not _retire_upload_gate_ok(journal, cur_digest):
+                    _print_json(
+                        {
+                            "ok": False,
+                            "error": (
+                                "retire refused: E-1 upload gate (default-on) "
+                                "requires prior db_artefact_upload ok=true bound "
+                                "to current logical digest; "
+                                "scratch opt-out: --skip-e1-upload-gate"
+                            ),
+                        }
                     )
-                    break
-            if not upload_ok:
+                    return EXIT_POLICY
+            if not getattr(args, "mirror_remote", None):
                 _print_json(
                     {
                         "ok": False,
-                        "error": (
-                            "retire refused: E-1 upload gate (default-on) "
-                            "requires prior db_artefact_upload ok=true bound to "
-                            "current logical digest; "
-                            "scratch opt-out: --skip-e1-upload-gate"
-                        ),
+                        "error": "retire refused: --mirror-remote required (gap)",
                     }
                 )
                 return EXIT_POLICY
-        if not getattr(args, "mirror_remote", None):
-            _print_json(
-                {
-                    "ok": False,
-                    "error": "retire refused: --mirror-remote required (gap)",
-                }
-            )
-            return EXIT_POLICY
+
         before_sha = sha256_file_streaming(lock)
         ts = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
         archive = lock.with_name(f"{lock.name}.retired.{before_sha[:12]}.{ts}")
@@ -935,6 +1205,97 @@ def cmd_retire_run_lock(args: argparse.Namespace) -> int:
                 }
             )
             return EXIT_POLICY
+
+        mirror_remote = (
+            getattr(args, "mirror_remote", None)
+            or DEFAULT_AUDIT_MIRROR_REMOTE_PREFIX
+        )
+        mirror_folder = _require_audit_folder_id(args)
+        mirror_error: Optional[str] = None
+
+        if package_retire:
+            # Intent → mirror (fail-closed, lock untouched) → mutate → Confirm
+            ph_intent = hashlib.sha256(
+                f"retire-run-lock-intent:{lock}:{before_sha}:{archive}".encode(
+                    "utf-8"
+                )
+            ).hexdigest()
+            intent = journal.append(
+                "retire_run_lock_intent",
+                ph_intent,
+                {
+                    "path": str(lock),
+                    "before_sha256": before_sha,
+                    "archive_path": str(archive),
+                    "retired_marker": str(marker),
+                },
+            )
+            mirror_audit_entry(
+                intent, mirror_remote, folder_id=mirror_folder
+            )
+            lock.rename(archive)
+            flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
+            fd = os.open(str(marker), flags, 0o644)
+            try:
+                os.write(
+                    fd,
+                    (
+                        f"before_sha256={before_sha}\n"
+                        f"archive={archive}\n"
+                        f"ts_utc={ts}\n"
+                    ).encode("utf-8"),
+                )
+            finally:
+                os.close(fd)
+            ph_confirm = hashlib.sha256(
+                f"retire-run-lock-confirm:{lock}:{before_sha}:{archive}".encode(
+                    "utf-8"
+                )
+            ).hexdigest()
+            confirm = journal.append(
+                "retire_run_lock_confirm",
+                ph_confirm,
+                {
+                    "path": str(lock),
+                    "before_sha256": before_sha,
+                    "archive_path": str(archive),
+                    "method": "rename_archive",
+                    "after_state": "absent",
+                    "retired_marker": str(marker),
+                    "intent_seq": intent["seq"],
+                },
+            )
+            try:
+                mirror_audit_entry(
+                    confirm, mirror_remote, folder_id=mirror_folder
+                )
+            except AuditChainError as mex:
+                mirror_error = str(mex)
+            out = {
+                "ok": True,
+                "action": "retire_run_lock",
+                "path": str(lock),
+                "archive_path": str(archive),
+                "before_sha256": before_sha,
+                "retired_marker": str(marker),
+                "intent_seq": intent["seq"],
+                "audit_seq": confirm["seq"],
+                "after_state": "absent",
+                "package_retire": True,
+            }
+            if mirror_error is not None:
+                out["ok"] = False
+                out["mirror_error"] = mirror_error
+                out["error"] = (
+                    "retire confirm mirror failed; lock already absent+marker; "
+                    "status shows open intent; undo via restore-run-lock"
+                )
+                _print_json(out)
+                return EXIT_POLICY
+            _print_json(out)
+            return EXIT_OK
+
+        # Scratch path — single retire_run_lock entry (suite compatibility)
         ph = hashlib.sha256(
             f"retire-run-lock:{lock}:{before_sha}:{archive}".encode("utf-8")
         ).hexdigest()
@@ -950,9 +1311,6 @@ def cmd_retire_run_lock(args: argparse.Namespace) -> int:
                 "retired_marker": str(marker),
             },
         )
-        # D3-a order: rename first; marker only after archive exists.
-        # Crash between rename and marker → absent without marker → refuse
-        # (fail-closed). Marker never pre-exists while LOCKED=1.
         lock.rename(archive)
         flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
         fd = os.open(str(marker), flags, 0o644)
@@ -973,7 +1331,15 @@ def cmd_retire_run_lock(args: argparse.Namespace) -> int:
                 args.mirror_remote,
                 folder_id=_require_audit_folder_id(args),
             )
-    except (AuditChainError, OSError) as exc:
+    except (
+        AuditChainError,
+        QuiescenceError,
+        SnapshotError,
+        ManifestMismatchError,
+        LivePathRefused,
+        OSError,
+        sqlite3.Error,
+    ) as exc:
         _print_json({"ok": False, "error": str(exc)})
         return EXIT_POLICY
     _print_json(
@@ -991,8 +1357,389 @@ def cmd_retire_run_lock(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def _last_retire_before_sha(
+    journal: AppendOnlyAuditChain,
+) -> Optional[tuple[str, str]]:
+    """Return (before_sha256, archive_path) from last retire confirm/legacy."""
+    entries = journal.read_entries()
+    for e in reversed(entries):
+        action = e.get("action")
+        if action in ("retire_run_lock_confirm", "retire_run_lock"):
+            payload = e.get("payload") or {}
+            sha = payload.get("before_sha256")
+            arch = payload.get("archive_path")
+            if isinstance(sha, str) and len(sha) == 64 and isinstance(arch, str):
+                return sha, arch
+    return None
+
+
+def _revoke_all_open_leases(
+    conn: sqlite3.Connection, *, allow_live: bool
+) -> list[str]:
+    """Revoke every unconsumed open token; return token digests revoked."""
+    rows = conn.execute(
+        "SELECT token FROM run_lease"
+        " WHERE consumed_at IS NULL AND revoked_at IS NULL"
+    ).fetchall()
+    digests: list[str] = []
+    for row in rows:
+        tok = row[0]
+        revoke_token(conn, tok, allow_live=allow_live)
+        digests.append(token_sha256(tok))
+    return digests
+
+
+def cmd_restore_run_lock(args: argparse.Namespace) -> int:
+    """Undo package/scratch retire: marker-first, then archive→RUN.lock (Rev. B §5)."""
+    lock = Path(args.lock).resolve()
+    marker = lock.parent / "RUN.RETIRED"
+    clear_stale = bool(getattr(args, "clear_stale_marker", False))
+
+    tc_err = _require_typed_confirm(args, "RESTORE_PACKAGE_LOCK")
+    if tc_err:
+        # Scratch restore: allow --i-am-a-test (already handled inside helper)
+        _print_json({"ok": False, "error": tc_err})
+        return EXIT_POLICY
+
+    # Lock+Marker heal path
+    if lock.is_file() and marker.is_file():
+        if not clear_stale:
+            _print_json(
+                {
+                    "ok": False,
+                    "error": (
+                        "restore refused: lock and RUN.RETIRED both present; "
+                        "use --clear-stale-marker to audit-remove marker only"
+                    ),
+                }
+            )
+            return EXIT_POLICY
+        journal = AppendOnlyAuditChain(_journal_path(args))
+        try:
+            journal.verify()
+            ph = hashlib.sha256(
+                f"restore-clear-marker:{lock}:{marker}".encode("utf-8")
+            ).hexdigest()
+            entry = journal.append(
+                "restore_run_lock_clear_marker",
+                ph,
+                {"path": str(lock), "marker": str(marker)},
+            )
+            if args.mirror_remote:
+                mirror_audit_entry(
+                    entry,
+                    args.mirror_remote,
+                    folder_id=_require_audit_folder_id(args),
+                )
+            marker.unlink()
+        except (AuditChainError, OSError) as exc:
+            _print_json({"ok": False, "error": str(exc)})
+            return EXIT_POLICY
+        _print_json(
+            {
+                "ok": True,
+                "action": "restore_run_lock_clear_marker",
+                "path": str(lock),
+                "audit_seq": entry["seq"],
+            }
+        )
+        return EXIT_OK
+
+    if lock.is_file():
+        _print_json(
+            {
+                "ok": False,
+                "error": "restore refused: RUN.lock already present (R1)",
+            }
+        )
+        return EXIT_POLICY
+
+    journal = AppendOnlyAuditChain(_journal_path(args))
+    try:
+        journal.verify()
+        pids = _list_shadow_runner_pids()
+        if pids:
+            _print_json(
+                {
+                    "ok": False,
+                    "error": f"restore refused: shadow_runner PIDs: {pids}",
+                }
+            )
+            return EXIT_POLICY
+
+        retire_info = _last_retire_before_sha(journal)
+        if retire_info is None:
+            _print_json(
+                {
+                    "ok": False,
+                    "error": "restore refused: no retire audit with before_sha256",
+                }
+            )
+            return EXIT_POLICY
+        before_sha, audit_archive = retire_info
+
+        archive_arg = getattr(args, "archive", None)
+        archive: Path
+        if archive_arg:
+            archive = Path(archive_arg).resolve()
+        else:
+            archives = sorted(
+                lock.parent.glob(f"{lock.name}.retired.*"),
+                key=lambda p: p.stat().st_mtime,
+            )
+            if marker.is_file():
+                archive = Path(audit_archive)
+                for line in marker.read_text(encoding="utf-8").splitlines():
+                    if line.startswith("archive="):
+                        archive = Path(line.split("=", 1)[1].strip())
+                        break
+            elif len(archives) == 0:
+                archive = Path(audit_archive)
+            elif len(archives) == 1:
+                archive = archives[0]
+            else:
+                _print_json(
+                    {
+                        "ok": False,
+                        "error": (
+                            "restore refused: multiple archives without marker; "
+                            "pass --archive <path>"
+                        ),
+                        "archives": [str(a) for a in archives],
+                    }
+                )
+                return EXIT_POLICY
+
+        if not archive.is_file():
+            _print_json(
+                {"ok": False, "error": f"restore refused: archive missing: {archive}"}
+            )
+            return EXIT_POLICY
+        arch_sha = sha256_file_streaming(archive)
+        if arch_sha != before_sha:
+            _print_json(
+                {
+                    "ok": False,
+                    "error": (
+                        "restore refused: archive SHA mismatch (R3): "
+                        f"archive={arch_sha} audit={before_sha}"
+                    ),
+                }
+            )
+            return EXIT_POLICY
+
+        # Revoke open tokens before bringing lock back
+        revoked: list[str] = []
+        conn = _conn(args)
+        try:
+            revoked = _revoke_all_open_leases(
+                conn, allow_live=_allow_live(args)
+            )
+            if revoked:
+                ph_rev = hashlib.sha256(
+                    f"restore-revoke:{lock}:{','.join(revoked)}".encode("utf-8")
+                ).hexdigest()
+                rev_entry = journal.append(
+                    "restore_run_lock_revoke_open",
+                    ph_rev,
+                    {"path": str(lock), "revoked_token_sha256": revoked},
+                )
+                if args.mirror_remote:
+                    mirror_audit_entry(
+                        rev_entry,
+                        args.mirror_remote,
+                        folder_id=_require_audit_folder_id(args),
+                    )
+        finally:
+            conn.close()
+
+        mirror_remote = (
+            getattr(args, "mirror_remote", None)
+            or DEFAULT_AUDIT_MIRROR_REMOTE_PREFIX
+        )
+        mirror_folder = _require_audit_folder_id(args)
+        ph_intent = hashlib.sha256(
+            f"restore-run-lock-intent:{lock}:{archive}:{before_sha}".encode(
+                "utf-8"
+            )
+        ).hexdigest()
+        intent = journal.append(
+            "restore_run_lock_intent",
+            ph_intent,
+            {
+                "path": str(lock),
+                "archive_path": str(archive),
+                "before_sha256": before_sha,
+                "marker_present": marker.is_file(),
+            },
+        )
+        mirror_audit_entry(intent, mirror_remote, folder_id=mirror_folder)
+
+        # Marker first (if present), then archive → lock
+        if marker.is_file():
+            marker.unlink()
+        archive.rename(lock)
+
+        ph_confirm = hashlib.sha256(
+            f"restore-run-lock-confirm:{lock}:{before_sha}".encode("utf-8")
+        ).hexdigest()
+        confirm = journal.append(
+            "restore_run_lock_confirm",
+            ph_confirm,
+            {
+                "path": str(lock),
+                "archive_path": str(archive),
+                "before_sha256": before_sha,
+                "intent_seq": intent["seq"],
+                "revoked_token_sha256": revoked,
+            },
+        )
+        mirror_error: Optional[str] = None
+        try:
+            mirror_audit_entry(
+                confirm, mirror_remote, folder_id=mirror_folder
+            )
+        except AuditChainError as mex:
+            mirror_error = str(mex)
+    except (
+        AuditChainError,
+        LivePathRefused,
+        LeaseError,
+        OSError,
+        sqlite3.Error,
+    ) as exc:
+        _print_json({"ok": False, "error": str(exc)})
+        return EXIT_POLICY
+
+    out: dict[str, Any] = {
+        "ok": True,
+        "action": "restore_run_lock",
+        "path": str(lock),
+        "intent_seq": intent["seq"],
+        "audit_seq": confirm["seq"],
+        "revoked_tokens": len(revoked),
+    }
+    if mirror_error is not None:
+        out["mirror_error"] = mirror_error
+    _print_json(out)
+    return EXIT_OK
+
+
+def cmd_restore_db_artefact(args: argparse.Namespace) -> int:
+    """E-1 rollback: replace DB only after pre-snapshot SHA match + L4."""
+    tc_err = _require_typed_confirm(args, "ALLOW_LIVE_DB")
+    if tc_err:
+        _print_json({"ok": False, "error": tc_err})
+        return EXIT_POLICY
+    if not _allow_live(args) and is_live_agentx_path(Path(args.db)):
+        _print_json(
+            {
+                "ok": False,
+                "error": "restore-db-artefact requires --allow-live-db on LIVE",
+            }
+        )
+        return EXIT_POLICY
+    artefact = Path(args.artefact).resolve()
+    db = Path(args.db).resolve()
+    if not artefact.is_file():
+        _print_json({"ok": False, "error": f"artefact missing: {artefact}"})
+        return EXIT_POLICY
+    expected = str(getattr(args, "expected_sha256", "") or "")
+    if len(expected) != 64:
+        _print_json(
+            {
+                "ok": False,
+                "error": "--expected-sha256 (64 hex) required (pre-snapshot)",
+            }
+        )
+        return EXIT_POLICY
+    journal = AppendOnlyAuditChain(_journal_path(args))
+    try:
+        journal.verify()
+        art_sha = sha256_file_streaming(artefact)
+        if art_sha != expected:
+            _print_json(
+                {
+                    "ok": False,
+                    "error": (
+                        "restore-db-artefact refused: artefact SHA mismatch: "
+                        f"got={art_sha} expected={expected}"
+                    ),
+                }
+            )
+            return EXIT_POLICY
+        before_sha = (
+            sha256_file_streaming(db) if db.is_file() else None
+        )
+        ph_intent = hashlib.sha256(
+            f"restore-db-artefact-intent:{db}:{art_sha}".encode("utf-8")
+        ).hexdigest()
+        intent = journal.append(
+            "restore_db_artefact_intent",
+            ph_intent,
+            {
+                "db": str(db),
+                "artefact": str(artefact),
+                "artefact_sha256": art_sha,
+                "before_sha256": before_sha,
+            },
+        )
+        if args.mirror_remote:
+            mirror_audit_entry(
+                intent,
+                args.mirror_remote,
+                folder_id=_require_audit_folder_id(args),
+            )
+        # Replace via tempfile + rename
+        tmp = db.with_suffix(db.suffix + ".restore_tmp")
+        shutil.copy2(artefact, tmp)
+        os.replace(str(tmp), str(db))
+        after_sha = sha256_file_streaming(db)
+        if after_sha != art_sha:
+            raise SnapshotError(
+                f"post-restore SHA drift: {after_sha} != {art_sha}"
+            )
+        ph_confirm = hashlib.sha256(
+            f"restore-db-artefact-confirm:{db}:{after_sha}".encode("utf-8")
+        ).hexdigest()
+        confirm = journal.append(
+            "restore_db_artefact_confirm",
+            ph_confirm,
+            {
+                "db": str(db),
+                "artefact_sha256": art_sha,
+                "after_sha256": after_sha,
+                "intent_seq": intent["seq"],
+            },
+        )
+        if args.mirror_remote:
+            mirror_audit_entry(
+                confirm,
+                args.mirror_remote,
+                folder_id=_require_audit_folder_id(args),
+            )
+    except (AuditChainError, SnapshotError, OSError) as exc:
+        _print_json({"ok": False, "error": str(exc)})
+        return EXIT_POLICY
+    _print_json(
+        {
+            "ok": True,
+            "action": "restore_db_artefact",
+            "db": str(db),
+            "artefact_sha256": art_sha,
+            "after_sha256": after_sha,
+            "intent_seq": intent["seq"],
+            "audit_seq": confirm["seq"],
+        }
+    )
+    return EXIT_OK
+
+
 def cmd_post_run_check(args: argparse.Namespace) -> int:
-    """Post-run invariants; optional ``--run-id`` scopes the terminal check."""
+    """Post-run invariants; optional ``--run-id`` scopes the terminal check.
+
+    DB reads use RO connect (no WAL flip). Snapshot artefact persist is file-only.
+    """
     journal = AppendOnlyAuditChain(_journal_path(args))
     try:
         journal.verify()
@@ -1012,7 +1759,7 @@ def cmd_post_run_check(args: argparse.Namespace) -> int:
                 "post-run-check runner SHA drift: "
                 f"manifest={manifest['runner_sha256']} live={runner_sha}"
             )
-        conn = _conn(args)
+        conn = _conn_ro(args)
         try:
             running = conn.execute(
                 "SELECT COUNT(*) FROM telemetry_runs WHERE status='RUNNING'"
@@ -1217,6 +1964,23 @@ def build_parser() -> argparse.ArgumentParser:
         help="M4: allow gatectl DB ops on Application Support/agentx (explicit)",
     )
     p.add_argument(
+        "--typed-confirm",
+        type=str,
+        default=None,
+        help=(
+            "L4 scratch/suite only: fixed phrase stem; "
+            "refused on live-marked DB and package lock (TTY+nonce required)"
+        ),
+    )
+    p.add_argument(
+        "--i-am-a-test",
+        action="store_true",
+        help=(
+            "L4 test hook: bypass typed confirm on scratch only; "
+            "refused on live-marked DB and package lock"
+        ),
+    )
+    p.add_argument(
         "--news-jsonl",
         type=Path,
         default=None,
@@ -1269,7 +2033,45 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="D4-a scratch/test opt-out; production path keeps upload gate ON",
     )
-    p_retire.set_defaults(func=cmd_retire_run_lock, skip_e1_upload_gate=False)
+    p_retire.add_argument(
+        "--allow-package-retire",
+        action="store_true",
+        help="Rev. B: lift soft-TABU for package ops/RUN.lock (V1–V8 + L4)",
+    )
+    p_retire.set_defaults(
+        func=cmd_retire_run_lock,
+        skip_e1_upload_gate=False,
+        allow_package_retire=False,
+    )
+
+    p_restore = sub.add_parser("restore-run-lock")
+    p_restore.add_argument(
+        "--archive",
+        type=Path,
+        default=None,
+        help="Explicit archive path when multiple .retired.* exist",
+    )
+    p_restore.add_argument(
+        "--clear-stale-marker",
+        action="store_true",
+        help="Heal Lock+Marker: audit-remove RUN.RETIRED only",
+    )
+    p_restore.set_defaults(func=cmd_restore_run_lock)
+
+    p_rdb = sub.add_parser("restore-db-artefact")
+    p_rdb.add_argument(
+        "--artefact",
+        type=Path,
+        required=True,
+        help="Pre-migrate snapshot artefact to restore onto --db",
+    )
+    p_rdb.add_argument(
+        "--expected-sha256",
+        type=str,
+        required=True,
+        help="Pre-snapshot SHA-256; refuse on mismatch",
+    )
+    p_rdb.set_defaults(func=cmd_restore_db_artefact)
 
     p_post = sub.add_parser("post-run-check")
     p_post.add_argument("--run-id", type=int, default=None)
@@ -1281,6 +2083,22 @@ def build_parser() -> argparse.ArgumentParser:
     return p
 
 
+def _l4_allow_live_gate(args: argparse.Namespace) -> Optional[str]:
+    """L4 for --allow-live-db on commands that do not have a more specific phrase."""
+    if not getattr(args, "allow_live_db", False):
+        return None
+    cmd = getattr(args, "command", "")
+    # Specific phrases already cover these; skip double-confirm.
+    if cmd in (
+        "retire-run-lock",
+        "restore-run-lock",
+        "abort-run",
+        "restore-db-artefact",
+    ):
+        return None
+    return _require_typed_confirm(args, "ALLOW_LIVE_DB")
+
+
 def main(argv: Optional[list[str]] = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -1290,6 +2108,14 @@ def main(argv: Optional[list[str]] = None) -> int:
         args.allow_live_skip_disk_check = False
     if not hasattr(args, "news_jsonl"):
         args.news_jsonl = None
+    if not hasattr(args, "typed_confirm"):
+        args.typed_confirm = None
+    if not hasattr(args, "i_am_a_test"):
+        args.i_am_a_test = False
+    live_err = _l4_allow_live_gate(args)
+    if live_err:
+        _print_json({"ok": False, "error": live_err})
+        return EXIT_POLICY
     return int(args.func(args))
 
 
