@@ -10,6 +10,7 @@ import argparse
 import asyncio
 import json
 import logging
+import sqlite3
 import subprocess
 import sys
 import time
@@ -423,15 +424,24 @@ def run_lock_blocks(lock_path: Path) -> bool:
 def main(argv: Optional[list[str]] = None) -> int:
     # FIRST instruction on the start path: refuse if RUN.lock is set.
     # No logging, no SQLite, no WS, no Falkor — stderr only, then exit 75.
+    # A4: --run-lock is never the default; package ops/RUN.lock unless explicit.
     argv_list = list(sys.argv[1:] if argv is None else argv)
     lock_path = default_run_lock_path()
+    run_lock_override = False
     if "--run-lock" in argv_list:
         i = argv_list.index("--run-lock")
         if i + 1 < len(argv_list):
             lock_path = Path(argv_list[i + 1])
+            run_lock_override = True
     lock_info = parse_run_lock(lock_path)
+    lock_info["run_lock_override"] = run_lock_override
     if lock_info["locked"]:
-        sys.stderr.write(f"RUN.lock active — refuse start path={lock_path}\n")
+        # forbid_run_id_gt is freeze metadata while LOCKED=1 only (A3/post-retire).
+        forbid = lock_info.get("forbid_run_id_gt")
+        extra = f" forbid_run_id_gt={forbid}" if forbid is not None else ""
+        sys.stderr.write(
+            f"RUN.lock active — refuse start path={lock_path}{extra}\n"
+        )
         return EXIT_RUN_LOCK
 
     parser = argparse.ArgumentParser(description=__doc__)
@@ -511,14 +521,9 @@ def main(argv: Optional[list[str]] = None) -> int:
             _LOG.error("control-plane preflight: %s", exc)
             store.close()
             return EXIT_CONTROL_PLANE
-        nxt = int(ready["next_run_id"])
-        forbid = lock_info.get("forbid_run_id_gt")
-        if forbid is not None and nxt > int(forbid):
-            sys.stderr.write(
-                f"RUN.lock forbid_run_id_gt={forbid} — refuse run_id={nxt}\n"
-            )
-            store.close()
-            return EXIT_RUN_LOCK
+        # forbid_run_id_gt is freeze metadata only while LOCKED=1 (early exit
+        # above). After retire (LOCKED=0 / lock absent) it must NOT block.
+        _ = ready  # next_run_id available for logs after claim
         store.close()
         store = None
 
@@ -534,9 +539,29 @@ def main(argv: Optional[list[str]] = None) -> int:
         except LeaseError as exc:
             _LOG.error("lease claim refused (no valid token): %s", exc)
             return EXIT_CONTROL_PLANE
+        except (sqlite3.Error, OSError) as exc:
+            # A1 fail-closed: DB/IO faults on claim path → refuse, never proceed.
+            _LOG.error("lease claim path failed closed: %s", exc)
+            return EXIT_CONTROL_PLANE
         except ValueError as exc:
             _LOG.error("%s", exc)
             return 2
+    except ControlPlaneError as exc:
+        _LOG.error("control-plane refused: %s", exc)
+        if store is not None:
+            try:
+                store.close()
+            except Exception:  # noqa: BLE001
+                pass
+        return EXIT_CONTROL_PLANE
+    except LeaseError as exc:
+        _LOG.error("lease refused: %s", exc)
+        if store is not None:
+            try:
+                store.close()
+            except Exception:  # noqa: BLE001
+                pass
+        return EXIT_CONTROL_PLANE
     except Exception:
         if store is not None:
             try:

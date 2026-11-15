@@ -13,6 +13,7 @@ import argparse
 import hashlib
 import json
 import sqlite3
+import time
 from pathlib import Path
 from typing import Any, Optional
 
@@ -512,7 +513,12 @@ def cmd_abort_run(args: argparse.Namespace) -> int:
 
 
 def cmd_retire_run_lock(args: argparse.Namespace) -> int:
-    """Refuse production ops/RUN.lock; scratch locks only (TABU + audit)."""
+    """Refuse production ops/RUN.lock; scratch locks only (TABU + audit).
+
+    Retire is reversible: rename/archive the lock (never delete). Active path
+    becomes absent → same parse branch as post-E-1 production (locked=False,
+    no forbid). Before-SHA is fixed in the audit journal prior to rename.
+    """
     lock = Path(args.lock).resolve()
     if lock == _REAL_LOCK:
         _print_json(
@@ -546,11 +552,19 @@ def cmd_retire_run_lock(args: argparse.Namespace) -> int:
     try:
         journal.verify()
         before_sha = sha256_file_streaming(lock)
-        new = text.replace("LOCKED=1", "LOCKED=0", 1)
-        lock.write_text(new, encoding="utf-8")
-        after_sha = sha256_file_streaming(lock)
+        ts = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
+        archive = lock.with_name(f"{lock.name}.retired.{before_sha[:12]}.{ts}")
+        if archive.exists():
+            _print_json(
+                {
+                    "ok": False,
+                    "error": f"retire archive already exists: {archive}",
+                }
+            )
+            return EXIT_POLICY
+        # Audit payload prepared with before_sha; rename is the sole mutation.
         ph = hashlib.sha256(
-            f"retire-run-lock:{lock}:{before_sha}:{after_sha}".encode("utf-8")
+            f"retire-run-lock:{lock}:{before_sha}:{archive}".encode("utf-8")
         ).hexdigest()
         entry = journal.append(
             "retire_run_lock",
@@ -558,9 +572,12 @@ def cmd_retire_run_lock(args: argparse.Namespace) -> int:
             {
                 "path": str(lock),
                 "before_sha256": before_sha,
-                "after_sha256": after_sha,
+                "archive_path": str(archive),
+                "method": "rename_archive",
+                "after_state": "absent",
             },
         )
+        lock.rename(archive)
         if args.mirror_remote:
             mirror_audit_entry(
                 entry,
@@ -576,8 +593,10 @@ def cmd_retire_run_lock(args: argparse.Namespace) -> int:
             "ok": True,
             "action": "retire_run_lock",
             "path": str(lock),
+            "archive_path": str(archive),
+            "before_sha256": before_sha,
             "audit_seq": entry["seq"],
-            "after_sha256": after_sha,
+            "after_state": "absent",
         }
     )
     return EXIT_OK
