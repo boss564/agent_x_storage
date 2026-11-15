@@ -28,6 +28,8 @@ _RUNNER_PGREP_PATTERN = "shadow_runner"
 _LOGICAL_DIGEST_EXCLUDE_TABLES = frozenset({"run_lease"})
 # Refuse persisting snapshot artefacts when volume is this full (project rule).
 _DISK_USAGE_REFUSE_RATIO = 0.85
+# Gate #4: chunked file digest (1 MiB) — never load whole DB into RAM.
+SHA256_CHUNK_SIZE = 1024 * 1024
 
 
 class QuiescenceError(RuntimeError):
@@ -58,12 +60,69 @@ def _canonical_json(obj: Any) -> str:
     )
 
 
-def _sha256_file(path: Path) -> str:
+def sha256_file_streaming(
+    path: Path, *, chunk_size: int = SHA256_CHUNK_SIZE
+) -> str:
+    """Chunked SHA-256 of a file (Gate #4 streaming digest)."""
+    if chunk_size < 1:
+        raise SnapshotError(f"chunk_size must be >= 1, got {chunk_size}")
     h = hashlib.sha256()
-    with path.open("rb") as fh:
-        for chunk in iter(lambda: fh.read(1024 * 1024), b""):
+    with Path(path).open("rb") as fh:
+        for chunk in iter(lambda: fh.read(chunk_size), b""):
             h.update(chunk)
     return h.hexdigest()
+
+
+def _sha256_file(path: Path) -> str:
+    return sha256_file_streaming(path)
+
+
+def compute_jsonl_prefix_sha256(
+    path: Path,
+    *,
+    byte_offset: int = 0,
+    byte_length: Optional[int] = None,
+    chunk_size: int = SHA256_CHUNK_SIZE,
+) -> dict[str, Any]:
+    """SHA-256 of a byte prefix of a JSONL (or any) file — Gate #4.
+
+    Digests ``path[byte_offset : byte_offset + byte_length]`` (or to EOF when
+    ``byte_length`` is None). Returns offset/size/sha so append-only growth of
+    ``news_scores.jsonl`` (and similar) stays verifiable without re-hashing
+    the whole file history.
+    """
+    p = Path(path)
+    if not p.is_file():
+        raise SnapshotError(f"jsonl missing: {p}")
+    if byte_offset < 0:
+        raise SnapshotError(f"byte_offset must be >= 0, got {byte_offset}")
+    if byte_length is not None and byte_length < 0:
+        raise SnapshotError(f"byte_length must be >= 0, got {byte_length}")
+    file_size = p.stat().st_size
+    if byte_offset > file_size:
+        raise SnapshotError(
+            f"byte_offset {byte_offset} beyond file size {file_size}"
+        )
+    remaining = file_size - byte_offset
+    to_read = remaining if byte_length is None else min(byte_length, remaining)
+    h = hashlib.sha256()
+    with p.open("rb") as fh:
+        fh.seek(byte_offset)
+        left = to_read
+        while left > 0:
+            n = min(chunk_size, left)
+            chunk = fh.read(n)
+            if not chunk:
+                break
+            h.update(chunk)
+            left -= len(chunk)
+    return {
+        "path": str(p.resolve()),
+        "byte_offset": int(byte_offset),
+        "byte_length": int(to_read),
+        "file_size": int(file_size),
+        "sha256": h.hexdigest(),
+    }
 
 
 def _git_head(repo_root: Path) -> str:
@@ -210,6 +269,29 @@ def assert_disk_headroom(
         "free": float(usage.free),
         "used_ratio": float(used_ratio),
     }
+
+
+def assert_skip_disk_check_allowed(
+    *paths: Path, allow_live: bool = False
+) -> None:
+    """``--skip-disk-check`` is Scratch-only unless ``allow_live`` Freigabe.
+
+    Fail-closed: any path under LIVE ``Application Support/agentx`` refuses
+    the skip without explicit ``--allow-live-skip-disk-check``.
+    """
+    if allow_live:
+        return
+    from order_execution_engine.control_plane_lease import LivePathRefused
+
+    for raw in paths:
+        if raw is None:
+            continue
+        lowered = str(Path(raw).resolve()).lower()
+        if "application support/agentx" in lowered:
+            raise LivePathRefused(
+                f"refuse --skip-disk-check on LIVE path without "
+                f"--allow-live-skip-disk-check: {Path(raw).resolve()}"
+            )
 
 
 def _backup_db_quiescent(src: Path, dest: Path, *, busy_ms: int = 50) -> None:
@@ -748,6 +830,72 @@ def mirror_audit_journal(
             )
         )
     return remotes
+
+
+def verify_audit_mirror(
+    journal_path: Path,
+    remote_prefix: str,
+    *,
+    run_rclone: Callable[..., subprocess.CompletedProcess[str]] | None = None,
+    folder_id: str = DEFAULT_AUDIT_MIRROR_FOLDER_ID,
+) -> dict[str, Any]:
+    """Fail-closed: every journal entry must exist off-host with matching SHA.
+
+    Compares local canonical payload SHA-256 to ``rclone cat`` of
+    ``{seq}_{entry_hash}.json`` under ``remote_prefix`` (pinned folder id).
+    """
+    if not remote_prefix or not isinstance(remote_prefix, str):
+        raise AuditChainError("remote_prefix required")
+    chain = AppendOnlyAuditChain(Path(journal_path))
+    n = chain.verify()
+    entries = chain.read_entries()
+    drive_flags = audit_mirror_rclone_flags(folder_id=folder_id)
+    runner = run_rclone or subprocess.run
+    checked: list[dict[str, Any]] = []
+    for entry in entries:
+        try:
+            seq = int(entry["seq"])
+            entry_hash = str(entry["entry_hash"])
+        except (KeyError, TypeError, ValueError) as exc:
+            raise AuditChainError(
+                f"entry missing seq/entry_hash: {exc}"
+            ) from exc
+        name = f"{seq:08d}_{entry_hash}.json"
+        remote = remote_prefix.rstrip("/") + "/" + name
+        local_payload = _canonical_json(entry) + "\n"
+        local_sha = hashlib.sha256(local_payload.encode("utf-8")).hexdigest()
+        cat = _run_rclone_cmd(
+            ["rclone", "cat", remote, *drive_flags],
+            runner=runner,
+        )
+        if cat.returncode != 0:
+            err = cat.stderr if isinstance(cat.stderr, str) else ""
+            out = cat.stdout if isinstance(cat.stdout, str) else ""
+            raise AuditChainError(
+                f"verify-mirror missing/unreachable {remote}: "
+                f"{(err or out).strip()}"
+            )
+        cat_out = cat.stdout if isinstance(cat.stdout, str) else ""
+        remote_sha = hashlib.sha256(cat_out.encode("utf-8")).hexdigest()
+        if remote_sha != local_sha:
+            raise AuditChainError(
+                f"verify-mirror SHA mismatch {remote}: "
+                f"local_sha={local_sha} remote_sha={remote_sha}"
+            )
+        checked.append(
+            {
+                "seq": seq,
+                "remote": remote,
+                "sha256": local_sha,
+            }
+        )
+    return {
+        "ok": True,
+        "entries": n,
+        "checked": checked,
+        "remote_prefix": remote_prefix,
+        "folder_id": folder_id,
+    }
 
 
 def token_sha256(token: str) -> str:

@@ -24,15 +24,20 @@ from order_execution_engine.control_plane_audit import (
     ManifestMismatchError,
     QuiescenceError,
     SnapshotError,
+    assert_skip_disk_check_allowed,
     build_snapshot_manifest,
+    compute_jsonl_prefix_sha256,
     expected_control_plane_manifest_sha256,
     mirror_audit_entry,
+    sha256_file_streaming,
     token_sha256,
+    verify_audit_mirror,
 )
 from order_execution_engine.control_plane_lease import (
     SCHEMA_CONTROL,
     LeaseError,
     LivePathRefused,
+    abort_run,
     connect_scratch,
     issue_token,
     migrate_control_plane,
@@ -79,8 +84,20 @@ def _snapshot_dir(args: argparse.Namespace) -> Path:
 
 
 def _check_disk(args: argparse.Namespace) -> bool:
-    """Production default True; Scratch tests may set --skip-disk-check."""
-    return not bool(getattr(args, "skip_disk_check", False))
+    """True → enforce ≥85% refuse. ``--skip-disk-check`` Scratch-only.
+
+    Skipping on LIVE ``Application Support/agentx`` paths requires explicit
+    ``--allow-live-skip-disk-check`` Freigabe (Gate #4 fail-closed).
+    """
+    if not bool(getattr(args, "skip_disk_check", False)):
+        return True
+    assert_skip_disk_check_allowed(
+        Path(args.db),
+        Path(args.data_root),
+        Path(args.lock),
+        allow_live=bool(getattr(args, "allow_live_skip_disk_check", False)),
+    )
+    return False
 
 
 def _mirror_required_entry(
@@ -326,7 +343,21 @@ def cmd_status(args: argparse.Namespace) -> int:
 
 
 def cmd_migrate(args: argparse.Namespace) -> int:
+    """Pre-snapshot → migrate → post manifest check → audit (Gate #4)."""
+    journal = AppendOnlyAuditChain(_journal_path(args))
     try:
+        journal.verify()
+        pre = build_snapshot_manifest(
+            Path(args.db),
+            Path(args.runner),
+            Path(args.lock),
+            Path(args.repo_root),
+            check_quiescent=True,
+            snapshot_dir=_snapshot_dir(args),
+            persist_artefact=True,
+            check_disk_headroom=_check_disk(args),
+            require_manifest_match=False,
+        )
         conn = connect_scratch(Path(args.db))
         try:
             migrate_control_plane(conn, db_path=Path(args.db))
@@ -336,7 +367,50 @@ def cmd_migrate(args: argparse.Namespace) -> int:
             ver = int(row[0]) if row else 0
         finally:
             conn.close()
-    except (LeaseError, LivePathRefused, sqlite3.Error, OSError) as exc:
+        post = build_snapshot_manifest(
+            Path(args.db),
+            Path(args.runner),
+            Path(args.lock),
+            Path(args.repo_root),
+            check_quiescent=True,
+            snapshot_dir=_snapshot_dir(args),
+            persist_artefact=False,
+            check_disk_headroom=False,
+            require_manifest_match=True,
+        )
+        expected = expected_control_plane_manifest_sha256()
+        if post["trigger_manifest_sha256"] != expected:
+            raise ManifestMismatchError(
+                "post-migrate trigger manifest mismatch: "
+                f"observed={post['trigger_manifest_sha256']} expected={expected}"
+            )
+        entry = journal.append(
+            "migrate",
+            post["manifest_sha256"],
+            {
+                "schema_version": ver,
+                "pre_artefact_sha256": pre["artefact_sha256"],
+                "post_trigger_manifest_sha256": post["trigger_manifest_sha256"],
+                "expected_trigger_manifest_sha256": expected,
+            },
+        )
+        if args.mirror_remote:
+            mirror_audit_entry(
+                entry,
+                args.mirror_remote,
+                folder_id=args.mirror_folder_id
+                or DEFAULT_AUDIT_MIRROR_FOLDER_ID,
+            )
+    except (
+        LeaseError,
+        LivePathRefused,
+        QuiescenceError,
+        SnapshotError,
+        ManifestMismatchError,
+        AuditChainError,
+        sqlite3.Error,
+        OSError,
+    ) as exc:
         _print_json({"ok": False, "error": str(exc)})
         return EXIT_POLICY
     _print_json(
@@ -344,56 +418,93 @@ def cmd_migrate(args: argparse.Namespace) -> int:
             "ok": True,
             "action": "migrate",
             "schema_version": ver,
-            "expected_manifest": expected_control_plane_manifest_sha256(),
+            "expected_manifest": expected,
+            "audit_seq": entry["seq"],
+            "pre_artefact_sha256": pre["artefact_sha256"],
         }
     )
     return EXIT_OK
 
 
 def cmd_abort_run(args: argparse.Namespace) -> int:
+    """Abort RUNNING run + revoke open leases; audit fail → DB rollback."""
     journal = AppendOnlyAuditChain(_journal_path(args))
+    conn = None
+    entry: Optional[dict[str, Any]] = None
+    info: Optional[dict[str, Any]] = None
+    rid = 0
+    reason = ""
     try:
         journal.verify()
         conn = connect_scratch(Path(args.db))
-        try:
-            rid = int(args.run_id)
-            cur = conn.execute(
-                "UPDATE telemetry_runs SET status='ABORTED',"
-                " closed_at=CAST(strftime('%s','now') AS INTEGER)"
-                " WHERE run_id=? AND status='RUNNING'",
-                (rid,),
-            )
-            if cur.rowcount != 1:
-                raise LeaseError(
-                    f"abort-run refused: run_id={rid} not RUNNING"
-                )
-            # Placeholder manifest hash when snapshot skipped (still chainable).
-            ph = hashlib.sha256(
-                f"abort-run:{rid}".encode("utf-8")
-            ).hexdigest()
-            entry = journal.append(
-                "abort_run",
-                ph,
-                {"run_id": rid},
-            )
-            if args.mirror_remote:
-                mirror_audit_entry(
-                    entry,
-                    args.mirror_remote,
-                    folder_id=args.mirror_folder_id
-                    or DEFAULT_AUDIT_MIRROR_FOLDER_ID,
-                )
-        finally:
-            conn.close()
+        rid = int(args.run_id)
+        reason = str(getattr(args, "reason", "") or "")
+        conn.execute("BEGIN IMMEDIATE")
+        info = abort_run(conn, rid, reason=reason)
+        ph = hashlib.sha256(
+            f"abort-run:{rid}:{reason}".encode("utf-8")
+        ).hexdigest()
+        entry = journal.append(
+            "abort_run",
+            ph,
+            {
+                "run_id": rid,
+                "reason": reason,
+                "leases_revoked": info["leases_revoked"],
+                "closed_at": info["closed_at"],
+            },
+        )
+        conn.execute("COMMIT")
     except (LeaseError, LivePathRefused, AuditChainError, sqlite3.Error) as exc:
+        if conn is not None:
+            try:
+                conn.execute("ROLLBACK")
+            except sqlite3.Error:
+                pass
         _print_json({"ok": False, "error": str(exc)})
         return EXIT_POLICY
-    _print_json({"ok": True, "action": "abort_run", "run_id": rid, "audit_seq": entry["seq"]})
+    finally:
+        if conn is not None:
+            try:
+                conn.close()
+            except sqlite3.Error:
+                pass
+    assert entry is not None and info is not None
+    try:
+        if args.mirror_remote:
+            mirror_audit_entry(
+                entry,
+                args.mirror_remote,
+                folder_id=args.mirror_folder_id
+                or DEFAULT_AUDIT_MIRROR_FOLDER_ID,
+            )
+    except AuditChainError as exc:
+        _print_json(
+            {
+                "ok": False,
+                "error": str(exc),
+                "action": "abort_run",
+                "run_id": rid,
+                "audit_seq": entry["seq"],
+                "db_aborted": True,
+            }
+        )
+        return EXIT_POLICY
+    _print_json(
+        {
+            "ok": True,
+            "action": "abort_run",
+            "run_id": rid,
+            "reason": reason,
+            "audit_seq": entry["seq"],
+            "leases_revoked": info["leases_revoked"],
+        }
+    )
     return EXIT_OK
 
 
 def cmd_retire_run_lock(args: argparse.Namespace) -> int:
-    """Refuse production ops/RUN.lock; scratch locks only (TABU)."""
+    """Refuse production ops/RUN.lock; scratch locks only (TABU + audit)."""
     lock = Path(args.lock).resolve()
     if lock == _REAL_LOCK:
         _print_json(
@@ -403,6 +514,19 @@ def cmd_retire_run_lock(args: argparse.Namespace) -> int:
             }
         )
         return EXIT_POLICY
+    # Also refuse any lock under the package ops/ directory (path tricks).
+    ops_dir = (_PKG / "ops").resolve()
+    try:
+        lock.relative_to(ops_dir)
+        _print_json(
+            {
+                "ok": False,
+                "error": "retire-run-lock refused for package ops/ lock (TABU)",
+            }
+        )
+        return EXIT_POLICY
+    except ValueError:
+        pass
     if not lock.is_file():
         _print_json({"ok": False, "error": f"lock missing: {lock}"})
         return EXIT_POLICY
@@ -410,16 +534,53 @@ def cmd_retire_run_lock(args: argparse.Namespace) -> int:
     if "LOCKED=1" not in text:
         _print_json({"ok": False, "error": "lock not LOCKED=1"})
         return EXIT_POLICY
-    new = text.replace("LOCKED=1", "LOCKED=0", 1)
-    lock.write_text(new, encoding="utf-8")
-    _print_json({"ok": True, "action": "retire_run_lock", "path": str(lock)})
+    journal = AppendOnlyAuditChain(_journal_path(args))
+    try:
+        journal.verify()
+        before_sha = sha256_file_streaming(lock)
+        new = text.replace("LOCKED=1", "LOCKED=0", 1)
+        lock.write_text(new, encoding="utf-8")
+        after_sha = sha256_file_streaming(lock)
+        ph = hashlib.sha256(
+            f"retire-run-lock:{lock}:{before_sha}:{after_sha}".encode("utf-8")
+        ).hexdigest()
+        entry = journal.append(
+            "retire_run_lock",
+            ph,
+            {
+                "path": str(lock),
+                "before_sha256": before_sha,
+                "after_sha256": after_sha,
+            },
+        )
+        if args.mirror_remote:
+            mirror_audit_entry(
+                entry,
+                args.mirror_remote,
+                folder_id=args.mirror_folder_id
+                or DEFAULT_AUDIT_MIRROR_FOLDER_ID,
+            )
+    except (AuditChainError, OSError) as exc:
+        _print_json({"ok": False, "error": str(exc)})
+        return EXIT_POLICY
+    _print_json(
+        {
+            "ok": True,
+            "action": "retire_run_lock",
+            "path": str(lock),
+            "audit_seq": entry["seq"],
+            "after_sha256": after_sha,
+        }
+    )
     return EXIT_OK
 
 
 def cmd_post_run_check(args: argparse.Namespace) -> int:
+    """Post-run invariants; optional ``--run-id`` scopes the terminal check."""
     journal = AppendOnlyAuditChain(_journal_path(args))
     try:
         journal.verify()
+        runner_sha = sha256_file_streaming(Path(args.runner))
         manifest = build_snapshot_manifest(
             Path(args.db),
             Path(args.runner),
@@ -430,6 +591,11 @@ def cmd_post_run_check(args: argparse.Namespace) -> int:
             persist_artefact=True,
             check_disk_headroom=_check_disk(args),
         )
+        if manifest["runner_sha256"] != runner_sha:
+            raise SnapshotError(
+                "post-run-check runner SHA drift: "
+                f"manifest={manifest['runner_sha256']} live={runner_sha}"
+            )
         conn = connect_scratch(Path(args.db))
         try:
             running = conn.execute(
@@ -439,18 +605,62 @@ def cmd_post_run_check(args: argparse.Namespace) -> int:
                 "SELECT COUNT(*) FROM run_lease"
                 " WHERE consumed_at IS NULL AND revoked_at IS NULL"
             ).fetchone()[0]
+            run_row = None
+            if getattr(args, "run_id", None) is not None:
+                rid = int(args.run_id)
+                run_row = conn.execute(
+                    "SELECT run_id, status, closed_at FROM telemetry_runs"
+                    " WHERE run_id=?",
+                    (rid,),
+                ).fetchone()
+                if run_row is None:
+                    raise SnapshotError(
+                        f"post-run-check: run_id={rid} not found"
+                    )
+                if run_row["status"] not in ("ABORTED", "COMMITTED"):
+                    raise SnapshotError(
+                        f"post-run-check: run_id={rid} status="
+                        f"{run_row['status']!r} not terminal"
+                    )
+                if run_row["closed_at"] is None:
+                    raise SnapshotError(
+                        f"post-run-check: run_id={rid} closed_at is NULL"
+                    )
+                open_for_run = conn.execute(
+                    "SELECT COUNT(*) FROM run_lease"
+                    " WHERE run_id=? AND consumed_at IS NULL"
+                    " AND revoked_at IS NULL",
+                    (rid,),
+                ).fetchone()[0]
+                if open_for_run:
+                    raise SnapshotError(
+                        f"post-run-check: run_id={rid} still has open lease"
+                    )
         finally:
             conn.close()
         if running or open_leases:
             raise SnapshotError(
                 f"post-run-check failed: running={running} open_leases={open_leases}"
             )
+        jsonl_info = None
+        news_jsonl = getattr(args, "news_jsonl", None)
+        if news_jsonl is not None:
+            jsonl_info = compute_jsonl_prefix_sha256(Path(news_jsonl))
         entry = journal.append(
             "post_run_check",
             manifest["manifest_sha256"],
             {
                 "max_run_id": manifest["max_run_id"],
                 "logical_digest_sha256": manifest["logical_digest_sha256"],
+                "runner_sha256": runner_sha,
+                "run_id": (
+                    int(args.run_id)
+                    if getattr(args, "run_id", None) is not None
+                    else None
+                ),
+                "run_status": run_row["status"] if run_row is not None else None,
+                "news_jsonl_prefix": jsonl_info,
+                "verdict": "PASS",
             },
         )
         if args.mirror_remote:
@@ -466,15 +676,60 @@ def cmd_post_run_check(args: argparse.Namespace) -> int:
         ManifestMismatchError,
         AuditChainError,
         LivePathRefused,
+        OSError,
+        ValueError,
     ) as exc:
+        _print_json({"ok": False, "error": str(exc), "verdict": "FAIL"})
+        return EXIT_POLICY
+    out: dict[str, Any] = {
+        "ok": True,
+        "action": "post_run_check",
+        "max_run_id": manifest["max_run_id"],
+        "audit_seq": entry["seq"],
+        "runner_sha256": runner_sha,
+        "verdict": "PASS",
+    }
+    if getattr(args, "run_id", None) is not None:
+        out["run_id"] = int(args.run_id)
+    if jsonl_info is not None:
+        out["news_jsonl_prefix"] = jsonl_info
+    _print_json(out)
+    return EXIT_OK
+
+
+def cmd_verify_mirror(args: argparse.Namespace) -> int:
+    """Compare local audit journal objects to off-host mirror (Gate #4)."""
+    journal = AppendOnlyAuditChain(_journal_path(args))
+    try:
+        journal.verify()
+        result = verify_audit_mirror(
+            _journal_path(args),
+            args.mirror_remote or DEFAULT_AUDIT_MIRROR_REMOTE_PREFIX,
+            folder_id=args.mirror_folder_id or DEFAULT_AUDIT_MIRROR_FOLDER_ID,
+        )
+        entry = journal.append(
+            "verify_mirror",
+            hashlib.sha256(
+                json.dumps(result, sort_keys=True, separators=(",", ":")).encode(
+                    "utf-8"
+                )
+            ).hexdigest(),
+            {
+                "entries": result["entries"],
+                "folder_id": result["folder_id"],
+                "remote_prefix": result["remote_prefix"],
+            },
+        )
+    except (AuditChainError, OSError, ValueError) as exc:
         _print_json({"ok": False, "error": str(exc)})
         return EXIT_POLICY
     _print_json(
         {
             "ok": True,
-            "action": "post_run_check",
-            "max_run_id": manifest["max_run_id"],
+            "action": "verify_mirror",
+            "entries": result["entries"],
             "audit_seq": entry["seq"],
+            "folder_id": result["folder_id"],
         }
     )
     return EXIT_OK
@@ -533,6 +788,20 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Scratch/tests only: allow persist artefacts when volume is nearly full",
     )
+    p.add_argument(
+        "--allow-live-skip-disk-check",
+        action="store_true",
+        help=(
+            "Explicit LIVE Freigabe for --skip-disk-check on "
+            "Application Support/agentx paths (default: refuse)"
+        ),
+    )
+    p.add_argument(
+        "--news-jsonl",
+        type=Path,
+        default=None,
+        help="Optional news_scores.jsonl for post-run-check prefix SHA",
+    )
 
     sub = p.add_subparsers(dest="command", required=True)
 
@@ -557,13 +826,18 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_abort = sub.add_parser("abort-run")
     p_abort.add_argument("--run-id", type=int, required=True)
+    p_abort.add_argument("--reason", type=str, default="")
     p_abort.set_defaults(func=cmd_abort_run)
 
     p_retire = sub.add_parser("retire-run-lock")
     p_retire.set_defaults(func=cmd_retire_run_lock)
 
     p_post = sub.add_parser("post-run-check")
+    p_post.add_argument("--run-id", type=int, default=None)
     p_post.set_defaults(func=cmd_post_run_check)
+
+    p_vm = sub.add_parser("verify-mirror")
+    p_vm.set_defaults(func=cmd_verify_mirror)
 
     return p
 
@@ -573,6 +847,10 @@ def main(argv: Optional[list[str]] = None) -> int:
     args = parser.parse_args(argv)
     if not hasattr(args, "allow_busy"):
         args.allow_busy = False
+    if not hasattr(args, "allow_live_skip_disk_check"):
+        args.allow_live_skip_disk_check = False
+    if not hasattr(args, "news_jsonl"):
+        args.news_jsonl = None
     return int(args.func(args))
 
 

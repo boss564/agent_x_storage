@@ -422,8 +422,19 @@ def test_retire_run_lock_refuses_package_lock(tmp_path: Path) -> None:
     )
     assert rc == EXIT_POLICY
 
-    # Scratch lock can be retired
-    rc = gatectl_main(_argv(paths, "retire-run-lock"))
+    def fake_run(cmd, **kwargs):  # noqa: ANN001
+        m = MagicMock()
+        m.returncode = 0
+        m.stdout = "[]" if len(cmd) > 1 and cmd[1] == "lsjson" else ""
+        m.stderr = ""
+        return m
+
+    # Scratch lock can be retired (mirror mocked — default remote always set)
+    with patch(
+        "order_execution_engine.control_plane_audit.subprocess.run",
+        side_effect=fake_run,
+    ):
+        rc = gatectl_main(_argv(paths, "retire-run-lock"))
     assert rc == EXIT_OK
     assert "LOCKED=0" in paths["lock"].read_text(encoding="utf-8")
 

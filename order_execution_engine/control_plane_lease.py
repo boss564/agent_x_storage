@@ -572,3 +572,39 @@ def lease_snapshot(conn: sqlite3.Connection) -> list[dict[str, Any]]:
         " FROM run_lease ORDER BY issued_at, token"
     ).fetchall()
     return [dict(r) for r in rows]
+
+
+def abort_run(
+    conn: sqlite3.Connection,
+    run_id: int,
+    *,
+    reason: str = "",
+    now: Optional[int] = None,
+) -> dict[str, Any]:
+    """Atomically mark RUNNING run ABORTED; revoke leftover open leases (L2).
+
+    Caller must wrap with audit journal: on audit failure, ``ROLLBACK`` this
+    transaction (gatectl holds BEGIN until audit succeeds).
+    """
+    _refuse_live_conn(conn)
+    rid = int(run_id)
+    ts = int(now if now is not None else time.time())
+    cur = conn.execute(
+        "UPDATE telemetry_runs SET status='ABORTED',"
+        " closed_at=?"
+        " WHERE run_id=? AND status='RUNNING'",
+        (ts, rid),
+    )
+    if cur.rowcount != 1:
+        raise LeaseError(f"abort-run refused: run_id={rid} not RUNNING")
+    revoked = conn.execute(
+        "UPDATE run_lease SET revoked_at=?"
+        " WHERE run_id=? AND consumed_at IS NULL AND revoked_at IS NULL",
+        (ts, rid),
+    ).rowcount
+    return {
+        "run_id": rid,
+        "reason": str(reason or ""),
+        "closed_at": ts,
+        "leases_revoked": int(revoked),
+    }
