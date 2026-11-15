@@ -119,6 +119,10 @@ def cmd_verify_snapshot(args: argparse.Namespace) -> int:
     journal = AppendOnlyAuditChain(_journal_path(args))
     try:
         journal.verify()
+        # Canary/pre-migrate: v9 LIVE copies lack control-plane DDL until migrate.
+        require_match = not bool(
+            getattr(args, "allow_manifest_mismatch", False)
+        )
         manifest = build_snapshot_manifest(
             Path(args.db),
             Path(args.runner),
@@ -128,6 +132,7 @@ def cmd_verify_snapshot(args: argparse.Namespace) -> int:
             snapshot_dir=_snapshot_dir(args),
             persist_artefact=True,
             check_disk_headroom=_check_disk(args),
+            require_manifest_match=require_match,
         )
         entry = journal.append(
             "verify_snapshot",
@@ -136,6 +141,8 @@ def cmd_verify_snapshot(args: argparse.Namespace) -> int:
                 "max_run_id": manifest["max_run_id"],
                 "logical_digest_sha256": manifest["logical_digest_sha256"],
                 "artefact_sha256": manifest["artefact_sha256"],
+                "manifest_match": manifest["manifest_match"],
+                "allow_manifest_mismatch": not require_match,
             },
         )
         remote = _mirror_required_entry(args, entry)
@@ -152,6 +159,7 @@ def cmd_verify_snapshot(args: argparse.Namespace) -> int:
         "action": "verify_snapshot",
         "manifest_sha256": manifest["manifest_sha256"],
         "trigger_manifest_sha256": manifest["trigger_manifest_sha256"],
+        "manifest_match": manifest["manifest_match"],
         "logical_digest_sha256": manifest["logical_digest_sha256"],
         "artefact_sha256": manifest["artefact_sha256"],
         "max_run_id": manifest["max_run_id"],
@@ -806,6 +814,14 @@ def build_parser() -> argparse.ArgumentParser:
     sub = p.add_subparsers(dest="command", required=True)
 
     p_verify = sub.add_parser("verify-snapshot")
+    p_verify.add_argument(
+        "--allow-manifest-mismatch",
+        action="store_true",
+        help=(
+            "Canary/pre-migrate only: record snapshot even when observed "
+            "DDL manifest ≠ Soll (e.g. LIVE schema v9 before gatectl migrate)"
+        ),
+    )
     p_verify.set_defaults(func=cmd_verify_snapshot)
 
     p_issue = sub.add_parser("issue-token")
