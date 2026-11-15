@@ -1,12 +1,13 @@
 # Architektur-Härtung & Revidierter E-Plan (K1–K8)
 
-**Status:** PLAN ABGENOMMEN — **Revision 8** (**E-1 Freigabe ≠ erteilt**; C1–C6 am Tip `793d17d8` erfüllt)  
+**Status:** PLAN ABGENOMMEN — **Revision 10** (**E-1 Freigabe ≠ erteilt**; D1–D6 **commit-gebunden** @ `98a6f307` / tests tip)  
 **Freeze-Produktion:** `RUN.lock` am Paketpfad (`LOCKED=1`) + LIVE_DB (`max_run_id=15` / `user_version=9`) bleibt bis **nach** `post-run-check --run-id 16` GRÜN (Lock = letzter Akt).  
 **Allowlist-Freeze `5adab542`:** Messlauf-Artefakt; Code-Härtung auf Branch + Scratch; neuer Tag+Manifest am Ende.  
 **Ziel:** fail-closed, schema-enforced Control-Plane vor `run_id=16`.  
-**E-1:** gesperrt; Push-Blocker auf Basis **`origin/main..HEAD = 337`** (333+4 Residual); Bundle = DR ≠ Remote-Ref.  
-**Rohakte:** `E1_FREIGABE_AKTE.json` · `E1_RESIDUALS_AKTE.json` · `E1_INTEGRATION_SEMANTICS.md` · `E1_F1_PLUS_COMMITTED.json`  
-**Runner-Pin (committed @ `6d7fd729`):** `e9efe320c4957c5924424fe191d49eac69f910688eff420148509c055ff870b0` — C2 MATCH.
+**E-1:** gesperrt; Push-Blocker auf Basis **`origin/main..HEAD` neu messen** (post-D; war 338); Bundle = DR ≠ Remote-Ref.  
+**Rohakte:** `E1_FREIGABE_AKTE.json` · `E1_RESIDUALS_AKTE.json` · `E1_D_RESIDUALS_AKTE.json` · `E1_INTEGRATION_SEMANTICS.md` · `E1_F1_PLUS_COMMITTED.json`  
+**D-Pins (committed @ `98a6f307`):** runner `1c65b0be2925da85fee6ce090a1fe817f93b61ed6be4a2a0a2cfc0d80e2b8d77` · gatectl `5068d869b3f03e97cdcc77ed8e683b89b73736b6521dfa89cedb1db70d19d567` — C2-Pins `e9efe320…` / `93ed1267…` **ungültig**.  
+**Push-Basis:** nach D-Commits neu messen (nicht mehr 338).
 
 ### Off-Host-Inkrement nach jedem Härtungs-Commit (bindend)
 
@@ -286,9 +287,15 @@ Kein separates Build-Binär — F1-Probe und E-1 importieren dieselbe Worktree-Q
 | **A3** Scratch = Post-Retire | **PASS Scratch** | Retire = **rename-archive** (nie delete); Aktivpfad **absent**; parse `locked=False`/`forbid=None`; Generalprobe absent oder `LOCKED=0\n`; **Bugfix:** `forbid_run_id_gt` gilt nur noch bei `LOCKED=1` |
 | **A4** Override explizit | **PASS Scratch** | Default = `ops/RUN.lock`; Plist **ohne** `--run-lock` |
 | **B** DB-Artefakt-Upload | **DEFINIERT** | In E-1-Scope; **vor** Retire; Ziel = H4-Folder + `db_snapshots/`; Hash = Artefakt-SHA256; Retention ≥ E-1+7d; Transport `rclone copyto`; `verify-mirror` = Audit-Journal Vollständigkeit/Integrität |
-| **C** Probe↔HEAD Code | **OFFEN bis Commit** | F1 lief auf Pin `93ed1267…` @ `10a4ddf4`; Residual dirty → Runner-Pin jetzt `e9efe320…`; migrate/lease-Reprobe PASS; **nach Commit:** F1+ erneut + `git diff` leer |
+| **C** Probe↔HEAD Code | **PASS C2** | Committed Pin `e9efe320…` @ `6d7fd729`; D6a `6d7fd729..af0ac607` runner/gatectl **leer**; D-WT erneut dirty |
+| **D1** Lease-Fencing | **PASS Scratch** | `claim_run(token=)` atomar; stale nach Re-Issue refuse; kein RUNNING-TTL-Abort |
+| **D2** Abort konsumiert | **PASS Scratch** | Abort → MAX=rid, next=rid+1; 2. abort refuse; Audit-Fail → ROLLBACK |
+| **D3** absent-Phase | **PASS Scratch** | Package absent ohne `RUN.RETIRED` → refuse; Marker → proceed |
+| **D4** Upload-Gate | **PASS Scratch** | `--enforce-e1-upload-gate` ohne Upload → Retire refuse, Lock bleibt |
+| **D5** F0 am Tip | **PASS gemessen** | Tip `af0ac607`; ahead=338; R3 commit; R4 rc=0; Guard-Pin WT stale bis D-Commit |
+| **D6** Deklarationen | **PASS Scratch** | D6a leer @ Tip; D6b Exit-76 no-retry; D6c Mapping in `E1_INTEGRATION_SEMANTICS.md` |
 
-**Retire (Scratch):** `before_sha256` im Audit **vor** Rename; Archiv `RUN.lock.retired.<sha12>.<utc>`; Paket-`ops/` weiter **TABU** bis eigener Freigabeakt.
+**Retire (Scratch):** `before_sha256` im Audit **vor** Rename; Archiv `RUN.lock.retired.<sha12>.<utc>`; `RUN.RETIRED` Marker; Paket-`ops/` weiter **TABU** bis eigener Freigabeakt.
 
 ### F2+ Scratch-Lock-Semantik (verbindlich)
 

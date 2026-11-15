@@ -1,0 +1,29 @@
+{
+  "title": "E-1 D1–D6 commit-bound + pin rebind",
+  "measured_at_pre_docs": "2026-11-15T15:54:51Z",
+  "environment": "host",
+  "e1_granted": false,
+  "code_commit": "98a6f307bbccb5544a6b50f5b6a09d1fc11ea678",
+  "tests_commit": "8e7bcf2bb567b0e07921eaa8f086481dbe2be482",
+  "pins": {
+    "runner_sha256": "1c65b0be2925da85fee6ce090a1fe817f93b61ed6be4a2a0a2cfc0d80e2b8d77",
+    "gatectl_sha256": "5068d869b3f03e97cdcc77ed8e683b89b73736b6521dfa89cedb1db70d19d567",
+    "bound_at_commit": "98a6f307bbccb5544a6b50f5b6a09d1fc11ea678",
+    "invalidated": [
+      "e9efe320c4957c5924424fe191d49eac69f910688eff420148509c055ff870b0",
+      "93ed12674cefa183aea8d21e751edc5bf7c4cd297429639e333db1f6b27116cc",
+      "f5a3bb76dec13563aececfd2ec88e56682e578c8a90bfc66767ef6071d0f643b"
+    ],
+    "blob_match_wt": true
+  },
+  "ahead_after_tests": 340,
+  "edges": {
+    "D1a": "status.running[].age_s watchdog surface; no auto-abort",
+    "D2a": "write-ahead audit before COMMIT",
+    "D2b": "--confirm-abort == --run-id",
+    "D3a": "O_EXCL marker after rename; preexisting refuse",
+    "D4a": "upload gate default-on; --skip-e1-upload-gate opt-out"
+  },
+  "RUN_lock_sha256": "58340c1e27b01a55d84f4d38f43590f1677d6cbf53c0536dc273237e1a69845b",
+  "note": "F0_full filled after docs commit in same turn"
+}
