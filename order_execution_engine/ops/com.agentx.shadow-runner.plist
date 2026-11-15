@@ -4,10 +4,11 @@
 <dict>
 	<key>Label</key>
 	<string>com.agentx.shadow-runner</string>
+	<!-- daemon off until E-1 / explicit load -->
 	<key>KeepAlive</key>
-	<true/>
+	<false/>
 	<key>RunAtLoad</key>
-	<true/>
+	<false/>
 	<!-- Code on THX (read); runtime DB/JSONL under ~/Library (launchd-writable). -->
 	<key>WorkingDirectory</key>
 	<string>/Volumes/THX_OS_ULTRA/Users/olivermueller/agent_x_storage</string>

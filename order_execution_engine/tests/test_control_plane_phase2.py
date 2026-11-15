@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import plistlib
 import sqlite3
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -590,3 +591,16 @@ def test_i2_status_uses_temp_snapshot_verify_persists(tmp_path: Path) -> None:
 
 def test_token_sha256_helper() -> None:
     assert token_sha256("abc") == hashlib.sha256(b"abc").hexdigest()
+
+
+def test_shadow_runner_plist_daemon_off_until_e1() -> None:
+    """Gate #3: repo LaunchAgent must not auto-start (no launchctl in test)."""
+    plist_path = (
+        Path(__file__).resolve().parents[1] / "ops" / "com.agentx.shadow-runner.plist"
+    )
+    with plist_path.open("rb") as fh:
+        data = plistlib.load(fh)
+    assert data.get("KeepAlive") is False
+    assert data.get("RunAtLoad") is False
+    assert "WatchPaths" not in data
+    assert data.get("Label") == "com.agentx.shadow-runner"
