@@ -1,0 +1,14 @@
+{
+  "ts_utc": "20261115T152713Z",
+  "git_head": "793d17d8e678bdee3033567a22bd16560079bccd",
+  "verdict": "PASS",
+  "committed_pin": "e9efe320c4957c5924424fe191d49eac69f910688eff420148509c055ff870b0",
+  "live_sha": "2a7915ef0eff5dea4b3e67332cbb117bf1b738190fbd9304c5dceaa3b54008ed",
+  "post_uv": 12,
+  "max_run_id": 15,
+  "manifest": "3e685b7d98349aeefae3ab591908dd672b731f89f06a7d71fedbd0e49574c9d9",
+  "abort_reopen_uv9": true,
+  "restore": true,
+  "f7": true,
+  "work_dir": "/var/folders/pl/7s5198dd4917v2qgh1lv99qr0000gn/T/e1_f1plus_committed_20261115T152713Z_mwk_7xkl"
+}
