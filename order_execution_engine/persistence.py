@@ -289,12 +289,22 @@ class SQLiteShadowStorage:
         self._migrate_v7()
         self._migrate_v8()
         self._migrate_v9()
-        self._conn.execute(
-            "INSERT OR REPLACE INTO schema_meta (key, value) VALUES ('schema_version', ?)",
-            (str(SCHEMA_VERSION),),
-        )
-        # Keep PRAGMA user_version in lockstep with schema_meta (A4: was 0).
-        self._conn.execute(f"PRAGMA user_version = {int(SCHEMA_VERSION)}")
+        # D3 / F1: never downgrade. migrate_control_plane is outside __init__; if the
+        # file is already schema >=10, preserve it so open_run takes the
+        # lease path. Only bump upward to SCHEMA_VERSION (currently 9).
+        current = self._schema_meta_version()
+        if current < SCHEMA_VERSION:
+            self._conn.execute(
+                "INSERT OR REPLACE INTO schema_meta (key, value)"
+                " VALUES ('schema_version', ?)",
+                (str(SCHEMA_VERSION),),
+            )
+            self._conn.execute(f"PRAGMA user_version = {int(SCHEMA_VERSION)}")
+        elif current == SCHEMA_VERSION:
+            self._conn.execute(f"PRAGMA user_version = {int(SCHEMA_VERSION)}")
+        else:
+            # Higher version (e.g. 10) — leave schema_meta alone; sync pragma.
+            self._conn.execute(f"PRAGMA user_version = {int(current)}")
         self._conn.commit()
 
     def _migrate_v2(self) -> None:
@@ -769,20 +779,40 @@ class SQLiteShadowStorage:
     ) -> int:
         """Erzeugt einen telemetry_runs-Eintrag und setzt den aktiven run_id.
 
-        Alle folgenden ``write_telemetry``-Zeilen tragen diesen ``run_id``.
+        Schema <10 (Bestand): INSERT ohne explizite run_id (lastrowid).
+        Schema >=10 (Phase-1 Control-Plane): ``BEGIN IMMEDIATE`` Claim mit
+        explizitem ``MAX+1`` und gültigem ``run_lease`` (Zwischen-Enforcement
+        bis run_lease production-live / K2/K3). migrate_control_plane is NOT
+        called from ``__init__`` — only tests / gatectl migrate.
         """
         import time as _time
 
         started = float(started_at if started_at is not None else _time.time())
         payload = json.dumps(config_json, sort_keys=True, default=str)
         with self._lock:
-            cur = self._conn.execute(
-                "INSERT INTO telemetry_runs (started_at, git_commit, config_json)"
-                " VALUES (?, ?, ?)",
-                (started, git_commit, payload),
-            )
-            run_id = int(cur.lastrowid)
-            self._conn.commit()
+            if self._schema_meta_version() >= 10:
+                from order_execution_engine.control_plane_lease import (
+                    LeaseError,
+                    claim_run,
+                )
+
+                try:
+                    run_id = claim_run(
+                        self._conn,
+                        git_commit=git_commit,
+                        config_json=payload,
+                        started_at=started,
+                    )
+                except LeaseError:
+                    raise
+            else:
+                cur = self._conn.execute(
+                    "INSERT INTO telemetry_runs (started_at, git_commit, config_json)"
+                    " VALUES (?, ?, ?)",
+                    (started, git_commit, payload),
+                )
+                run_id = int(cur.lastrowid)
+                self._conn.commit()
         self._active_run_id = run_id
         return run_id
 
