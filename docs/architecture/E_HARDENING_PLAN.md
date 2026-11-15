@@ -4,7 +4,7 @@
 **Freeze-Produktion:** `RUN.lock` am Paketpfad (`LOCKED=1`) + LIVE_DB (`max_run_id=15` / `user_version=9`) bleibt bis **nach** `post-run-check --run-id 16` GRÜN (Lock = letzter Akt).  
 **Allowlist-Freeze `5adab542`:** Messlauf-Artefakt; Code-Härtung auf Branch + Scratch; neuer Tag+Manifest am Ende.  
 **Ziel:** fail-closed, schema-enforced Control-Plane vor `run_id=16`.  
-**E-1:** gesperrt; Push-Blocker auf Basis **`origin/main..HEAD = 336`** (333+3 Residual); Bundle = DR ≠ Remote-Ref.  
+**E-1:** gesperrt; Push-Blocker auf Basis **`origin/main..HEAD = 337`** (333+4 Residual); Bundle = DR ≠ Remote-Ref.  
 **Rohakte:** `E1_FREIGABE_AKTE.json` · `E1_RESIDUALS_AKTE.json` · `E1_INTEGRATION_SEMANTICS.md` · `E1_F1_PLUS_COMMITTED.json`  
 **Runner-Pin (committed @ `6d7fd729`):** `e9efe320c4957c5924424fe191d49eac69f910688eff420148509c055ff870b0` — C2 MATCH.
 
