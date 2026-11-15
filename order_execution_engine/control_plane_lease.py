@@ -528,26 +528,72 @@ def claim_run(
     *,
     git_commit: str,
     config_json: str,
+    token: str,
     started_at: Optional[float] = None,
+    now: Optional[int] = None,
 ) -> int:
-    """BEGIN IMMEDIATE claim: INSERT telemetry_runs with explicit next_run_id.
+    """BEGIN IMMEDIATE fenced claim: bind INSERT to a specific open lease token (D1).
 
-    Gate #6: used by production ``open_run`` — does **not** refuse LIVE paths
+    Gate #6 / E-1: production ``open_run`` path. Does **not** refuse LIVE paths
     (unlike ``connect_scratch`` / ``issue_token`` / ``migrate_control_plane``).
-    Lease BI trigger still requires a valid open ``run_lease`` for ``run_id``.
+
+    Fencing: the caller must present the exact token issued for ``next_run_id``.
+    An expired holder whose token was revoked/replaced cannot INSERT — even if
+    another process later issued a fresh lease for the same run_id.
     """
+    if not token or not isinstance(token, str):
+        raise LeaseError("claim_run requires lease token (D1 fencing)")
     started = float(started_at if started_at is not None else time.time())
+    ts = int(now if now is not None else time.time())
     conn.execute("BEGIN IMMEDIATE")
     try:
         run_id = next_run_id(conn)
+        row = conn.execute(
+            "SELECT token, run_id, expires_at, consumed_at, revoked_at"
+            " FROM run_lease WHERE token = ?",
+            (token,),
+        ).fetchone()
+        if row is None:
+            conn.execute("ROLLBACK")
+            raise LeaseError("claim refused: unknown lease token")
+        # Tuple or sqlite3.Row — never assume row_factory.
+        _tok, lease_rid, expires_at, consumed_at, revoked_at = (
+            row[0],
+            row[1],
+            row[2],
+            row[3],
+            row[4],
+        )
+        if int(lease_rid) != int(run_id):
+            conn.execute("ROLLBACK")
+            raise LeaseError(
+                f"claim refused: token run_id={lease_rid} != next={run_id}"
+            )
+        if consumed_at is not None or revoked_at is not None:
+            conn.execute("ROLLBACK")
+            raise LeaseError("claim refused: lease token already closed")
+        if int(expires_at) <= ts:
+            conn.execute("ROLLBACK")
+            raise LeaseError("claim refused: lease token expired")
         conn.execute(
             "INSERT INTO telemetry_runs"
             " (run_id, started_at, git_commit, config_json, status, closed_at)"
             " VALUES (?, ?, ?, ?, 'RUNNING', NULL)",
             (run_id, started, git_commit, config_json),
         )
+        # AI trigger consumes the open lease for run_id. Fence: THIS token
+        # must be the one now consumed (stale holder after re-issue fails).
+        after = conn.execute(
+            "SELECT consumed_at, revoked_at FROM run_lease WHERE token = ?",
+            (token,),
+        ).fetchone()
+        if after is None or after[0] is None or after[1] is not None:
+            conn.execute("ROLLBACK")
+            raise LeaseError("claim refused: token consume failed (fence)")
         conn.execute("COMMIT")
         return run_id
+    except LeaseError:
+        raise
     except sqlite3.IntegrityError as exc:
         try:
             conn.execute("ROLLBACK")

@@ -184,6 +184,7 @@ def build_runner(
     start_ws: bool = True,
     config_allowlist: Optional[dict[str, Any]] = None,
     git_commit: Optional[str] = None,
+    lease_token: Optional[str] = None,
 ) -> tuple[ShadowExecutionEngine, NewsBridge, SQLiteShadowStorage, Any, dict[str, Any]]:
     """Verdrahtet Engine + Bridge + Storage + optionalen WS-Feed.
 
@@ -258,7 +259,11 @@ def build_runner(
         "live_execution": False,
         "order_send": False,
     }
-    run_id = store.open_run(git_commit=commit, config_json=config_json)
+    run_id = store.open_run(
+        git_commit=commit,
+        config_json=config_json,
+        lease_token=lease_token,
+    )
     bridge = NewsBridge(
         engine, binding.cache, resolver,
         SqliteDedupStore(store), policy, run_id,
@@ -394,6 +399,12 @@ def default_run_lock_path() -> Path:
     return Path(__file__).resolve().parent / "ops" / "RUN.lock"
 
 
+def package_retired_marker_path(lock_path: Optional[Path] = None) -> Path:
+    """D3 post-retire marker beside package RUN.lock (written by authorized retire)."""
+    base = (lock_path or default_run_lock_path()).resolve().parent
+    return base / "RUN.RETIRED"
+
+
 def parse_run_lock(lock_path: Path) -> dict[str, Any]:
     """Parse RUN.lock → ``locked`` + optional ``forbid_run_id_gt``."""
     out: dict[str, Any] = {"locked": False, "forbid_run_id_gt": None, "path": str(lock_path)}
@@ -421,10 +432,45 @@ def run_lock_blocks(lock_path: Path) -> bool:
     return bool(parse_run_lock(lock_path)["locked"])
 
 
+def evaluate_start_lock(
+    lock_path: Path, *, run_lock_override: bool
+) -> tuple[bool, str]:
+    """D3 phase-aware lock gate.
+
+    Returns ``(refuse, reason)``. Package path: absent without ``RUN.RETIRED``
+    is fail-closed (pre-retire freeze). Scratch override: absent = proceed.
+    """
+    pkg = default_run_lock_path().resolve()
+    path = lock_path.resolve()
+    info = parse_run_lock(lock_path)
+    if path == pkg and not run_lock_override:
+        if not lock_path.is_file():
+            marker = package_retired_marker_path(lock_path)
+            if not marker.is_file():
+                return (
+                    True,
+                    "package RUN.lock absent without RUN.RETIRED — refuse (D3 pre-retire fail-closed)",
+                )
+            return False, "post-retire marker present — proceed to lease"
+        if info["locked"]:
+            forbid = info.get("forbid_run_id_gt")
+            extra = f" forbid_run_id_gt={forbid}" if forbid is not None else ""
+            return True, f"RUN.lock active — refuse start path={lock_path}{extra}"
+        return False, "package lock unlocked"
+    # Scratch / explicit --run-lock: absent or LOCKED=0 → proceed; LOCKED=1 → refuse
+    if info["locked"]:
+        forbid = info.get("forbid_run_id_gt")
+        extra = f" forbid_run_id_gt={forbid}" if forbid is not None else ""
+        return True, f"RUN.lock active — refuse start path={lock_path}{extra}"
+    return False, "scratch lock allows start"
+
+
 def main(argv: Optional[list[str]] = None) -> int:
     # FIRST instruction on the start path: refuse if RUN.lock is set.
     # No logging, no SQLite, no WS, no Falkor — stderr only, then exit 75.
     # A4: --run-lock is never the default; package ops/RUN.lock unless explicit.
+    # D3: package absent without RUN.RETIRED → refuse (freeze fail-closed).
+    # D6b: Exit 76 = control-plane refusal — callers must NOT retry as transient.
     argv_list = list(sys.argv[1:] if argv is None else argv)
     lock_path = default_run_lock_path()
     run_lock_override = False
@@ -433,15 +479,11 @@ def main(argv: Optional[list[str]] = None) -> int:
         if i + 1 < len(argv_list):
             lock_path = Path(argv_list[i + 1])
             run_lock_override = True
-    lock_info = parse_run_lock(lock_path)
-    lock_info["run_lock_override"] = run_lock_override
-    if lock_info["locked"]:
-        # forbid_run_id_gt is freeze metadata while LOCKED=1 only (A3/post-retire).
-        forbid = lock_info.get("forbid_run_id_gt")
-        extra = f" forbid_run_id_gt={forbid}" if forbid is not None else ""
-        sys.stderr.write(
-            f"RUN.lock active — refuse start path={lock_path}{extra}\n"
-        )
+    refuse, reason = evaluate_start_lock(
+        lock_path, run_lock_override=run_lock_override
+    )
+    if refuse:
+        sys.stderr.write(reason + "\n")
         return EXIT_RUN_LOCK
 
     parser = argparse.ArgumentParser(description=__doc__)
@@ -477,6 +519,11 @@ def main(argv: Optional[list[str]] = None) -> int:
     parser.add_argument(
         "--run-lock", type=Path, default=None,
         help="Path to RUN.lock (default: order_execution_engine/ops/RUN.lock)",
+    )
+    parser.add_argument(
+        "--lease-token",
+        default=None,
+        help="D1 fencing token from gatectl issue-token (or SHADOW_LEASE_TOKEN)",
     )
     args = parser.parse_args(argv)
 
@@ -528,6 +575,9 @@ def main(argv: Optional[list[str]] = None) -> int:
         store = None
 
         try:
+            import os as _os
+
+            lease_tok = args.lease_token or _os.environ.get("SHADOW_LEASE_TOKEN")
             engine, bridge, store, binding, config_json = build_runner(
                 data_root=args.data_root,
                 user_id=args.user_id,
@@ -535,9 +585,11 @@ def main(argv: Optional[list[str]] = None) -> int:
                 policy_cfg=policy_cfg,
                 start_ws=not args.no_ws and not args.once,
                 config_allowlist=config_allowlist,
+                lease_token=lease_tok,
             )
         except LeaseError as exc:
-            _LOG.error("lease claim refused (no valid token): %s", exc)
+            # D6b: Exit 76 = refusal — callers must not retry as transient fault.
+            _LOG.error("lease claim refused (D1/D6b no-retry): %s", exc)
             return EXIT_CONTROL_PLANE
         except (sqlite3.Error, OSError) as exc:
             # A1 fail-closed: DB/IO faults on claim path → refuse, never proceed.
@@ -547,7 +599,7 @@ def main(argv: Optional[list[str]] = None) -> int:
             _LOG.error("%s", exc)
             return 2
     except ControlPlaneError as exc:
-        _LOG.error("control-plane refused: %s", exc)
+        _LOG.error("control-plane refused (D6b no-retry): %s", exc)
         if store is not None:
             try:
                 store.close()
@@ -555,7 +607,7 @@ def main(argv: Optional[list[str]] = None) -> int:
                 pass
         return EXIT_CONTROL_PLANE
     except LeaseError as exc:
-        _LOG.error("lease refused: %s", exc)
+        _LOG.error("lease refused (D6b no-retry): %s", exc)
         if store is not None:
             try:
                 store.close()

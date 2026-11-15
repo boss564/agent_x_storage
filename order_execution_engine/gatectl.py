@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import sqlite3
 import time
 from pathlib import Path
@@ -330,16 +331,30 @@ def cmd_status(args: argparse.Namespace) -> int:
                 "SELECT COUNT(*) FROM run_lease"
                 " WHERE consumed_at IS NULL AND revoked_at IS NULL"
             ).fetchone()[0]
-            running = conn.execute(
-                "SELECT COUNT(*) FROM telemetry_runs WHERE status='RUNNING'"
-            ).fetchone()[0]
+            running_rows = conn.execute(
+                "SELECT run_id, started_at FROM telemetry_runs"
+                " WHERE status='RUNNING' ORDER BY run_id"
+            ).fetchall()
+            now_s = time.time()
+            running_detail = []
+            for rr in running_rows:
+                started = float(rr[1] or 0.0)
+                running_detail.append(
+                    {
+                        "run_id": int(rr[0]),
+                        "started_at": started,
+                        "age_s": max(0.0, now_s - started),
+                    }
+                )
             out["db_state"] = {
                 "schema_version": schema_version,
                 "schema_ok": schema_version >= SCHEMA_CONTROL,
                 "open_leases": int(open_leases),
-                "running_runs": int(running),
+                "running_runs": len(running_detail),
+                # D1-a: lease age visible for operator watchdog (no auto-abort).
+                "running": running_detail,
             }
-            if schema_version < SCHEMA_CONTROL or running:
+            if schema_version < SCHEMA_CONTROL or running_detail:
                 out["ok"] = False
         finally:
             conn.close()
@@ -436,7 +451,14 @@ def cmd_migrate(args: argparse.Namespace) -> int:
 
 
 def cmd_abort_run(args: argparse.Namespace) -> int:
-    """Abort RUNNING run + revoke open leases; audit fail → DB rollback."""
+    """Abort RUNNING run + revoke open leases; audit fail → DB rollback.
+
+    D2-a (write-ahead audit): ``journal.append`` runs **before** ``COMMIT``.
+    If append raises, ``ROLLBACK`` undoes the lease transition — the DB never
+    reaches ABORTED without an audit row. Mirror is post-commit best-effort.
+
+    D2-b: requires ``--confirm-abort <run_id>`` (operator intentionality gate).
+    """
     journal = AppendOnlyAuditChain(_journal_path(args))
     conn = None
     entry: Optional[dict[str, Any]] = None
@@ -444,15 +466,28 @@ def cmd_abort_run(args: argparse.Namespace) -> int:
     rid = 0
     reason = ""
     try:
+        rid = int(args.run_id)
+        confirm = str(getattr(args, "confirm_abort", "") or "")
+        if confirm != str(rid):
+            _print_json(
+                {
+                    "ok": False,
+                    "error": (
+                        "abort-run refused: --confirm-abort must equal "
+                        f"--run-id ({rid}) — operator gate (D2-b)"
+                    ),
+                }
+            )
+            return EXIT_POLICY
         journal.verify()
         conn = connect_scratch(Path(args.db))
-        rid = int(args.run_id)
         reason = str(getattr(args, "reason", "") or "")
         conn.execute("BEGIN IMMEDIATE")
         info = abort_run(conn, rid, reason=reason)
         ph = hashlib.sha256(
             f"abort-run:{rid}:{reason}".encode("utf-8")
         ).hexdigest()
+        # Write-ahead audit (D2-a): append before COMMIT so failure rolls back.
         entry = journal.append(
             "abort_run",
             ph,
@@ -515,9 +550,15 @@ def cmd_abort_run(args: argparse.Namespace) -> int:
 def cmd_retire_run_lock(args: argparse.Namespace) -> int:
     """Refuse production ops/RUN.lock; scratch locks only (TABU + audit).
 
-    Retire is reversible: rename/archive the lock (never delete). Active path
-    becomes absent → same parse branch as post-E-1 production (locked=False,
-    no forbid). Before-SHA is fixed in the audit journal prior to rename.
+    Retire is reversible: rename/archive the lock (never delete). Writes
+    ``RUN.RETIRED`` marker beside the lock (D3 post-retire). Before-SHA is
+    fixed in the audit journal prior to rename.
+
+    D4-a: upload gate is **default-on**. Prior ``db_artefact_upload`` with
+    ok=true+sha256 required unless ``--skip-e1-upload-gate`` (scratch/test hook).
+
+    D3-a: ``RUN.RETIRED`` is created **only after** rename-archive succeeds
+    (exclusive create). Pre-existing marker → refuse (fail-closed).
     """
     lock = Path(args.lock).resolve()
     if lock == _REAL_LOCK:
@@ -548,9 +589,45 @@ def cmd_retire_run_lock(args: argparse.Namespace) -> int:
     if "LOCKED=1" not in text:
         _print_json({"ok": False, "error": "lock not LOCKED=1"})
         return EXIT_POLICY
+    marker = lock.parent / "RUN.RETIRED"
+    if marker.is_file():
+        _print_json(
+            {
+                "ok": False,
+                "error": (
+                    "retire refused: RUN.RETIRED already present "
+                    "(D3-a marker integrity)"
+                ),
+            }
+        )
+        return EXIT_POLICY
     journal = AppendOnlyAuditChain(_journal_path(args))
     try:
         journal.verify()
+        # D4-a: default-on; --skip-e1-upload-gate is the only opt-out.
+        skip_upload = bool(getattr(args, "skip_e1_upload_gate", False))
+        if not skip_upload:
+            entries = journal.read_entries()
+            upload_ok = False
+            for e in reversed(entries):
+                if e.get("action") == "db_artefact_upload":
+                    payload = e.get("payload") or {}
+                    upload_ok = bool(payload.get("ok")) and bool(
+                        payload.get("sha256")
+                    )
+                    break
+            if not upload_ok:
+                _print_json(
+                    {
+                        "ok": False,
+                        "error": (
+                            "retire refused: E-1 upload gate (default-on) "
+                            "requires prior db_artefact_upload ok=true (D4-a); "
+                            "scratch opt-out: --skip-e1-upload-gate"
+                        ),
+                    }
+                )
+                return EXIT_POLICY
         before_sha = sha256_file_streaming(lock)
         ts = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
         archive = lock.with_name(f"{lock.name}.retired.{before_sha[:12]}.{ts}")
@@ -562,7 +639,6 @@ def cmd_retire_run_lock(args: argparse.Namespace) -> int:
                 }
             )
             return EXIT_POLICY
-        # Audit payload prepared with before_sha; rename is the sole mutation.
         ph = hashlib.sha256(
             f"retire-run-lock:{lock}:{before_sha}:{archive}".encode("utf-8")
         ).hexdigest()
@@ -575,9 +651,26 @@ def cmd_retire_run_lock(args: argparse.Namespace) -> int:
                 "archive_path": str(archive),
                 "method": "rename_archive",
                 "after_state": "absent",
+                "retired_marker": str(marker),
             },
         )
+        # D3-a order: rename first; marker only after archive exists.
+        # Crash between rename and marker → absent without marker → refuse
+        # (fail-closed). Marker never pre-exists while LOCKED=1.
         lock.rename(archive)
+        flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
+        fd = os.open(str(marker), flags, 0o644)
+        try:
+            os.write(
+                fd,
+                (
+                    f"before_sha256={before_sha}\n"
+                    f"archive={archive}\n"
+                    f"ts_utc={ts}\n"
+                ).encode("utf-8"),
+            )
+        finally:
+            os.close(fd)
         if args.mirror_remote:
             mirror_audit_entry(
                 entry,
@@ -595,6 +688,7 @@ def cmd_retire_run_lock(args: argparse.Namespace) -> int:
             "path": str(lock),
             "archive_path": str(archive),
             "before_sha256": before_sha,
+            "retired_marker": str(marker),
             "audit_seq": entry["seq"],
             "after_state": "absent",
         }
@@ -862,10 +956,21 @@ def build_parser() -> argparse.ArgumentParser:
     p_abort = sub.add_parser("abort-run")
     p_abort.add_argument("--run-id", type=int, required=True)
     p_abort.add_argument("--reason", type=str, default="")
+    p_abort.add_argument(
+        "--confirm-abort",
+        type=str,
+        required=True,
+        help="D2-b: must equal --run-id (operator intentionality gate)",
+    )
     p_abort.set_defaults(func=cmd_abort_run)
 
     p_retire = sub.add_parser("retire-run-lock")
-    p_retire.set_defaults(func=cmd_retire_run_lock)
+    p_retire.add_argument(
+        "--skip-e1-upload-gate",
+        action="store_true",
+        help="D4-a scratch/test opt-out; production path keeps upload gate ON",
+    )
+    p_retire.set_defaults(func=cmd_retire_run_lock, skip_e1_upload_gate=False)
 
     p_post = sub.add_parser("post-run-check")
     p_post.add_argument("--run-id", type=int, default=None)

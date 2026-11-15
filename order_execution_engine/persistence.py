@@ -776,15 +776,16 @@ class SQLiteShadowStorage:
         git_commit: str,
         config_json: dict[str, Any],
         started_at: Optional[float] = None,
+        lease_token: Optional[str] = None,
     ) -> int:
         """Erzeugt einen telemetry_runs-Eintrag und setzt den aktiven run_id.
 
         Schema <10 (Bestand): INSERT ohne explizite run_id (lastrowid).
-        Schema >=10 (Phase-1 Control-Plane): ``BEGIN IMMEDIATE`` Claim mit
-        explizitem ``MAX+1`` und gültigem ``run_lease`` (Zwischen-Enforcement
-        bis run_lease production-live / K2/K3). migrate_control_plane is NOT
-        called from ``__init__`` — only tests / gatectl migrate.
+        Schema >=10 (Phase-1 Control-Plane): ``BEGIN IMMEDIATE`` fenced Claim
+        (D1) — ``lease_token`` required (or ``SHADOW_LEASE_TOKEN`` env).
+        migrate_control_plane is NOT called from ``__init__``.
         """
+        import os as _os
         import time as _time
 
         started = float(started_at if started_at is not None else _time.time())
@@ -796,11 +797,13 @@ class SQLiteShadowStorage:
                     claim_run,
                 )
 
+                tok = lease_token or _os.environ.get("SHADOW_LEASE_TOKEN") or ""
                 try:
                     run_id = claim_run(
                         self._conn,
                         git_commit=git_commit,
                         config_json=payload,
+                        token=tok,
                         started_at=started,
                     )
                 except LeaseError:
