@@ -33,10 +33,10 @@ from order_execution_engine.control_plane_lease import (
 )
 from order_execution_engine.persistence import SCHEMA_VERSION, SQLiteShadowStorage
 
-# Gate #6 pin (control-plane preflight + claim in shadow_runner.main).
+# Gate #6 + E-1 residual pin (fail-closed claim / forbid only while LOCKED=1).
 # Pre-Gate-6 baseline was 2157113ad64c88c0e5c2ab346e2c6b3530b869440981aa5a708a3f73c6faefb3.
 GUARD_SHA_PRE_PHASE1 = (
-    "93ed12674cefa183aea8d21e751edc5bf7c4cd297429639e333db1f6b27116cc"
+    "e9efe320c4957c5924424fe191d49eac69f910688eff420148509c055ff870b0"
 )
 
 

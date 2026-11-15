@@ -287,9 +287,15 @@ def test_retire_scratch_ok_and_package_ops_refused(tmp_path: Path) -> None:
     ):
         rc = gatectl_main(_argv(paths, "retire-run-lock"))
     assert rc == EXIT_OK
-    assert "LOCKED=0" in paths["lock"].read_text(encoding="utf-8")
+    assert not paths["lock"].is_file()  # renamed away (reversible archive)
+    archives = list(paths["lock"].parent.glob(paths["lock"].name + ".retired.*"))
+    assert len(archives) == 1
+    assert "LOCKED=1" in archives[0].read_text(encoding="utf-8")
     entries = AppendOnlyAuditChain(paths["journal"]).read_entries()
-    assert any(e["action"] == "retire_run_lock" for e in entries)
+    retire = [e for e in entries if e["action"] == "retire_run_lock"]
+    assert len(retire) == 1
+    assert retire[0]["payload"]["before_sha256"]
+    assert retire[0]["payload"]["after_state"] == "absent"
 
     # Fake lock under package ops/ must be refused (TABU path)
     ops = Path(__file__).resolve().parents[1] / "ops"

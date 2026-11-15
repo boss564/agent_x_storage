@@ -31,9 +31,9 @@ PACKAGE_LOCK = PKG / "ops" / "RUN.lock"
 GUARD_SHA_BASELINE = (
     "2157113ad64c88c0e5c2ab346e2c6b3530b869440981aa5a708a3f73c6faefb3"
 )
-# Gate #6 pin after runner control-plane binding.
+# Gate #6 pin after runner control-plane binding + E-1 residual A1/A3 fix.
 GUARD_SHA_GATE6 = (
-    "93ed12674cefa183aea8d21e751edc5bf7c4cd297429639e333db1f6b27116cc"
+    "e9efe320c4957c5924424fe191d49eac69f910688eff420148509c055ff870b0"
 )
 
 

@@ -436,7 +436,8 @@ def test_retire_run_lock_refuses_package_lock(tmp_path: Path) -> None:
     ):
         rc = gatectl_main(_argv(paths, "retire-run-lock"))
     assert rc == EXIT_OK
-    assert "LOCKED=0" in paths["lock"].read_text(encoding="utf-8")
+    assert not paths["lock"].is_file()
+    assert list(paths["lock"].parent.glob(paths["lock"].name + ".retired.*"))
 
 
 def test_i1_logical_digest_sees_all_measurement_tables(tmp_path: Path) -> None:
