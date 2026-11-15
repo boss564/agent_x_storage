@@ -667,6 +667,8 @@ def test_d2b_abort_requires_confirm(tmp_path: Path) -> None:
             "--mirror-folder-id",
             "test-audit-folder-id",
             "--skip-disk-check",
+            "--typed-confirm",
+            f"ABORT_RUN_{rid}",
             "abort-run",
             "--run-id",
             str(rid),
@@ -966,23 +968,50 @@ def test_m4_allow_live_db_migrate_issue_abort_on_live_marked_temp(
         m.stderr = ""
         return m
 
+    # N2: live path refuses --typed-confirm; TTY + nonce challenge required.
+    import io
+    import re
+    from contextlib import redirect_stdout
+    from unittest.mock import patch as _patch
+
+    challenge: list[str] = []
+
+    class _TTY:
+        def isatty(self) -> bool:
+            return True
+
+        def readline(self) -> str:
+            return challenge[-1] + "\n"
+
+        def write(self, s: str) -> int:
+            m = re.search(r"Type exactly: (\S+)", s)
+            if m:
+                challenge.append(m.group(1))
+            return len(s)
+
+        def flush(self) -> None:
+            return None
+
     with patch(
         "order_execution_engine.gatectl._list_shadow_runner_pids",
         return_value=[],
     ), patch(
         "order_execution_engine.control_plane_audit.subprocess.run",
         side_effect=fake_run,
-    ):
-        import io
-        from contextlib import redirect_stdout
-
+    ), _patch("sys.stdin", _TTY()), _patch("sys.stderr", _TTY()):
         buf = io.StringIO()
         with redirect_stdout(buf):
             rc_m = gatectl_main(
-                _gate_base(paths) + ["--allow-live-db", "--allow-live-skip-disk-check", "migrate"]
+                _gate_base(paths)
+                + [
+                    "--allow-live-db",
+                    "--allow-live-skip-disk-check",
+                    "migrate",
+                ]
             )
         assert rc_m == EXIT_OK, buf.getvalue()
 
+        challenge.clear()
         buf = io.StringIO()
         with redirect_stdout(buf):
             rc_i = gatectl_main(
@@ -1007,6 +1036,7 @@ def test_m4_allow_live_db_migrate_issue_abort_on_live_marked_temp(
         claim_run(conn, git_commit="m4", config_json="{}", token=tok)
         conn.close()
 
+        challenge.clear()
         buf = io.StringIO()
         with redirect_stdout(buf):
             rc_a = gatectl_main(

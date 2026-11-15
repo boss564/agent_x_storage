@@ -350,6 +350,8 @@ def test_abort_run_atomic_and_audit_rollback(tmp_path: Path) -> None:
             rc = gatectl_main(
                 _argv(
                     paths,
+                    "--typed-confirm",
+                    f"ABORT_RUN_{rid}",
                     "abort-run",
                     "--run-id",
                     str(rid),
@@ -405,6 +407,8 @@ def test_abort_run_atomic_and_audit_rollback(tmp_path: Path) -> None:
         rc = gatectl_main(
             _argv(
                 paths2,
+                "--typed-confirm",
+                f"ABORT_RUN_{rid2}",
                 "abort-run",
                 "--run-id",
                 str(rid2),
@@ -445,6 +449,8 @@ def test_abort_run_atomic_and_audit_rollback(tmp_path: Path) -> None:
         rc = gatectl_main(
             _argv(
                 paths3,
+                "--typed-confirm",
+                f"ABORT_RUN_{rid3}",
                 "abort-run",
                 "--run-id",
                 str(rid3),
@@ -493,6 +499,8 @@ def test_abort_run_mirror_fail_after_commit_still_aborted(tmp_path: Path) -> Non
             rc = gatectl_main(
                 _argv(
                     paths,
+                    "--typed-confirm",
+                    f"ABORT_RUN_{rid}",
                     "abort-run",
                     "--run-id",
                     str(rid),
@@ -534,6 +542,8 @@ def test_abort_run_refuses_when_runner_alive(tmp_path: Path) -> None:
             rc = gatectl_main(
                 _argv(
                     paths,
+                    "--typed-confirm",
+                    f"ABORT_RUN_{rid}",
                     "abort-run",
                     "--run-id",
                     str(rid),
@@ -572,6 +582,8 @@ def test_abort_run_refused_closes_intent_pair(tmp_path: Path) -> None:
             rc = gatectl_main(
                 _argv(
                     paths,
+                    "--typed-confirm",
+                    "ABORT_RUN_999",
                     "abort-run",
                     "--run-id",
                     "999",
@@ -657,6 +669,8 @@ def test_post_run_check_run_id_pass_and_fail(tmp_path: Path) -> None:
             gatectl_main(
                 _argv(
                     paths,
+                    "--typed-confirm",
+                    f"ABORT_RUN_{rid}",
                     "abort-run",
                     "--run-id",
                     str(rid),
