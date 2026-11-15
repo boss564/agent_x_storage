@@ -10286,3 +10286,22 @@ Bezug: root=/Volumes/THX_OS_ULTRA/Users/olivermueller/agent_x_storage, CLAUDE.md
 ```
 
 Prüfer `fbcbe4c42521` · erzeugt aus dem Ist-Stand, nicht kopiert.
+
+
+### §71.77 — Hook-Grün docs-only (SP-1933 / 2026-11-15)
+
+**TAG7-Auflösung: erfüllt** (nicht still entfernt, nicht uminterpretiert).
+
+| Feld | Wert |
+|---|---|
+| Roter Hook-Befund | `SWARM_INVENTORY.md` Laufzeit-Block >24h → Klasse Inventare:1 → Live-Karte `total=1` gegen zitierten Messblock §71.76 `total=0` (`Karte: d6aa48a83cb8`) |
+| Carrier | `make raas-swarm-inventory-sync` · `generated_at=2026-11-15T09:10:24.791169+00:00` |
+| Ist nach Sync | 0 ACTIVE · 0 STALE · IDLE/MISSING/OFF laut Laufzeit-Zeilen — **kein** Greenwashing |
+| Nachmessung | Live-Karte wieder `Karte: d6aa48a83cb8` · `_akt_block_mismatch` = [] · Träger bleibt §71.76 (nicht ersetzt) |
+
+**Freeze-Klassifikation (K8, schriftlich fixiert):** Allowlist-Freeze `5adab542` ist ein **Messlauf-Artefakt**, kein Code-Pin. Deklarierte Ausnahme auf Branch `hardening/control-plane`. B′-Freeze (Telemetrie/`sanitize_url`) unberührt. Diese Re-Klassifikation steht hier und in der Commit-Message — nicht nur im Chat.
+
+**K1/K7-Notiz:** Docs-Commits sind bis Phase 2 (`audit_chain.jsonl` / gatectl) **unverkettet**; Nachweis bis dahin nur über Git-Historie. Akzeptabel für diesen docs-only Takt; Hook-Splitting bleibt separater Folgeschritt.
+
+**Scope dieses Takts:** docs-only Hook-Grün (C1–C5). Guard-Commit (`shadow_runner.py` LOCKED=1→75) und Push **nicht** Teil dieses Blocks.
+
