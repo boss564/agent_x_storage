@@ -1,12 +1,17 @@
 # Architektur-Härtung & Revidierter E-Plan (K1–K8)
 
-**Status:** PLAN ABGENOMMEN — **Revision 12.2** (Working-Tree: Code-Schnitt SIGTERM-vor-Claim / Audit≠Bundle / L3 Intent-Confirm — Review vor Commit) (**E-1 Freigabe ≠ erteilt**; Vor-2a #1 auf TEILWEISE zurückgestuft; Bundle-Kette OK; E-1 gesperrt)  
-**Freeze-Produktion:** `RUN.lock` am Paketpfad (`LOCKED=1`) + LIVE_DB (`max_run_id=15` / `user_version=9`) bleibt bis **nach** `post-run-check --run-id 16` GRÜN (Lock = letzter Akt).  
-**Allowlist-Freeze `5adab542`:** Messlauf-Artefakt; Code-Härtung auf Branch + Scratch; neuer Tag+Manifest am Ende.  
-**Ziel:** fail-closed, schema-enforced Control-Plane vor `run_id=16`.  
-**E-1:** gesperrt; Push-Blocker auf Basis **`origin/main..HEAD` neu messen** (post-D; war 338); Bundle = DR ≠ Remote-Ref.  
-**Rohakte:** `E1_FREIGABE_AKTE.json` · `E1_RESIDUALS_AKTE.json` · `E1_D_RESIDUALS_AKTE.json` · `E1_INTEGRATION_SEMANTICS.md` · `E1_F1_PLUS_COMMITTED.json`  
-**D-Pins (committed @ `98a6f307`):** runner `1c65b0be2925da85fee6ce090a1fe817f93b61ed6be4a2a0a2cfc0d80e2b8d77` · gatectl `5068d869b3f03e97cdcc77ed8e683b89b73736b6521dfa89cedb1db70d19d567` — C2-Pins `e9efe320…` / `93ed1267…` **ungültig**.  
+**Status:** PLAN ABGENOMMEN — **Revision 12.6** (Rev. B im WT; **N1/N2 Blocker-Fixes**; kein Commit bis Prüfer-Nachmessung; Prod unberührt)  
+**Audit-Objekte:**  
+- **Produktion (1c):** `1IBXL-lIrXTvnleZMvhv7Er1IJf5VAjla` (`audit_chain_objects_shadow_runner`) — Tests schreiben **nie** dorthin.  
+- **Testziel:** `1knskUdopb-6E9eNhoXnuO5V6ULSzCwVe` (`control_plane_audit`) — Abnahme/Harness nur hier.  
+Konfig: `AUDIT_OBJECTS_FOLDER_ID` / `--mirror-folder-id`.  
+**Rev. B + N1/N2:** RO-Connect; Intent→Spiegel→Rename; Restore Marker-first; **kein** `GATECTL_PACKAGE_ROOT` (Paket = `Path(__file__)/ops`, wie Runner); L4 auf Live/Paket = **TTY + Zufallsnonce**, `--typed-confirm`/`--i-am-a-test` dort verweigert; Scratch behält Suite-Hooks.  
+**Freeze-Produktion:** Prod-`RUN.lock` (`LOCKED=1`, SHA `58340c1e…`) + LIVE_DB unverändert.  
+**Allowlist-Freeze `5adab542`:** Messlauf-Artefakt.  
+**Ziel:** fail-closed Control-Plane vor `run_id=16`.  
+**E-1 Live:** gesperrt. **Retention:** `newsagent-backup/retention.log` — prüfen, dass Anker/Bundle-Kette/Audit-Ordner nicht nach Alter gelöscht werden (Regeln dem Operator).  
+**Rohakte:** `E1_FREIGABE_AKTE.json` · …  
+**Freeze-Pins (unverändert):** persistence `ce9cc2f8…c47f` · runner `cfc79b2b…cf01`.  
 **Push-Basis:** nach D-Commits neu messen (nicht mehr 338).
 
 ### Off-Host-Inkrement nach jedem Härtungs-Commit (bindend)
@@ -19,37 +24,40 @@ Nach **jedem** Commit auf `hardening/control-plane` (und Nachfolge-Härtungs-Bra
 
 **Beweis-Anker (kein Git-Bundle):** `p0_p1_preflight_sp1933_offhost_20261115T0954Z` — ID `1D6QE987XWN_R0U2MMK8OUwCXUYbIKxqI` (Gate-Akten, Guard, `RUN.lock`, Plan). Unberührt lassen.
 
-**Git-Wiederherstellungskette im Drive (Host nur gelesen):**
+**Git-Wiederherstellungskette im Drive (4 Glieder; Host: rclone-Lesung + einmalige Schreibprobe 1b):**
 
-| # | Drive-Ordner | ID | Deckt |
-|---|---|---|---|
-| 1 | `git_bundle_20261115T094918Z` | `1w3wvOt9FTCVsovMw97zF58yBZz8OW4Rn` | Voll-Bundle bis `1e934cff` |
-| 2 | `hardening_incr_20261115T133457Z` | `1VxqOIvk1a2qTBuQlpJ4PE3Z3p6Co7Tzz` | `1e934cff..7e5bfb32` |
-| 3 | `hardening_incr_20261115T164147Z` | `1_kKwsiO3S1mgth4yWKFurIUDqw3F3seu` | `7e5bfb32..2d9df0cf` |
+| # | Drive-Ordner | ID | Deckt | Bundle-SHA256 (Drive-Redownload) |
+|---|---|---|---|---|
+| 1 | `git_bundle_20261115T094918Z` | `1w3wvOt9FTCVsovMw97zF58yBZz8OW4Rn` | Voll-Bundle bis `1e934cff` | `25ced3f8…d5b940` |
+| 2 | `hardening_incr_20261115T133457Z` | `1VxqOIvk1a2qTBuQlpJ4PE3Z3p6Co7Tzz` | `1e934cff..7e5bfb32` | `b2156dfc…087598` |
+| 3 | `hardening_incr_20261115T164147Z` | `1_kKwsiO3S1mgth4yWKFurIUDqw3F3seu` | `7e5bfb32..2d9df0cf` | `89ed461f…072186` |
+| 4 | `hardening_incr_20261115T172330Z` | `1PqLcdBUHDIbd20CtMasPgv0zflQRsIQ0` | `2d9df0cf..c0996759` | `6da48ede…59d796` (8447 B) |
 
-Lokal: `reports/P0_P1_PREFLIGHT_SP1933/git_bundle_incr_20261115T164147Z/` — Bundle SHA256 `89ed461f…072186` (83 591 B). `git_bundle_incr_20261115T1705Z` + drei `residual`-Bundles sind durch #3 abgedeckt (nicht hochladen). **Punkt 8 erledigt.** **Ketten-Gegentest (Host, leere Temp-Kopien):** clone #1 → fetch #2 → fetch #3 → Tip `2d9df0cf`; Beweis `CHAIN_RESTORE_PROOF.json`. Drive-Redownload-Rehash ausstehend.
+Lokal: `reports/P0_P1_PREFLIGHT_SP1933/git_bundle_incr_20261115T172330Z/` + Vorgänger. **Punkt 8 erledigt.** **4-Glieder-Gegentest 2026-11-15T172736Z:** rclone `copyto --drive-root-folder-id` → SHA MATCH ×4 → `git bundle verify` ok ×4 → clone #1 → fetch #2→#3→#4 → Tip `c0996759`; fünf Kerndatei-SHA256 Restored==Host-WT; `/tmp` bereinigt. Beweis `CHAIN_RESTORE_PROOF.json` (jetzt 4 Glieder, `drive_redownload_rehash=true`).
 
 ### Reihenfolge vor Phase 2a
 
 | # | Punkt | Status |
 |---|---|---|
-| 1 | OAuth-Token / eigene rclone-Client-ID + eigener Audit-Ordner (Spiegel = Freigabe-Pfad) | **TEILWEISE** — siehe Kriterien unten; **nicht** PASS |
-| 2 | Systemplatte unter 85 % nach bestätigtem Off-Host-Backup | **PASS** — Data **65 %** / **~655 GiB** frei (nach `container prune` + Docker-Restart; `Docker.raw` 714 G→113 G) |
+| 1 | OAuth-Token / eigene rclone-Client-ID + eigener Audit-Ordner (Spiegel = Freigabe-Pfad) | **offen (Prüfer)** — 1a/1c/1d erneut; Ziel-Audit-ID `1IBXL-lIrXTvnleZMvhv7Er1IJf5VAjla` |
+| 2 | Systemplatte unter 85 % nach bestätigtem Off-Host-Backup | **PASS** — Data **65 %** / **~652 GiB** frei (Nachmessung 2026-11-15T17:28Z; unter 85 %-Schwelle) |
 | 3 | Repo-Plist `KeepAlive=false`, `RunAtLoad=false` | **PASS** — Repo `false`/`false`; kein `WatchPaths`; Install fehlt; Service nicht geladen; plistlib-Regression |
 | 4 | Lücken-Schnitt (`retire-run-lock`, `migrate`, `abort-run`, `post-run-check --run-id`, `news_scores.jsonl`-Präfix, `verify-mirror`, Digest streamen, `--skip-disk-check` × Live-Freigabe) | **PASS** — 8 Bausteine + Scratch-Suite `test_control_plane_gate4.py` (44 Control-Plane-Tests gesamt) |
-| 5 | Canary-Kopie LIVE_DB (explizite Freigabe nötig): Migration, Soll-Manifest, Digest-Laufzeit/RAM | **PASS** — siehe Messwerte unten (2026-11-15T14:44Z); LIVE unverändert max=15/schema=9 |
+| 5 | Canary-Kopie LIVE_DB (explizite Freigabe nötig): Migration, Soll-Manifest, Digest-Laufzeit/RAM | **Schema/Migrate belegt** (v9→v13 / `8f756655…` auf LIVE-Kopie) — **nicht** E-Canary (kein Live-Markierungspfad; siehe Blocker) |
 | 6 | Runner-Anbindung: Claim/`open_run`, Exit bei fehlendem Token, Guard-Pin-Test | **PASS** — Preflight v12+Manifest; Claim via Lease; Exit 75/76; Pin `93ed1267…7116cc` |
 
-**Vor-2a #1 — Abnahmekriterien (alle vier nötig für PASS):**
+**Vor-2a #1 — Abnahmekriterien (Prüfer-Register 2026-11-15, nachgezogen):**
 
 | # | Kriterium | Stand |
 |---|---|---|
-| 1a | Klartext-OAuth-Token im Google-Konto widerrufen | **ungeprüft** (kein Beleg im Plan) |
-| 1b | rclone mit eigener Client-ID schreibt wieder | **ungeprüft** — bekannt: 403 um 14:46; Bundle #2/#3 kamen über Drive-Connector, nicht als rclone-Schreibbeweis |
-| 1c | Eigener Drive-Ordner für Audit-Objekte; ID im Plan | **offen** — `1VxqOIvk…` ist **Inkrement-Bundle-Ordner**, kein Audit-Ziel; `gatectl` verlangt seit `2d9df0cf` explizite ID; Restpunkt „Audit ≠ Bundle-ID“ |
-| 1d | Überschreib-Test im Zielordner dokumentiert (2. Upload gleicher Name, anderer Inhalt → Vorprüfung abweist) | **Code/Scratch:** H4 `refuse overwrite` in Suite; **Live-Zielordner:** nicht belegt |
+| 1a | Klartext-OAuth-Token im Google-Konto widerrufen | **offen** — nur Operator |
+| 1b | rclone mit eigener Client-ID schreibt wieder | **belegt** (Schreib/Lösch + Bundle-Lesen); Client-ID-Herkunft ohne Config-Dump |
+| 1c | Eigener Drive-Ordner für Audit-Objekte; ID im Plan | **offen** — Soll-ID `1IBXL-lIrXTvnleZMvhv7Er1IJf5VAjla` in Plan/Env; frühere Probe `1knskUdopb…` zählt nicht als Abschluss |
+| 1d | Überschreib-Test im Zielordner | **offen** — gegen `1IBXL…` mit rclone wiederholen |
+| L4 | Live/Paket = TTY + Zufallsnonce; kein `--typed-confirm`-Bypass (N2) | **im Code (12.6)** — Operator-Ratifikation der Hürde steht; Agent mit User-Rechten bleibt technisch nicht ganz aussperrbar |
+| Systemplatte | 97 % → 65 % Herkunft | **ungeklärt** (aktuell 65 % gemessen) |
 
-Früherer PASS-Eintrag (API aktiv / `1VxqOIvk…` verdrahtet) war **überzogen** und ist mit Rev. 12.2 widerrufen.
+**Canary `/tmp` @ `c0996759` (18:38Z + S1–S4):** belegt **Schema-Migrate v9→v13** und Recovery-Logik auf echten Daten-Bytes — **zählt nicht** als E-Canary-Abnahme (Pfad ohne Live-Markierung; `--run-lock`/`--lease-token`/Paket-Retire unbewiesen). LIVE-Kopie 18:38Z: Operator-Freigabe in AUFGABE „Canary-Abnahme … Freigabe“; SHA `2a7915ef…` unverändert.
 
 **Verifiziert (RO, Host):**
 - **Gate #6 Pin** `shadow_runner.py` SHA256 = `93ed12674cefa183aea8d21e751edc5bf7c4cd297429639e333db1f6b27116cc` (Preflight + Claim; Exit 75 lock / 76 control-plane)
@@ -377,15 +385,36 @@ Kein separates Build-Binär — F1-Probe und E-1 importieren dieselbe Worktree-Q
 | **S3** | nach Claim, `status=RUNNING`, Prozess tot (SIGKILL) | `issue-token` refuse; `abort-run` → `ABORTED`; danach neues Token für **nächste** `run_id` |
 | **S4** | Reboot mit aktivem Lock (vor Lock-Ablösung) | rc=75; nach `retire-run-lock` nur Token-Pfad |
 
-- [ ] S1–S4 auf Scratch; nach 2a Claim-/Abort-Tests nur auf **Canary-Kopie** der LIVE_DB (nie run16 auf Prod verbrauchen)
+- [x] S1–S4 **Wiederanlauf-Logik** auf Scratch + (opt-in) LIVE-Byte-Kopie belegt — **nicht** E-Abnahme
+- [ ] E-Canary auf **live-markiertem** Temp-Pfad + Paket-Lock-Semantik (nach Code-Schnitt Paket-Retire / Plan-E-Reihenfolge)
 
-### E-0 … E-4 (an korrigierte Reihenfolge gebunden)
+**Messwerte S1–S4 (2026-11-15, Tip `c0996759`) — was belegt / was nicht:**
 
-- **E-0:** Snapshot+Digest vor Token; Trigger-SQL-Hash = Manifest; K1; `MAX=15`; kein `RUNNING`; JSONL-Präfix; Code-Stand-Zeile  
-- **E-1a:** LIVE migrate unter Lock; `verify-mirror` post-Migration GRÜN  
-- **E-1b:** `issue-token 16` → `shadow_runner` (primär, `--run-lock` Scratch) → Plist-Test (sekundär) → `post-run-check 16` PASS  
-- **E-1c:** erst dann `retire-run-lock` + Audit + verify-mirror; LaunchAgent-Load = **Nein** (Default)  
-- **E-2…E-4:** entfallen als separate Lock-vor-Lauf-Schritte; Inhalte in E-1a–c aufgegangen  
+| ID | Scratch | `/tmp`-Kopie (ohne Live-Markierung) | Nicht belegt |
+|---|---|---|---|
+| **S1** | Exit **76**; kein Lease; keine neuen Runs | gleich; max=15 | LIVE-Flags |
+| **S2** | TTL-Expiry → Re-Issue + `revoked_at` | run_id=16 | — |
+| **S3** | `abort-run` → ABORTED; nächste `run_id` | 16→17 | — |
+| **S4** | Scratch-Lock Exit **75**; `retire` + `--skip-e1-upload-gate`; Token-Pfad | gleich | **Paket-Lock-Retire**; Runner-Start unter Paket-Lock; `--run-lock`/`--lease-token`-Refuse auf LIVE |
+
+Suite: `test_control_plane_recovery_s1_s4.py` — Default = Scratch only; Canary nur mit `CONTROL_PLANE_CANARY=1` (+ optional `CANARY_LIVE_SHA`, `CANARY_S14_ROOT`). LIVE SHA Pin default `2a7915ef…` (nach run16: `CANARY_LIVE_SHA` setzen).
+
+### E-0 … E-5 (Rev. B — Runbook, Paket-Kopie / live-markierter Temp-Root)
+
+**Kein Lauf vor Lock-Ablösung.** Prod-`ops/RUN.lock` und Prod-LIVE bleiben TABU.
+
+| Schritt | Name | Lock | Hinweis |
+|---|---|---|---|
+| **E-0** | Vorprüfung | `LOCKED=1` | nur RO-`status`/Checks; **kein** SHA-Drift der LIVE_DB-Kopie; `schema=not_migrated` auf v9 |
+| **E-1** | migrate | `LOCKED=1` | einzige WAL-Umschaltung; Off-Host-Artefakt + `db_artefact_upload`; bei Fail → `restore-db-artefact` |
+| **E-2** | Paket-Retire | → Marker | `--allow-package-retire` + `--allow-live-db` + L4 `RETIRE_PACKAGE_LOCK`; Intent-Spiegel **vor** Rename; Confirm danach; `GATECTL_PACKAGE_ROOT` = Temp-Paket |
+| **E-3** | Token | Marker | `issue-token` → `--lease-token-file` (kein raw argv auf LIVE) |
+| **E-4** | Lauf | Marker | **Vordergrund von Hand**, kein launchd; **innerhalb Token-TTL** |
+| **E-5** | Nachprüfung | Marker | RO `post-run-check` + `verify-mirror` |
+
+**Notbremse:** manuelles `ops/RUN.lock` mit `LOCKED=1` (ohne Retire-Undo) → Runner Exit **75** (gewollt).  
+**Rollback nach E-2:** `restore-run-lock` (Marker zuerst; Lock+Marker → `--clear-stale-marker`; offene Tokens widerrufen).  
+**Abnahme-Ort:** `/tmp/abnahme_revb_<ts>/` — danach vollständig löschen; Probe-Audit-Ordner `1knsk…` von Testobjekten leeren.
 
 ---
 
