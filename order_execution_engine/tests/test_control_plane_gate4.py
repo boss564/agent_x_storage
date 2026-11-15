@@ -285,7 +285,7 @@ def test_retire_scratch_ok_and_package_ops_refused(tmp_path: Path) -> None:
         "order_execution_engine.control_plane_audit.subprocess.run",
         side_effect=_fake_rclone_ok,
     ):
-        rc = gatectl_main(_argv(paths, "retire-run-lock"))
+        rc = gatectl_main(_argv(paths, "retire-run-lock", "--skip-e1-upload-gate"))
     assert rc == EXIT_OK
     assert not paths["lock"].is_file()  # renamed away (reversible archive)
     archives = list(paths["lock"].parent.glob(paths["lock"].name + ".retired.*"))
@@ -332,8 +332,8 @@ def test_abort_run_atomic_and_audit_rollback(tmp_path: Path) -> None:
     paths = _bundle(tmp_path)
     conn = connect_scratch(paths["db"])
     rid = next_run_id(conn)
-    issue_token(conn, run_id=rid, ttl_s=60)
-    assert claim_run(conn, git_commit="c", config_json="{}") == rid
+    tok = issue_token(conn, run_id=rid, ttl_s=60)
+    assert claim_run(conn, git_commit="c", config_json="{}", token=tok) == rid
     conn.close()
 
     with patch(
@@ -347,6 +347,8 @@ def test_abort_run_atomic_and_audit_rollback(tmp_path: Path) -> None:
                     paths,
                     "abort-run",
                     "--run-id",
+                    str(rid),
+                    "--confirm-abort",
                     str(rid),
                     "--reason",
                     "gate4",
@@ -374,8 +376,8 @@ def test_abort_run_atomic_and_audit_rollback(tmp_path: Path) -> None:
     paths2 = _bundle(tmp_path / "rollback")
     conn = connect_scratch(paths2["db"])
     rid2 = next_run_id(conn)
-    issue_token(conn, run_id=rid2, ttl_s=60)
-    assert claim_run(conn, git_commit="c", config_json="{}") == rid2
+    tok = issue_token(conn, run_id=rid2, ttl_s=60)
+    assert claim_run(conn, git_commit="c", config_json="{}", token=tok) == rid2
     conn.close()
 
     real_append = AppendOnlyAuditChain.append
@@ -387,7 +389,16 @@ def test_abort_run_atomic_and_audit_rollback(tmp_path: Path) -> None:
 
     with patch.object(AppendOnlyAuditChain, "append", boom):
         rc = gatectl_main(
-            _argv(paths2, "abort-run", "--run-id", str(rid2), "--reason", "x")
+            _argv(
+                paths2,
+                "abort-run",
+                "--run-id",
+                str(rid2),
+                "--confirm-abort",
+                str(rid2),
+                "--reason",
+                "x",
+            )
         )
     assert rc == EXIT_POLICY
     conn = connect_scratch(paths2["db"])
@@ -405,8 +416,8 @@ def test_post_run_check_run_id_pass_and_fail(tmp_path: Path) -> None:
     paths = _bundle(tmp_path)
     conn = connect_scratch(paths["db"])
     rid = next_run_id(conn)
-    issue_token(conn, run_id=rid, ttl_s=60)
-    assert claim_run(conn, git_commit="c", config_json="{}") == rid
+    tok = issue_token(conn, run_id=rid, ttl_s=60)
+    assert claim_run(conn, git_commit="c", config_json="{}", token=tok) == rid
     conn.close()
 
     news = paths["data_root"] / "news_scores.jsonl"
@@ -428,7 +439,16 @@ def test_post_run_check_run_id_pass_and_fail(tmp_path: Path) -> None:
         # Abort then PASS
         assert (
             gatectl_main(
-                _argv(paths, "abort-run", "--run-id", str(rid), "--reason", "done")
+                _argv(
+                    paths,
+                    "abort-run",
+                    "--run-id",
+                    str(rid),
+                    "--confirm-abort",
+                    str(rid),
+                    "--reason",
+                    "done",
+                )
             )
             == EXIT_OK
         )

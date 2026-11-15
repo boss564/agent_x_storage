@@ -106,7 +106,7 @@ def test_h1_snapshot_hashes_backup_not_live_wal(tmp_path: Path) -> None:
     live_before = hashlib.sha256(paths["db"].read_bytes()).hexdigest()
     conn = connect_scratch(paths["db"])
     rid = next_run_id(conn)
-    issue_token(conn, run_id=rid, ttl_s=60)
+    tok = issue_token(conn, run_id=rid, ttl_s=60)
     conn.close()
     live_after = hashlib.sha256(paths["db"].read_bytes()).hexdigest()
     # WAL-mode: main file SHA often unchanged after commit (auditor finding).
@@ -434,7 +434,7 @@ def test_retire_run_lock_refuses_package_lock(tmp_path: Path) -> None:
         "order_execution_engine.control_plane_audit.subprocess.run",
         side_effect=fake_run,
     ):
-        rc = gatectl_main(_argv(paths, "retire-run-lock"))
+        rc = gatectl_main(_argv(paths, "retire-run-lock", "--skip-e1-upload-gate"))
     assert rc == EXIT_OK
     assert not paths["lock"].is_file()
     assert list(paths["lock"].parent.glob(paths["lock"].name + ".retired.*"))
@@ -445,8 +445,8 @@ def test_i1_logical_digest_sees_all_measurement_tables(tmp_path: Path) -> None:
     paths = _bundle(tmp_path)
     conn = connect_scratch(paths["db"])
     rid = next_run_id(conn)
-    issue_token(conn, run_id=rid, ttl_s=60)
-    assert claim_run(conn, git_commit="c", config_json="{}") == rid
+    tok = issue_token(conn, run_id=rid, ttl_s=60)
+    assert claim_run(conn, git_commit="c", config_json="{}", token=tok) == rid
 
     def digest() -> str:
         return compute_logical_digest_sha256(conn)
@@ -463,7 +463,7 @@ def test_i1_logical_digest_sees_all_measurement_tables(tmp_path: Path) -> None:
     after_abort = digest()
     assert after_abort != before_lease
     rid2 = next_run_id(conn)
-    issue_token(conn, run_id=rid2, ttl_s=60)
+    tok = issue_token(conn, run_id=rid2, ttl_s=60)
     assert digest() == after_abort
 
     mutations: list[tuple[str, object]] = [

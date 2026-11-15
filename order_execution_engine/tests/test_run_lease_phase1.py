@@ -36,7 +36,7 @@ from order_execution_engine.persistence import SCHEMA_VERSION, SQLiteShadowStora
 # Gate #6 + E-1 residual pin (fail-closed claim / forbid only while LOCKED=1).
 # Pre-Gate-6 baseline was 2157113ad64c88c0e5c2ab346e2c6b3530b869440981aa5a708a3f73c6faefb3.
 GUARD_SHA_PRE_PHASE1 = (
-    "e9efe320c4957c5924424fe191d49eac69f910688eff420148509c055ff870b0"
+    "1c65b0be2925da85fee6ce090a1fe817f93b61ed6be4a2a0a2cfc0d80e2b8d77"
 )
 
 
@@ -87,11 +87,15 @@ def test_live_path_refused() -> None:
     print("OK test_live_path_refused")
 
 
-def _claim_worker(db_path: str, queue: mp.Queue) -> None:
+def _claim_worker(db_path: str, token: str, queue: mp.Queue) -> None:
     try:
         conn = connect_scratch(Path(db_path))
         rid = claim_run(
-            conn, git_commit="c", config_json="{}", started_at=time.time()
+            conn,
+            git_commit="c",
+            config_json="{}",
+            token=token,
+            started_at=time.time(),
         )
         queue.put(("ok", rid))
     except Exception as exc:  # noqa: BLE001
@@ -102,11 +106,11 @@ def test_concurrency_one_claim_one_reject() -> None:
     db_path, conn = _v10_conn()
     rid = next_run_id(conn)
     assert rid == RUN_ID_FLOOR + 1
-    issue_token(conn, run_id=rid, ttl_s=60)
+    tok = issue_token(conn, run_id=rid, ttl_s=60)
     q: mp.Queue = mp.Queue()
     procs = [
-        mp.Process(target=_claim_worker, args=(str(db_path), q)),
-        mp.Process(target=_claim_worker, args=(str(db_path), q)),
+        mp.Process(target=_claim_worker, args=(str(db_path), tok, q)),
+        mp.Process(target=_claim_worker, args=(str(db_path), tok, q)),
     ]
     for p in procs:
         p.start()
@@ -125,9 +129,9 @@ def test_expired_token_rejects_claim() -> None:
     _, conn = _v10_conn()
     rid = next_run_id(conn)
     now = int(time.time())
-    issue_token(conn, run_id=rid, ttl_s=1, now=now - 10)
+    tok = issue_token(conn, run_id=rid, ttl_s=1, now=now - 10)
     try:
-        claim_run(conn, git_commit="c", config_json="{}")
+        claim_run(conn, git_commit="c", config_json="{}", token=tok)
         raise AssertionError("expected LeaseError on expired lease")
     except LeaseError:
         pass
@@ -137,7 +141,7 @@ def test_expired_token_rejects_claim() -> None:
 def test_issue_token_rejects_non_next_run_id() -> None:
     _, conn = _v10_conn()
     try:
-        issue_token(conn, run_id=99, ttl_s=60)
+        tok = issue_token(conn, run_id=99, ttl_s=60)
         raise AssertionError("expected LeaseError for run_id!=MAX+1")
     except LeaseError as exc:
         assert "next is" in str(exc)
@@ -148,7 +152,7 @@ def test_ttl_cap_rejects_duration_grant() -> None:
     _, conn = _v10_conn()
     rid = next_run_id(conn)
     try:
-        issue_token(conn, run_id=rid, ttl_s=10**9)
+        tok = issue_token(conn, run_id=rid, ttl_s=10**9)
         raise AssertionError("expected LeaseError for ttl > TTL_MAX_S")
     except LeaseError as exc:
         assert str(TTL_MAX_S) in str(exc)
@@ -158,10 +162,10 @@ def test_ttl_cap_rejects_duration_grant() -> None:
 def test_reused_token_rejects_second_claim() -> None:
     _, conn = _v10_conn()
     rid = next_run_id(conn)
-    issue_token(conn, run_id=rid, ttl_s=60)
-    assert claim_run(conn, git_commit="c", config_json="{}") == rid
+    tok = issue_token(conn, run_id=rid, ttl_s=60)
+    assert claim_run(conn, git_commit="c", config_json="{}", token=tok) == rid
     try:
-        claim_run(conn, git_commit="c", config_json="{}")
+        claim_run(conn, git_commit="c", config_json="{}", token=tok)
         raise AssertionError("expected LeaseError on reused lease")
     except LeaseError:
         pass
@@ -196,7 +200,7 @@ def test_revoke_and_reissue() -> None:
     revoke_token(conn, t1)
     t2 = issue_token(conn, run_id=rid, ttl_s=60)
     assert t1 != t2
-    assert claim_run(conn, git_commit="c", config_json="{}") == rid
+    assert claim_run(conn, git_commit="c", config_json="{}", token=t2) == rid
     print("OK test_revoke_and_reissue")
 
 
@@ -210,8 +214,10 @@ def test_f1_reopen_preserves_v10_and_store_open_run() -> None:
     store2 = SQLiteShadowStorage(db_path)
     assert _schema(store2._conn) == SCHEMA_CONTROL  # noqa: SLF001
     rid = next_run_id(store2._conn)  # noqa: SLF001
-    issue_token(store2._conn, run_id=rid, ttl_s=60)  # noqa: SLF001
-    got = store2.open_run(git_commit="integ", config_json={"phase": 1})
+    tok = issue_token(store2._conn, run_id=rid, ttl_s=60)  # noqa: SLF001
+    got = store2.open_run(
+        git_commit="integ", config_json={"phase": 1}, lease_token=tok
+    )
     assert got == rid
     row = store2._conn.execute(  # noqa: SLF001
         "SELECT status FROM telemetry_runs WHERE run_id = ?", (got,)
@@ -262,7 +268,7 @@ def test_f3_issue_token_refuses_live_path_via_conn() -> None:
         pass
     raw = sqlite3.connect(str(db), isolation_level=None)
     try:
-        issue_token(raw, run_id=1, ttl_s=60)
+        tok = issue_token(raw, run_id=1, ttl_s=60)
         raise AssertionError("issue_token should refuse LIVE path via conn")
     except LivePathRefused:
         pass
@@ -274,7 +280,7 @@ def test_f3_issue_token_refuses_live_path_via_conn() -> None:
 def test_run_lease_delete_forbidden() -> None:
     _, conn = _v10_conn()
     rid = next_run_id(conn)
-    issue_token(conn, run_id=rid, ttl_s=60)
+    tok = issue_token(conn, run_id=rid, ttl_s=60)
     try:
         conn.execute("DELETE FROM run_lease")
         raise AssertionError("expected DELETE forbidden")
@@ -303,8 +309,8 @@ def test_run_lease_bi_rejects_bad_run_id() -> None:
             assert "not next" in str(exc)
 
     # After a claimed run, jump still rejected
-    issue_token(conn, run_id=expect, ttl_s=60)
-    claim_run(conn, git_commit="c", config_json="{}")
+    tok = issue_token(conn, run_id=expect, ttl_s=60)
+    claim_run(conn, git_commit="c", config_json="{}", token=tok)
     nxt = next_run_id(conn)
     try:
         conn.execute(
@@ -385,7 +391,7 @@ def test_g1_issued_at_far_future_rejected() -> None:
         (rid, past, past + 1),
     )
     try:
-        claim_run(conn, git_commit="c", config_json="{}")
+        claim_run(conn, git_commit="c", config_json="{}", token="tok-past")
         raise AssertionError("expected LeaseError on past/expired lease")
     except LeaseError:
         pass
@@ -407,7 +413,7 @@ def test_run_lease_bi_accepts_valid_and_manifest_stable() -> None:
 
     tok = issue_token(conn, run_id=rid, ttl_s=60)
     assert tok
-    assert claim_run(conn, git_commit="c", config_json="{}") == rid
+    assert claim_run(conn, git_commit="c", config_json="{}", token=tok) == rid
 
     rid2 = next_run_id(conn)
     conn.execute(
@@ -444,8 +450,8 @@ def test_g2_manifest_changes_on_each_structural_drop() -> None:
 def test_status_cannot_revert_to_running() -> None:
     _, conn = _v10_conn()
     rid = next_run_id(conn)
-    issue_token(conn, run_id=rid, ttl_s=60)
-    claim_run(conn, git_commit="c", config_json="{}")
+    tok = issue_token(conn, run_id=rid, ttl_s=60)
+    claim_run(conn, git_commit="c", config_json="{}", token=tok)
     conn.execute(
         "UPDATE telemetry_runs SET status = 'COMMITTED',"
         " closed_at = CAST(strftime('%s', 'now') AS INTEGER)"

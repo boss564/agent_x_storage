@@ -33,7 +33,7 @@ GUARD_SHA_BASELINE = (
 )
 # Gate #6 pin after runner control-plane binding + E-1 residual A1/A3 fix.
 GUARD_SHA_GATE6 = (
-    "e9efe320c4957c5924424fe191d49eac69f910688eff420148509c055ff870b0"
+    "1c65b0be2925da85fee6ce090a1fe817f93b61ed6be4a2a0a2cfc0d80e2b8d77"
 )
 
 
@@ -180,10 +180,10 @@ def test_runner_positive_claim_once_close_scratch(tmp_path: Path) -> None:
     store = SQLiteShadowStorage.for_user(paths["data"], "shadow")
     conn = store._conn  # noqa: SLF001
     rid = next_run_id(conn)
-    issue_token(conn, run_id=rid, ttl_s=120)
+    tok = issue_token(conn, run_id=rid, ttl_s=120)
     store.close()
     paths["lock"].write_text("LOCKED=0\n", encoding="utf-8")
-    rc = runner_main(_argv(paths))
+    rc = runner_main(_argv(paths, "--lease-token", tok))
     assert rc == 0
     conn = sqlite3.connect(str(paths["db"]))
     row = conn.execute(

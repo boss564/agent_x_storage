@@ -29,7 +29,9 @@ from order_execution_engine.gatectl import (
 from order_execution_engine.persistence import SQLiteShadowStorage
 from order_execution_engine.shadow_runner import (
     EXIT_CONTROL_PLANE,
+    EXIT_RUN_LOCK,
     default_run_lock_path,
+    evaluate_start_lock,
     main as runner_main,
     parse_run_lock,
 )
@@ -38,7 +40,7 @@ PKG = Path(__file__).resolve().parents[1]
 SHADOW_RUNNER = PKG / "shadow_runner.py"
 # Updated after A1/A3 forbid-gating residual fix (was Gate-6 93ed1267…).
 GUARD_SHA_RESIDUAL = (
-    "e9efe320c4957c5924424fe191d49eac69f910688eff420148509c055ff870b0"
+    "1c65b0be2925da85fee6ce090a1fe817f93b61ed6be4a2a0a2cfc0d80e2b8d77"
 )
 POST_RETIRE_PARSE = {"locked": False, "forbid_run_id_gt": None}
 
@@ -224,7 +226,7 @@ def test_a2a_open_never_started_expiry_reuses_same_run_id(tmp_path: Path) -> Non
     now = int(time.time())
     t1 = issue_token(conn, run_id=rid, ttl_s=1, now=now - 10)
     with pytest.raises(LeaseError):
-        claim_run(conn, git_commit="x", config_json="{}")
+        claim_run(conn, git_commit="x", config_json="{}", token=t1)
     # run_id unchanged (no telemetry_runs row) — 16 reused, not forfeited
     assert next_run_id(conn) == rid
     assert conn.execute("SELECT COUNT(*) FROM telemetry_runs").fetchone()[0] == 0
@@ -243,10 +245,10 @@ def test_a2b_running_stuck_abort_audit_idempotent_advance(tmp_path: Path) -> Non
     conn = sqlite3.connect(str(paths["db"]))
     migrate_control_plane(conn, db_path=paths["db"])
     rid = next_run_id(conn)
-    issue_token(conn, run_id=rid, ttl_s=60)
-    assert claim_run(conn, git_commit="x", config_json="{}") == rid
+    tok = issue_token(conn, run_id=rid, ttl_s=60)
+    assert claim_run(conn, git_commit="x", config_json="{}", token=tok) == rid
     with pytest.raises(LeaseError):
-        issue_token(conn, run_id=rid + 1, ttl_s=60)
+        tok = issue_token(conn, run_id=rid + 1, ttl_s=60)
     info = abort_run(conn, rid, reason="induced_crash")
     conn.commit()
     assert info["run_id"] == rid
@@ -336,6 +338,7 @@ def test_a3_scratch_parse_matches_post_retire(tmp_path: Path) -> None:
                 "--journal",
                 str(paths["journal"]),
                 "retire-run-lock",
+                "--skip-e1-upload-gate",
             ]
         )
     assert rc == EXIT_OK
@@ -367,7 +370,7 @@ def test_a3_scratch_parse_matches_post_retire(tmp_path: Path) -> None:
     store = SQLiteShadowStorage.for_user(paths["data"], "a3reg")
     migrate_control_plane(store._conn, db_path=store._db_path)  # noqa: SLF001
     rid = next_run_id(store._conn)  # noqa: SLF001
-    issue_token(store._conn, run_id=rid, ttl_s=60)  # noqa: SLF001
+    tok = issue_token(store._conn, run_id=rid, ttl_s=60)  # noqa: SLF001
     store.close()
     rc = runner_main(
         [
@@ -381,6 +384,8 @@ def test_a3_scratch_parse_matches_post_retire(tmp_path: Path) -> None:
             str(paths["news"]),
             "--run-lock",
             str(leftover),
+            "--lease-token",
+            tok,
             "--once",
             "--no-ws",
         ]
@@ -409,3 +414,282 @@ def test_b_db_upload_scope_declared_in_plan() -> None:
     text = plan.read_text(encoding="utf-8")
     # Updated in same turn — soft check; Akte holds full B definition.
     assert "E-1" in text
+
+
+
+# --- D1–D4 architecture residuals (pre-Live) ---------------------------------
+
+
+def test_d1_stale_token_after_reissue_cannot_claim(tmp_path: Path) -> None:
+    """D1 fencing: expired holder token must fail after fresh issue for same run_id."""
+    paths = _bundle(tmp_path)
+    conn = sqlite3.connect(str(paths["db"]))
+    migrate_control_plane(conn, db_path=paths["db"])
+    rid = next_run_id(conn)
+    now = int(time.time())
+    t1 = issue_token(conn, run_id=rid, ttl_s=1, now=now - 10)
+    with pytest.raises(LeaseError):
+        claim_run(conn, git_commit="x", config_json="{}", token=t1, now=now)
+    t2 = issue_token(conn, run_id=rid, ttl_s=60, now=now)
+    assert t2 != t1
+    # Stale P1 token must not claim even though run_id still next.
+    with pytest.raises(LeaseError) as ei:
+        claim_run(conn, git_commit="x", config_json="{}", token=t1, now=now)
+    assert "closed" in str(ei.value).lower() or "expired" in str(ei.value).lower() or "unknown" in str(ei.value).lower() or "fence" in str(ei.value).lower() or "revok" in str(ei.value).lower()
+    # Fresh token claims once
+    assert claim_run(conn, git_commit="x", config_json="{}", token=t2, now=now) == rid
+    # Wrong / empty token refused
+    with pytest.raises(LeaseError):
+        claim_run(conn, git_commit="x", config_json="{}", token="deadbeef" * 4)
+    conn.close()
+
+
+def test_d1_running_blocks_reissue_no_auto_abort(tmp_path: Path) -> None:
+    """D1 liveness: RUNNING is not TTL-aborted; only explicit abort_run advances."""
+    paths = _bundle(tmp_path)
+    conn = sqlite3.connect(str(paths["db"]))
+    migrate_control_plane(conn, db_path=paths["db"])
+    rid = next_run_id(conn)
+    tok = issue_token(conn, run_id=rid, ttl_s=60)
+    assert claim_run(conn, git_commit="x", config_json="{}", token=tok) == rid
+    with pytest.raises(LeaseError) as ei:
+        issue_token(conn, run_id=rid + 1, ttl_s=60)
+    assert "RUNNING" in str(ei.value)
+    # Still RUNNING — no silent advance
+    assert next_run_id(conn) == rid + 1  # row exists → next is rid+1 for *issue*, but refuse
+    st = conn.execute(
+        "SELECT status FROM telemetry_runs WHERE run_id=?", (rid,)
+    ).fetchone()[0]
+    assert st == "RUNNING"
+    abort_run(conn, rid, reason="operator")
+    conn.commit()
+    assert next_run_id(conn) == rid + 1
+    conn.close()
+
+
+def test_d2_abort_consumes_run_id_gap_documented(tmp_path: Path) -> None:
+    """D2: abort consumes run_id; next=17; DB terminal ABORTED; 2nd abort refuses."""
+    paths = _bundle(tmp_path)
+    conn = sqlite3.connect(str(paths["db"]))
+    migrate_control_plane(conn, db_path=paths["db"])
+    rid = next_run_id(conn)
+    tok = issue_token(conn, run_id=rid, ttl_s=60)
+    claim_run(conn, git_commit="x", config_json="{}", token=tok)
+    abort_run(conn, rid, reason="d2")
+    conn.commit()
+    mx = conn.execute("SELECT MAX(run_id) FROM telemetry_runs").fetchone()[0]
+    assert int(mx) == rid
+    assert next_run_id(conn) == rid + 1
+    st = conn.execute(
+        "SELECT status, closed_at FROM telemetry_runs WHERE run_id=?", (rid,)
+    ).fetchone()
+    assert st[0] == "ABORTED" and st[1] is not None
+    with pytest.raises(LeaseError):
+        abort_run(conn, rid, reason="again")
+    try:
+        conn.execute("ROLLBACK")
+    except sqlite3.Error:
+        pass
+    # New lease only for next id — 16 never re-run
+    t_next = issue_token(conn, run_id=rid + 1, ttl_s=60)
+    assert t_next
+    conn.close()
+
+
+def test_d3_package_absent_without_marker_refuses(tmp_path: Path) -> None:
+    """D3: package path absent + no RUN.RETIRED → refuse (pre-retire fail-closed)."""
+    pkg_lock = tmp_path / "ops" / "RUN.lock"
+    pkg_lock.parent.mkdir(parents=True)
+    # absent
+    assert not pkg_lock.is_file()
+    refuse, reason = evaluate_start_lock(pkg_lock, run_lock_override=False)
+    # Without patching default path, package check uses real default — patch it.
+    with patch(
+        "order_execution_engine.shadow_runner.default_run_lock_path",
+        return_value=pkg_lock,
+    ):
+        refuse, reason = evaluate_start_lock(pkg_lock, run_lock_override=False)
+        assert refuse is True
+        assert "RUN.RETIRED" in reason
+        # Marker present → proceed signal (lease still required later)
+        marker = pkg_lock.parent / "RUN.RETIRED"
+        marker.write_text("retired=1\n", encoding="utf-8")
+        refuse2, reason2 = evaluate_start_lock(pkg_lock, run_lock_override=False)
+        assert refuse2 is False
+        assert "post-retire" in reason2
+    # Scratch override: absent still proceed
+    scratch = tmp_path / "scratch.lock"
+    refuse3, _ = evaluate_start_lock(scratch, run_lock_override=True)
+    assert refuse3 is False
+
+
+def test_d3_retire_writes_marker_and_archive(tmp_path: Path) -> None:
+    """D3/D4 path: retire rename-archive + RUN.RETIRED; upload-gate blocks without upload."""
+    paths = _bundle(tmp_path)
+    paths["lock"].write_text(
+        "LOCKED=1\nforbid_run_id_gt=14\nreason=TEST\n", encoding="utf-8"
+    )
+    before = _sha(paths["lock"])
+
+    def fake_run(cmd, **kwargs):  # noqa: ANN001
+        from unittest.mock import MagicMock
+
+        m = MagicMock()
+        m.returncode = 0
+        m.stdout = "[]" if len(cmd) > 1 and cmd[1] == "lsjson" else ""
+        m.stderr = ""
+        return m
+
+    with patch(
+        "order_execution_engine.control_plane_audit.subprocess.run",
+        side_effect=fake_run,
+    ):
+        # D4-a: upload gate default-on → refuse without prior upload; lock stays
+        rc = gatectl_main(
+            [
+                "--db",
+                str(paths["db"]),
+                "--data-root",
+                str(paths["data_root"]),
+                "--runner",
+                str(paths["runner"]),
+                "--lock",
+                str(paths["lock"]),
+                "--repo-root",
+                str(paths["repo"]),
+                "--journal",
+                str(paths["journal"]),
+                "retire-run-lock",
+            ]
+        )
+        assert rc == EXIT_POLICY
+        assert paths["lock"].is_file()
+        assert "LOCKED=1" in paths["lock"].read_text(encoding="utf-8")
+        assert not (paths["lock"].parent / "RUN.RETIRED").is_file()
+
+        # Scratch opt-out: retire succeeds + marker (D3-a order)
+        rc2 = gatectl_main(
+            [
+                "--db",
+                str(paths["db"]),
+                "--data-root",
+                str(paths["data_root"]),
+                "--runner",
+                str(paths["runner"]),
+                "--lock",
+                str(paths["lock"]),
+                "--repo-root",
+                str(paths["repo"]),
+                "--journal",
+                str(paths["journal"]),
+                "retire-run-lock",
+                "--skip-e1-upload-gate",
+            ]
+        )
+        assert rc2 == EXIT_OK
+    assert not paths["lock"].is_file()
+    archives = list(paths["lock"].parent.glob("RUN.lock.retired.*"))
+    assert len(archives) == 1
+    assert _sha(archives[0]) == before
+    assert (paths["lock"].parent / "RUN.RETIRED").is_file()
+
+
+def test_d6c_section4_mapping_declared() -> None:
+    """D6c: §4 semantics file maps tests to A/D clauses (traceability)."""
+    sem = Path("docs/architecture/E1_INTEGRATION_SEMANTICS.md")
+    assert sem.is_file()
+    text = sem.read_text(encoding="utf-8")
+    for needle in (
+        "test_d1_stale_token_after_reissue_cannot_claim",
+        "test_d2_abort_consumes_run_id_gap_documented",
+        "test_d3_package_absent_without_marker_refuses",
+        "test_a2b_running_stuck_abort_audit_idempotent_advance",
+        "Exit 76",
+        "D6b",
+    ):
+        assert needle in text, f"missing mapping: {needle}"
+
+
+
+def test_d2b_abort_requires_confirm(tmp_path: Path) -> None:
+    """D2-b: abort without matching --confirm-abort is refused."""
+    paths = _bundle(tmp_path)
+    conn = sqlite3.connect(str(paths["db"]))
+    migrate_control_plane(conn, db_path=paths["db"])
+    rid = next_run_id(conn)
+    tok = issue_token(conn, run_id=rid, ttl_s=60)
+    claim_run(conn, git_commit="x", config_json="{}", token=tok)
+    conn.close()
+    rc = gatectl_main(
+        [
+            "--db",
+            str(paths["db"]),
+            "--data-root",
+            str(paths["data_root"]),
+            "--runner",
+            str(paths["runner"]),
+            "--lock",
+            str(paths["lock"]),
+            "--repo-root",
+            str(paths["repo"]),
+            "--journal",
+            str(paths["journal"]),
+            "abort-run",
+            "--run-id",
+            str(rid),
+            "--confirm-abort",
+            "999",
+            "--reason",
+            "wrong",
+        ]
+    )
+    assert rc == EXIT_POLICY
+    conn = sqlite3.connect(str(paths["db"]))
+    assert (
+        conn.execute(
+            "SELECT status FROM telemetry_runs WHERE run_id=?", (rid,)
+        ).fetchone()[0]
+        == "RUNNING"
+    )
+    conn.close()
+
+
+def test_d3a_preexisting_marker_refuses_retire(tmp_path: Path) -> None:
+    """D3-a: RUN.RETIRED present before retire → refuse (marker integrity)."""
+    paths = _bundle(tmp_path)
+    paths["lock"].write_text("LOCKED=1\n", encoding="utf-8")
+    (paths["lock"].parent / "RUN.RETIRED").write_text("bogus\n", encoding="utf-8")
+
+    def fake_run(cmd, **kwargs):  # noqa: ANN001
+        from unittest.mock import MagicMock
+
+        m = MagicMock()
+        m.returncode = 0
+        m.stdout = "[]"
+        m.stderr = ""
+        return m
+
+    with patch(
+        "order_execution_engine.control_plane_audit.subprocess.run",
+        side_effect=fake_run,
+    ):
+        rc = gatectl_main(
+            [
+                "--db",
+                str(paths["db"]),
+                "--data-root",
+                str(paths["data_root"]),
+                "--runner",
+                str(paths["runner"]),
+                "--lock",
+                str(paths["lock"]),
+                "--repo-root",
+                str(paths["repo"]),
+                "--journal",
+                str(paths["journal"]),
+                "retire-run-lock",
+                "--skip-e1-upload-gate",
+            ]
+        )
+    assert rc == EXIT_POLICY
+    assert paths["lock"].is_file()
