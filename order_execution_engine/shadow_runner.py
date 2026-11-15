@@ -383,7 +383,38 @@ async def run_ws_and_hub(
             t.cancel()
 
 
+def default_run_lock_path() -> Path:
+    """ops/RUN.lock next to this package — Abort sets LOCKED=1 before kill."""
+    return Path(__file__).resolve().parent / "ops" / "RUN.lock"
+
+
+def run_lock_blocks(lock_path: Path) -> bool:
+    """True if RUN.lock exists and declares LOCKED=1 (runtime gate)."""
+    if not lock_path.is_file():
+        return False
+    try:
+        text = lock_path.read_text(encoding="utf-8")
+    except OSError:
+        return True  # fail-closed: unreadable lock blocks start
+    for line in text.splitlines():
+        if line.strip() == "LOCKED=1" or line.strip().startswith("LOCKED=1"):
+            return True
+    return False
+
+
 def main(argv: Optional[list[str]] = None) -> int:
+    # FIRST instruction on the start path: refuse if RUN.lock is set.
+    # No logging, no SQLite, no WS, no Falkor — stderr only, then exit 75.
+    argv_list = list(sys.argv[1:] if argv is None else argv)
+    lock_path = default_run_lock_path()
+    if "--run-lock" in argv_list:
+        i = argv_list.index("--run-lock")
+        if i + 1 < len(argv_list):
+            lock_path = Path(argv_list[i + 1])
+    if run_lock_blocks(lock_path):
+        sys.stderr.write(f"RUN.lock active — refuse start path={lock_path}\n")
+        return 75
+
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--data-root", type=Path,
@@ -414,6 +445,10 @@ def main(argv: Optional[list[str]] = None) -> int:
         help="Von Offset 0 / gespeichertem Offset lesen",
     )
     parser.add_argument("--tail-interval-s", type=float, default=DEFAULT_TAIL_INTERVAL_S)
+    parser.add_argument(
+        "--run-lock", type=Path, default=None,
+        help="Path to RUN.lock (default: order_execution_engine/ops/RUN.lock)",
+    )
     args = parser.parse_args(argv)
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
