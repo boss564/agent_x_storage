@@ -1,0 +1,88 @@
+{
+  "title": "L1 — Evidenz commit-gebunden (nicht Working-Tree-Pin)",
+  "measured_at": "2026-11-15T16:06:00Z",
+  "environment": "host",
+  "e1_granted": false,
+  "push_blocked": true,
+  "answer_to_reviewer": {
+    "should_review_98a6f307": true,
+    "reason": "WT SHA of gatectl/runner/lease/persistence/audit MATCH committed blobs @ 98a6f307 and tip b2303ceb; D1–D4 are in that code commit and are unchecked since 7e5bfb32",
+    "scope": "gatectl delta 7e5bfb32..98a6f307 + D1–D4 semantics; not a push/E-1 grant"
+  },
+  "f5a3bb76_status": {
+    "in_7e5bfb32_to_HEAD": false,
+    "verdict": "WT-only intermediate — never committed; delta f5a3bb76→5068d869 cannot be named from git history",
+    "64_run_against_f5a3bb76": "EXPLICITLY_SUPERSEDED — not Abnahme-Evidenz"
+  },
+  "L1_steps": {
+    "1_worktree": {
+      "cmd": "git worktree add /tmp/e1_tip b2303ceb",
+      "HEAD": "b2303ceba09f5083e8e32b6c6b6f6b53278672be"
+    },
+    "2_pytest_clean_tip": {
+      "cwd": "/tmp/e1_tip (repo root)",
+      "result_as_measured": "64 passed, 1 failed, 1 skipped",
+      "fail": "test_guard_pin_and_package_lock_intact — ops/RUN.lock untracked → absent in clean tree",
+      "skip": "test_retire_run_lock_refuses_package_lock — same absent lock",
+      "note": "Dirty main WT had untracked RUN.lock → reported 66 passed; that number depended on a non-committed fixture",
+      "followup_fix": "gate6 pin test skips lock body when fixture absent (pin remains binding)"
+    },
+    "3_gatectl_delta": {
+      "range": "7e5bfb32..98a6f307",
+      "stat": "gatectl.py +558/−… among 5 files +1105/−143 total",
+      "focus_symbols": [
+        "--confirm-abort (D2-b)",
+        "write-ahead audit before COMMIT (D2-a)",
+        "RUN.RETIRED O_EXCL after rename (D3-a)",
+        "upload gate default-on / --skip-e1-upload-gate (D4-a)",
+        "status.running[].age_s (D1-a)"
+      ]
+    },
+    "4_two_tests_64_to_66": {
+      "mapping": {
+        "test_d2b_abort_requires_confirm": "D2-b",
+        "test_d3a_preexisting_marker_refuses_retire": "D3-a"
+      },
+      "also_added_in_8e7bcf2b": [
+        "test_d1_stale_token_after_reissue_cannot_claim",
+        "test_d1_running_blocks_reissue_no_auto_abort",
+        "test_d2_abort_consumes_run_id_gap_documented",
+        "test_d3_package_absent_without_marker_refuses",
+        "test_d3_retire_writes_marker_and_archive",
+        "test_d6c_section4_mapping_declared"
+      ]
+    }
+  },
+  "core_files_since_7e5bfb32": {
+    "gatectl.py": {"was": "9588adc3…", "now": "5068d869b3f03e97cdcc77ed8e683b89b73736b6521dfa89cedb1db70d19d567"},
+    "shadow_runner.py": {"was": "2157113a…", "now": "1c65b0be2925da85fee6ce090a1fe817f93b61ed6be4a2a0a2cfc0d80e2b8d77"},
+    "control_plane_lease.py": {"was": "c45e5785…", "now": "45b2e7bbf90ad7e4…"},
+    "persistence.py": {"was": "cc8f8f30…", "now": "b8bc55c23510d20d…"},
+    "control_plane_audit.py": {"was": "0606e219…", "now": "ca77de2994738109…"},
+    "reviewer_note": "Prior Freigaben ca57b4e0 / 7e5bfb32 do NOT cover 98a6f307; D1–D4 ungeprüft durch Prüfer"
+  },
+  "WT_equals_commit": {
+    "gatectl": true,
+    "shadow_runner": true,
+    "control_plane_lease": true,
+    "persistence": true,
+    "control_plane_audit": true,
+    "code_commit": "98a6f307bbccb5544a6b50f5b6a09d1fc11ea678",
+    "tip": "b2303ceba09f5083e8e32b6c6b6f6b53278672be"
+  },
+  "offhost_increment": {
+    "range": "7e5bfb32..b2303ceb",
+    "local_path": "reports/P0_P1_PREFLIGHT_SP1933/git_bundle_incr_20261115T1705Z/",
+    "bundle": "hardening_7e5bfb32_to_b2303ceb.bundle",
+    "bundle_bytes": 68609,
+    "requires_ref": "7e5bfb324cb7147654b0320b4b682a468746a1d9",
+    "contains_ref": "b2303ceba09f5083e8e32b6c6b6f6b53278672be",
+    "also": "13 format-patch files same dir",
+    "rclone_upload": "NOT_DONE — operator; no config dump"
+  },
+  "R4": {
+    "rc": 0,
+    "warn": "4/4 ohne Eigentuemer — Luecke DEKLARIERT (governance_gate: gesperrte Pfade ohne Owner-Eintrag; Commit ohne neuen Test erlaubt)"
+  },
+  "priority_next": ["L3 WAL crash window", "L4 abort-run / skip-switch authorization", "Prüfer-Review 98a6f307"]
+}
