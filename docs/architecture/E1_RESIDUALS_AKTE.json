@@ -1,0 +1,64 @@
+{
+  "A1": {
+    "note": "schema/manifest/no-token \u2192 Exit 76; sqlite error on ensure raises",
+    "status": "PASS_SCRATCH",
+    "tests": [
+      "test_a1_fail_closed_schema_and_manifest_and_db_error",
+      "test_a1_ensure_raises_on_sqlite_error"
+    ]
+  },
+  "A2": {
+    "paths": [
+      "TTL expiry \u2192 re-issue revokes",
+      "RUNNING stuck \u2192 abort_run \u2192 next issue"
+    ],
+    "status": "PASS_SCRATCH",
+    "tests": [
+      "test_a2_lease_stuck_ttl_and_abort_release"
+    ]
+  },
+  "A3": {
+    "bugfix": "forbid_run_id_gt no longer enforced when unlocked",
+    "post_retire_state": "lock path ABSENT (rename archive)",
+    "retire_method": "rename_archive (never delete); before_sha in audit before rename",
+    "scratch_generalprobe": "absent path OR LOCKED=0 without forbid \u2014 same parse branch",
+    "status": "PASS_SCRATCH"
+  },
+  "A4": {
+    "default_run_lock": "/Volumes/THX_OS_ULTRA/Users/olivermueller/agent_x_storage/order_execution_engine/ops/RUN.lock",
+    "override_explicit_only": true,
+    "plist_has_run_lock": false,
+    "status": "PASS_SCRATCH"
+  },
+  "B": {
+    "before_lock_retire": true,
+    "db_artefact_upload_in_e1_scope": true,
+    "hash": "SHA-256 of snapshot artefact file",
+    "retention": "keep until E-1+7d explicit retire of snapshots; not auto-deleted",
+    "sequence": "pre-migrate snapshot off-host \u2192 migrate \u2192 post-migrate snapshot off-host \u2192 verify-mirror(audit) GR\u00dcN \u2192 \u2026 \u2192 retire",
+    "status": "DEFINIERT",
+    "target": "gdrive folder DEFAULT_AUDIT_MIRROR_FOLDER_ID (same H4 folder) under explicit db_snapshots/ prefix \u2014 operator confirms",
+    "transport": "rclone copyto to pinned folder id (no config dump)",
+    "verify_mirror_green": "all audit journal entries present off-host with matching payload SHA; seq contiguous; no gaps"
+  },
+  "C": {
+    "F1_ran_at_HEAD": true,
+    "F1_runner_pin_then": "93ed12674cefa183aea8d21e751edc5bf7c4cd297429639e333db1f6b27116cc",
+    "WT_diff_vs_HEAD_nonempty": true,
+    "committed_HEAD": "10a4ddf4394f7311fde9f793fdcf71a9134b5bc7",
+    "diff_stat_lines": 162,
+    "runner_sha_now": "e9efe320c4957c5924424fe191d49eac69f910688eff420148509c055ff870b0",
+    "ts_utc": "20261115T151850Z",
+    "verdict": "F1_NOT_TRANSFERABLE_UNTIL_REPROBE \u2014 residual A1/A3 code change dirty; re-run F1+ after commit of residual pin e9efe320\u2026"
+  },
+  "E1_freigabe": "NICHT_ERTEILT",
+  "pytest": "56 passed (residuals+gate4/5/6/phase1/phase2 subset)",
+  "retire_reversible": {
+    "before_sha_in_audit": true,
+    "delete_forbidden": true,
+    "method": "rename to RUN.lock.retired.<sha12>.<utc>",
+    "package_ops_still_TABU": true
+  },
+  "runner_pin_residual": "e9efe320c4957c5924424fe191d49eac69f910688eff420148509c055ff870b0",
+  "ts_utc": "20261115T151850Z"
+}

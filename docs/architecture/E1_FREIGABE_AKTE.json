@@ -1,0 +1,539 @@
+{
+  "F0": {
+    "HEAD": "10a4ddf4394f7311fde9f793fdcf71a9134b5bc7",
+    "HEAD_expected": "10a4ddf4394f7311fde9f793fdcf71a9134b5bc7",
+    "HEAD_match": true,
+    "R3": {
+      "gpg": "N",
+      "no_amend_in_recent_reflog": true,
+      "parent": "70b17659d75b2498246e76607ea34a16bb22d46a",
+      "reflog_tip_action": "10a4ddf4 HEAD@{2026-11-15 15:52:37 +0100}: commit: feat(control-plane): Gate-6 shadow_runner lease enforcement & pin guard",
+      "tip_commit": "10a4ddf4394f7311fde9f793fdcf71a9134b5bc7"
+    },
+    "R4": {
+      "governance_rc": 0,
+      "governance_tail": "GOVERNANCE WARNUNG: Besitz rot (4/4 ohne Eigentuemer) \u2014 Commit ohne neuen Test erlaubt; Luecke DEKLARIERT\nGovernance: ok (4 gesperrt, 4/4 EXT offen)",
+      "note": "4/4 ohne Eigentuemer \u2014 Luecke DEKLARIERT (ok mit Warnung)"
+    },
+    "branch": "hardening/control-plane",
+    "commands": [
+      {
+        "cmd": [
+          "git",
+          "rev-parse",
+          "HEAD"
+        ],
+        "rc": 0,
+        "stderr": "",
+        "stdout": "10a4ddf4394f7311fde9f793fdcf71a9134b5bc7\n"
+      },
+      {
+        "cmd": [
+          "git",
+          "rev-parse",
+          "--abbrev-ref",
+          "HEAD"
+        ],
+        "rc": 0,
+        "stderr": "",
+        "stdout": "hardening/control-plane\n"
+      },
+      {
+        "cmd": [
+          "git",
+          "rev-list",
+          "--count",
+          "origin/main..HEAD"
+        ],
+        "rc": 0,
+        "stderr": "",
+        "stdout": "333\n"
+      },
+      {
+        "cmd": [
+          "git",
+          "rev-list",
+          "--count",
+          "1e934cff..HEAD"
+        ],
+        "rc": 0,
+        "stderr": "",
+        "stdout": "7\n"
+      },
+      {
+        "cmd": [
+          "git",
+          "log",
+          "--oneline",
+          "--no-decorate",
+          "1e934cff..HEAD"
+        ],
+        "rc": 0,
+        "stderr": "",
+        "stdout": "10a4ddf4 feat(control-plane): Gate-6 shadow_runner lease enforcement & pin guard\n70b17659 feat(gatectl): add --allow-manifest-mismatch for pre-migration snapshots\nbd511f0d feat(control-plane): Gate-4 hardening gaps (migrate, abort, post-run, mirror verify)\n1aa998fc chore(ops): harden shadow-runner launchd plist (KeepAlive/RunAtLoad false)\nb0d700df feat(control-plane): Phase-2 H4 Drive preflight + pinned audit mirror folder\n7e5bfb32 feat(control-plane): Phase-2 gatectl snapshot, audit chain, immutable mirror\nca57b4e0 feat(control-plane): Phase-1 run_lease schema v12 (Scratch)\n"
+      },
+      {
+        "cmd": [
+          "git",
+          "reflog",
+          "-12",
+          "--date=iso"
+        ],
+        "rc": 0,
+        "stderr": "",
+        "stdout": "10a4ddf4 HEAD@{2026-11-15 15:52:37 +0100}: commit: feat(control-plane): Gate-6 shadow_runner lease enforcement & pin guard\n70b17659 HEAD@{2026-11-15 15:45:58 +0100}: commit: feat(gatectl): add --allow-manifest-mismatch for pre-migration snapshots\nbd511f0d HEAD@{2026-11-15 15:40:49 +0100}: commit: feat(control-plane): Gate-4 hardening gaps (migrate, abort, post-run, mirror verify)\n1aa998fc HEAD@{2026-11-15 15:33:43 +0100}: commit: chore(ops): harden shadow-runner launchd plist (KeepAlive/RunAtLoad false)\nb0d700df HEAD@{2026-11-15 15:22:15 +0100}: commit: feat(control-plane): Phase-2 H4 Drive preflight + pinned audit mirror folder\n7e5bfb32 HEAD@{2026-11-15 13:22:43 +0100}: commit: feat(control-plane): Phase-2 gatectl snapshot, audit chain, immutable mirror\nca57b4e0 HEAD@{2026-11-15 12:52:37 +0100}: commit: feat(control-plane): Phase-1 run_lease schema v12 (Scratch)\n1e934cff HEAD@{2026-11-15 10:35:06 +0100}: commit: chore(order_execution_engine): versioniere WT-Fail-closed-Guard (LOCKED=1 \u2192 75)\nae2dc374 HEAD@{2026-11-15 10:20:20 +0100}: commit: docs: Hook-Gr\u00fcn \u2014 SWARM_INVENTORY Sync + TAG7 \u00a771.77 Aufl\u00f6sung erf\u00fcllt\nf1680f15 HEAD@{2026-11-15 10:01:41 +0100}: checkout: moving from wip/live-ist-20261110 to hardening/control-plane\nf1680f15 HEAD@{2026-11-12 20:30:50 +0100}: commit: M-W4 Weg A: gate_pin (4. Pin) + allow_dirty_for_test-Pfad dokumentiert.\ncae4290c HEAD@{2026-11-12 20:19:44 +0100}: commit: M-W4: NA_MESS_PREFIXES um rotprobe_/abnahme_booking_ erweitern (M-q).\n"
+      },
+      {
+        "cmd": [
+          "git",
+          "rev-parse",
+          "HEAD^"
+        ],
+        "rc": 0,
+        "stderr": "",
+        "stdout": "70b17659d75b2498246e76607ea34a16bb22d46a\n"
+      },
+      {
+        "cmd": [
+          "git",
+          "log",
+          "-1",
+          "--format=%G?"
+        ],
+        "rc": 0,
+        "stderr": "",
+        "stdout": "N\n"
+      },
+      {
+        "cmd": [
+          "python3",
+          "scripts/governance_gate.py"
+        ],
+        "rc": 0,
+        "stderr": "",
+        "stdout": "GOVERNANCE WARNUNG: Besitz rot (4/4 ohne Eigentuemer) \u2014 Commit ohne neuen Test erlaubt; Luecke DEKLARIERT\nGovernance: ok (4 gesperrt, 4/4 EXT offen)\n"
+      },
+      {
+        "cmd": [
+          "git",
+          "hash-object",
+          "/Volumes/THX_OS_ULTRA/Users/olivermueller/agent_x_storage/order_execution_engine/shadow_runner.py"
+        ],
+        "rc": 0,
+        "stderr": "",
+        "stdout": "33e0d32793ff9b497c134683dbabe90334a2f2ed\n"
+      },
+      {
+        "cmd": [
+          "git",
+          "rev-parse",
+          "HEAD:order_execution_engine/shadow_runner.py"
+        ],
+        "rc": 0,
+        "stderr": "",
+        "stdout": "33e0d32793ff9b497c134683dbabe90334a2f2ed\n"
+      },
+      {
+        "cmd": [
+          "pgrep",
+          "-lf",
+          "shadow_runner"
+        ],
+        "rc": 1,
+        "stderr": "",
+        "stdout": ""
+      }
+    ],
+    "delta_1e934cff_dot_dot_HEAD_count": 7,
+    "delta_1e934cff_dot_dot_HEAD_log": [
+      "10a4ddf4 feat(control-plane): Gate-6 shadow_runner lease enforcement & pin guard",
+      "70b17659 feat(gatectl): add --allow-manifest-mismatch for pre-migration snapshots",
+      "bd511f0d feat(control-plane): Gate-4 hardening gaps (migrate, abort, post-run, mirror verify)",
+      "1aa998fc chore(ops): harden shadow-runner launchd plist (KeepAlive/RunAtLoad false)",
+      "b0d700df feat(control-plane): Phase-2 H4 Drive preflight + pinned audit mirror folder",
+      "7e5bfb32 feat(control-plane): Phase-2 gatectl snapshot, audit chain, immutable mirror",
+      "ca57b4e0 feat(control-plane): Phase-1 run_lease schema v12 (Scratch)"
+    ],
+    "guard": {
+      "HEAD_blob": "33e0d32793ff9b497c134683dbabe90334a2f2ed",
+      "WT_equals_HEAD_blob": true,
+      "WT_git_hash_object": "33e0d32793ff9b497c134683dbabe90334a2f2ed",
+      "gate6_pin": "93ed12674cefa183aea8d21e751edc5bf7c4cd297429639e333db1f6b27116cc",
+      "pin_match": true,
+      "shadow_runner_file_sha256": "93ed12674cefa183aea8d21e751edc5bf7c4cd297429639e333db1f6b27116cc"
+    },
+    "live": {
+      "files": {
+        "shadow.db": {
+          "exists": true,
+          "path": "/Users/olivermueller/Library/Application Support/agentx/shadow_live/shadow/shadow/shadow.db",
+          "sha256": "2a7915ef0eff5dea4b3e67332cbb117bf1b738190fbd9304c5dceaa3b54008ed",
+          "size": 364544
+        },
+        "shadow.db-shm": {
+          "exists": false,
+          "path": "/Users/olivermueller/Library/Application Support/agentx/shadow_live/shadow/shadow/shadow.db-shm",
+          "sha256": null,
+          "size": null
+        },
+        "shadow.db-wal": {
+          "exists": false,
+          "path": "/Users/olivermueller/Library/Application Support/agentx/shadow_live/shadow/shadow/shadow.db-wal",
+          "sha256": null,
+          "size": null
+        }
+      },
+      "meta": {
+        "has_closed_at": false,
+        "has_run_lease": false,
+        "has_status": false,
+        "integrity_check": "ok",
+        "journal_mode": "delete",
+        "max_run_id": 15,
+        "null_status_rows": null,
+        "telemetry_runs_count": 15,
+        "triggers": [],
+        "user_version": 9
+      },
+      "quiescence": {
+        "declared": "LOCKED=1 + no runner PID + no -wal/-shm + journal_mode=delete \u21d2 copy2 safe",
+        "launchagent_installed": false,
+        "pgrep_shadow_runner_rc": 1,
+        "pgrep_stdout": ""
+      }
+    },
+    "origin_main_dot_dot_HEAD": 333,
+    "run_lock": {
+      "content": "LOCKED=1\nreason=ABORT_RUN14_CONTROL_PLANE\nset_utc=2026-11-14T19:39:43Z\nset_by=operator_channel\nforbid_run_id_gt=14\nnote=shadow_runner must refuse start while this file exists with LOCKED=1\n",
+      "expected": "58340c1e27b01a55d84f4d38f43590f1677d6cbf53c0536dc273237e1a69845b",
+      "match": true,
+      "sha256": "58340c1e27b01a55d84f4d38f43590f1677d6cbf53c0536dc273237e1a69845b",
+      "tracked_in_git": false
+    },
+    "stale_326_invalid": true,
+    "ts_utc": "20261115T150525Z"
+  },
+  "F1_plus": {
+    "abort_reopen": {
+      "abort_after": "trg_lease_bu",
+      "error": "RuntimeError: forced migrate abort after trg_lease_bu",
+      "file_sha_unchanged": true,
+      "pass": true,
+      "reopen_post": {
+        "has_closed_at": false,
+        "has_run_lease": false,
+        "has_status": false,
+        "integrity_check": "ok",
+        "journal_mode": "delete",
+        "max_run_id": 15,
+        "null_status_rows": null,
+        "telemetry_runs_count": 15,
+        "triggers": [],
+        "user_version": 9
+      },
+      "reopen_pre": {
+        "has_closed_at": false,
+        "has_run_lease": false,
+        "has_status": false,
+        "integrity_check": "ok",
+        "journal_mode": "delete",
+        "max_run_id": 15,
+        "null_status_rows": null,
+        "telemetry_runs_count": 15,
+        "triggers": [],
+        "user_version": 9
+      },
+      "schema_unchanged": true,
+      "single_transaction_evidence": "migrate_control_plane wraps all steps in one BEGIN IMMEDIATE; forced abort \u2192 ROLLBACK; reopen shows uv=9 and no run_lease"
+    },
+    "byte_identical_copy": true,
+    "copy_method": "shutil.copy2",
+    "f7_plus": {
+      "db_state_at_test": {
+        "max_run_id": 15,
+        "path": "/var/folders/pl/7s5198dd4917v2qgh1lv99qr0000gn/T/e1_f1plus_20261115T150525Z_eixb01c9/canary.db",
+        "user_version": 12
+      },
+      "first_ok": true,
+      "open_count": 1,
+      "pass": true,
+      "refuse_15": "issue-token refuses run_id=15, next is 16",
+      "second_open": "open lease already exists for run_id=16",
+      "token_sha256": "baf743607c8278915bcc564b0cd60977fbc9187d24ffc14cc77088944732ce00"
+    },
+    "git_head": "10a4ddf4394f7311fde9f793fdcf71a9134b5bc7",
+    "live_final_sha256": "2a7915ef0eff5dea4b3e67332cbb117bf1b738190fbd9304c5dceaa3b54008ed",
+    "live_sha256": "2a7915ef0eff5dea4b3e67332cbb117bf1b738190fbd9304c5dceaa3b54008ed",
+    "live_unchanged": true,
+    "max_run_id_preserved": true,
+    "migrate_idempotent": true,
+    "post_migrate_conn": {
+      "manifest_ist": "3e685b7d98349aeefae3ab591908dd672b731f89f06a7d71fedbd0e49574c9d9",
+      "manifest_soll": "3e685b7d98349aeefae3ab591908dd672b731f89f06a7d71fedbd0e49574c9d9",
+      "max_run_id": 15,
+      "next_run_id": 16,
+      "null_status": 0,
+      "user_version": 12
+    },
+    "post_migrate_reopen": {
+      "has_closed_at": true,
+      "has_run_lease": true,
+      "has_status": true,
+      "integrity_check": "ok",
+      "journal_mode": "delete",
+      "max_run_id": 15,
+      "null_status_rows": 0,
+      "telemetry_runs_count": 15,
+      "triggers": [
+        "trg_run_lease_bd_forbid",
+        "trg_run_lease_before_insert",
+        "trg_run_lease_bu_guard",
+        "trg_telemetry_runs_ai_consume",
+        "trg_telemetry_runs_bd_forbid",
+        "trg_telemetry_runs_bi_lease",
+        "trg_telemetry_runs_bu_run_id_forbid",
+        "trg_telemetry_runs_bu_status"
+      ],
+      "user_version": 12
+    },
+    "pre_migrate_reopen": {
+      "has_closed_at": false,
+      "has_run_lease": false,
+      "has_status": false,
+      "integrity_check": "ok",
+      "journal_mode": "delete",
+      "max_run_id": 15,
+      "null_status_rows": null,
+      "telemetry_runs_count": 15,
+      "triggers": [],
+      "user_version": 9
+    },
+    "restore_probe": {
+      "matches_live": true,
+      "pass": true,
+      "reopen": {
+        "has_closed_at": false,
+        "has_run_lease": false,
+        "has_status": false,
+        "integrity_check": "ok",
+        "journal_mode": "delete",
+        "max_run_id": 15,
+        "null_status_rows": null,
+        "telemetry_runs_count": 15,
+        "triggers": [],
+        "user_version": 9
+      },
+      "sha256": "2a7915ef0eff5dea4b3e67332cbb117bf1b738190fbd9304c5dceaa3b54008ed"
+    },
+    "runtime_modules": {
+      "SCHEMA_CONTROL": 12,
+      "control_plane_lease.__file__": "/Volumes/THX_OS_ULTRA/Users/olivermueller/agent_x_storage/order_execution_engine/control_plane_lease.py",
+      "gatectl.__file__": "/Volumes/THX_OS_ULTRA/Users/olivermueller/agent_x_storage/order_execution_engine/gatectl.py",
+      "same_tree_as_HEAD": true
+    },
+    "ts_utc": "20261115T150525Z",
+    "verdict": "PASS",
+    "wal": {
+      "journal_mode": "delete",
+      "quiescence_declared": "LOCKED=1 + no runner PID + no -wal/-shm + journal_mode=delete \u21d2 copy2 safe",
+      "shm_exists": false,
+      "wal_exists": false
+    },
+    "work_dir": "/var/folders/pl/7s5198dd4917v2qgh1lv99qr0000gn/T/e1_f1plus_20261115T150525Z_eixb01c9"
+  },
+  "F2_plus": {
+    "code_path_same_as_post_retire": "Nach retire-run-lock ist Schutz = Lease (ensure_control_plane_ready + claim_run). Der kontrollierte Einzellauf mit unlocked Scratch-Lock testet genau diesen Lease-Pfad. Paket-Lock bleibt physisch LOCKED=1 f\u00fcr alle Starts OHNE --run-lock Override.",
+    "evidence_code": {
+      "lease": "ensure_control_plane_ready + open_run/claim_run",
+      "parse_run_lock": "shadow_runner.py parse_run_lock / main early exit 75"
+    },
+    "initial_scratch_lock_state": "Datei existiert; Inhalt OHNE LOCKED=1 (oder LOCKED=0). parse_run_lock \u2192 locked=False \u2192 Startpfad nicht mit Exit 75 blockiert.",
+    "interpretation": "i_lease_path_with_unlocked_scratch_override",
+    "not_decorative": "Security w\u00e4hrend 4b = Token/Lease, nicht Scratch-Lock-Datei. Scratch-Lock unlocked ist bewusster Freeze-Bypass f\u00fcr EINEN instrumentierten Prozess.",
+    "refuse_path_still_tested": "LOCKED=1 auf Default-Pfad \u2192 Exit 75 (Gate #6 Negativtests)",
+    "who_acquires": "Kein Lock-Acquire. --run-lock ersetzt nur den gepr\u00fcften Pfad. Paket-RUN.lock wird bei Override nicht gelesen."
+  },
+  "F4_plus": {
+    "HEAD": "10a4ddf4394f7311fde9f793fdcf71a9134b5bc7",
+    "HEAD_tree_contains_migrate_9_to_12": true,
+    "ancestors": {
+      "1e934cff_of_HEAD": true,
+      "bd511f0d_gate4_of_HEAD": true,
+      "ca57b4e0_phase1_of_HEAD": true
+    },
+    "clarification": "0ee9a5da\u2026 was FILE sha256 of gatectl.py, NOT a git commit. Abnahme-Einheit = Quellstand HEAD; Datei-SHA = Fingerabdruck; kein separates Build-Bin\u00e4r (CPython import).",
+    "commands": [
+      {
+        "cmd": [
+          "git",
+          "rev-parse",
+          "HEAD:order_execution_engine/gatectl.py"
+        ],
+        "rc": 0,
+        "stderr": "",
+        "stdout": "e01a7af2d00622c152c4d6de78e9b2246351fc0a\n"
+      },
+      {
+        "cmd": [
+          "git",
+          "rev-parse",
+          "HEAD:order_execution_engine/control_plane_lease.py"
+        ],
+        "rc": 0,
+        "stderr": "",
+        "stdout": "13c2934a42873c8daf0b1a5b9b348ce5014ba09f\n"
+      },
+      {
+        "cmd": [
+          "git",
+          "merge-base",
+          "--is-ancestor",
+          "ca57b4e0",
+          "HEAD"
+        ],
+        "rc": 0,
+        "stderr": "",
+        "stdout": ""
+      },
+      {
+        "cmd": [
+          "git",
+          "merge-base",
+          "--is-ancestor",
+          "bd511f0d",
+          "HEAD"
+        ],
+        "rc": 0,
+        "stderr": "",
+        "stdout": ""
+      },
+      {
+        "cmd": [
+          "git",
+          "show",
+          "HEAD:order_execution_engine/control_plane_lease.py"
+        ],
+        "rc": 0,
+        "stderr": "",
+        "stdout": "\"\"\"Phase-1 scratch Control-Plane: run_lease + migrate (not in __init__).\n\nZwischen-Enforcement until run_lease is live on production (K2/K3).\nScratch only \u2014 every public entry refuses LIVE Application Support paths\nvia ``PRAGMA database_list`` (F3).\n\n``issued_at`` / ``expires_at`` are unix-second INTEGER (not datetime text);\nTTL checks use integer deltas equivalent to the julianday formul\u00e6.\nTable name is ``telemetry_runs`` (this codebase; prompt ``runs`` maps here).\n\"\"\"\n\nfrom __future__ import annotations\n\nimport hashlib\nimport re\nimport secrets\nimport sqlite3\nimport time\nfrom pathlib import Path\nfrom typing import Any, Callable, Optional\n\nSCHEMA_V10 = 10  # first control-plane stamp (historical)\nSCHEMA_V11 = 11  # hardened lease BI + run_id floor (pre-G1)\nSCHEMA_V12 = 12  # G1: issued_at wall-clock skew; G2: expanded manifest\nSCHEMA_CONTROL = SCHEMA_V12\n\nTTL_MAX_S = 900\n# Max seconds issued_at may lie ahead of DB now (clock skew only).\nISSUED_AT_FUTURE_SKEW_S = 5\n# Production freeze: LIVE max_run_id=15 \u2192 next claimable id is at least 16.\n# Scratch uses the same floor (Grabstein also after restore onto older dumps).\nRUN_ID_FLOOR = 15\n\n_LIVE_PATH_MARKERS = (\n    \"Application Support/agentx\",\n)\n\n_CREATE_RUN_LEASE = \"\"\"\nCREATE TABLE IF NOT EXISTS run_lease (\n    token        TEXT PRIMARY KEY,\n    run_id       INTEGER NOT NULL,\n    issued_at    INTEGER NOT NULL,\n    expires_at   INTEGER NOT NULL,\n    consumed_at  INTEGER,\n    revoked_at   INTEGER\n)\n\"\"\"\n\n_CREATE_UX_OPEN = \"\"\"\nCREATE UNIQUE INDEX IF NOT EXISTS ux_run_lease_open_run\n  ON run_lease(run_id)\n  WHERE consumed_at IS NULL AND revoked_at IS NULL\n\"\"\"\n\n\ndef _next_run_id_sql() -> str:\n    \"\"\"SQL expr: MAX(floor, COALESCE(MAX(telemetry_runs.run_id),0)) + 1.\"\"\"\n    return (\n        f\"(MAX({RUN_ID_FLOOR}, COALESCE(\"\n        f\"(SELECT MAX(run_id) FROM telemetry_runs), 0)) + 1)\"\n    )\n\n\ndef _trigger_telemetry_runs_bi_lease() -> str:\n    nxt = _next_run_id_sql()\n    return f\"\"\"\nCREATE TRIGGER IF NOT EXISTS trg_telemetry_runs_bi_lease\nBEFORE INSERT ON telemetry_runs\nFOR EACH ROW\nBEGIN\n    SELECT CASE\n        WHEN NEW.run_id IS NULL THEN\n            RAISE(ABORT, 'telemetry_runs.run_id required')\n        WHEN NEW.run_id != {nxt} THEN\n            RAISE(ABORT, 'telemetry_runs.run_id not MAX+1')\n        WHEN NOT EXISTS (\n            SELECT 1 FROM run_lease\n            WHERE run_id = NEW.run_id\n              AND consumed_at IS NULL\n              AND revoked_at IS NULL\n              AND expires_at > CAST(strftime('%s', 'now') AS INTEGER)\n        ) THEN\n            RAISE(ABORT, 'no valid open run_lease for run_id')\n    END;\nEND\n\"\"\"\n\n\nTRIGGER_AFTER_INSERT = \"\"\"\nCREATE TRIGGER IF NOT EXISTS trg_telemetry_runs_ai_consume\nAFTER INSERT ON telemetry_runs\nFOR EACH ROW\nBEGIN\n    UPDATE run_lease\n       SET consumed_at = CAST(strftime('%s', 'now') AS INTEGER)\n     WHERE run_id = NEW.run_id\n       AND consumed_at IS NULL\n       AND revoked_at IS NULL;\nEND\n\"\"\"\n\nTRIGGER_BEFORE_DELETE = \"\"\"\nCREATE TRIGGER IF NOT EXISTS trg_telemetry_runs_bd_forbid\nBEFORE DELETE ON telemetry_runs\nFOR EACH ROW\nBEGIN\n    SELECT RAISE(ABORT, 'telemetry_runs DELETE forbidden');\nEND\n\"\"\"\n\nTRIGGER_BEFORE_UPDATE_RUN_ID = \"\"\"\nCREATE TRIGGER IF NOT EXISTS trg_telemetry_runs_bu_run_id_forbid\nBEFORE UPDATE OF run_id ON telemetry_runs\nFOR EACH ROW\nBEGIN\n    SELECT RAISE(ABORT, 'telemetry_runs.run_id UPDATE forbidden');\nEND\n\"\"\"\n\nTRIGGER_BEFORE_UPDATE_STATUS = \"\"\"\nCREATE TRIGGER IF NOT EXISTS trg_telemetry_runs_bu_status\nBEFORE UPDATE OF status ON telemetry_runs\nFOR EACH ROW\nBEGIN\n    SELECT CASE\n        WHEN OLD.status IS NEW.status THEN NULL\n        WHEN OLD.status = 'RUNNING'\n             AND NEW.status IN ('ABORTED', 'COMMITTED') THEN NULL\n        ELSE RAISE(ABORT, 'telemetry_runs status transition forbidden')\n    END;\nEND\n\"\"\"\n\n\ndef _trigger_run_lease_before_insert() -> str:\n    \"\"\"BEFORE INSERT ON run_lease \u2014 next-id, wall-clock skew, TTL (G1).\"\"\"\n    nxt = _next_run_id_sql()\n    skew = int(ISSUED_AT_FUTURE_SKEW_S)\n    ttl = int(TT"
+      },
+      {
+        "cmd": [
+          "git",
+          "log",
+          "--oneline",
+          "-5",
+          "--",
+          "order_execution_engine/gatectl.py"
+        ],
+        "rc": 0,
+        "stderr": "",
+        "stdout": "70b17659 feat(gatectl): add --allow-manifest-mismatch for pre-migration snapshots\nbd511f0d feat(control-plane): Gate-4 hardening gaps (migrate, abort, post-run, mirror verify)\nb0d700df feat(control-plane): Phase-2 H4 Drive preflight + pinned audit mirror folder\n7e5bfb32 feat(control-plane): Phase-2 gatectl snapshot, audit chain, immutable mirror\n"
+      },
+      {
+        "cmd": [
+          "git",
+          "log",
+          "--oneline",
+          "-5",
+          "--",
+          "order_execution_engine/control_plane_lease.py"
+        ],
+        "rc": 0,
+        "stderr": "",
+        "stdout": "10a4ddf4 feat(control-plane): Gate-6 shadow_runner lease enforcement & pin guard\nbd511f0d feat(control-plane): Gate-4 hardening gaps (migrate, abort, post-run, mirror verify)\nca57b4e0 feat(control-plane): Phase-1 run_lease schema v12 (Scratch)\n"
+      },
+      {
+        "cmd": [
+          "git",
+          "merge-base",
+          "--is-ancestor",
+          "1e934cff",
+          "HEAD"
+        ],
+        "rc": 0,
+        "stderr": "",
+        "stdout": ""
+      }
+    ],
+    "probe_binary_eq_live_binary": "PASS \u2014 no compiled gatectl binary; E-1 and F1 both import order_execution_engine.* from this worktree at HEAD 10a4ddf4",
+    "runtime_import_identity": {
+      "SCHEMA_CONTROL": 12,
+      "control_plane_lease.__file__": "/Volumes/THX_OS_ULTRA/Users/olivermueller/agent_x_storage/order_execution_engine/control_plane_lease.py",
+      "gatectl.__file__": "/Volumes/THX_OS_ULTRA/Users/olivermueller/agent_x_storage/order_execution_engine/gatectl.py",
+      "same_tree_as_HEAD": true
+    },
+    "source_files": {
+      "control_plane_lease.py": {
+        "file_sha256": "5af2bb8fc14b67dc156fde4e709493b790de80f668ab6ea5233495ebd499dff6",
+        "git_blob_HEAD": "13c2934a42873c8daf0b1a5b9b348ce5014ba09f",
+        "last_commits": [
+          "10a4ddf4 feat(control-plane): Gate-6 shadow_runner lease enforcement & pin guard",
+          "bd511f0d feat(control-plane): Gate-4 hardening gaps (migrate, abort, post-run, mirror verify)",
+          "ca57b4e0 feat(control-plane): Phase-1 run_lease schema v12 (Scratch)"
+        ]
+      },
+      "gatectl.py": {
+        "file_sha256": "0ee9a5dad594a74e192e831f770355ea831e75fb983cb2c084677d6b180c78b7",
+        "git_blob_HEAD": "e01a7af2d00622c152c4d6de78e9b2246351fc0a",
+        "last_commits": [
+          "70b17659 feat(gatectl): add --allow-manifest-mismatch for pre-migration snapshots",
+          "bd511f0d feat(control-plane): Gate-4 hardening gaps (migrate, abort, post-run, mirror verify)",
+          "b0d700df feat(control-plane): Phase-2 H4 Drive preflight + pinned audit mirror folder",
+          "7e5bfb32 feat(control-plane): Phase-2 gatectl snapshot, audit chain, immutable mirror"
+        ]
+      },
+      "shadow_runner.py": {
+        "file_sha256": "93ed12674cefa183aea8d21e751edc5bf7c4cd297429639e333db1f6b27116cc",
+        "git_blob_HEAD": "33e0d32793ff9b497c134683dbabe90334a2f2ed"
+      }
+    }
+  },
+  "F5_plus": {
+    "code": "control_plane_audit.verify_audit_mirror / gatectl cmd_verify_mirror",
+    "e1_required_definition": {
+      "db_snapshot_post": "Artefakt-SHA der LIVE_DB nach migrate (off-host)",
+      "db_snapshot_pre": "Artefakt-SHA der LIVE_DB vor migrate (off-host)",
+      "green_before_lock_retire": true,
+      "no_hidden_db_mirror_write": "verify-mirror schreibt keinen DB-Stand; mirror_audit_entry schreibt nur Audit-JSON. DB-Snapshot-Upload ist ein EXPLIZITER zus\u00e4tzlicher Schritt in E-1a und muss in der Schrittfolge ausgewiesen werden.",
+      "verify_mirror_role": "GR\u00dcN = alle Audit-Events (verify_snapshot/migrate/issue_token/post_run_check) sind off-host mit matching SHA \u2014 Spiegel der Audit-Kette, nicht der DB-Bytes"
+    },
+    "honest_scope": "gatectl verify-mirror pr\u00fcft NUR Audit-Journal-Eintr\u00e4ge (seq_hash.json per rclone cat) \u2014 NICHT byte-Identit\u00e4t der LIVE_DB.",
+    "status": "DEFINIERT \u2014 Ausf\u00fchrung erst bei E-1-Freigabe"
+  },
+  "F7_plus": {
+    "db_state_at_test": {
+      "max_run_id": 15,
+      "path": "/var/folders/pl/7s5198dd4917v2qgh1lv99qr0000gn/T/e1_f1plus_20261115T150525Z_eixb01c9/canary.db",
+      "user_version": 12
+    },
+    "first_ok": true,
+    "open_count": 1,
+    "pass": true,
+    "refuse_15": "issue-token refuses run_id=15, next is 16",
+    "second_open": "open lease already exists for run_id=16",
+    "token_sha256": "baf743607c8278915bcc564b0cd60977fbc9187d24ffc14cc77088944732ce00"
+  },
+  "F8": {
+    "end_state": "LaunchAgent nicht installiert / nicht geladen",
+    "followup": "Separater Freigabeschritt E-1-LA nach erfolgreichem E-1c; KeepAlive=false / RunAtLoad=false bleibt; kein automatischer Load in E-1",
+    "launchagent_in_e1": false,
+    "measured_now": {
+      "installed": false,
+      "loaded": false
+    },
+    "scope": "OUT OF SCOPE f\u00fcr E-1 Cutover-Kern"
+  },
+  "ts_utc": "20261115T150525Z",
+  "verdict_summary": {
+    "E1_freigabe": "NICHT_ERTEILT",
+    "F0": "PASS",
+    "F1_plus": "PASS",
+    "F2_plus": "DEFINIERT",
+    "F4_plus": "PASS",
+    "F5_plus": "DEFINIERT",
+    "F6": "PASS_DEFINITION",
+    "F7_plus": "PASS",
+    "F8": "OUT_OF_SCOPE_DEKLARIERT"
+  }
+}

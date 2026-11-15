@@ -1,0 +1,99 @@
+{
+  "copy": {
+    "byte_identical_to_live": true,
+    "path": "/var/folders/pl/7s5198dd4917v2qgh1lv99qr0000gn/T/e1_f1_probe_20261115T145940Z_f6ik_rbj/canary.db",
+    "sha256": "2a7915ef0eff5dea4b3e67332cbb117bf1b738190fbd9304c5dceaa3b54008ed",
+    "size_bytes": 364544
+  },
+  "copy_method": "shutil.copy2 (byte-identical; Connection.backup is logical-only)",
+  "f7_issue_token": {
+    "first_issue_ok": true,
+    "issue_run_id_15_refused": "issue-token refuses run_id=15, next is 16",
+    "open_lease_count_run16": 1,
+    "pass": true,
+    "second_open_lease": "open lease already exists for run_id=16",
+    "token_sha256": "57b87e519842f5d58f66de969bd157cc7d05b70b83190d80b1a169294eaa5583"
+  },
+  "git_head": "10a4ddf4394f7311fde9f793fdcf71a9134b5bc7",
+  "live": {
+    "integrity_check": "ok",
+    "journal_mode": "delete",
+    "max_run_id": 15,
+    "sha256": "2a7915ef0eff5dea4b3e67332cbb117bf1b738190fbd9304c5dceaa3b54008ed",
+    "size_bytes": 364544,
+    "user_version": 9
+  },
+  "live_db": "/Users/olivermueller/Library/Application Support/agentx/shadow_live/shadow/shadow/shadow.db",
+  "live_final": {
+    "max_run_id": 15,
+    "sha256": "2a7915ef0eff5dea4b3e67332cbb117bf1b738190fbd9304c5dceaa3b54008ed",
+    "unchanged": true,
+    "user_version": 9
+  },
+  "live_unchanged_after_copy": true,
+  "migrate": {
+    "SCHEMA_CONTROL": 12,
+    "next_run_id": 16,
+    "null_status_rows": 0,
+    "ok": true,
+    "schema_version": 12,
+    "transactional": "BEGIN IMMEDIATE + COMMIT/ROLLBACK in migrate_control_plane",
+    "trigger_manifest_ist": "3e685b7d98349aeefae3ab591908dd672b731f89f06a7d71fedbd0e49574c9d9",
+    "trigger_manifest_match": true,
+    "trigger_manifest_soll": "3e685b7d98349aeefae3ab591908dd672b731f89f06a7d71fedbd0e49574c9d9"
+  },
+  "migrate_abort_rollback": {
+    "abort_after": "add_status",
+    "error": "forced migrate abort after add_status",
+    "pass": true,
+    "sha256_after": "2a7915ef0eff5dea4b3e67332cbb117bf1b738190fbd9304c5dceaa3b54008ed",
+    "unchanged_from_snapshot": true,
+    "user_version_after": 9
+  },
+  "migrate_idempotent": {
+    "ok": true,
+    "schema_version": 12,
+    "trigger_manifest_ist": "3e685b7d98349aeefae3ab591908dd672b731f89f06a7d71fedbd0e49574c9d9"
+  },
+  "post_migrate": {
+    "integrity_check": "ok",
+    "max_run_id": 15,
+    "sha256": "b2d68ce335e281fbfa590cf02d832aa3bc3dbf50cc2c02a0873902aaa2cbdfc0",
+    "user_version": 12
+  },
+  "pre_migrate": {
+    "integrity_check": "ok",
+    "max_run_id": 15,
+    "user_version": 9
+  },
+  "pre_migrate_snapshot": {
+    "matches_canary_pre": true,
+    "path": "/var/folders/pl/7s5198dd4917v2qgh1lv99qr0000gn/T/e1_f1_probe_20261115T145940Z_f6ik_rbj/pre_migrate_snapshot.db",
+    "sha256": "2a7915ef0eff5dea4b3e67332cbb117bf1b738190fbd9304c5dceaa3b54008ed"
+  },
+  "restore_probe": {
+    "integrity_check": "ok",
+    "matches_live_baseline": true,
+    "matches_pre_snapshot": true,
+    "max_run_id": 15,
+    "pass": true,
+    "path": "/var/folders/pl/7s5198dd4917v2qgh1lv99qr0000gn/T/e1_f1_probe_20261115T145940Z_f6ik_rbj/restored.db",
+    "sha256": "2a7915ef0eff5dea4b3e67332cbb117bf1b738190fbd9304c5dceaa3b54008ed",
+    "user_version": 9
+  },
+  "rollback_criterion": {
+    "repair_forbidden": "No in-place repair of partial LIVE migrate; restore from pre-migrate snapshot artefact only",
+    "restore_when": [
+      "integrity_check != ok after migrate",
+      "schema_version != 12 after migrate",
+      "trigger_manifest_ist != soll after migrate",
+      "max_run_id changed during migrate (must stay 15)",
+      "null status rows remain after backfill",
+      "any exception / non-zero gatectl migrate exit on LIVE",
+      "forced mid-step abort leaves DB unchanged (proven on copy)"
+    ]
+  },
+  "ts_utc": "20261115T145940Z",
+  "verdict": "PASS",
+  "work_dir": "/var/folders/pl/7s5198dd4917v2qgh1lv99qr0000gn/T/e1_f1_probe_20261115T145940Z_f6ik_rbj"
+}
