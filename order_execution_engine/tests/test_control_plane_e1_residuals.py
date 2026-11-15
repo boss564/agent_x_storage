@@ -40,7 +40,7 @@ PKG = Path(__file__).resolve().parents[1]
 SHADOW_RUNNER = PKG / "shadow_runner.py"
 # Updated after A1/A3 forbid-gating residual fix (was Gate-6 93ed1267…).
 GUARD_SHA_RESIDUAL = (
-    "1c65b0be2925da85fee6ce090a1fe817f93b61ed6be4a2a0a2cfc0d80e2b8d77"
+    "702fd2fb4829692d8a9a4e0076c16e6ee9641b3ea93e5e819f689cc8cd912af1"
 )
 POST_RETIRE_PARSE = {"locked": False, "forbid_run_id_gt": None}
 
@@ -693,3 +693,124 @@ def test_d3a_preexisting_marker_refuses_retire(tmp_path: Path) -> None:
         )
     assert rc == EXIT_POLICY
     assert paths["lock"].is_file()
+
+
+
+def test_m1_gatectl_issue_token_file_then_runner(tmp_path: Path) -> None:
+    """M1: gatectl issue-token writes file; runner claims via --lease-token-file."""
+    paths = _bundle(tmp_path)
+    paths["lock"].write_text("LOCKED=0\n", encoding="utf-8")
+    # migrate already done in _bundle via store; ensure control plane
+    conn = sqlite3.connect(str(paths["db"]))
+    migrate_control_plane(conn, db_path=paths["db"])
+    rid = next_run_id(conn)
+    conn.close()
+
+    def fake_run(cmd, **kwargs):  # noqa: ANN001
+        from unittest.mock import MagicMock
+
+        m = MagicMock()
+        m.returncode = 0
+        m.stdout = "[]" if len(cmd) > 1 and cmd[1] == "lsjson" else ""
+        m.stderr = ""
+        return m
+
+    with patch(
+        "order_execution_engine.control_plane_audit.subprocess.run",
+        side_effect=fake_run,
+    ):
+        import io
+        from contextlib import redirect_stdout
+
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            rc = gatectl_main(
+                [
+                    "--db",
+                    str(paths["db"]),
+                    "--data-root",
+                    str(paths["data_root"]),
+                    "--runner",
+                    str(paths["runner"]),
+                    "--lock",
+                    str(paths["lock"]),
+                    "--repo-root",
+                    str(paths["repo"]),
+                    "--journal",
+                    str(paths["journal"]),
+                    "issue-token",
+                    "--run-id",
+                    str(rid),
+                    "--ttl",
+                    "120",
+                ]
+            )
+        assert rc == EXIT_OK
+        out = json.loads(buf.getvalue().strip().splitlines()[-1])
+    assert out["ok"] is True
+    token_file = Path(out["token_file"])
+    assert token_file.is_file()
+    assert token_file.stat().st_mode & 0o777 == 0o600
+    raw = token_file.read_text(encoding="utf-8").strip()
+    assert len(raw) >= 32
+    # raw token must not appear in JSON stdout
+    assert raw not in buf.getvalue()
+
+    rc2 = runner_main(
+        _runner_argv(paths, paths["lock"])
+        + ["--lease-token-file", str(token_file)]
+    )
+    assert rc2 == 0
+    assert not token_file.is_file()  # consumed after claim
+    conn = sqlite3.connect(str(paths["db"]))
+    row = conn.execute(
+        "SELECT run_id, status FROM telemetry_runs WHERE run_id=?", (rid,)
+    ).fetchone()
+    conn.close()
+    assert row is not None and int(row[0]) == rid
+    assert row[1] == "COMMITTED"
+
+
+def test_m2_run_lock_override_refused_on_live_data_root(tmp_path: Path) -> None:
+    """M2: --run-lock with LIVE data-root → Exit 75 before start."""
+    live_root = (
+        tmp_path
+        / "Library"
+        / "Application Support"
+        / "agentx"
+        / "shadow_live"
+    )
+    live_root.mkdir(parents=True)
+    scratch_lock = tmp_path / "absent.lock"  # absent → would proceed on scratch
+    allow = tmp_path / "allowlist.json"
+    allow.write_text(
+        json.dumps({"BTC": {"token_id": "t", "market_id": "m"}}),
+        encoding="utf-8",
+    )
+    news = tmp_path / "news.jsonl"
+    news.write_text("", encoding="utf-8")
+    rc = runner_main(
+        [
+            "--data-root",
+            str(live_root),
+            "--user-id",
+            "shadow",
+            "--allowlist",
+            str(allow),
+            "--news-jsonl",
+            str(news),
+            "--run-lock",
+            str(scratch_lock),
+            "--once",
+            "--no-ws",
+        ]
+    )
+    assert rc == EXIT_RUN_LOCK
+
+
+def test_m3_sigterm_handler_wired_in_source() -> None:
+    """M3: runner source installs SIGTERM → ordered stop (COMMITTED path)."""
+    text = SHADOW_RUNNER.read_text(encoding="utf-8")
+    assert "SIGTERM" in text
+    assert "add_signal_handler" in text
+    assert "ordered stop" in text

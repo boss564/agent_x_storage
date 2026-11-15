@@ -33,7 +33,7 @@ GUARD_SHA_BASELINE = (
 )
 # Gate #6 pin after runner control-plane binding + E-1 residual A1/A3 fix.
 GUARD_SHA_GATE6 = (
-    "1c65b0be2925da85fee6ce090a1fe817f93b61ed6be4a2a0a2cfc0d80e2b8d77"
+    "702fd2fb4829692d8a9a4e0076c16e6ee9641b3ea93e5e819f689cc8cd912af1"
 )
 
 
