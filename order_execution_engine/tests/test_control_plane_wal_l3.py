@@ -81,9 +81,9 @@ def test_l3d_wal_autocheckpoint_bound(tmp_path: Path) -> None:
 
 
 def test_l3b_startup_integrity_fk_and_restart_kind(tmp_path: Path) -> None:
-    """L3-b: integrity + foreign_key_check; clean vs WAL sidecars."""
+    """L3-b: integrity + foreign_key_check; clean vs WAL sidecars (L3-N2 size)."""
     db = _db(tmp_path)
-    assert detect_restart_kind(db) in ("clean_start", "crash_or_open_wal", "crash_or_open_shm")
+    assert detect_restart_kind(db) in ("clean_start", "crash_or_open_wal")
     # After close of migrate connection, WAL may linger — either is fine;
     # open+checkpoint to force clean then re-check.
     conn = connect_scratch(db)
@@ -98,8 +98,12 @@ def test_l3b_startup_integrity_fk_and_restart_kind(tmp_path: Path) -> None:
     # Sidecars gone or empty → clean_start
     kind = detect_restart_kind(db)
     assert kind == "clean_start"
-    # Simulate leftover WAL bytes (crash/open window marker)
     wal = Path(str(db) + "-wal")
+    # L3-N2: 0-byte WAL (clean Close residue) must NOT be crash.
+    wal.write_bytes(b"")
+    assert wal.is_file() and wal.stat().st_size == 0
+    assert detect_restart_kind(db) == "clean_start"
+    # Non-empty WAL ⇒ crash/open window
     wal.write_bytes(b"\x00" * 32)
     assert detect_restart_kind(db) == "crash_or_open_wal"
     wal.unlink(missing_ok=True)
@@ -261,6 +265,7 @@ def test_f7_lease_token_refused_on_live_marked_path(
             ]
         )
     assert rc == EXIT_CONTROL_PLANE
+    assert rc == 76  # F7 footnote: Exit 76 explicit (EXIT_CONTROL_PLANE)
     # Module identity: runner_main is the frozen file.
     assert Path(runner_main.__code__.co_filename).resolve() == _RUNNER.resolve()
     assert Path(default_run_lock_path.__code__.co_filename).resolve() == _RUNNER.resolve()
@@ -324,14 +329,30 @@ def _wait_ready_then_kill9(proc: subprocess.Popen[str], timeout_s: float = 15.0)
     raise AssertionError(f"READY timeout; out={buf!r}")
 
 
+def _live_sha_guard() -> tuple[Path | None, str | None]:
+    """L3-N1: when LIVE DB exists, Pre/Post must be measured and equal."""
+    live = Path.home() / (
+        "Library/Application Support/agentx/shadow_live/shadow/shadow/shadow.db"
+    )
+    if not live.is_file():
+        return None, None
+    return live, _sha(live)
+
+
+def _assert_live_unchanged(live: Path | None, live_pre: str | None) -> None:
+    if live is None or live_pre is None:
+        return
+    live_post = _sha(live)
+    assert live_post == live_pre, (
+        f"L3-N1 LIVE SHA drift: pre={live_pre} post={live_post}"
+    )
+
+
 def test_l3e_kill9_after_token_before_commit(tmp_path: Path) -> None:
     """L3-e: kill -9 after lease INSERT before COMMIT → row absent; integrity ok."""
     db = _db(tmp_path)
     pre = _sha(db)
-    live = Path.home() / (
-        "Library/Application Support/agentx/shadow_live/shadow/shadow/shadow.db"
-    )
-    live_pre = _sha(live) if live.is_file() else None
+    live, live_pre = _live_sha_guard()
 
     proc = _spawn_crash_child("before_commit", db)
     _wait_ready_then_kill9(proc)
@@ -340,26 +361,18 @@ def test_l3e_kill9_after_token_before_commit(tmp_path: Path) -> None:
     apply_writer_durability(conn)
     n = conn.execute("SELECT COUNT(*) FROM run_lease").fetchone()[0]
     assert n == 0
-    assert detect_restart_kind(db) in (
-        "clean_start",
-        "crash_or_open_wal",
-        "crash_or_open_shm",
-    )
+    assert detect_restart_kind(db) in ("clean_start", "crash_or_open_wal")
     conn.close()
     post = _sha(db)
     # DB file bytes may change (WAL checkpoint into main); integrity is the contract.
     assert isinstance(pre, str) and isinstance(post, str)
-    if live_pre is not None:
-        assert _sha(live) == live_pre
+    _assert_live_unchanged(live, live_pre)
 
 
 def test_l3e_kill9_after_commit_before_checkpoint(tmp_path: Path) -> None:
     """L3-e: kill after COMMIT of claim; RUNNING durable; abort recovers."""
     db = _db(tmp_path)
-    live = Path.home() / (
-        "Library/Application Support/agentx/shadow_live/shadow/shadow/shadow.db"
-    )
-    live_pre = _sha(live) if live.is_file() else None
+    live, live_pre = _live_sha_guard()
 
     proc = _spawn_crash_child("after_commit", db)
     _wait_ready_then_kill9(proc)
@@ -379,17 +392,13 @@ def test_l3e_kill9_after_commit_before_checkpoint(tmp_path: Path) -> None:
     ).fetchone()[0]
     assert st == "ABORTED"
     conn.close()
-    if live_pre is not None:
-        assert _sha(live) == live_pre
+    _assert_live_unchanged(live, live_pre)
 
 
 def test_l3e_kill9_mid_wal_write(tmp_path: Path) -> None:
     """L3-e: kill during uncommitted WAL frames → no durable lease rows."""
     db = _db(tmp_path)
-    live = Path.home() / (
-        "Library/Application Support/agentx/shadow_live/shadow/shadow/shadow.db"
-    )
-    live_pre = _sha(live) if live.is_file() else None
+    live, live_pre = _live_sha_guard()
 
     proc = _spawn_crash_child("mid_wal", db)
     _wait_ready_then_kill9(proc)
@@ -400,5 +409,14 @@ def test_l3e_kill9_mid_wal_write(tmp_path: Path) -> None:
     n = int(conn.execute("SELECT COUNT(*) FROM run_lease").fetchone()[0])
     assert n == 0
     conn.close()
-    if live_pre is not None:
-        assert _sha(live) == live_pre
+    _assert_live_unchanged(live, live_pre)
+
+
+def test_l3n1_live_sha_measured_equal_when_present() -> None:
+    """L3-N1: if LIVE exists, Pre==Post is a real measurement (not skipped)."""
+    live, live_pre = _live_sha_guard()
+    if live is None:
+        pytest.skip("LIVE DB absent — L3-N1 N/A this host")
+    assert live_pre is not None and len(live_pre) == 64
+    live_post = _sha(live)
+    assert live_post == live_pre

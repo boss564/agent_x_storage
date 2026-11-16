@@ -305,17 +305,20 @@ def apply_writer_durability(conn: sqlite3.Connection) -> dict[str, Any]:
 
 
 def detect_restart_kind(db_path: Path) -> str:
-    """L3-b: distinguish clean start vs leftover WAL/SHM (crash/open window).
+    """L3-b / L3-N2: clean start vs leftover WAL (crash/open window).
 
-    Not the E-1 production first-start path — only DB-file sidecar presence.
+    Decision key is **WAL size**, not bare file presence and **not** SHM:
+    after a clean Close, SQLite often leaves a **0-byte** ``-wal`` and a
+    still-sized ``-shm``. Treating SHM presence/size as crash would mis-route
+    every clean shutdown into the crash path (L5 Erststart falsch).
+
+    * ``-wal`` missing or size == 0 → ``clean_start``
+    * ``-wal`` size > 0 → ``crash_or_open_wal``
     """
     base = Path(db_path)
     wal = Path(str(base) + "-wal")
-    shm = Path(str(base) + "-shm")
     if wal.is_file() and wal.stat().st_size > 0:
         return "crash_or_open_wal"
-    if shm.is_file() and shm.stat().st_size > 0:
-        return "crash_or_open_shm"
     return "clean_start"
 
 

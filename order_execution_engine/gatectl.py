@@ -47,7 +47,11 @@ from order_execution_engine.control_plane_watchdog import (
     check_running_leases,
     report_exit_code,
 )
-from order_execution_engine.control_plane_authz import AuthzError, authorize
+from order_execution_engine.control_plane_authz import (
+    AuthzError,
+    authorize,
+    authz_enforced,
+)
 from order_execution_engine.control_plane_lease import (
     SCHEMA_CONTROL,
     LeaseError,
@@ -2172,11 +2176,6 @@ def _l4_allow_live_gate(args: argparse.Namespace) -> Optional[str]:
     return _require_typed_confirm(args, "ALLOW_LIVE_DB")
 
 
-def _authz_enforced() -> bool:
-    raw = os.environ.get("CONTROL_PLANE_AUTHZ_ENFORCE", "").strip().lower()
-    return raw in ("1", "true", "yes", "on")
-
-
 def main(argv: Optional[list[str]] = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -2192,13 +2191,13 @@ def main(argv: Optional[list[str]] = None) -> int:
         args.i_am_a_test = False
     if not hasattr(args, "role"):
         args.role = None
-    # L4: enforce when flag set or --role / CONTROL_PLANE_ROLE present.
-    role = getattr(args, "role", None)
-    env_role = os.environ.get("CONTROL_PLANE_ROLE", "").strip()
-    if _authz_enforced() or role or env_role:
+    # L4-C1: default enforce (unset ⇒ Deny). No Allow-All when env forgotten.
+    if authz_enforced():
+        role = getattr(args, "role", None)
+        env_role = os.environ.get("CONTROL_PLANE_ROLE", "").strip()
         try:
             authorize(
-                role if role is not None else env_role or None,
+                role if role is not None else (env_role or None),
                 str(getattr(args, "command", "")),
                 target=str(getattr(args, "db", "") or ""),
             )

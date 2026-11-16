@@ -98,13 +98,13 @@ requires_canary = pytest.mark.skipif(
 FREEZE_PINS = {
     # Rebind after L3-e heal-on-claim + L4 authz wire (persistence/runner frozen).
     "control_plane_lease.py": (
-        "d518da4a0bae6021a736003a5e136f8eb54c3ca73949172187da87fbb4eada75"
+        "d893067e2031e5d05733a50763e350665e51052da5f758ec1e67e39b67d73c7e"
     ),
     "control_plane_audit.py": (
         "4af2307f40b9101c727ac286b8f2bbd910ba646770abe2bfa42a6ca7bc2e58cf"
     ),
     "gatectl.py": (
-        "ae5be00fefbfd8fe231e8cccd743e3d085f07bd129d14f488ba9f5ebd6a9db7b"
+        "f43504f51710405580f116d36a94c94d06a09932cbcaf903ae87b6d74ca489a3"
     ),
     "persistence.py": (
         "ce9cc2f88b6202a9cd098b86ed756b2c69f83e5ad6b7819311d8b8f06b36c47f"

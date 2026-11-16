@@ -1,7 +1,41 @@
 """L4 role authorization — gatectl/lease policy (not persistence schema).
 
-Policy lives here / in env override — never as a SQLite schema change
-(would thaw the frozen persistence module). Deny-by-default; no Operator-fallback.
+Policy lives here / optional JSON via ``CONTROL_PLANE_AUTHZ_POLICY`` —
+never as a SQLite schema change (would thaw the frozen persistence module).
+
+## Defaults (L4-b / L4-C1)
+
+* Authz is **always enforced** in gatectl (unset ``CONTROL_PLANE_AUTHZ_ENFORCE``
+  ⇒ enforce). Explicit ``0`` / ``false`` / ``off`` is refused in production
+  paths; only the pytest suite may set it for isolation experiments.
+* Missing role ⇒ **Deny** (no Operator fallback — L4-C3).
+* Unknown role ⇒ **Deny**.
+* Unknown operation ⇒ **Deny**.
+
+## Operations matrix (L4-a / L4-C2) — Soll
+
+| Operation              | runner | watchdog | auditor | operator |
+|------------------------|:------:|:--------:|:-------:|:--------:|
+| issue-token            |   ✓    |          |         |    ✓     |
+| abort-run              |   ✓    |          |         |    ✓     |
+| revoke-token           |   ✓    |          |         |    ✓     |
+| claim-run              |   ✓    |          |         |          |
+| watchdog-check         |        |    ✓     |         |    ✓     |
+| status                 |        |    ✓     |    ✓    |    ✓     |
+| integrity-check        |        |    ✓     |    ✓    |    ✓     |
+| verify-snapshot        |        |          |    ✓    |    ✓     |
+| verify-mirror          |        |          |    ✓    |    ✓     |
+| post-run-check         |        |          |    ✓    |    ✓     |
+| audit-read             |        |          |    ✓    |    ✓     |
+| migrate                |        |          |         |    ✓     |
+| retire-run-lock        |        |          |         |    ✓     |
+| restore-run-lock       |        |          |         |    ✓     |
+| restore-db-artefact    |        |          |         |    ✓     |
+| launchctl-register     |        |          |         |    ✓     |
+
+Least privilege (L4-c): ``runner`` = lease ops only; ``watchdog`` = lease/status
+reads; ``auditor`` = audit reads; ``operator`` = documented mutations only.
+No allmacht role alias.
 """
 
 from __future__ import annotations
@@ -16,8 +50,8 @@ from typing import Any, Callable, Optional
 # L4-c: least privilege — no allmacht alias.
 ROLES = frozenset({"runner", "watchdog", "auditor", "operator"})
 
-# L4-a: every gatectl / control-plane operation maps to exactly one role set.
-# launchctl registration is documented but not a gatectl subcommand yet —
+# L4-a: every gatectl / control-plane operation maps to an allowed role set.
+# launchctl-register is documented but not a gatectl subcommand yet —
 # listed so unknown callers cannot invent a silent allow.
 OPERATIONS: dict[str, frozenset[str]] = {
     # Lease ops (runner hot path + operator recovery)
@@ -45,6 +79,7 @@ OPERATIONS: dict[str, frozenset[str]] = {
 # Optional JSON override path (gatectl-config, not persistence).
 _ENV_POLICY = "CONTROL_PLANE_AUTHZ_POLICY"
 _ENV_ROLE = "CONTROL_PLANE_ROLE"
+_ENV_ENFORCE = "CONTROL_PLANE_AUTHZ_ENFORCE"
 _ENV_AUDIT_LOG = "CONTROL_PLANE_AUTHZ_AUDIT_LOG"
 
 
@@ -63,6 +98,15 @@ class AuthzDecision:
 
 
 _AuditSink = Callable[[AuthzDecision], None]
+
+
+def authz_enforced() -> bool:
+    """L4-C1: unset ⇒ enforce. Only explicit 0/false/off disables (suite only)."""
+    raw = os.environ.get(_ENV_ENFORCE, "").strip().lower()
+    if raw in ("0", "false", "no", "off"):
+        return False
+    # unset, "1", "true", "yes", "on", or any other value → enforce
+    return True
 
 
 def _default_audit_sink(decision: AuthzDecision) -> None:
@@ -103,9 +147,10 @@ def load_operations_matrix() -> dict[str, frozenset[str]]:
 
 
 def resolve_role(explicit: Optional[str] = None) -> str:
-    """Resolve role once per process call — no silent Operator default."""
-    role = (explicit if explicit is not None else os.environ.get(_ENV_ROLE, "")).strip()
-    return role
+    """Resolve role once per process call — no silent Operator default (L4-C3)."""
+    if explicit is not None:
+        return str(explicit).strip()
+    return os.environ.get(_ENV_ROLE, "").strip()
 
 
 def authorize(
@@ -202,3 +247,16 @@ def assert_no_persistence_schema_touch() -> dict[str, Any]:
     )
     hits = [m for m in banned_mods if m in imported]
     return {"ok": not hits, "banned_hits": hits, "imports": imported}
+
+
+def operations_matrix_markdown() -> str:
+    """Stable Soll table for audits / L5 runbook embedding."""
+    roles = ("runner", "watchdog", "auditor", "operator")
+    lines = [
+        "| Operation | " + " | ".join(roles) + " |",
+        "|" + "|".join(["---"] * (len(roles) + 1)) + "|",
+    ]
+    for op, allowed in OPERATIONS.items():
+        cells = ["✓" if r in allowed else "" for r in roles]
+        lines.append(f"| {op} | " + " | ".join(cells) + " |")
+    return "\n".join(lines)

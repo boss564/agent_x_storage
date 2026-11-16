@@ -8,9 +8,13 @@ from pathlib import Path
 import pytest
 
 from order_execution_engine.control_plane_authz import (
+    OPERATIONS,
     AuthzError,
     assert_no_persistence_schema_touch,
     authorize,
+    authz_enforced,
+    operations_matrix_markdown,
+    resolve_role,
 )
 from order_execution_engine.gatectl import EXIT_POLICY, main as gatectl_main
 
@@ -112,3 +116,58 @@ def test_l4_freeze_pins_unchanged() -> None:
         _sha(_REPO / "order_execution_engine" / "persistence.py")
         == FROZEN_PERSISTENCE_SHA256
     )
+
+
+def test_l4_c1_unset_enforce_defaults_on(monkeypatch: pytest.MonkeyPatch) -> None:
+    """L4-C1: unset CONTROL_PLANE_AUTHZ_ENFORCE ⇒ enforce (not Allow-All)."""
+    monkeypatch.delenv("CONTROL_PLANE_AUTHZ_ENFORCE", raising=False)
+    assert authz_enforced() is True
+    monkeypatch.setenv("CONTROL_PLANE_AUTHZ_ENFORCE", "")
+    assert authz_enforced() is True
+
+
+def test_l4_c1_gatectl_deny_when_role_missing_even_if_enforce_unset(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Unset enforce + missing role must still Deny (default enforce)."""
+    monkeypatch.delenv("CONTROL_PLANE_AUTHZ_ENFORCE", raising=False)
+    monkeypatch.delenv("CONTROL_PLANE_ROLE", raising=False)
+    data = tmp_path / "data"
+    data.mkdir()
+    db = tmp_path / "x.db"
+    db.write_bytes(b"")
+    rc = gatectl_main(["--db", str(db), "--data-root", str(data), "status"])
+    assert rc == EXIT_POLICY
+
+
+def test_l4_c2_operations_matrix_documented() -> None:
+    """L4-C2: Soll matrix present in module + markdown helper covers all ops."""
+    src = (_REPO / "order_execution_engine" / "control_plane_authz.py").read_text(
+        encoding="utf-8"
+    )
+    assert "Operations matrix (L4-a / L4-C2)" in src
+    md = operations_matrix_markdown()
+    for op in OPERATIONS:
+        assert op in md
+        assert op in src
+
+
+def test_l4_c3_no_runtime_operator_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """L4-C3: resolve_role has no Operator default; missing ⇒ Deny."""
+    monkeypatch.delenv("CONTROL_PLANE_ROLE", raising=False)
+    assert resolve_role() == ""
+    assert resolve_role(None) == ""
+    with pytest.raises(AuthzError, match="missing role"):
+        authorize(None, "status")
+    # conftest injects operator — prove it is env, not code default
+    authz_src = (_REPO / "order_execution_engine" / "control_plane_authz.py").read_text(
+        encoding="utf-8"
+    )
+    assert 'return "operator"' not in authz_src
+    gatectl_src = (_REPO / "order_execution_engine" / "gatectl.py").read_text(
+        encoding="utf-8"
+    )
+    assert 'CONTROL_PLANE_ROLE", "operator"' not in gatectl_src
+    assert 'default="operator"' not in gatectl_src
