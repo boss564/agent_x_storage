@@ -289,6 +289,36 @@ def _open_sqlite(path: Path) -> sqlite3.Connection:
     return conn
 
 
+def apply_writer_durability(conn: sqlite3.Connection) -> dict[str, Any]:
+    """L3-a: bind WAL+FULL+autocheckpoint on **this** connection.
+
+    ``journal_mode=WAL`` is file-persistent; ``synchronous`` and
+    ``wal_autocheckpoint`` are per-connection. Runner re-opens via frozen
+    persistence after preflight — claim/abort/issue must re-bind on the
+    write connection (not rely on SQLite defaults).
+    """
+    conn.execute("PRAGMA foreign_keys = ON")
+    conn.execute("PRAGMA journal_mode = WAL")
+    conn.execute("PRAGMA synchronous = FULL")
+    conn.execute(f"PRAGMA wal_autocheckpoint = {int(WAL_AUTOCHECKPOINT_PAGES)}")
+    return startup_integrity_checks(conn)
+
+
+def detect_restart_kind(db_path: Path) -> str:
+    """L3-b: distinguish clean start vs leftover WAL/SHM (crash/open window).
+
+    Not the E-1 production first-start path — only DB-file sidecar presence.
+    """
+    base = Path(db_path)
+    wal = Path(str(base) + "-wal")
+    shm = Path(str(base) + "-shm")
+    if wal.is_file() and wal.stat().st_size > 0:
+        return "crash_or_open_wal"
+    if shm.is_file() and shm.stat().st_size > 0:
+        return "crash_or_open_shm"
+    return "clean_start"
+
+
 def startup_integrity_checks(conn: sqlite3.Connection) -> dict[str, Any]:
     """L3-b: integrity + FK check after open / before lease mutations."""
     ic = conn.execute("PRAGMA integrity_check").fetchone()
@@ -308,12 +338,13 @@ def startup_integrity_checks(conn: sqlite3.Connection) -> dict[str, Any]:
             f"durability refuse: journal_mode={journal!r} synchronous={sync!r} "
             "(require WAL + FULL)"
         )
+    ac = int(conn.execute("PRAGMA wal_autocheckpoint").fetchone()[0])
     return {
         "integrity_check": "ok",
         "foreign_key_check": "ok",
         "journal_mode": journal,
         "synchronous": sync,
-        "wal_autocheckpoint": WAL_AUTOCHECKPOINT_PAGES,
+        "wal_autocheckpoint": ac,
     }
 
 
@@ -694,6 +725,9 @@ def claim_run(
     """
     if not token or not isinstance(token, str):
         raise LeaseError("claim_run requires lease token (D1 fencing)")
+    # L3-a: re-bind per-connection durability on the runner write conn
+    # (persistence re-open after preflight close — see shadow_runner main).
+    apply_writer_durability(conn)
     started = float(started_at if started_at is not None else time.time())
     ts = int(now if now is not None else time.time())
     conn.execute("BEGIN IMMEDIATE")
@@ -781,12 +815,8 @@ def ensure_control_plane_ready(conn: sqlite3.Connection) -> dict[str, Any]:
         expected_control_plane_manifest_sha256,
     )
 
-    # Heal shared-DB opens from frozen persistence without thawing it.
-    conn.execute("PRAGMA foreign_keys = ON")
-    conn.execute("PRAGMA journal_mode = WAL")
-    conn.execute("PRAGMA synchronous = FULL")
-    conn.execute(f"PRAGMA wal_autocheckpoint = {int(WAL_AUTOCHECKPOINT_PAGES)}")
-    durability = startup_integrity_checks(conn)
+    # Heal this connection (preflight). Write path re-binds in claim_run.
+    durability = apply_writer_durability(conn)
     ver = _schema_version(conn)
     if ver < SCHEMA_CONTROL:
         raise ControlPlaneError(
@@ -835,6 +865,9 @@ def abort_run(
     transaction (gatectl holds BEGIN until audit succeeds).
     """
     _guard_live_conn(conn, allow_live=allow_live)
+    # Heal only when not mid-transaction (gatectl may already BEGIN).
+    if not conn.in_transaction:
+        apply_writer_durability(conn)
     rid = int(run_id)
     ts = int(now if now is not None else time.time())
     cur = conn.execute(

@@ -47,6 +47,7 @@ from order_execution_engine.control_plane_watchdog import (
     check_running_leases,
     report_exit_code,
 )
+from order_execution_engine.control_plane_authz import AuthzError, authorize
 from order_execution_engine.control_plane_lease import (
     SCHEMA_CONTROL,
     LeaseError,
@@ -2028,6 +2029,15 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Optional news_scores.jsonl for post-run-check prefix SHA",
     )
+    p.add_argument(
+        "--role",
+        type=str,
+        default=None,
+        help=(
+            "L4 role: runner|watchdog|auditor|operator "
+            "(or CONTROL_PLANE_ROLE; deny-by-default when Authz enforced)"
+        ),
+    )
 
     sub = p.add_subparsers(dest="command", required=True)
 
@@ -2162,6 +2172,11 @@ def _l4_allow_live_gate(args: argparse.Namespace) -> Optional[str]:
     return _require_typed_confirm(args, "ALLOW_LIVE_DB")
 
 
+def _authz_enforced() -> bool:
+    raw = os.environ.get("CONTROL_PLANE_AUTHZ_ENFORCE", "").strip().lower()
+    return raw in ("1", "true", "yes", "on")
+
+
 def main(argv: Optional[list[str]] = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -2175,6 +2190,21 @@ def main(argv: Optional[list[str]] = None) -> int:
         args.typed_confirm = None
     if not hasattr(args, "i_am_a_test"):
         args.i_am_a_test = False
+    if not hasattr(args, "role"):
+        args.role = None
+    # L4: enforce when flag set or --role / CONTROL_PLANE_ROLE present.
+    role = getattr(args, "role", None)
+    env_role = os.environ.get("CONTROL_PLANE_ROLE", "").strip()
+    if _authz_enforced() or role or env_role:
+        try:
+            authorize(
+                role if role is not None else env_role or None,
+                str(getattr(args, "command", "")),
+                target=str(getattr(args, "db", "") or ""),
+            )
+        except AuthzError as exc:
+            _print_json({"ok": False, "error": f"authz deny: {exc}"})
+            return EXIT_POLICY
     live_err = _l4_allow_live_gate(args)
     if live_err:
         _print_json({"ok": False, "error": live_err})
