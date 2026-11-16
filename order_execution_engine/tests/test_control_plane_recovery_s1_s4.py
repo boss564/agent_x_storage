@@ -103,7 +103,7 @@ FREEZE_PINS = {
         "4af2307f40b9101c727ac286b8f2bbd910ba646770abe2bfa42a6ca7bc2e58cf"
     ),
     "gatectl.py": (
-        "09ab2c11fdebd55de5da145653fbdbd2f52c2c8bdd9b518edc6a45e89605cb2d"
+        "178b9dabffac12add9b01ffa1f0cc840fb5235a4a89d0f3a1b35abfb7e6b738e"
     ),
     "persistence.py": (
         "ce9cc2f88b6202a9cd098b86ed756b2c69f83e5ad6b7819311d8b8f06b36c47f"

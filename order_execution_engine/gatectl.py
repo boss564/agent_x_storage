@@ -42,6 +42,11 @@ from order_execution_engine.control_plane_audit import (
     token_sha256,
     verify_audit_mirror,
 )
+from order_execution_engine.control_plane_watchdog import (
+    DEFAULT_T_MAX_S,
+    check_running_leases,
+    report_exit_code,
+)
 from order_execution_engine.control_plane_lease import (
     SCHEMA_CONTROL,
     LeaseError,
@@ -570,6 +575,18 @@ def _open_audit_intents(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
             }
         )
     return open_rows
+
+
+def cmd_watchdog_check(args: argparse.Namespace) -> int:
+    """L2-a…d: RO stuck-RUNNING scan; alarm channel; never writes lease DB."""
+    report = check_running_leases(
+        Path(args.db),
+        t_max_s=getattr(args, "t_max_s", None),
+        allow_live=_allow_live(args),
+        alarm_log=getattr(args, "alarm_log", None),
+    )
+    _print_json(report.to_dict())
+    return report_exit_code(report)
 
 
 def cmd_status(args: argparse.Namespace) -> int:
@@ -2104,6 +2121,27 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_vm = sub.add_parser("verify-mirror")
     p_vm.set_defaults(func=cmd_verify_mirror)
+
+    p_wd = sub.add_parser(
+        "watchdog-check",
+        help=(
+            "L2: RO scan for stuck RUNNING runs (age_s > T_max); "
+            "alarm to stderr (+ optional --alarm-log). No launchd."
+        ),
+    )
+    p_wd.add_argument(
+        "--t-max-s",
+        type=float,
+        default=None,
+        help=f"Stuck threshold seconds (default {DEFAULT_T_MAX_S}=2×TTL_MAX_S)",
+    )
+    p_wd.add_argument(
+        "--alarm-log",
+        type=Path,
+        default=None,
+        help="Optional append-only JSONL alarm channel path",
+    )
+    p_wd.set_defaults(func=cmd_watchdog_check)
 
     return p
 
