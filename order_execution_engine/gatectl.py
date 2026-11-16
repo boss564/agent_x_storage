@@ -131,12 +131,37 @@ def _allow_live(args: argparse.Namespace) -> bool:
     return bool(getattr(args, "allow_live_db", False))
 
 
+# Production Drive audit folder — refused in test mode only (L1 Drive-Boundary
+# bandage). Live/operator path may legally use this id; architecture fix
+# (separate credentials/mounts/CI) remains open.
+PROD_AUDIT_OBJECTS_FOLDER_ID = "1IBXL-lIrXTvnleZMvhv7Er1IJf5VAjla"
+
+
+def _control_plane_test_mode() -> bool:
+    """True under pytest or explicit CONTROL_PLANE_TEST_MODE (not live ops)."""
+    flag = os.environ.get("CONTROL_PLANE_TEST_MODE", "").strip().lower()
+    if flag in ("1", "true", "yes", "on"):
+        return True
+    if os.environ.get("PYTEST_CURRENT_TEST"):
+        return True
+    return False
+
+
 def _require_audit_folder_id(args: argparse.Namespace) -> str:
-    """Require explicit audit folder id ≠ incr-bundle folder."""
+    """Require explicit audit folder id ≠ incr-bundle; deny Prod-ID in test mode."""
     fid = getattr(args, "mirror_folder_id", None) or os.environ.get(
         "AUDIT_OBJECTS_FOLDER_ID"
     )
-    return require_audit_objects_folder_id(fid)
+    resolved = require_audit_objects_folder_id(fid)
+    if (
+        _control_plane_test_mode()
+        and resolved == PROD_AUDIT_OBJECTS_FOLDER_ID
+    ):
+        raise AuditChainError(
+            f"refuse prod audit folder_id={resolved} in test mode "
+            "(CONTROL_PLANE_TEST_MODE / pytest); use test folder, not Prod"
+        )
+    return resolved
 
 EXIT_OK = 0
 EXIT_POLICY = 2

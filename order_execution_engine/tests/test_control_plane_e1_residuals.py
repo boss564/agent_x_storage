@@ -1177,3 +1177,52 @@ def test_gap_audit_folder_cli_refuses_bundle_id(tmp_path: Path) -> None:
             )
         assert rc == EXIT_POLICY
         assert "incr-bundle" in buf.getvalue()
+
+
+def test_l1_drive_boundary_prod_id_refused_in_test_mode(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """L1 bandage: Prod audit folder id refused when CONTROL_PLANE_TEST_MODE=1."""
+    import argparse
+
+    from order_execution_engine.control_plane_audit import AuditChainError
+    from order_execution_engine.gatectl import (
+        PROD_AUDIT_OBJECTS_FOLDER_ID,
+        _require_audit_folder_id,
+    )
+
+    monkeypatch.setenv("CONTROL_PLANE_TEST_MODE", "1")
+    ns = argparse.Namespace(mirror_folder_id=PROD_AUDIT_OBJECTS_FOLDER_ID)
+    with pytest.raises(AuditChainError, match="prod audit folder"):
+        _require_audit_folder_id(ns)
+
+
+def test_l1_drive_boundary_test_folder_ok_in_test_mode(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Test folder id remains allowed under test mode."""
+    import argparse
+
+    from order_execution_engine.gatectl import _require_audit_folder_id
+
+    monkeypatch.setenv("CONTROL_PLANE_TEST_MODE", "1")
+    test_fid = "1knskUdopb-6E9eNhoXnuO5V6ULSzCwVe"
+    ns = argparse.Namespace(mirror_folder_id=test_fid)
+    assert _require_audit_folder_id(ns) == test_fid
+
+
+def test_l1_drive_boundary_prod_id_ok_outside_test_mode(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Regression: live/operator path may legally use Prod folder id."""
+    import argparse
+
+    from order_execution_engine.gatectl import (
+        PROD_AUDIT_OBJECTS_FOLDER_ID,
+        _require_audit_folder_id,
+    )
+
+    monkeypatch.delenv("CONTROL_PLANE_TEST_MODE", raising=False)
+    monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
+    ns = argparse.Namespace(mirror_folder_id=PROD_AUDIT_OBJECTS_FOLDER_ID)
+    assert _require_audit_folder_id(ns) == PROD_AUDIT_OBJECTS_FOLDER_ID
