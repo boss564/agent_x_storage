@@ -7,6 +7,25 @@ via ``PRAGMA database_list`` (F3).
 ``issued_at`` / ``expires_at`` are unix-second INTEGER (not datetime text);
 TTL checks use integer deltas equivalent to the julianday formulæ.
 Table name is ``telemetry_runs`` (this codebase; prompt ``runs`` maps here).
+
+L3 WAL crash-window semantics (binding; control-plane writers only):
+- Default durability: ``journal_mode=WAL`` + ``synchronous=FULL`` in
+  ``_open_sqlite``. Deviations (e.g. NORMAL) require explicit operator
+  Freigabe and a documented larger crash window.
+- Recovery order on writer open: apply WAL recovery (SQLite open), then
+  optional ``integrity_check`` / ``foreign_key_check`` via
+  ``startup_integrity_checks`` before lease mutations.
+- Crash after WAL write but before COMMIT of a lease/abort txn: the abort
+  is **not** applied; no automatic replay. Audit intents that never
+  confirmed are treated as rolled-back / open-intent fail-closed at status.
+- Crash after COMMIT before checkpoint: durable in WAL; next open recovers.
+- Token↔DB: issue-token writes O_EXCL 0600 file then DB lease row (gatectl);
+  claim consumes token. Orphan file (no claim) → refuse reuse of stale open
+  lease via fencing; orphan RUNNING row → explicit ``abort_run`` / watchdog
+  (no silent TTL abort of RUNNING).
+- ``persistence.py`` (frozen pin) does not set journal_mode; control-plane
+  opens own the WAL/FULL contract for lease writers. L3 does **not** thaw
+  persistence.
 """
 
 from __future__ import annotations
@@ -26,6 +45,9 @@ SCHEMA_V13 = 13  # STOPPED terminal (ordered SIGTERM; not ABORTED/COMMITTED)
 SCHEMA_CONTROL = SCHEMA_V13
 
 TTL_MAX_S = 900
+# L3-d: bound WAL growth (pages). Same module as TTL_MAX_S (watchdog T_max
+# binds to TTL_MAX_S — keep durability knobs co-located).
+WAL_AUTOCHECKPOINT_PAGES = 1000
 # Max seconds issued_at may lie ahead of DB now (clock skew only).
 ISSUED_AT_FUTURE_SKEW_S = 5
 # Production freeze: LIVE max_run_id=15 → next claimable id is at least 16.
@@ -251,7 +273,11 @@ def _refuse_live_conn(conn: sqlite3.Connection) -> Path:
 
 
 def _open_sqlite(path: Path) -> sqlite3.Connection:
-    """RW open with WAL/FULL — writers only (migrate / issue / abort / claim)."""
+    """RW open with WAL/FULL — writers only (migrate / issue / abort / claim).
+
+    L3-a/d: WAL + synchronous=FULL + wal_autocheckpoint bound. Never silently
+    downgrade to NORMAL/OFF.
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(path), timeout=30.0, isolation_level=None)
     conn.row_factory = sqlite3.Row
@@ -259,7 +285,36 @@ def _open_sqlite(path: Path) -> sqlite3.Connection:
     conn.execute("PRAGMA busy_timeout = 5000")
     conn.execute("PRAGMA journal_mode = WAL")
     conn.execute("PRAGMA synchronous = FULL")
+    conn.execute(f"PRAGMA wal_autocheckpoint = {int(WAL_AUTOCHECKPOINT_PAGES)}")
     return conn
+
+
+def startup_integrity_checks(conn: sqlite3.Connection) -> dict[str, Any]:
+    """L3-b: integrity + FK check after open / before lease mutations."""
+    ic = conn.execute("PRAGMA integrity_check").fetchone()
+    if not ic or str(ic[0]).lower() != "ok":
+        raise ControlPlaneError(f"integrity_check failed: {ic!r}")
+    fk_rows = conn.execute("PRAGMA foreign_key_check").fetchall()
+    if fk_rows:
+        raise ControlPlaneError(
+            f"foreign_key_check failed: {len(fk_rows)} violation(s)"
+        )
+    journal = str(conn.execute("PRAGMA journal_mode").fetchone()[0]).lower()
+    sync = conn.execute("PRAGMA synchronous").fetchone()[0]
+    # FULL == 2 in SQLite; accept string 'full' on some builds.
+    sync_ok = sync in (2, "2", "full", "FULL")
+    if journal != "wal" or not sync_ok:
+        raise ControlPlaneError(
+            f"durability refuse: journal_mode={journal!r} synchronous={sync!r} "
+            "(require WAL + FULL)"
+        )
+    return {
+        "integrity_check": "ok",
+        "foreign_key_check": "ok",
+        "journal_mode": journal,
+        "synchronous": sync,
+        "wal_autocheckpoint": WAL_AUTOCHECKPOINT_PAGES,
+    }
 
 
 def _open_sqlite_ro(path: Path) -> sqlite3.Connection:
@@ -715,12 +770,23 @@ class ControlPlaneError(RuntimeError):
 
 
 def ensure_control_plane_ready(conn: sqlite3.Connection) -> dict[str, Any]:
-    """Fail-closed: schema == SCHEMA_CONTROL and DDL manifest == Soll."""
+    """Fail-closed: schema == SCHEMA_CONTROL and DDL manifest == Soll.
+
+    L3-a/b: upgrade this connection to WAL+FULL (persistence.py is frozen and
+    does not set journal_mode; preflight owns the durability contract), then
+    ``startup_integrity_checks``.
+    """
     from order_execution_engine.control_plane_audit import (
         compute_control_plane_manifest_sha256,
         expected_control_plane_manifest_sha256,
     )
 
+    # Heal shared-DB opens from frozen persistence without thawing it.
+    conn.execute("PRAGMA foreign_keys = ON")
+    conn.execute("PRAGMA journal_mode = WAL")
+    conn.execute("PRAGMA synchronous = FULL")
+    conn.execute(f"PRAGMA wal_autocheckpoint = {int(WAL_AUTOCHECKPOINT_PAGES)}")
+    durability = startup_integrity_checks(conn)
     ver = _schema_version(conn)
     if ver < SCHEMA_CONTROL:
         raise ControlPlaneError(
@@ -741,6 +807,7 @@ def ensure_control_plane_ready(conn: sqlite3.Connection) -> dict[str, Any]:
         "trigger_manifest_sha256": ist,
         "expected_trigger_manifest_sha256": soll,
         "next_run_id": next_run_id(conn),
+        "durability": durability,
     }
 
 

@@ -97,7 +97,7 @@ requires_canary = pytest.mark.skipif(
 )
 FREEZE_PINS = {
     "control_plane_lease.py": (
-        "ea5a179c3ffa22438670257ba26e00fef98fc33d04535b85b559e388a102fcc9"
+        "da0f3eb5e117b065623ff7452d06f3db4baea261fb24bd0f217b8918ef81ca61"
     ),
     "control_plane_audit.py": (
         "4af2307f40b9101c727ac286b8f2bbd910ba646770abe2bfa42a6ca7bc2e58cf"
