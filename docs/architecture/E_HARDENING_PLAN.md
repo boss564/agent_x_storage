@@ -1,6 +1,6 @@
 # Architektur-Härtung & Revidierter E-Plan (K1–K8)
 
-**Status:** PLAN ABGENOMMEN — **Revision 12.6** (Rev. B im WT; **N1/N2 Blocker-Fixes**; kein Commit bis Prüfer-Nachmessung; Prod unberührt)  
+**Status:** PLAN ABGENOMMEN — **Revision 12.7** (L6/R4 Eigentümer gebucht; Retention gemessen; Tip-Basis `ad4f3f60` vor L6-Commit)  
 **Audit-Objekte:**  
 - **Produktion (1c):** `1IBXL-lIrXTvnleZMvhv7Er1IJf5VAjla` (`audit_chain_objects_shadow_runner`) — Tests schreiben **nie** dorthin.  
 - **Testziel:** `1knskUdopb-6E9eNhoXnuO5V6ULSzCwVe` (`control_plane_audit`) — Abnahme/Harness nur hier.  
@@ -9,10 +9,36 @@ Konfig: `AUDIT_OBJECTS_FOLDER_ID` / `--mirror-folder-id`.
 **Freeze-Produktion:** Prod-`RUN.lock` (`LOCKED=1`, SHA `58340c1e…`) + LIVE_DB unverändert.  
 **Allowlist-Freeze `5adab542`:** Messlauf-Artefakt.  
 **Ziel:** fail-closed Control-Plane vor `run_id=16`.  
-**E-1 Live:** gesperrt. **Retention:** `newsagent-backup/retention.log` — prüfen, dass Anker/Bundle-Kette/Audit-Ordner nicht nach Alter gelöscht werden (Regeln dem Operator).  
+**E-1 Live:** gesperrt. **Push `origin/main`:** gesperrt.  
+**Retention:** gemessen 2026-11-16 — siehe Abschnitt *L6/R4 + Retention* unten.  
 **Rohakte:** `E1_FREIGABE_AKTE.json` · …  
 **Freeze-Pins (unverändert):** persistence `ce9cc2f8…c47f` · runner `cfc79b2b…cf01`.  
-**Push-Basis:** nach D-Commits neu messen (nicht mehr 338).
+**Push-Basis:** nach L6-Commit neu messen.
+
+### L6 / R4 — Operator-Freigabe 2026-11-16
+
+**Geber:** Oliver Mueller (`operator_channel`) · **Basis-Tip:** `ad4f3f60` (118 passed / 4 skipped).  
+**Buchung:** `scripts/waechter_vertrag.json` → `externes_buch.posten` EXT-1…4.
+
+| ID | Eigentümer | Nachweis-/Review-Frist | Status |
+|---|---|---|---|
+| EXT-1 Fremd-Konsument Exit 4 / Schnittstelle | Oliver Mueller (`operator_channel`) | 2026-11-30 (post-E-1 / vor Push `origin/main`) | Besitz gebucht; Akzeptanz offen |
+| EXT-2 Downstream Zeitstempel-Treue | Oliver Mueller (`operator_channel`) | 2026-11-30 (post-E-1 / vor Push `origin/main`) | Besitz gebucht; Akzeptanz offen |
+| EXT-3 NRM-Strom n≥1418 | Oliver Mueller (`operator_channel`) | 2026-11-30 (post-E-1 / vor Push `origin/main`) | Besitz gebucht; Akzeptanz offen |
+| EXT-4 Tafel zweite Hand | Oliver Mueller (`operator_channel`) | 2026-11-30 (post-E-1 / vor Push `origin/main`) | Besitz gebucht; Akzeptanz offen |
+
+**Gate:** `python3 scripts/governance_gate.py` → `0/4 EXT offen` (vorher `4/4`).  
+**Grenze:** Besitz ≠ Schließung — Fremdnachweis bis Frist; E-1 und Push `origin/main` bleiben gesperrt. RUN.lock / LIVE_DB / `shadow_runner.py` / `persistence.py` / `~/.config/rclone/` unberührt.
+
+### Retention — Messung 2026-11-16 (Operator-Gate)
+
+**Quelle (RO):** `gdrive:newsagent-backup/retention.log` (248 Zeilen, Stand Tail `2026-11-15T03:36:00Z`).  
+**Befund:** Keine Treffer für geschützte Härtungs-Artefakte (`p0_p1_preflight*`, `git_bundle_*`, `hardening_incr_*`, `audit_chain*`, `control_plane_audit`, `SHA256SUMS`, `CHAIN_RESTORE`). Log enthält nur Routine-Alterslöschungen (`graph-*`, `drafts-*`, `budget-*`, `config-*`, `pre-receive-*`).
+
+**Noch vorhanden (dirs-only, RO):**  
+`p0_p1_preflight_sp1933_offhost_20261115T0954Z/` · `git_bundle_20261115T094918Z/` · `hardening_incr_20261115T{133457,164147,172330}Z/` · `audit_chain_objects_shadow_runner/` · `control_plane_audit/`.
+
+**Operator-Regel (bindend bis E-1+):** Alters-Retention **darf** Anker-, Bundle-, Hardening-Inkrement- und Audit-Ordner **nicht** löschen. Jede künftige Retention-Job-Änderung braucht explizite Denylist dieser Präfixe + Nachmessung gegen `retention.log`.
 
 ### Off-Host-Inkrement nach jedem Härtungs-Commit (bindend)
 
@@ -75,8 +101,11 @@ Lokal: `reports/P0_P1_PREFLIGHT_SP1933/git_bundle_incr_20261115T172330Z/` + Vorg
 | B1–B5, D1–D3 | geschlossen |
 | **Guard-WT** | kritisch — Off-Host-SHA jetzt; Dirty-WT nicht „klären“, sondern **sichern + committen/branch** vor jedem Reset |
 | **L1** | `revoked_at` + Index; `issue-token` widerruft Abgelaufene |
-| **L2** | kein neues Token bei `RUNNING`; `gatectl abort-run`; Recovery S1–S4 definiert |
+| **L2–L5** | geschlossen (Stand Tip `ad4f3f60` vor L6-Commit) |
+| **L6 / R4** | Eigentümer EXT-1…4 gebucht 2026-11-16; Frist 2026-11-30; Gate `0/4 EXT offen` |
+| **Retention** | gemessen 2026-11-16 — geschützte Ordner nicht in `retention.log`; Denylist-Regel dokumentiert |
 | R1 / R2 / KeepAlive-Ausnahme | wie Rev. 2 |
+| **E-1 / Push `origin/main`** | gesperrt |
 
 ---
 
